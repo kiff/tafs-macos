@@ -32,7 +32,7 @@ The build is not signed. Signing and notarization are a release step, not part o
 | `Tests/<part>/mac/` | The part's tests that need the views or a Mac. |
 | `Tests/Runner/` | The small test runner. XCTest isn't in the Command Line Tools. |
 
-A **part** is a folder of `Tests/`: `shell` today, then `strings`, `contracts`, `pairing`,
+A **part** is a folder of `Tests/`: `shell` and `strings` today, then `contracts`, `pairing`,
 `approvals`, `coach`, `record`, `connections`, `calendar` and `account` as they arrive.
 
 ## Test
@@ -63,3 +63,4 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
   only when `Sources/App/`, `App/`, a `mac/` test folder, a script or the workflow changed.
 - **One part alone:** run the workflow by hand with `part` set to its name.
 - **Every night**, every part runs on both.
+- **The drift check** fails when the shared pin is too far behind ([shared.md](shared.md)).

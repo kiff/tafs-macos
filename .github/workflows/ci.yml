@@ -47,6 +47,25 @@ jobs:
             *) git diff --name-only "$BASE" HEAD | scripts/parts.sh ;;
           esac | tee -a "$GITHUB_OUTPUT"
 
+  # The pin of the shared words and contracts isn't left behind kiff/tafs (docs/shared.md).
+  drift:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The rule refuses 21 commits and 8 days, and takes 20 and 7
+        run: |
+          ! scripts/shared.sh verdict 21 0
+          ! scripts/shared.sh verdict 0 8
+          scripts/shared.sh verdict 20 7
+      - name: The pin is at most 20 commits and 7 days behind kiff/tafs main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/shared.sh drift
+
   core:
     needs: parts
     if: needs.parts.outputs.parts != ''

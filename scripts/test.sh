@@ -11,6 +11,9 @@ if [ "${1:-}" = "--core" ]; then CORE=1; shift; fi
 PARTS="$*"
 [ -n "$PARTS" ] || PARTS=$(ls Tests | grep -v '^Runner$')
 
+# The shared words and contracts, at the pin.
+scripts/shared.sh fetch
+
 OUT=build/tests
 mkdir -p "$OUT"
 MAIN="$OUT/main.swift"
