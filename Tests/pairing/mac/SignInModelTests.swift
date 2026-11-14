@@ -93,3 +93,75 @@ let pairingModelTests: [Test] = [
         try expectEqual(SessionStore(store: store).load(), nil)
     }),
 ]
+
+private let viewOnly = Session(accessToken: "old", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_view")
+
+/// A Mac that is already signed in, view-only, with its device key and session kept.
+@MainActor
+private func signedIn(_ answers: [(Int, String)]) throws -> (SignInModel, CannedTransport, MemoryStore, SigningKey, () -> [(String, Data)]) {
+    let store = MemoryStore()
+    let oldKey = try DeviceKey.load(from: store, enclave: false)
+    try SessionStore(store: store).save(viewOnly)
+    let transport = CannedTransport(answers)
+    var ended: [(String, Data)] = []
+    let model = SignInModel(client: KIFFClient(transport: transport), key: oldKey, approval: .passkey, sessions: SessionStore(store: store),
+                            deviceName: "A Mac", sleep: { _ in }, open: { _ in }, now: { Date(timeIntervalSince1970: 1_794_679_200) },
+                            enclave: false, endSession: { session, key in ended.append((session.accessToken, key.publicKeyDER)) })
+    return (model, transport, store, oldKey, { ended })
+}
+
+let pairingFreshKeyTests: [Test] = [
+    Test("a signed-in Mac pairs with a new device key, never the one KIFF already has", awaiting: { @MainActor in
+        let (model, transport, store, oldKey, ended) = try signedIn([pending, (200, sessionAnswer)])
+        var shown: SignInModel.Code?
+        let watching = model.$step.sink { if case .pairing(let code) = $0 { shown = code } }
+        await model.pair()
+        watching.cancel()
+        guard let shown else { throw Failure(description: "no code was shown") }
+        let payload = try JSONDecoder().decode(PairingPayload.self, from: Data(shown.text.utf8))
+        try expect(payload.pub != Encoding.base64URL(oldKey.publicKeyDER), "the code carries a new key")
+        try expectEqual(payload.pub, Encoding.base64URL(model.key.publicKeyDER))
+        // The claim's proof is the new key's, and the new key is now the device key kept.
+        let claim = try JSONDecoder().decode([String: String].self, from: transport.sent[1].body)
+        let message = KIFFMessage.pairClaim(nonce: payload.nonce, keyHash: Signing.sha256Hex(model.key.publicKeyDER))
+        try expect(Signing.verifies(claim["proof"] ?? "", over: message, publicKeyDER: model.key.publicKeyDER), "the new key's proof")
+        try expectEqual(try DeviceKey.load(from: store, enclave: false).publicKeyDER, model.key.publicKeyDER)
+        try expectEqual(store.load(DeviceKey.nextAccount), nil)
+        // The new session is kept; the old one is ended with the old key, once, afterwards.
+        try expectEqual(model.session?.accessToken, "tok")
+        try expectEqual(SessionStore(store: store).load()?.accessToken, "tok")
+        try expectEqual(ended().count, 1)
+        try expectEqual(ended()[0].0, "old")
+        try expectEqual(ended()[0].1, oldKey.publicKeyDER)
+    }),
+    Test("if the pairing doesn't happen, the old session and its key stay, and nothing is signed out", awaiting: { @MainActor in
+        for answer in [(400, #"{"error":"expired_token"}"#), (403, #"{"error":"invalid_proof"}"#), (500, "")] {
+            let (model, _, store, oldKey, ended) = try signedIn([answer])
+            await model.pair()
+            try expectEqual(ended().count, 0)
+            try expectEqual(model.session, viewOnly)
+            try expectEqual(SessionStore(store: store).load(), viewOnly)
+            try expectEqual(model.key.publicKeyDER, oldKey.publicKeyDER)
+            try expectEqual(try DeviceKey.load(from: store, enclave: false).publicKeyDER, oldKey.publicKeyDER)
+            try expectEqual(store.load(DeviceKey.nextAccount), nil)
+        }
+    }),
+    Test("a cancelled pairing leaves the old session, forgets the new key, and signs nothing out", awaiting: { @MainActor in
+        let (model, _, store, oldKey, ended) = try signedIn([pending, (200, sessionAnswer)])
+        let watching = model.$step.sink { if case .pairing = $0 { model.cancel() } }
+        await model.pair()
+        watching.cancel()
+        try expectEqual(ended().count, 0)
+        try expectEqual(model.session, viewOnly)
+        try expectEqual(model.key.publicKeyDER, oldKey.publicKeyDER)
+        try expectEqual(store.load(DeviceKey.nextAccount), nil)
+    }),
+    Test("a Mac with no session still pairs with its own device key", awaiting: { @MainActor in
+        let store = MemoryStore()
+        let key = try DeviceKey.load(from: store, enclave: false)
+        let (model, _) = try model([(200, sessionAnswer)], store: store)
+        await model.pair()
+        try expectEqual(model.key.publicKeyDER, key.publicKeyDER)
+        try expectEqual(store.load(DeviceKey.nextAccount), nil)
+    }),
+]

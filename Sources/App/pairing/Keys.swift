@@ -26,7 +26,31 @@ protocol SecretStore {
 enum DeviceKey {
     static let account = "tafs.device-key"
 
+    /// Where a new device key waits while a signed-in Mac pairs: it becomes the device key
+    /// only once its pairing is claimed.
+    static let nextAccount = "tafs.device-key.next"
+
+    /// A new device key for a pairing, kept apart from the one in use.
+    static func makeNext(in store: SecretStore, enclave: Bool = SecureEnclave.isAvailable) throws -> SigningKey {
+        store.delete(nextAccount)
+        return try load(from: store, enclave: enclave, account: nextAccount)
+    }
+
+    /// The pairing was claimed: the new key takes the device key's place, and the old one is gone.
+    static func promoteNext(in store: SecretStore) throws {
+        guard let next = store.load(nextAccount) else { return }
+        try store.save(next, for: account)
+        store.delete(nextAccount)
+    }
+
+    /// The pairing didn't happen: the new key is forgotten, and the one in use stays.
+    static func discardNext(in store: SecretStore) { store.delete(nextAccount) }
+
     static func load(from store: SecretStore, enclave: Bool = SecureEnclave.isAvailable) throws -> SigningKey {
+        try load(from: store, enclave: enclave, account: account)
+    }
+
+    private static func load(from store: SecretStore, enclave: Bool, account: String) throws -> SigningKey {
         if enclave {
             if let handle = store.load(account), let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: handle) {
                 return EnclaveKey(key: key)

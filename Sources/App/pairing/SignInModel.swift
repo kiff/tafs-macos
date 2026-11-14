@@ -27,7 +27,8 @@ final class SignInModel: ObservableObject {
     @Published private(set) var session: Session?
 
     private let client: KIFFClient
-    private let key: SigningKey
+    /// This Mac's device key: the one its session is bound to.
+    private(set) var key: SigningKey
     private let approval: ApprovalMeans
     private let sessions: SessionStore
     private let deviceName: String
@@ -35,10 +36,18 @@ final class SignInModel: ObservableObject {
     private let open: (URL) -> Void
     private let now: () -> Date
     private var attempt = 0
+    /// Ends a session at KIFF, signed in with its own key: for the view-only session a
+    /// pairing replaces.
+    private let endSession: (Session, SigningKey) async -> Void
+    /// Whether the keys are made in the Secure Enclave. Tests say no.
+    private let enclave: Bool?
 
     init(client: KIFFClient, key: SigningKey, approval: ApprovalMeans, sessions: SessionStore, deviceName: String,
          sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
-         open: @escaping (URL) -> Void, now: @escaping () -> Date = Date.init) {
+         open: @escaping (URL) -> Void, now: @escaping () -> Date = Date.init, enclave: Bool? = nil,
+         endSession: @escaping (Session, SigningKey) async -> Void = { _, _ in }) {
+        self.endSession = endSession
+        self.enclave = enclave
         self.client = client; self.key = key; self.approval = approval; self.sessions = sessions
         self.deviceName = deviceName; self.sleep = sleep; self.open = open; self.now = now
         session = sessions.load()
@@ -65,33 +74,74 @@ final class SignInModel: ObservableObject {
     }
 
     /// Shows a pairing code and waits for a phone that can approve to sign this Mac's keys.
+    ///
+    /// A Mac that is already signed in (view-only) pairs with a **new** device key: KIFF
+    /// refuses a pairing for a key that is already a device's. Its view-only session is signed
+    /// out by this Mac only after the pairing is claimed; if the pairing doesn't happen, the
+    /// new key is forgotten and the session it had stays as it was.
     func pair() async {
         attempt += 1
         let mine = attempt
+        let replaced = session
+        let store = sessions.store
         do {
+            let pairingKey: SigningKey
+            if replaced == nil {
+                pairingKey = key
+            } else if let enclave {
+                pairingKey = try DeviceKey.makeNext(in: store, enclave: enclave)
+            } else {
+                pairingKey = try DeviceKey.makeNext(in: store)
+            }
             let nonce = Signing.nonce()
             var approvalDER: Data?
             if case .key(let der) = approval { approvalDER = der }
-            let payload = PairingPayload(deviceKey: key.publicKeyDER, keyStore: key.keyStore, approvalKey: approvalDER, name: deviceName,
+            let payload = PairingPayload(deviceKey: pairingKey.publicKeyDER, keyStore: pairingKey.keyStore, approvalKey: approvalDER, name: deviceName,
                                          nonce: nonce, exp: KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime)))
             // The check code is made from exactly the keys the code carries.
             let carried = payload.approvalPub == nil ? nil : approvalDER
-            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: key.publicKeyDER, approvalKey: carried)))
-            let proof = try Signing.claimProof(key: key, nonce: nonce)
+            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: pairingKey.publicKeyDER, approvalKey: carried)))
+            let proof = try Signing.claimProof(key: pairingKey, nonce: nonce)
             let got = try await Waiting.until(interval: 3, expiresIn: PairingPayload.lifetime, sleep: sleep) {
                 guard self.attempt == mine else { throw CancellationError() }
                 return try await self.client.claimPairing(nonce: nonce, publicKey: payload.pub, proof: proof)
             }
-            try finish(got, mine)
-        } catch KIFFError.expired {
-            if mine == attempt { step = .codeExpired }
+            guard mine == attempt else {
+                if replaced != nil { DeviceKey.discardNext(in: store) }
+                return
+            }
+            if let replaced {
+                // The new session is in hand: keep it and its key first, then end the old one.
+                let oldKey = key
+                try DeviceKey.promoteNext(in: store)
+                try sessions.save(got)
+                key = pairingKey
+                session = got
+                step = .welcome
+                await endSession(replaced, oldKey)
+            } else {
+                try finish(got, mine)
+            }
         } catch {
-            fail(error, mine, pairing: true)
+            if replaced != nil { DeviceKey.discardNext(in: store) }
+            if case KIFFError.expired = error {
+                if mine == attempt { step = .codeExpired }
+            } else {
+                fail(error, mine, pairing: true)
+            }
         }
     }
 
     /// Puts the screen on a step, for a screenshot.
     func show(_ step: Step) { self.step = step }
+
+    /// A pairing is on screen: its code, an expired code, or why it didn't work.
+    var isPairing: Bool {
+        switch step {
+        case .pairing, .codeExpired, .failed(why: _, pairing: true): return true
+        default: return false
+        }
+    }
 
     /// Back to the start: whatever was waiting stops asking, and a late answer is dropped.
     func cancel() {

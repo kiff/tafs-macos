@@ -9,10 +9,12 @@ struct TafsApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if let session = signIn.session {
-                    SignedInView(account: AccountClient(session: session, key: TafsApp.key, language: words.language),
+                if let session = signIn.session, !signIn.isPairing {
+                    // The session's own key: after a pairing it is the new one.
+                    SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language),
                                  cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
-                                 route: .phoneOrPasskey, streamer: NetworkLineStream(), signedOut: { signIn.signedOut() })
+                                 route: .phoneOrPasskey, streamer: NetworkLineStream(), signedOut: { signIn.signedOut() },
+                                 addThisMac: { Task { await signIn.pair() } })
                         .id(session.accessToken)
                 } else {
                     SignInView(model: signIn)
@@ -33,6 +35,10 @@ struct TafsApp: App {
         let store = KeychainStore()
         return SignInModel(client: KIFFClient(transport: NetworkTransport()), key: key, approval: .passkey,
                            sessions: SessionStore(store: store), deviceName: words("pair.device_name", ["device": words("device.mac")]),
-                           open: { NSWorkspace.shared.open($0) })
+                           open: { NSWorkspace.shared.open($0) },
+                           // The view-only session a pairing replaced is ended at KIFF with its own key.
+                           endSession: { old, oldKey in
+                               try? await AccountClient(session: old, key: oldKey, language: words.language).signOut()
+                           })
     }
 }

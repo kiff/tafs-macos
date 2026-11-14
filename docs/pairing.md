@@ -72,3 +72,22 @@ A Mac with no session opens on sign-in (`SignInView`, driven by `SignInModel`).
 
 `scripts/test.sh pairing` writes the screens to `build/screenshots/sign-in-*.png` in English,
 French and Portuguese.
+
+## Adding a Mac that is already signed in
+
+A Mac that signed in through the browser on an account that has a device is view-only. It
+shows "View only" in Account, with **Add this Mac**. KIFF refuses a pairing for a key that is
+already a device's, so:
+
+1. The Mac makes a **new device key**, kept apart from the one in use, and shows the pairing
+   code with that key.
+2. When the phone has approved and the Mac has claimed the pairing, the new session and the
+   new key are kept **first**.
+3. **Then** the Mac signs its old view-only session out at KIFF, with the old key.
+
+If the pairing doesn't happen (the code runs out, KIFF refuses the claim, the person
+cancels), the new key is forgotten, nothing is signed out, and the Mac stays signed in as it
+was. There is no upgrade of a device in place.
+
+The pairing steps name the phone's own button, from the shared words
+(`settings.devices.pair`).

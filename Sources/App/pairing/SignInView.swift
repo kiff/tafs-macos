@@ -56,7 +56,7 @@ struct SignInView: View {
                 .padding(12).background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
                 .accessibilityLabel(words("pair.title", ["device": device]))
         }
-        note(words("pair.steps", ["account": words("settings.title"), "devices": words("settings.devices.title")]))
+        note(words("pair.steps", ["account": words("settings.title"), "devices": words("settings.devices.title"), "pair": words("settings.devices.pair")]))
         note(words("pair.check_code_lead", ["device": device]), color: Theme.ink)
         code(shown.check)
         waiting(words("pair.waiting"))
