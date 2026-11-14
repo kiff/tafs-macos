@@ -15,5 +15,9 @@ happens in pull requests to `main`.
 - [The signed-in Mac: the session and devices](docs/account.md)
 - [The Record](docs/record.md)
 
+## Notes
+
+- [macOS 13 and later](docs/macos-13.md): the iPhone and iPad app built with Mac Catalyst, why, and how to build it.
+
 A new page is added to this list in a pull request of its own, never in the one that writes
 the page: every pull request editing this list made each of them conflict with the others.
