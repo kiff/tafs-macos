@@ -58,8 +58,8 @@ jobs:
           persist-credentials: false
       - name: The rule refuses 21 commits and 8 days, and takes 20 and 7
         run: |
-          ! scripts/shared.sh verdict 21 0
-          ! scripts/shared.sh verdict 0 8
+          if scripts/shared.sh verdict 21 0; then echo "21 commits were taken"; exit 1; fi
+          if scripts/shared.sh verdict 0 8; then echo "8 days were taken"; exit 1; fi
           scripts/shared.sh verdict 20 7
       - name: The pin is at most 20 commits and 7 days behind kiff/tafs main
         env:

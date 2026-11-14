@@ -9,6 +9,11 @@ cd "$(dirname "$0")/.."
 
 REPO=kiff/tafs
 PIN=$(tr -d '[:space:]' < shared.pin)
+# The pin is a full commit id and nothing else, before it reaches git or the API.
+case "$PIN" in
+    *[!0-9a-f]*) echo "shared.pin is not a commit id" >&2; exit 2 ;;
+esac
+[ "${#PIN}" = 40 ] || { echo "shared.pin is not a full commit id (40 characters)" >&2; exit 2; }
 MAX_COMMITS=20
 MAX_DAYS=7
 
