@@ -11,6 +11,7 @@ struct TafsApp: App {
             Group {
                 if let session = signIn.session {
                     SignedInView(account: AccountClient(session: session, key: TafsApp.key, language: words.language),
+                                 cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
                                  route: .phoneOrPasskey, signedOut: { signIn.signedOut() })
                         .id(session.accessToken)
                 } else {
