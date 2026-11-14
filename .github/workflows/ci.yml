@@ -1,0 +1,81 @@
+# The app's tests, by part (docs/building.md). A change runs only the parts it touches, plus
+# strings and contracts. The tests that need no Mac run on Linux, with the oldest Swift the
+# app supports. A Mac builds the app only when the app's own code, the scripts or this file
+# change, since the organization has few Mac runners. The full suite runs each night.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      part:
+        description: "One part to run (a folder of Tests/), or all"
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parts:
+    runs-on: ubuntu-latest
+    outputs:
+      parts: ${{ steps.parts.outputs.parts }}
+      mac: ${{ steps.parts.outputs.mac }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: The parts this change touches
+        id: parts
+        env:
+          EVENT: ${{ github.event_name }}
+          PART: ${{ inputs.part }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          case "$EVENT" in
+            schedule) scripts/parts.sh all ;;
+            workflow_dispatch) scripts/parts.sh "${PART:-all}" ;;
+            *) git diff --name-only "$BASE" HEAD | scripts/parts.sh ;;
+          esac | tee -a "$GITHUB_OUTPUT"
+
+  core:
+    needs: parts
+    if: needs.parts.outputs.parts != ''
+    runs-on: ubuntu-latest
+    container: swift:5.7
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tests that need no Mac
+        env:
+          PARTS: ${{ needs.parts.outputs.parts }}
+        run: scripts/test.sh --core $PARTS
+
+  mac:
+    needs: parts
+    if: needs.parts.outputs.mac == 'true' && needs.parts.outputs.parts != ''
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build for Intel and Apple silicon
+        run: |
+          scripts/build.sh
+          test "$(lipo -archs build/tafs.app/Contents/MacOS/tafs)" = "x86_64 arm64"
+      - name: The parts' tests, with the app's views
+        env:
+          PARTS: ${{ needs.parts.outputs.parts }}
+        run: scripts/test.sh $PARTS
