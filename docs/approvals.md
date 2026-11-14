@@ -49,9 +49,15 @@ The key that signs what grants authority on a Mac with Touch ID.
 - **Its own access control** is private-key use by the fingerprints enrolled when it was
   made: never the password, never a fingerprint enrolled later. The key checks the prompt
   itself, so code that skipped the prompt can't sign with it.
-- **Every signature asks for Touch ID again.** No unlock given before is reused.
-- **Changed fingerprints end it.** The kept key is forgotten and none takes its place by
-  itself: a new one must be approved again by a device that can approve.
+- **Every signature asks for Touch ID again**, and the prompt always says what the
+  fingerprint is for: `sign` refuses an empty reason. No unlock given before is reused.
+- **Loading never makes a key.** `ApprovalKey.load` answers the key this Mac already has, or
+  none. A new key is made only by `ApprovalKey.make`, at the step where the person enrols
+  this Mac (sign-in as the first device, or pairing), and only when the enrolled
+  fingerprints' value can be kept beside it.
+- **Changed fingerprints end it**, and so does a kept handle that no longer reads: what was
+  kept is forgotten, and no later launch makes another. A new one is the person's act, and
+  must be approved again by a device that can approve.
 - **A software device key never approves**, even with an approval key beside it
   (`ApprovalMeans.of`).
 

@@ -24,13 +24,48 @@ let approvalsKeyTests: [Test] = [
         try expectEqual(ApprovalKey.changed(made: Data([1]), now: Data([1])), false)
         try expectEqual(ApprovalKey.changed(made: Data([1]), now: nil), false)
         try expectEqual(ApprovalKey.changed(made: nil, now: Data([2])), false)
-        // A kept key whose fingerprints changed is forgotten, and none takes its place by itself.
+    },
+    Test("after the fingerprints change, the key is forgotten and no launch ever makes another") {
         let store = MemoryStore()
         store.save(Data([9, 9]), for: ApprovalKey.account)
         store.save(Data([1]), for: ApprovalKey.domainAccount)
         try expect(ApprovalKey.load(from: store, available: true, domain: Data([2])) == nil, "no key after a change")
         try expectEqual(store.load(ApprovalKey.account), nil)
         try expectEqual(store.load(ApprovalKey.domainAccount), nil)
+        // The next launches: still none, and nothing is written.
+        for _ in 0..<2 {
+            try expect(ApprovalKey.load(from: store, available: true, domain: Data([2])) == nil, "still no key")
+            try expectEqual(store.load(ApprovalKey.account), nil)
+            try expectEqual(store.load(ApprovalKey.domainAccount), nil)
+        }
+    },
+    Test("a kept handle that no longer reads is forgotten, not replaced") {
+        let store = MemoryStore()
+        store.save(Data([0xDE, 0xAD]), for: ApprovalKey.account)
+        store.save(Data([1]), for: ApprovalKey.domainAccount)
+        try expect(ApprovalKey.load(from: store, available: true, domain: Data([1])) == nil, "no key")
+        try expectEqual(store.load(ApprovalKey.account), nil)
+        try expectEqual(store.load(ApprovalKey.domainAccount), nil)
+    },
+    Test("loading with nothing kept makes nothing") {
+        let store = MemoryStore()
+        try expect(ApprovalKey.load(from: store, available: true, domain: Data([1])) == nil, "no key")
+        try expectEqual(store.load(ApprovalKey.account), nil)
+    },
+    Test("no key is made on a Mac that can't hold one, or without the fingerprints' value to keep") {
+        let store = MemoryStore()
+        try expect(ApprovalKey.make(in: store, available: false, domain: Data([1])) == nil, "not available")
+        try expect(ApprovalKey.make(in: store, available: true, domain: nil) == nil, "no fingerprints' value")
+        try expectEqual(store.load(ApprovalKey.account), nil)
+        try expectEqual(store.load(ApprovalKey.domainAccount), nil)
+    },
+    Test("a signature is never asked for without saying what the fingerprint is for") {
+        for reason in ["", "   ", "\n"] {
+            do { try ApprovalKey.check(reason: reason); throw Failure(description: "an empty reason was taken") } catch let error as ApprovalKey.Refused {
+                try expectEqual(error, .noReason)
+            }
+        }
+        try ApprovalKey.check(reason: "Approve Refunds' Card")
     },
     Test("a software device key never approves, with or without an approval key beside it") {
         let software = try DeviceKey.load(from: MemoryStore(), enclave: false)
