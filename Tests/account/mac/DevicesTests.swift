@@ -6,9 +6,23 @@ private let two = #"{"devices":[{"id":"dev_1","display_name":"Mac","platform":"m
 private let oneLeft = #"{"devices":[{"id":"dev_1","display_name":"Mac","this_device":true}]}"#
 
 @MainActor
-private func model(_ answers: [(Int, String)]) -> (DevicesModel, CannedTransport) {
+private func model(_ answers: [(Int, String)], canRemoveOthers: Bool = true) -> (DevicesModel, CannedTransport) {
     let transport = CannedTransport(answers)
-    return (DevicesModel(account: AccountClient(transport: transport, session: session)), transport)
+    return (DevicesModel(account: AccountClient(transport: transport, session: session), canRemoveOthers: canRemoveOthers), transport)
+}
+
+/// The colours drawn in a view, to tell whether Sign out's red is among them.
+@MainActor
+private func draws(_ wanted: UInt32, in view: DevicesView, words: Words) -> Bool {
+    let size = CGSize(width: 980, height: 400)
+    guard let bitmap = Snapshot.bitmap(of: view.environment(\.words, words), size: size) else { return false }
+    for y in stride(from: 0, to: Int(size.height), by: 2) {
+        for x in stride(from: 300, to: 740, by: 1) {
+            guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
+            if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
+        }
+    }
+    return false
 }
 
 let accountScreenTests: [Test] = [
@@ -31,6 +45,24 @@ let accountScreenTests: [Test] = [
         try expectEqual(model.notRemoved, "owner_only")
         try expectEqual(model.state, .loaded(devices))
     }),
+    Test("a Mac that can't approve draws no Sign out for another device, and never sends a removal", awaiting: { @MainActor in
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let (without, transport) = model([(200, two)], canRemoveOthers: false)
+        await without.load()
+        guard case .loaded(let devices) = without.state else { throw Failure(description: "not loaded") }
+        try expect(!draws(Palette.no.light, in: DevicesView(model: without), words: words), "no red Sign out is drawn")
+        await without.remove(devices[1])
+        try expectEqual(transport.sent.map(\.method), ["GET"])
+        try expectEqual(without.state, .loaded(devices))
+        // The same list on a Mac that may: the button is there, so the check above can fail.
+        let (with, _) = model([(200, two)])
+        await with.load()
+        try expect(draws(Palette.no.light, in: DevicesView(model: with), words: words), "Sign out is drawn when it may")
+    }),
+    Test("the default is that a Mac may not sign another device out", awaiting: { @MainActor in
+        let transport = CannedTransport([])
+        try expectEqual(DevicesModel(account: AccountClient(transport: transport, session: session)).canRemoveOthers, false)
+    }),
     Test("signing out a device that approves needs a device that can approve, and says so", awaiting: { @MainActor in
         for code in ["approval_key_required", "critical_key_required"] {
             let (model, _) = model([(200, two), (403, #"{"error":"\#(code)"}"#)])
@@ -47,7 +79,7 @@ let accountScreenTests: [Test] = [
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for language in ["en", "fr", "pt"] {
-            let (model, _) = model([(200, two)])
+            let (model, _) = model([(200, two)], canRemoveOthers: false)
             await model.load()
             let view = DevicesView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800))
                 .environment(\.words, Words.load(folder: strings, preferred: [language]))

@@ -20,8 +20,15 @@ final class DevicesModel: ObservableObject {
     static let approvalCodes: Set<String> = ["approval_key_required", "critical_key_required"]
 
     private let account: AccountClient
+    /// Whether this Mac may sign another device out. Signing out a device that approves is an
+    /// approval, so only a Mac that can sign one may: without it no button is drawn, and
+    /// nothing is ever sent.
+    let canRemoveOthers: Bool
 
-    init(account: AccountClient) { self.account = account }
+    init(account: AccountClient, canRemoveOthers: Bool = false) {
+        self.account = account
+        self.canRemoveOthers = canRemoveOthers
+    }
 
     func load() async {
         do { state = .loaded(try await account.devices()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
@@ -30,7 +37,7 @@ final class DevicesModel: ObservableObject {
     /// Signs another device out, then reads the list again. This Mac is never removed here:
     /// it signs out with Sign out, which also forgets its session.
     func remove(_ device: Device) async {
-        guard !device.thisDevice else { return }
+        guard canRemoveOthers, !device.thisDevice else { return }
         do {
             try await account.removeDevice(device.id)
             notRemoved = nil
@@ -78,8 +85,13 @@ struct DevicesView: View {
                     Text(words("sign_in.not_signed_out_device", ["why": why, "device": words("device.mac")]))
                         .font(.system(size: 13)).foregroundColor(Theme.no)
                 }
-                Text(words("settings.devices.note_device", ["device": words("device.mac")]))
-                    .font(.system(size: 13)).foregroundColor(Theme.dim)
+                if model.canRemoveOthers {
+                    Text(words("settings.devices.note_device", ["device": words("device.mac")]))
+                        .font(.system(size: 13)).foregroundColor(Theme.dim)
+                } else {
+                    // Where another device is signed out: on a device that can approve.
+                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
             }
             .padding(28)
             .frame(maxWidth: 720, alignment: .leading)
@@ -109,7 +121,7 @@ struct DevicesView: View {
             Spacer()
             if device.thisDevice {
                 Text(words("settings.devices.this_device_title")).font(.system(size: 13)).foregroundColor(Theme.dim)
-            } else {
+            } else if model.canRemoveOthers {
                 Button(words("settings.devices.sign_out")) { removing = device }
                     .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
                     .accessibilityLabel(words("settings.devices.sign_out_prompt", ["device": device.name ?? words("settings.devices.unnamed")]))
