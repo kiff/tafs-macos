@@ -82,6 +82,24 @@ let approvalsTests: [Test] = [
         try await refusal(try await account.refuse(all[0], nextStep: "pay anyway"), is: "not_a_next_step")
         try expectEqual(a.sent.count + b.sent.count, 0)
     }),
+    Test("a call is announced once, never those already waiting, and again if it is held again", awaiting: {
+        let all = try await calls()
+        var announced = Announced()
+        try expectEqual(announced.new(in: [all[0]]).map(\.id), [])
+        try expectEqual(announced.new(in: all).map(\.id), ["exc_2"])
+        try expectEqual(announced.new(in: all).map(\.id), [])
+        try expectEqual(announced.new(in: [all[0]]).map(\.id), [])
+        try expectEqual(announced.new(in: all).map(\.id), ["exc_2"])
+    }),
+    Test("a notification says the app's line, then KIFF's words for the call", awaiting: {
+        let all = try await calls()
+        let words = try Words(language: "fr", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let first = Announcement(all[0], words: words)
+        try expectEqual(first.title, words("alert.needs_you"))
+        try expectEqual(first.body, "Refund a payment · €640 is over its €500 limit.")
+        try expectEqual(Announcement(all[1], words: words).body, words("push.open_needs_you"))
+        try expectEqual(first.id, "exc_1")
+    }),
     Test("KIFF's refusal of an answer reaches the person as its code", awaiting: {
         let (account, _) = client([(409, #"{"error":"already_answered"}"#)])
         let call = try await calls()[0]
