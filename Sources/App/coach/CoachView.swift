@@ -102,21 +102,26 @@ final class CoachModel: ObservableObject {
         stopped = nil
         do {
             if let streamer, let request = cloud.streamRequest(text, to: coach.id) {
+                var opened: AsyncThrowingStream<String, Error>?
                 do {
-                    try await stream(try await streamer.lines(request), coach)
-                    return
+                    opened = try await streamer.lines(request)
                 } catch let refusal as CloudRefusal {
                     throw refusal
                 } catch {
-                    // The stream couldn't open, or broke. If tafs cloud has the message, the
-                    // thread is followed; only if it doesn't is the message sent plainly.
-                    live = nil
+                    // The stream couldn't open. If tafs cloud has the message all the same, the
+                    // thread is followed; only if it doesn't is the message sent plainly, below.
                     if let page = try? await cloud.thread(of: coach.id), let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
                         state = .loaded(coach, page)
                         pending = nil
                         await follow(coach)
                         return
                     }
+                }
+                if let opened {
+                    // tafs cloud answered the stream route: it has the message. Whatever the
+                    // stream does from here, the message is never sent again.
+                    await stream(opened, coach)
+                    return
                 }
             }
             let sent = try await cloud.send(text, to: coach.id)
@@ -131,16 +136,15 @@ final class CoachModel: ObservableObject {
         }
     }
 
-    /// Draws the answer as its events come, then reads the thread, which has it whole.
-    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach) async throws {
+    /// Draws the answer as its events come, then reads the thread, which has it whole. A
+    /// stream that breaks, at any point, only ends the drawing: the thread has the rest.
+    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach) async {
         var reader = EventReader()
         var answer = LiveAnswer()
-        var took = false
         live = answer
         do {
             for try await line in lines {
                 guard let event = reader.read(line) else { continue }
-                took = true
                 if case .session(let id) = event { pending?.id = id }
                 if case .end(let words) = event {
                     stopped = words
@@ -150,12 +154,12 @@ final class CoachModel: ObservableObject {
                 if answer.take(event) { await reload(coach) }
                 live = answer
             }
-        } catch {
-            // Before tafs cloud said anything, the caller decides; after, the thread has the rest.
-            if !took { throw error }
-        }
+        } catch {}
         live = nil
         await follow(coach)
+        // The message was taken even if the thread didn't show it in time: it is not left
+        // looking unsent, with a Retry that would send it again.
+        if pending?.failed == nil { pending = nil }
     }
 
     private func reload(_ coach: Coach) async {

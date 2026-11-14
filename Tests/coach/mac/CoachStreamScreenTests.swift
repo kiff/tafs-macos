@@ -74,6 +74,21 @@ let coachStreamMacTests: [Test] = [
         try expectEqual(model.live, nil)
         try expectEqual(model.pending, nil)
     }),
+    Test("a stream that opened, then dropped before its first event, is never sent plainly", awaiting: { @MainActor in
+        // A 200, a keep-alive comment and a blank line, then the connection is lost; the
+        // thread doesn't show the message yet.
+        let (model, transport, _) = await make(.breaksAfter([": keep-alive", ""]), Array(repeating: (200, before), count: 31))
+        await model.send()
+        try expectEqual(posts(transport), 0)
+        try expectEqual(model.live, nil)
+        // And it isn't left as unsent with a Retry: a Retry now sends nothing either.
+        try expectEqual(model.pending, nil)
+        await model.retry()
+        try expectEqual(posts(transport), 0)
+        let (empty, sent, _) = await make(.breaksAfter([]), [(200, after)])
+        await empty.send()
+        try expectEqual(posts(sent), 0)
+    }),
     Test("a refusal on the stream is the same as on the plain route: consent is asked, and nothing else is sent", awaiting: { @MainActor in
         let (model, transport, _) = await make(.refuse(403, consentRefusal), [])
         await model.send()

@@ -66,8 +66,9 @@ shows as Coach writes it. tafs cloud trims the stream to what an app shows.
   this app doesn't know) is dropped. It is never drawn.
 - **A message is never sent twice.** If the stream can't open, the app reads the thread
   first: if tafs cloud has the message, it only follows the thread; only if it doesn't is the
-  message sent on the plain route. A stream that breaks after tafs cloud's first event is
-  never sent again.
+  message sent on the plain route. **Once the stream route has answered, tafs cloud has the
+  message**: a stream that then drops, even before its first event, is never sent again, and
+  the message is not left looking unsent.
 - A refusal on the stream is handled as on the plain route: the consent is asked for, or the
   message stays with tafs cloud's reason.
 - The stream goes to tafs cloud's streaming address, the one the phones use, over HTTPS only.
