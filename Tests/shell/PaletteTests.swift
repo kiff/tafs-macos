@@ -1,6 +1,6 @@
 import Foundation
 
-let shellTests: [Test] = [
+let shellPaletteTests: [Test] = [
     Test("contrast is 1 for a colour on itself and 21 for black on white") {
         try expectEqual(Palette.contrast(0x123456, 0x123456), 1)
         try expect(abs(Palette.contrast(0x000000, 0xFFFFFF) - 21) < 0.001, "21")
@@ -25,7 +25,7 @@ let shellTests: [Test] = [
         try expect(Palette.contrast(Palette.amberText.light, Palette.background.light) >= 4.5, "light")
         try expect(Palette.contrast(Palette.amberText.dark, Palette.background.dark) >= 4.5, "dark")
     },
-    Test("white text is 4.5:1 on every taf colour and every stop of the brand") {
+    Test("white text is 4.5:1 on every taf colour and every stop of the brand, which a count's fill is") {
         for hex in Palette.tafColors + Palette.brand {
             try expect(Palette.contrast(0xFFFFFF, hex) >= 4.5, String(hex, radix: 16))
         }

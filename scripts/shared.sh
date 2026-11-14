@@ -1,7 +1,7 @@
 #!/bin/sh
 # The words and contracts every tafs app shares, read from kiff/tafs at the commit named in
 # shared.pin (docs/shared.md). Nothing of them is copied into this repository.
-#   scripts/shared.sh fetch          puts app/strings and contracts at the pin in .shared/
+#   scripts/shared.sh fetch          puts the words, the contracts and the mascot at the pin in .shared/
 #   scripts/shared.sh drift          fails when the pin is too far behind kiff/tafs main
 #   scripts/shared.sh verdict C D    the drift rule alone: C commits behind, D days behind
 set -eu
@@ -28,11 +28,11 @@ verdict() {
 
 case "${1:-}" in
     fetch)
-        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && exit 0
+        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && [ -d .shared/ios/Shared ] && exit 0
         rm -rf .shared
         git init -q .shared
         git -C .shared remote add origin "https://github.com/$REPO.git"
-        git -C .shared sparse-checkout set app/strings contracts
+        git -C .shared sparse-checkout set app/strings contracts ios/Shared/Mascot.xcassets
         git -C .shared fetch -q --depth 1 --filter=blob:none origin "$PIN"
         git -C .shared checkout -q FETCH_HEAD
         echo "$PIN" > .shared/.pin
