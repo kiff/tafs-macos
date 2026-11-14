@@ -8,3 +8,4 @@ happens in pull requests to `main`.
 - [The window and its sidebar](docs/shell.md)
 - [Keys and signatures](docs/signing.md)
 - [Signing in and adding this Mac](docs/pairing.md)
+- [The signed-in Mac](docs/account.md)

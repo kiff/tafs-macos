@@ -29,6 +29,12 @@ enum KIFFError: Error, Equatable {
     /// An answer that isn't what the contract says.
     case unreadable
 
+    /// Whether KIFF no longer knows this session: signed out, or the device was removed.
+    var endsSession: Bool {
+        if case .refused(status: 401, code: _) = self { return true }
+        return false
+    }
+
     init(status: Int, body: Data) {
         struct Refusal: Decodable { let error: String? }
         let code = (try? JSONDecoder().decode(Refusal.self, from: body))?.error ?? ""
@@ -58,7 +64,7 @@ struct DeviceStart: Decodable, Equatable {
 }
 
 /// A session, handed over once. Its token is kept in the Keychain and never written elsewhere.
-struct Session: Decodable, Equatable {
+struct Session: Codable, Equatable {
     let accessToken: String
     let expiresIn: Int
     let tenant: String
