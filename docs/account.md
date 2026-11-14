@@ -62,3 +62,23 @@ This Mac is never removed from its own row: it signs out with Sign out, which al
 its session.
 
 `scripts/test.sh account` writes `build/screenshots/devices-*.png`.
+
+## The Account page (`AccountView`, `AccountModel`)
+
+To the iPad's layout: a large title and grouped panels of rows.
+
+| Group | Rows |
+|---|---|
+| Your account | Mode ("Signed in with KIFF"), and the KIFF account: who is signed in, from `GET /v1/me`. |
+| View only | **Only when KIFF says this session is `view`** (`approval_mode`): what a view-only Mac does, and **Add this Mac**. A KIFF that doesn't say, and a session it calls `passkey` or `key`, show no such group. |
+| People & apps | Devices (opens the list), Connect apps. |
+| Plan | tafs cloud's line for the balance; it opens Plan & usage. Left out when it can't be read. |
+| Theme | Light, Dark, or System. Kept for the next launch and applied to the whole app. |
+| How it works | The shared line. |
+| Legal | Terms and Privacy policy, on kiff.dev. Only those two pages are ever opened from here. |
+| | Sign out. |
+
+Each line is read on its own: one that can't be read is left out, never the page.
+
+Not on the Mac yet: People & groups, Coach's suggestions, Alerts, Language, AI use, Time zone,
+Export my chats, About.

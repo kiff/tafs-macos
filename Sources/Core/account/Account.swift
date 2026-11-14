@@ -33,6 +33,32 @@ struct Device: Decodable, Identifiable, Equatable {
     }
 }
 
+/// Who is signed in, and how this session approves (`GET /v1/me`).
+struct Me: Decodable, Equatable {
+    /// The person's email, when KIFF says it.
+    let email: String?
+    /// The account's name, else its slug.
+    let account: String?
+    /// How this session approves, in KIFF's word: `view`, `key`, `passkey`. Nil from a KIFF
+    /// that doesn't say: the app then claims nothing about it.
+    let approvalMode: String?
+
+    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode" }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func text(_ key: CodingKeys) -> String? {
+            guard let value = (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil, !value.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+            return value
+        }
+        email = text(.email)
+        account = text(.name) ?? text(.slug)
+        approvalMode = text(.approvalMode)
+    }
+
+    /// The session reads everything and approves nothing here: exactly when KIFF says `view`.
+    var viewOnly: Bool { approvalMode == "view" }
+}
+
 /// KIFF's routes for a signed-in Mac. Every request carries the session; one that KIFF wants
 /// signed also carries the device key's signature over the exact bytes sent.
 struct AccountClient {
@@ -44,6 +70,9 @@ struct AccountClient {
     var sign: ((HTTPRequest) throws -> String)?
     /// Signs one of KIFF's messages with the device key: the signature in standard base64.
     var signMessage: ((String) throws -> String)?
+
+    /// Who is signed in, and how this session approves.
+    func me() async throws -> Me { try read(try await send("GET", "/v1/me")) }
 
     /// The devices signed in as this person on the account.
     func devices() async throws -> [Device] {
