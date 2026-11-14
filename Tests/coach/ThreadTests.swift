@@ -21,7 +21,7 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
     return (CloudClient(transport: transport, session: session), transport)
 }
 
-let coachTests: [Test] = [
+let coachThreadTests: [Test] = [
     Test("Coach is the account's, or none before it is started, and reading it sends no time zone", awaiting: {
         let (client, transport) = cloud([(200, setupAnswer), (200, #"{"setup":null,"tools":null}"#)])
         let coach = try await client.coach()

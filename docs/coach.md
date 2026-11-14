@@ -1,7 +1,7 @@
 # Coach
 
 Coach is where a taf is set up, an app is connected and a taf is changed, in conversation.
-**Today this screen reads Coach's chat. Nothing is written or answered from it yet.**
+**Today this screen reads Coach's chat and writes to Coach. Its cards can't be answered from it yet.**
 
 ## What is read (`Coach`, `Thread`, `CloudClient`)
 
@@ -28,14 +28,41 @@ The app draws the list as it comes. It places and folds nothing itself.
   an empty chat.
 - With no Coach, or an empty chat: "Ask anything about your tafs".
 
+## Writing to Coach (`CloudClient.send`, `CoachModel`)
+
+`POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
+sent for what the person typed and sent with Return or Send.
+
+- **A message is 1 to 2,000 characters once trimmed.** Anything else is not sent.
+- **The sent message stays in view**, faded, until the thread has it. tafs cloud answers the
+  send with the message's id, and the thread's copy carries the same id.
+- **Then the thread is read again every 4 seconds, at most 30 times**, while an answer is
+  owed, as the phones do when the answer can't be streamed.
+- **A message that didn't go stays where it was**, with tafs cloud's own words for why when
+  it sent some ("Halted: nothing runs until it's resumed."), and Retry, which sends the same
+  words.
+- One message goes at a time: the box sends again once the last one is in the thread or failed.
+
+### The AI-data consent
+
+Before anything a person writes reaches the model, they allow it once. When tafs cloud
+refuses a message for want of it (`ai_consent_required`), the app shows **tafs cloud's own
+screen**: its title, its lines, Allow and Not now.
+
+- **Allow** sends the version of the words that were read (`POST /v1/me/ai-consent`), then
+  the message.
+- **Not now** allows nothing and sends nothing more. The message stays unsent.
+- A consent without its words is no screen: the refusal is then shown as a failure.
+
 ## Not yet
 
-Writing to Coach, its answer as it comes, answering a card, connecting an app with its Card,
+Coach's answer as it is written (the stream), answering a card, connecting an app with its Card,
 the list of earlier conversations, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests
 
 `scripts/test.sh coach`: Coach or none, no time zone sent, the thread in tafs cloud's order,
-items that don't read, a card's key, an unreadable answer, and **that nothing but `GET` is
-ever sent**. It writes `build/screenshots/coach-*.png`.
+items that don't read, a card's key, an unreadable answer; what is and isn't a message, the
+send's exact body, each refusal, the following's pace and its limit, Retry, and both answers
+to the consent. It writes `build/screenshots/coach-*.png`.

@@ -24,8 +24,48 @@ struct CloudClient {
         return answer
     }
 
+    /// Sends one request that changes something, and answers its body. A refusal throws
+    /// `CloudRefusal`, with tafs cloud's own words for the person when it sent some.
+    func post(_ path: String, _ fields: [String: String]) async throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let request = HTTPRequest(method: "POST", path: path, headers: [
+            "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
+            "Accept-Language": language, "User-Agent": "tafs-macos",
+        ], body: try encoder.encode(fields))
+        let (status, body) = try await transport.send(request)
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: body) }
+        return body
+    }
+
     /// A value as one part of a query: only letters and digits stay as they are.
     static func query(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value
     }
+}
+
+/// tafs cloud didn't do what was asked: its status, its code, and its words for the person.
+struct CloudRefusal: Error, Equatable {
+    let status: Int
+    let code: String?
+    /// tafs cloud's line in the person's language, drawn as sent; nil when it sent none.
+    let words: String?
+    /// The AI-data consent's words, when the refusal is for want of it.
+    let consent: TafsCloud.AIConsent?
+
+    init(status: Int, body: Data) {
+        struct Body: Decodable { let words: String?; let error: String? }
+        let refusal = TafsCloud.Refusal(status: status, body: body)
+        let read = try? JSONDecoder().decode(Body.self, from: body)
+        self.status = status
+        code = refusal.code ?? read?.error
+        let line = read?.words?.trimmingCharacters(in: .whitespacesAndNewlines)
+        words = line.flatMap { $0.isEmpty ? nil : $0 }
+        consent = refusal.consent
+    }
+
+    /// The person must allow AI use first, and the screen for it can be drawn.
+    var needsConsent: Bool { code == TafsCloud.aiConsentRequired && consent?.drawable == true }
+    /// Too many messages in a few minutes.
+    var tooMany: Bool { status == 429 }
 }

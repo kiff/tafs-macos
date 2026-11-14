@@ -80,6 +80,14 @@ enum Thread {
 
         private struct Skipped: Decodable {}
 
+        /// Whether the thread has the message tafs cloud gave this id.
+        func has(message id: String) -> Bool {
+            items.contains { item in
+                if case .message(let message, _) = item { return message.id == id }
+                return false
+            }
+        }
+
         /// Whether something in this chat waits for the person.
         var waitsForPerson: Bool {
             items.contains { item in
@@ -105,12 +113,44 @@ struct Coach: Decodable, Equatable {
     let name: String
 }
 
+/// A message as it may be sent: 1 to 2,000 characters once trimmed.
+enum Outgoing {
+    static let longest = 2000
+
+    /// The text to send, or nil when there is nothing to send or it is too long.
+    static func text(_ typed: String) -> String? {
+        let trimmed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || trimmed.count > longest ? nil : trimmed
+    }
+
+    /// What tafs cloud answers a sent message: the thread gives the same message that id.
+    struct Sent: Decodable, Equatable {
+        struct Message: Decodable, Equatable { let id: String }
+        let session: String
+        let message: Message?
+    }
+}
+
 extension CloudClient {
     /// The account's Coach. A plain read: it sends no time zone, so it changes nothing.
     func coach() async throws -> Coach? {
         struct Answer: Decodable { let setup: Coach? }
         let answer: Answer = try await get("/v1/setup")
         return answer.setup
+    }
+
+    /// Sends the person's message to a taf's live chat, or to Coach's. It starts a run: only
+    /// ever called for what the person typed and sent.
+    func send(_ text: String, to taf: String) async throws -> Outgoing.Sent {
+        guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
+        let body = try await post("/v1/tafs/\(Self.query(taf))/messages", ["text": text])
+        guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
+        return sent
+    }
+
+    /// Allows AI use, for the version of the words the person read.
+    func allowAI(version: String) async throws {
+        _ = try await post("/v1/me/ai-consent", ["version": version])
     }
 
     /// The thread of the person's chats with a taf, or with Coach.

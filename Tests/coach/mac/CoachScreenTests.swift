@@ -9,7 +9,7 @@ private func make(_ answers: [(Int, String)]) -> (CoachModel, CannedTransport) {
     return (CoachModel(cloud: CloudClient(transport: transport, session: session)), transport)
 }
 
-let coachMacTests: [Test] = [
+let coachScreenTests: [Test] = [
     Test("Coach's chat is read from its own taf, and an account with no Coach reads no thread", awaiting: { @MainActor in
         let (model, transport) = make([(200, setupAnswer), (200, threadAnswer)])
         await model.load()
@@ -22,7 +22,7 @@ let coachMacTests: [Test] = [
         try expectEqual(none.state, .notStarted)
         try expectEqual(sent.sent.count, 1)
     }),
-    Test("the screen only reads, and a chat that can't be read says so", awaiting: { @MainActor in
+    Test("opening the chat only reads, and a chat that can't be read says so", awaiting: { @MainActor in
         let (model, transport) = make([(200, setupAnswer), (200, threadAnswer)])
         await model.load()
         try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
