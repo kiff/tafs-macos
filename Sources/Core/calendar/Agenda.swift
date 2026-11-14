@@ -116,6 +116,28 @@ enum Days {
         return (y, m, d, weekdays[w - 1], months[m - 1])
     }
 
+    /// The six weeks a month's card shows, Monday first: 42 days around the month `day` is in.
+    static func monthGrid(of day: String) -> [String] {
+        guard let p = parts(day) else { return [] }
+        let first = String(format: "%04d-%02d-01", p.year, p.month)
+        guard let start = week(of: first).first else { return [] }
+        return (0..<42).compactMap { adding($0, to: start) }
+    }
+
+    /// The first day of the month before or after the one `day` is in.
+    static func month(_ offset: Int, from day: String) -> String? {
+        guard let p = parts(day) else { return nil }
+        let index = p.year * 12 + (p.month - 1) + offset
+        return String(format: "%04d-%02d-01", index / 12, index % 12 + 1)
+    }
+
+    /// The hours a day's grid shows: 08:00 to 18:00, wider when an event falls outside.
+    static func hours(covering minutes: [Int]) -> ClosedRange<Int> {
+        let first = min(8, (minutes.min() ?? 480) / 60)
+        let last = max(18, (minutes.max() ?? 1080) / 60)
+        return max(0, first)...min(23, last)
+    }
+
     /// Today's date in a zone tafs cloud named, else in the Mac's own.
     static func today(in zone: String, now: Date = Date()) -> String {
         var local = Calendar(identifier: .gregorian)

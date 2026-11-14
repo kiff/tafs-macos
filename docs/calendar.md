@@ -18,12 +18,19 @@ so no other screen draws a second way to it.
 
 ## The screen (`CalendarView`, `CalendarModel`)
 
-- **Seven days, Monday to Sunday**, each with its events by time, or "Nothing scheduled on
-  this day."
-- **Today** is marked with a pill on its day, and is the date in the **account's** zone, as
-  tafs cloud names it. The Today button comes back to this week.
-- The arrows move by a whole week. A slower answer for a week left behind is dropped.
-- The title is the shared line for the week, also across two months or two years.
+To the iPad's layout:
+
+- **On the left, the month's card**: six weeks, Monday first, today ringed in amber, the days
+  shown shaded. Its arrows turn its page without changing the days shown; a click on a day
+  goes to it. Under it, the **agenda**: each day's events with tafs cloud's words, or tafs
+  cloud's own line when there are none.
+- **On the right**: Today, the arrows, the range's title, and today's date; then **Day** and
+  **Week**; then the days' columns over an **hour grid**, 08:00 to 18:00, wider when an event
+  falls outside. Each event sits at its time in its taf's colour.
+- **Today** is the date in the **account's** zone, as tafs cloud names it. The first read
+  names that zone: if its today is another day than the Mac's, the screen goes there.
+- The arrows move by a week in Week and by a day in Day. A slower answer for days left behind
+  is dropped.
 
 ## Dates (`Days`)
 
@@ -32,7 +39,7 @@ refused, never rolled over.
 
 ## Not yet
 
-The Day and Month views, choosing a date, and opening a taf from an event.
+The Month view, and opening a taf from an event.
 
 ## Tests
 

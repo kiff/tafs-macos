@@ -43,6 +43,23 @@ let calendarTests: [Test] = [
         try expectEqual(Days.adding(7, to: "2026-02-23"), "2026-03-02")
         try expectEqual(Days.adding(-7, to: "2024-03-04"), "2024-02-26")
     },
+    Test("a month's card is six weeks from a Monday, and months step across a year") {
+        let grid = Days.monthGrid(of: "2026-11-15")
+        try expectEqual(grid.count, 42)
+        try expectEqual(grid.first, "2026-10-26")
+        try expectEqual(grid.last, "2026-12-06")
+        try expectEqual(Days.monthGrid(of: "2027-02-10").first, "2027-02-01")
+        try expectEqual(Days.month(1, from: "2026-12-31"), "2027-01-01")
+        try expectEqual(Days.month(-1, from: "2026-01-15"), "2025-12-01")
+        try expectEqual(Days.month(-12, from: "2026-11-15"), "2025-11-01")
+        try expectEqual(Days.monthGrid(of: "nope"), [])
+    },
+    Test("the hour grid is 08:00 to 18:00, and widens for an event outside it") {
+        try expectEqual(Days.hours(covering: []), 8...18)
+        try expectEqual(Days.hours(covering: [540, 600]), 8...18)
+        try expectEqual(Days.hours(covering: [390, 1380]), 6...23)
+        try expectEqual(Days.hours(covering: [0, 1439]), 0...23)
+    },
     Test("a date that isn't one is refused, never rolled over") {
         for bad in ["2026-02-30", "2026-13-01", "20261114", "2026-1-4", "today", ""] {
             try expect(Days.date(bad) == nil, bad)
