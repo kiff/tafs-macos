@@ -32,3 +32,6 @@ closed there is no notification yet: that needs a push, which needs a signed bui
 
 Sign out ends the session at KIFF, then forgets it on this Mac whether or not KIFF answered,
 and the window goes back to sign-in.
+
+If KIFF couldn't be reached, this Mac is signed out here but its session is still valid at
+KIFF until it expires. To end it for certain, sign this Mac out from another device's Devices.
