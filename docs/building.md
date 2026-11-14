@@ -32,7 +32,7 @@ The build is not signed. Signing and notarization are a release step, not part o
 | `Tests/<part>/mac/` | The part's tests that need the views or a Mac. |
 | `Tests/Runner/` | The small test runner. XCTest isn't in the Command Line Tools. |
 
-A **part** is a folder of `Tests/`: `shell` and `strings` today, then `contracts`, `pairing`,
+A **part** is a folder of `Tests/`: `shell`, `strings` and `contracts` today, then `pairing`,
 `approvals`, `coach`, `record`, `connections`, `calendar` and `account` as they arrive.
 
 ## Test
