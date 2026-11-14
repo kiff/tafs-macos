@@ -18,10 +18,40 @@ enum Thread {
         var isNote: Bool { kind == "kickoff" }
     }
 
+    /// A card Coach or a taf showed. The run pauses on one that waits, and its answer goes
+    /// back as data, never as text in the chat.
+    struct Card: Equatable {
+        struct Option: Equatable {
+            let label: String
+            let value: String
+        }
+        /// Unique in the thread: a card is known by it, never only by the name the model gave it.
+        let key: String
+        /// The name the model gave it: what an answer is sent to.
+        let id: String
+        /// `confirm`, `questions`, `approval`, `sign_in`, or a kind that only shows something.
+        let type: String
+        /// The chat it is in.
+        let session: String?
+        let title: String?
+        let text: String?
+        let options: [Option]
+        /// `owner` when its run waits on the person; `service` when tafs cloud answers it.
+        let waits: String?
+        /// What was answered, in tafs cloud's words, once it was.
+        let answered: String?
+
+        var waitsForPerson: Bool { waits == "owner" && answered == nil }
+        /// A choice between a few answers, which grants nothing: the only kind answered here.
+        var isChoice: Bool { type == "confirm" && !options.isEmpty }
+        /// A card whose answer is a signature: approving a connection or a Card.
+        var grants: Bool { type == "approval" || type == "sign_in" }
+    }
+
     enum Item: Identifiable, Equatable {
         case message(Message, position: Int)
         /// A card that waits for an answer (`owner`), or that tafs cloud answers (`service`).
-        case card(key: String, waits: String?, position: Int)
+        case card(Card, position: Int)
         /// A call KIFF held, at the point it was held. Only KIFF's keys: it is answered in Needs you.
         case held(exception: String, position: Int)
         /// Something this app doesn't draw yet (a drive's end, a kind it doesn't know).
@@ -29,7 +59,7 @@ enum Thread {
 
         var id: Int {
             switch self {
-            case .message(_, let p), .card(_, _, let p), .held(_, let p), .other(_, let p): return p
+            case .message(_, let p), .card(_, let p), .held(_, let p), .other(_, let p): return p
             }
         }
     }
@@ -42,7 +72,9 @@ enum Thread {
         enum Keys: String, CodingKey { case items, working }
         enum ItemKeys: String, CodingKey { case type, message, card, held }
         enum MessageKeys: String, CodingKey { case id, at, from, kind, text }
-        enum CardKeys: String, CodingKey { case key, id, waits }
+        enum CardKeys: String, CodingKey { case key, id, type, session, title, text, options, waits, answer }
+        enum OptionKeys: String, CodingKey { case label, value }
+        enum AnswerKeys: String, CodingKey { case words, state }
         enum HeldKeys: String, CodingKey { case exception }
 
         init(from decoder: Decoder) throws {
@@ -64,9 +96,27 @@ enum Thread {
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
                                                   kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text), position: position))
                 case "card":
-                    guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
-                          let key = ((try? card.decodeIfPresent(String.self, forKey: .key)) ?? nil) ?? ((try? card.decodeIfPresent(String.self, forKey: .id)) ?? nil) else { continue }
-                    items.append(.card(key: key, waits: (try? card.decodeIfPresent(String.self, forKey: .waits)) ?? nil, position: position))
+                    guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card) else { continue }
+                    func text(_ key: CardKeys) -> String? {
+                        guard let value = (try? card.decodeIfPresent(String.self, forKey: key)) ?? nil,
+                              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                        return value
+                    }
+                    guard let id = text(.id) ?? text(.key) else { continue }
+                    var options: [Card.Option] = []
+                    if var list = try? card.nestedUnkeyedContainer(forKey: .options) {
+                        while !list.isAtEnd {
+                            guard let option = try? list.nestedContainer(keyedBy: OptionKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                            // An option with no value can't be answered, and one with no label can't be read.
+                            guard let label = try? option.decode(String.self, forKey: .label), let value = try? option.decode(String.self, forKey: .value),
+                                  !label.isEmpty, !value.isEmpty else { continue }
+                            options.append(Card.Option(label: label, value: value))
+                        }
+                    }
+                    let answer = try? card.nestedContainer(keyedBy: AnswerKeys.self, forKey: .answer)
+                    let answered = answer.flatMap { ((try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ((try? $0.decodeIfPresent(String.self, forKey: .state)) ?? nil) }
+                    items.append(.card(Card(key: text(.key) ?? id, id: id, type: text(.type) ?? "", session: text(.session), title: text(.title),
+                                            text: text(.text), options: options, waits: text(.waits), answered: answered), position: position))
                 case "held":
                     guard let held = try? item.nestedContainer(keyedBy: HeldKeys.self, forKey: .held),
                           let exception = try? held.decode(String.self, forKey: .exception) else { continue }
@@ -103,7 +153,7 @@ enum Thread {
         var waitsForPerson: Bool {
             items.contains { item in
                 switch item {
-                case .card(_, let waits, _): return waits == "owner"
+                case .card(let card, _): return card.waitsForPerson
                 case .held: return true
                 default: return false
                 }
@@ -157,6 +207,17 @@ extension CloudClient {
         let body = try await post("/v1/tafs/\(Self.query(taf))/messages", ["text": text])
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
+    }
+
+    /// Answers a card that waits with one of its own options, as data. The run that waited
+    /// goes on. Only a choice is answered this way: never a card whose answer is a signature.
+    func answer(_ card: Thread.Card, with option: Thread.Card.Option, in taf: String) async throws {
+        guard card.isChoice, !card.grants, card.options.contains(option) else {
+            throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
+        }
+        var fields = ["answer": option.value]
+        if let session = card.session { fields["session"] = session }
+        _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
     }
 
     /// Allows AI use, for the version of the words the person read.
