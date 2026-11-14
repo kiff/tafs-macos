@@ -47,6 +47,31 @@ sent for what the person typed and sent with Return or Send.
   did arrive (only its answer was lost) and nothing more is sent.
 - One message goes at a time: the box sends again once the last one is in the thread or failed.
 
+### The answer as it is written (`StreamEvent`, `LiveAnswer`, `NetworkLineStream`)
+
+The message is sent on the stream route (`POST /v1/tafs/{id}/messages/stream`), so the answer
+shows as Coach writes it. tafs cloud trims the stream to what an app shows.
+
+| Event | What the app does |
+|---|---|
+| `session` | Notes the person's message's id, to match it in the thread. |
+| `text` | Adds to the answer, drawn under the person's message. |
+| `state`, `activity` | The one line of where the run is, in tafs cloud's words; "Thinking…" before either. |
+| `step` | If it failed, tafs cloud's one line of why, under the answer. |
+| `held`, `taken`, `component`, `part` | The thread now has something the stream doesn't carry: it is read again. |
+| `end` | The answer is over: the thread is read, which has it whole. If the run stopped with a reason, tafs cloud's words for it are shown. |
+| `thinking` | Nothing. The model's thinking is never drawn. |
+
+- An event that isn't what the page says (not JSON, a number where words should be, a name
+  this app doesn't know) is dropped. It is never drawn.
+- **A message is never sent twice.** If the stream can't open, the app reads the thread
+  first: if tafs cloud has the message, it only follows the thread; only if it doesn't is the
+  message sent on the plain route. A stream that breaks after tafs cloud's first event is
+  never sent again.
+- A refusal on the stream is handled as on the plain route: the consent is asked for, or the
+  message stays with tafs cloud's reason.
+- The stream goes to tafs cloud's streaming address, the one the phones use, over HTTPS only.
+
 ### The AI-data consent
 
 Before anything a person writes reaches the model, they allow it once. When tafs cloud
@@ -62,7 +87,7 @@ screen**: its title, its lines, Allow and Not now.
 
 ## Not yet
 
-Coach's answer as it is written (the stream), answering a card, connecting an app with its Card,
+Answering a card, connecting an app with its Card,
 the list of earlier conversations, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 

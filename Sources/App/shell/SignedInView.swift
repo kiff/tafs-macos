@@ -19,7 +19,7 @@ struct SignedInView: View {
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
-    init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, signedOut: @escaping () -> Void) {
+    init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void) {
         self.account = account
         self.signedOut = signedOut
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
@@ -29,7 +29,7 @@ struct SignedInView: View {
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
-        _coach = StateObject(wrappedValue: CoachModel(cloud: cloud))
+        _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
     }
 
     var body: some View {
