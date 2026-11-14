@@ -31,6 +31,17 @@ let accountScreenTests: [Test] = [
         try expectEqual(model.notRemoved, "owner_only")
         try expectEqual(model.state, .loaded(devices))
     }),
+    Test("signing out a device that approves needs a device that can approve, and says so", awaiting: { @MainActor in
+        for code in ["approval_key_required", "critical_key_required"] {
+            let (model, _) = model([(200, two), (403, #"{"error":"\#(code)"}"#)])
+            await model.load()
+            guard case .loaded(let devices) = model.state else { throw Failure(description: "not loaded") }
+            await model.remove(devices[1])
+            try expectEqual(model.needsApprover, true)
+            try expectEqual(model.notRemoved, nil)
+            try expectEqual(model.state, .loaded(devices))
+        }
+    }),
     Test("the screenshots: Devices in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")

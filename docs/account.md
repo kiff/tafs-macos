@@ -48,6 +48,10 @@ network.
 - "This device" on this Mac's own row, with no button;
 - **Sign out** on every other row. It asks first, naming the device.
 
+Signing out a device that can approve is itself an approval. A Mac that can't approve gets
+KIFF's refusal and says "This device can't approve. Approve on another device signed in to
+your account."
+
 After a removal the list is read again from KIFF. A removal KIFF refuses says why and leaves
 the list as it was. This Mac is never removed from its own row: it signs out with Sign out,
 which also forgets its session.

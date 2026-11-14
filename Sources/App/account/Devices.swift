@@ -12,6 +12,12 @@ final class DevicesModel: ObservableObject {
     @Published private(set) var state: State = .loading
     /// Why the last removal wasn't taken.
     @Published private(set) var notRemoved: String?
+    /// The last removal needs a device that can approve: signing out a device that approves
+    /// is itself an approval, which this Mac can't give.
+    @Published private(set) var needsApprover = false
+
+    /// KIFF's refusals that mean "this needs an approval".
+    static let approvalCodes: Set<String> = ["approval_key_required", "critical_key_required"]
 
     private let account: AccountClient
 
@@ -28,8 +34,13 @@ final class DevicesModel: ObservableObject {
         do {
             try await account.removeDevice(device.id)
             notRemoved = nil
+            needsApprover = false
             await load()
+        } catch KIFFError.refused(status: 403, code: let code) where Self.approvalCodes.contains(code) {
+            notRemoved = nil
+            needsApprover = true
         } catch {
+            needsApprover = false
             notRemoved = NeedsYouModel.why(error)
         }
     }
@@ -59,6 +70,9 @@ struct DevicesView: View {
                     }
                     .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
                     .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+                }
+                if model.needsApprover {
+                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.no)
                 }
                 if let why = model.notRemoved {
                     Text(words("sign_in.not_signed_out_device", ["why": why, "device": words("device.mac")]))
