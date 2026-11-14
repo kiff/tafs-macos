@@ -5,6 +5,7 @@ struct SignedInView: View {
     @Environment(\.words) private var words
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
+    @StateObject private var record: RecordModel
     @State private var selection: Screen = .overview
     @State private var announced = Announced()
     private let notifier = Notifier()
@@ -13,17 +14,19 @@ struct SignedInView: View {
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
-    init(account: AccountClient, route: ApprovalRoute, signedOut: @escaping () -> Void) {
+    init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, signedOut: @escaping () -> Void) {
         self.account = account
         self.signedOut = signedOut
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
+        _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
     }
 
     var body: some View {
         ShellView(selection: $selection, needsYou: needsYou.count) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
+            case .record: return AnyView(RecordView(model: record))
             case .account: return AnyView(accountScreen)
             default: return nil
             }
