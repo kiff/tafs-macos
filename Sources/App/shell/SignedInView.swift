@@ -6,6 +6,7 @@ struct SignedInView: View {
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
     @StateObject private var record: RecordModel
+    @StateObject private var overview: OverviewModel
     @State private var selection: Screen = .overview
     @State private var announced = Announced()
     private let notifier = Notifier()
@@ -20,12 +21,14 @@ struct SignedInView: View {
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
+        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
     }
 
     var body: some View {
         ShellView(selection: $selection, needsYou: needsYou.count) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
+            case .overview: return AnyView(OverviewView(model: overview))
             case .record: return AnyView(RecordView(model: record))
             case .account: return AnyView(accountScreen)
             default: return nil
