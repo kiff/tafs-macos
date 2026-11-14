@@ -70,6 +70,24 @@ let accountTests: [Test] = [
         }
         try expectEqual(untouched.sent.count, 0)
     }),
+    Test("who is signed in and how the session approves are KIFF's words, and view-only is only what KIFF calls view", awaiting: {
+        let (account, transport) = client([(200, #"{"tenant_id":"t1","tenant_slug":"acme","tenant_display_name":"Acme","email":"you@example.com","approval_mode":"view"}"#),
+                                           (200, #"{"tenant_slug":"acme","approval_mode":"passkey"}"#), (200, #"{"tenant_slug":"acme","email":" "}"#), (200, "<html>")])
+        let view = try await account.me()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/me")
+        try expectEqual(view.email, "you@example.com")
+        try expectEqual(view.account, "Acme")
+        try expectEqual(view.viewOnly, true)
+        let passkey = try await account.me()
+        try expectEqual(passkey.viewOnly, false)
+        try expectEqual(passkey.account, "acme")
+        // A KIFF that doesn't say: the app claims neither.
+        let silent = try await account.me()
+        try expectEqual(silent.approvalMode, nil)
+        try expectEqual(silent.viewOnly, false)
+        try expectEqual(silent.email, nil)
+        do { _ = try await account.me(); throw Failure(description: "HTML was read") } catch let error as KIFFError { try expectEqual(error, .unreadable) }
+    }),
     Test("signing out ends the session at KIFF", awaiting: {
         let (account, transport) = client([(200, "{}")])
         try await account.signOut()
