@@ -14,6 +14,10 @@ PARTS="$*"
 # The shared words and contracts, at the pin.
 scripts/shared.sh fetch
 
+# Swift tells files of one build apart by name: two with the same name don't compile together.
+TWICE=$(find Sources Tests -name '*.swift' -exec basename {} \; | sort | uniq -d)
+[ -z "$TWICE" ] || { echo "Two files share a name; name each after its part: $TWICE" >&2; exit 2; }
+
 OUT=build/tests
 mkdir -p "$OUT"
 MAIN="$OUT/main.swift"

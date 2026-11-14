@@ -34,6 +34,8 @@ mkdir -p "$STRINGS"
 cp .shared/app/strings/languages.json "$STRINGS/"
 for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped/ { for (i = 2; i <= NF; i++) print $i }'); do
     cp -R ".shared/app/strings/$lang" "$STRINGS/$lang"
+    ls "$STRINGS/$lang"/*.json > /dev/null
 done
+[ -d "$STRINGS/en" ] || { echo "No words were copied into the app" >&2; exit 1; }
 cp .shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png "$APP/Contents/Resources/mascot.png"
 echo "Built $APP: $(lipo -archs "$APP/Contents/MacOS/tafs")"
