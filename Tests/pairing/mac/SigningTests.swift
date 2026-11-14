@@ -3,7 +3,7 @@ import Foundation
 
 private let examplePublicKey = Data(base64Encoded: Example.publicKey)!
 
-let pairingMacTests: [Test] = [
+let pairingSigningTests: [Test] = [
     Test("the worked example's hashes are KIFF's") {
         try expectEqual(Signing.sha256Hex(Data(Example.body.utf8)), Example.bodyHash)
         try expectEqual(Signing.sha256Hex(Data(Example.message.utf8)), Example.messageHash)

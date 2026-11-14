@@ -1,0 +1,93 @@
+import Foundation
+
+private let startAnswer = #"{"device_code":"dc","user_code":"ABCD-EFGH","verification_uri":"https://app.kiff.dev/device","verification_uri_complete":"https://app.kiff.dev/device?code=ABCD-EFGH","expires_in":600,"interval":5}"#
+private let sessionAnswer = #"{"access_token":"tok","token_type":"Bearer","expires_in":60,"tenant":"t1","subject":"u1","device_id":"dev_1"}"#
+private let pending = (400, #"{"error":"authorization_pending"}"#)
+
+@MainActor
+private func model(_ answers: [(Int, String)], store: MemoryStore = MemoryStore(), opened: @escaping (URL) -> Void = { _ in }) throws -> (SignInModel, CannedTransport) {
+    let transport = CannedTransport(answers)
+    let key = try DeviceKey.load(from: store, enclave: false)
+    let model = SignInModel(client: KIFFClient(transport: transport), key: key, approval: .passkey, sessions: SessionStore(store: store),
+                            deviceName: "A Mac", sleep: { _ in }, open: opened, now: { Date(timeIntervalSince1970: 1_794_679_200) })
+    return (model, transport)
+}
+
+let pairingModelTests: [Test] = [
+    Test("signing in opens KIFF's page, waits, and keeps the session", awaiting: { @MainActor in
+        var opened: [URL] = []
+        let store = MemoryStore()
+        let (model, transport) = try model([(200, startAnswer), pending, (200, sessionAnswer)], store: store) { opened.append($0) }
+        await model.signIn()
+        try expectEqual(opened.map(\.absoluteString), ["https://app.kiff.dev/device?code=ABCD-EFGH"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/auth/device/start", "/v1/auth/device/token", "/v1/auth/device/token"])
+        try expectEqual(model.session?.tenant, "t1")
+        try expectEqual(SessionStore(store: store).load()?.accessToken, "tok")
+        try expectEqual(model.step, .welcome)
+    }),
+    Test("a page that isn't KIFF's over HTTPS is never opened", awaiting: { @MainActor in
+        for page in ["http://app.kiff.dev/device", "https://kiff.dev.example.com/device", "file:///etc/passwd"] {
+            var opened = 0
+            let start = startAnswer.replacingOccurrences(of: "https://app.kiff.dev/device?code=ABCD-EFGH", with: page)
+            let (model, _) = try model([(200, start), (200, sessionAnswer)]) { _ in opened += 1 }
+            await model.signIn()
+            try expectEqual(opened, 0)
+        }
+    }),
+    Test("a sign-in that can't start says why, and keeps no session", awaiting: { @MainActor in
+        let (model, _) = try model([(403, #"{"error":"platform_not_allowed"}"#)])
+        await model.signIn()
+        try expectEqual(model.step, .failed(why: "platform_not_allowed", pairing: false))
+        try expectEqual(model.session, nil)
+    }),
+    Test("pairing shows this Mac's keys and check code, and claims with a proof by the device key", awaiting: { @MainActor in
+        let store = MemoryStore()
+        let key = try DeviceKey.load(from: store, enclave: false)
+        let (model, transport) = try model([pending, (200, sessionAnswer)], store: store)
+        var shown: SignInModel.Code?
+        let watching = model.$step.sink { if case .pairing(let code) = $0 { shown = code } }
+        await model.pair()
+        watching.cancel()
+        guard let shown else { throw Failure(description: "no code was shown") }
+        let payload = try JSONDecoder().decode(PairingPayload.self, from: Data(shown.text.utf8))
+        try expectEqual(payload.pub, Encoding.base64URL(key.publicKeyDER))
+        try expectEqual(payload.approvalPub, nil)
+        try expectEqual(payload.kind, .passkey)
+        try expectEqual(payload.name, "A Mac")
+        try expectEqual(payload.exp, "2026-11-14T18:05:00Z")
+        try expectEqual(shown.check, Signing.checkCode(deviceKey: key.publicKeyDER, approvalKey: nil))
+        let claim = try JSONDecoder().decode([String: String].self, from: transport.sent[1].body)
+        try expectEqual(claim["nonce"], payload.nonce)
+        try expectEqual(claim["pub"], payload.pub)
+        let message = KIFFMessage.pairClaim(nonce: payload.nonce, keyHash: Signing.sha256Hex(key.publicKeyDER))
+        try expect(Signing.verifies(claim["proof"] ?? "", over: message, publicKeyDER: key.publicKeyDER), "the proof verifies")
+        try expectEqual(model.session?.deviceID, "dev_1")
+    }),
+    Test("a pairing code that runs out says so, and a refused proof is a failure, with no session either way", awaiting: { @MainActor in
+        let (expired, _) = try model([(400, #"{"error":"expired_token"}"#)])
+        await expired.pair()
+        try expectEqual(expired.step, .codeExpired)
+        let (refused, _) = try model([(403, #"{"error":"invalid_proof"}"#)])
+        await refused.pair()
+        try expectEqual(refused.step, .failed(why: "invalidProof", pairing: true))
+        try expectEqual(expired.session ?? refused.session, nil)
+    }),
+    Test("each pairing code has a new nonce", awaiting: { @MainActor in
+        let (model, transport) = try model([(400, #"{"error":"expired_token"}"#), (400, #"{"error":"expired_token"}"#)])
+        await model.pair()
+        await model.pair()
+        let nonces = try transport.sent.map { try JSONDecoder().decode([String: String].self, from: $0.body)["nonce"] }
+        try expectEqual(nonces.count, 2)
+        try expect(nonces[0] != nonces[1], "two nonces")
+    }),
+    Test("a session kept from the last launch is there at the next, and signing out forgets it", awaiting: { @MainActor in
+        let store = MemoryStore()
+        let (first, _) = try model([(200, startAnswer), (200, sessionAnswer)], store: store)
+        await first.signIn()
+        let (second, _) = try model([], store: store)
+        try expectEqual(second.session?.accessToken, "tok")
+        second.signedOut()
+        try expectEqual(second.session, nil)
+        try expectEqual(SessionStore(store: store).load(), nil)
+    }),
+]
