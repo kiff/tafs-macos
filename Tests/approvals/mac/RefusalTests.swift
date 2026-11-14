@@ -1,6 +1,6 @@
 import Foundation
 
-let approvalsMacTests: [Test] = [
+let approvalsRefusalTests: [Test] = [
     Test("a signed-in Mac's refusal verifies with its device key over KIFF's answer message", awaiting: {
         let key = try DeviceKey.load(from: MemoryStore(), enclave: false)
         let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)

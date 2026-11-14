@@ -38,3 +38,21 @@ Approving with Touch ID, on the phone and with a passkey each arrive in their ow
 `scripts/test.sh approvals`: the hold as KIFF sends it, the answer's message line by line,
 the refusal's exact body, each case where a refusal is not sent, and that a refusal's
 signature verifies with the device key and is not an approval's.
+
+## The Needs you screen
+
+`NeedsYouView`, driven by `NeedsYouModel`, draws each held call as a card:
+
+- KIFF's name for the call and its reason, as sent;
+- "The taf says", then the taf's own words, apart from KIFF's and drawn plain;
+- the time left, or "expired";
+- "Nothing is sent until you approve.";
+- **Refuse**;
+- on a Mac with no approval key, "This device can't approve. Approve on another device
+  signed in to your account."
+
+After a refusal the list is read again from KIFF: its list is the truth, not the screen's.
+A refusal KIFF doesn't take stays on the card with KIFF's reason, and the call stays listed.
+A list that can't be read says so and is never shown as "Nothing needs you."
+
+`scripts/test.sh approvals` writes `build/screenshots/needs-you-*.png`.
