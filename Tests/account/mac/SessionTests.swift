@@ -1,6 +1,6 @@
 import Foundation
 
-let accountMacTests: [Test] = [
+let accountSessionTests: [Test] = [
     Test("the session is kept, read back, and forgotten") {
         let sessions = SessionStore(store: MemoryStore())
         try expectEqual(sessions.load(), nil)
