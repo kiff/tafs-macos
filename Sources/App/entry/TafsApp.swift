@@ -4,7 +4,7 @@ import SwiftUI
 struct TafsApp: App {
     var body: some Scene {
         WindowGroup {
-            ShellView()
+            ShellView().environment(\.words, Words.load())
         }
     }
 }

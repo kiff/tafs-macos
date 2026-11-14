@@ -12,6 +12,8 @@ enum Theme {
     static let line = Color(Palette.line)
     static let amber = Color(Palette.amber)
     static let amberText = Color(Palette.amberText)
+    /// A count's fill, dark enough for white numbers.
+    static let amberFill = Color(Shade(Palette.brand[0]))
     static let onFill = Color(Palette.onFill)
     static let ok = Color(Palette.ok)
     static let no = Color(Palette.no)

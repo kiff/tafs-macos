@@ -1,6 +1,6 @@
 import Foundation
 
-let shellTests: [Test] = [
+let shellPaletteTests: [Test] = [
     Test("contrast is 1 for a colour on itself and 21 for black on white") {
         try expectEqual(Palette.contrast(0x123456, 0x123456), 1)
         try expect(abs(Palette.contrast(0x000000, 0xFFFFFF) - 21) < 0.001, "21")
