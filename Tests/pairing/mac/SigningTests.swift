@@ -3,7 +3,7 @@ import Foundation
 
 private let examplePublicKey = Data(base64Encoded: Example.publicKey)!
 
-let pairingMacTests: [Test] = [
+let pairingSigningTests: [Test] = [
     Test("the worked example's hashes are KIFF's") {
         try expectEqual(Signing.sha256Hex(Data(Example.body.utf8)), Example.bodyHash)
         try expectEqual(Signing.sha256Hex(Data(Example.message.utf8)), Example.messageHash)
@@ -59,6 +59,18 @@ let pairingMacTests: [Test] = [
         try expectEqual(code, String(Encoding.base32(Data(SHA256.hash(data: Data([1, 2, 3, 4, 5])))).prefix(6)))
         try expectEqual(code.count, 6)
         try expect(Signing.checkCode(deviceKey: device, approvalKey: nil) != code, "the device key alone differs")
+    },
+    Test("the check code matches the vector every tafs app shares") {
+        // The P-256 keys of private keys 1 and 2, as KIFF's own test has them.
+        func bytes(_ hex: String) -> Data {
+            var out = Data(); var rest = Substring(hex)
+            while !rest.isEmpty { out.append(UInt8(rest.prefix(2), radix: 16)!); rest = rest.dropFirst(2) }
+            return out
+        }
+        let device = bytes("3059301306072a8648ce3d020106082a8648ce3d030107034200046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
+        let approval = bytes("3059301306072a8648ce3d020106082a8648ce3d030107034200047cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc4766997807775510db8ed040293d9ac69f7430dbba7dade63ce982299e04b79d227873d1")
+        try expectEqual(Signing.checkCode(deviceKey: device, approvalKey: approval), "H6SJNU")
+        try expectEqual(Signing.checkCode(deviceKey: device, approvalKey: nil), "LTJFF6")
     },
     Test("a nonce is 32 random bytes in base64url") {
         let nonce = Signing.nonce()

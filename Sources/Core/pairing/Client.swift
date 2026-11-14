@@ -92,11 +92,15 @@ struct KIFFClient {
     /// Starts a sign-in as a new device. `publicKey` is the device key (SPKI DER), and
     /// `keyStore` says where its private half is.
     func startSignIn(publicKey: Data, keyStore: String, name: String, approval: ApprovalMeans) async throws -> DeviceStart {
-        var body = ["public_key": publicKey.base64EncodedString(), "key_store": keyStore,
-                    "device_name": name, "platform": "macos", "kind": "other"]
-        switch approval {
-        case .key(let der): body["approval_public_key"] = der.base64EncodedString()
-        case .passkey: body["approval"] = "passkey"
+        var body = ["public_key": publicKey.base64EncodedString(), "device_name": name, "platform": "macos", "kind": "other"]
+        // A device key outside hardware never approves: it says so, and sends no approval key.
+        if keyStore == "software" {
+            body["key_store"] = "software"
+            body["approval"] = "passkey"
+        } else if case .key(let der) = approval {
+            body["approval_public_key"] = der.base64EncodedString()
+        } else {
+            body["approval"] = "passkey"
         }
         return try await post("/v1/auth/device/start", body)
     }

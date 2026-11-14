@@ -7,17 +7,17 @@ struct Test {
     let body: () throws -> Void
     init(_ name: String, _ body: @escaping () throws -> Void) { self.name = name; self.body = body }
 
-    /// A test that waits on something: it runs off the main thread, which waits for it.
+    /// A test that waits on something. The main thread keeps its run loop turning meanwhile,
+    /// so what must run on it (a screen's model) does.
     init(_ name: String, awaiting body: @escaping () async throws -> Void) {
         self.name = name
         self.body = {
-            let done = DispatchSemaphore(value: 0)
             let outcome = Outcome()
             Task.detached {
                 do { try await body() } catch { outcome.error = error }
-                done.signal()
+                outcome.done = true
             }
-            done.wait()
+            while !outcome.done { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.005)) }
             if let error = outcome.error { throw error }
         }
     }
@@ -25,6 +25,7 @@ struct Test {
 
 private final class Outcome: @unchecked Sendable {
     var error: Error?
+    var done = false
 }
 
 struct Failure: Error, CustomStringConvertible {

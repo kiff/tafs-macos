@@ -50,3 +50,25 @@ A code lasts at most 5 minutes. A session is handed over once.
 `scripts/test.sh pairing`: the exact fields each route is sent, that a Mac with no approval
 key never sends one, every answer the contract names, and the waiting's pace with a clock
 the test controls. No test reaches the network.
+
+## The screens
+
+A Mac with no session opens on sign-in (`SignInView`, driven by `SignInModel`).
+
+| Step | What it shows |
+|---|---|
+| Welcome | What tafs is, **Sign in with KIFF**, and "Already use tafs on your phone? Add this Mac with it." |
+| The browser's code | The code KIFF's page must show, and that the Mac is waiting. KIFF's page opens by itself. |
+| The pairing code | The QR code, where to scan it on the phone, the 6-character check code, and that the Mac is waiting. |
+| The code ran out | "This code expired." and **Show a new code**. Each code has a new nonce. |
+| It didn't work | KIFF's own code for why, and **Try again**. |
+
+- **Only KIFF's page is ever opened**: `https`, on `kiff.dev`. Any other address in the answer is ignored.
+- **Cancel** stops the waiting, and a late answer to a cancelled attempt is dropped.
+- **The QR code** (`QRCode`) is the pairing text as bytes with error correction M. A test reads
+  it back from the image, as a phone's camera would.
+- **The session** goes to the Keychain as soon as it is handed over, and the next launch opens
+  signed in.
+
+`scripts/test.sh pairing` writes the screens to `build/screenshots/sign-in-*.png` in English,
+French and Portuguese.

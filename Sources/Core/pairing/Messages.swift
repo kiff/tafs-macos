@@ -50,12 +50,29 @@ struct PairingPayload: Codable, Equatable {
     let name: String
     var platform = "macos"
     let kind: Kind
+    /// `software` when the device key isn't in hardware (only with `passkey`), absent otherwise.
+    /// The phone's signature covers it, so KIFF never lets that key approve.
+    var keyStore: String?
     /// Base64url of 32 random bytes. The computer keeps it to claim the pairing.
     let nonce: String
     /// When the code stops working, at most 5 minutes ahead.
     let exp: String
 
-    enum CodingKeys: String, CodingKey { case v, pub, approvalPub = "approval_pub", name, platform, kind, nonce, exp }
+    enum CodingKeys: String, CodingKey { case v, pub, approvalPub = "approval_pub", name, platform, kind, keyStore = "key_store", nonce, exp }
+
+    /// The payload for a Mac's keys. A device key outside hardware is said so, and such a
+    /// Mac has no approval key in the code, whatever was passed.
+    init(deviceKey: Data, keyStore: String, approvalKey: Data?, name: String, nonce: String, exp: String) {
+        let software = keyStore == "software"
+        let approval = software ? nil : approvalKey
+        self.init(pub: Encoding.base64URL(deviceKey), approvalPub: approval.map(Encoding.base64URL), name: name,
+                  kind: approval == nil ? .passkey : .enclave, keyStore: software ? "software" : nil, nonce: nonce, exp: exp)
+    }
+
+    init(pub: String, approvalPub: String?, name: String, kind: Kind, keyStore: String? = nil, nonce: String, exp: String) {
+        self.pub = pub; self.approvalPub = approvalPub; self.name = name
+        self.kind = kind; self.keyStore = keyStore; self.nonce = nonce; self.exp = exp
+    }
 
     /// How long a code is shown before a new one takes its place.
     static let lifetime: TimeInterval = 5 * 60
