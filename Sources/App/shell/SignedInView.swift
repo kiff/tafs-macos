@@ -8,6 +8,7 @@ struct SignedInView: View {
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
     @StateObject private var calendar: CalendarModel
+    @StateObject private var usage: UsageModel
     @State private var selection: Screen = .overview
     @State private var announced = Announced()
     private let notifier = Notifier()
@@ -24,6 +25,7 @@ struct SignedInView: View {
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
+        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
     }
 
     var body: some View {
@@ -33,6 +35,7 @@ struct SignedInView: View {
             case .overview: return AnyView(OverviewView(model: overview))
             case .record: return AnyView(RecordView(model: record))
             case .calendar: return AnyView(CalendarView(model: calendar))
+            case .usage: return AnyView(UsageView(model: usage))
             case .account: return AnyView(accountScreen)
             default: return nil
             }
