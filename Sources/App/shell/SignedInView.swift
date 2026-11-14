@@ -10,6 +10,7 @@ struct SignedInView: View {
     @StateObject private var calendar: CalendarModel
     @StateObject private var usage: UsageModel
     @StateObject private var connect: ConnectAppsModel
+    @StateObject private var coach: CoachModel
     @State private var selection: Screen = .overview
     @State private var announced = Announced()
     private let notifier = Notifier()
@@ -28,6 +29,7 @@ struct SignedInView: View {
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
+        _coach = StateObject(wrappedValue: CoachModel(cloud: cloud))
     }
 
     var body: some View {
@@ -39,8 +41,8 @@ struct SignedInView: View {
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
             case .connectApps: return AnyView(ConnectAppsView(model: connect))
+            case .coach: return AnyView(CoachView(model: coach))
             case .account: return AnyView(accountScreen)
-            default: return nil
             }
         }
         .onAppear { notifier.opened = { selection = .needsYou } }
