@@ -20,8 +20,10 @@ struct SessionStore {
 extension AccountClient {
     /// The client for a signed-in Mac: over the network, signing with its device key.
     init(session: Session, key: SigningKey, language: String, transport: Transport = NetworkTransport()) {
-        self.init(transport: transport, session: session, language: language) { request in
+        self.init(transport: transport, session: session, language: language, sign: { request in
             try Signing.header(key: key, tenant: session.tenant, method: request.method, path: request.path, body: request.body)
-        }
+        }, signMessage: { message in
+            try key.sign(Data(message.utf8)).base64EncodedString()
+        })
     }
 }
