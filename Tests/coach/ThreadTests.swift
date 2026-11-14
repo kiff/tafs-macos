@@ -41,8 +41,12 @@ let coachThreadTests: [Test] = [
         try expectEqual(first.fromPerson, true)
         try expectEqual(first.text, "Connect Qonto for my refunds taf")
         try expectEqual(second.fromPerson, false)
-        try expectEqual(page.items[2], .card(key: "s1:confirm-1", waits: "owner", position: 2))
-        try expectEqual(page.items[3], .card(key: "s1:result-1", waits: "service", position: 3))
+        guard case .card(let confirm, _) = page.items[2], case .card(let result, _) = page.items[3] else { throw Failure(description: "two cards") }
+        try expectEqual(confirm.key, "s1:confirm-1")
+        try expectEqual(confirm.id, "confirm-1")
+        try expectEqual(confirm.waitsForPerson, true)
+        try expectEqual(result.waits, "service")
+        try expectEqual(result.waitsForPerson, false)
         try expectEqual(page.items[4], .held(exception: "exc_1", position: 4))
         try expectEqual(page.items[5], .other(type: "drive", position: 5))
         try expectEqual(page.waitsForPerson, true)
@@ -50,7 +54,8 @@ let coachThreadTests: [Test] = [
     Test("a card is known by its key, never only by the name the model gave it") {
         let both = #"{"items":[{"type":"card","card":{"id":"confirm-1","key":"s2:confirm-1","waits":"owner"}},{"type":"card","card":{"id":"confirm-1","key":"s3:confirm-1"}}]}"#
         let page = try JSONDecoder().decode(Thread.Page.self, from: Data(both.utf8))
-        try expectEqual(page.items, [.card(key: "s2:confirm-1", waits: "owner", position: 0), .card(key: "s3:confirm-1", waits: nil, position: 1)])
+        let keys: [String] = page.items.compactMap { if case .card(let card, _) = $0 { return card.key } else { return nil } }
+        try expectEqual(keys, ["s2:confirm-1", "s3:confirm-1"])
     },
     Test("an answer with no ordered list is unreadable, never an empty chat", awaiting: {
         for body in ["{}", #"{"messages":[]}"#, "<html>"] {

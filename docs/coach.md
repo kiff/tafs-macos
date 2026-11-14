@@ -1,7 +1,7 @@
 # Coach
 
 Coach is where a taf is set up, an app is connected and a taf is changed, in conversation.
-**Today this screen reads Coach's chat and writes to Coach. Its cards can't be answered from it yet.**
+**Today this screen reads Coach's chat, writes to Coach, and answers its choices. Its approvals can't be given from it yet.**
 
 ## What is read (`Coach`, `Thread`, `CloudClient`)
 
@@ -73,6 +73,26 @@ shows as Coach writes it. tafs cloud trims the stream to what an app shows.
   message stays with tafs cloud's reason.
 - The stream goes to tafs cloud's streaming address, the one the phones use, over HTTPS only.
 
+### Answering a card (`Thread.Card`, `CloudClient.answer`)
+
+A card Coach shows may wait for the person: its run pauses on it. The answer goes back as
+data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the chat.
+
+| Card | On the Mac |
+|---|---|
+| A choice (`confirm`, with options) | Its title and text as Coach wrote them, and a button for each option. One tap answers it. |
+| Questions (`questions`) | "Needs you · a question". Not answered here yet. |
+| An approval or a sign-in (`approval`, `sign_in`) | "Needs you · approve". **Never answered here**: its answer is a signature, which arrives with approvals on the Mac. |
+| A card already answered | What was answered, in tafs cloud's words. |
+
+- **Only a card's own options can be sent.** An option that isn't the card's, and any answer
+  to an approval or a sign-in, is refused before the network, whatever options the card carries.
+- An option with no label or no value is left out: it can't be read, or can't be answered.
+- While the answer is on its way the card says so; then the thread is followed, and the
+  card shows what the thread says was answered. The app keeps no answer of its own.
+- A card that no longer waits (409) is read again as it is. Any other refusal stays on the
+  card with tafs cloud's reason, and the card still waits.
+
 ### The AI-data consent
 
 Before anything a person writes reaches the model, they allow it once. When tafs cloud
@@ -88,7 +108,7 @@ screen**: its title, its lines, Allow and Not now.
 
 ## Not yet
 
-Answering a card, connecting an app with its Card,
+Answering questions, approving a connection or a Card,
 the list of earlier conversations, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 

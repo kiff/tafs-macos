@@ -24,6 +24,9 @@ final class CoachModel: ObservableObject {
     @Published private(set) var state: State = .loading
     @Published var draft = ""
     @Published private(set) var pending: Pending?
+    /// The card whose answer is on its way, by its key, and why an answer didn't go.
+    @Published private(set) var answering: String?
+    @Published private(set) var notAnswered: [String: String] = [:]
     /// The AI-data consent to ask for before the message can go.
     @Published private(set) var consent: TafsCloud.AIConsent?
     /// The answer as it is written, while a run streams.
@@ -61,6 +64,24 @@ final class CoachModel: ObservableObject {
         guard case .loaded(let coach, _) = state, canSend, let text = Outgoing.text(draft) else { return }
         draft = ""
         await deliver(text, to: coach)
+    }
+
+    /// Answers a card with one of its options. A card that no longer waits is read again as
+    /// it is; any other refusal stays on the card with why.
+    func answer(_ card: Thread.Card, with option: Thread.Card.Option) async {
+        guard case .loaded(let coach, _) = state, answering == nil, card.waitsForPerson else { return }
+        answering = card.key
+        defer { answering = nil }
+        do {
+            try await cloud.answer(card, with: option, in: coach.id)
+            notAnswered[card.key] = nil
+            await follow(coach)
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            notAnswered[card.key] = nil
+            await reload(coach)
+        } catch {
+            notAnswered[card.key] = Self.why(error)
+        }
     }
 
     /// Sends the message that didn't go, again. If the first try reached tafs cloud after all
@@ -346,12 +367,49 @@ struct CoachView: View {
                     if !message.fromPerson { Spacer(minLength: 80) }
                 }
             }
-        case .card(_, let waits, _):
-            if waits == "owner" { waiting(words("coach.needs_you_question")) }
+        case .card(let card, _):
+            self.card(card)
         case .held:
             waiting(words("coach.needs_you_approve"))
         case .other:
             EmptyView()
+        }
+    }
+
+    /// A card: what it asks, in Coach's words as written, then its answer or its choices. A
+    /// card whose answer is a signature isn't answered here: it says it needs the person.
+    @ViewBuilder private func card(_ card: Thread.Card) -> some View {
+        if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                if let title = card.title { Text(verbatim: title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
+                if let text = card.text { Text(verbatim: text).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
+                if let answered = card.answered {
+                    Text(verbatim: answered).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ok)
+                } else if card.waitsForPerson, card.isChoice {
+                    if model.answering == card.key {
+                        Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    } else {
+                        HStack(spacing: 8) {
+                            ForEach(card.options, id: \.value) { option in
+                                Button { Task { await model.answer(card, with: option) } } label: {
+                                    Text(verbatim: option.label).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.coach)
+                                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(Capsule().stroke(Theme.coach))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(model.answering != nil)
+                            }
+                        }
+                    }
+                    if let why = model.notAnswered[card.key] {
+                        Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
+                    }
+                } else if card.waitsForPerson {
+                    waiting(words(card.grants ? "coach.needs_you_approve" : "coach.needs_you_question"))
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: 520, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.coachPanel))
         }
     }
 
