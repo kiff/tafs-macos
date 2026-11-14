@@ -54,6 +54,8 @@ enum Usage {
         let coach: String?
         /// What wasn't counted (trials, failed runs), in words.
         let notCounted: String?
+        /// Why each wasn't, a line each ("Coach, included · 16 runs").
+        let notCountedLines: [String]
         let note: String?
 
         enum Keys: String, CodingKey { case words, tafs, coach, notCounted = "not_counted", note }
@@ -79,6 +81,10 @@ enum Usage {
             }
             coach = nested(.coach)
             notCounted = nested(.notCounted)
+            struct Line: Decodable { let words: String? }
+            struct Lines: Decodable { let lines: [Line]? }
+            let lines = ((try? c.decodeIfPresent(Lines.self, forKey: .notCounted)) ?? nil)?.lines ?? []
+            notCountedLines = lines.compactMap { Usage.text($0.words) }
             note = Usage.text((try? c.decodeIfPresent(String.self, forKey: .note)) ?? nil)
         }
 
