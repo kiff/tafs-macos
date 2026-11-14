@@ -5,3 +5,4 @@ happens in pull requests to `main`.
 
 - [Building and testing](docs/building.md)
 - [The shared words and contracts](docs/shared.md)
+- [Keys and signatures](docs/signing.md)
