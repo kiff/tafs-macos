@@ -51,28 +51,33 @@ struct UsageView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(words("usage.title")).font(Theme.display(28)).foregroundColor(Theme.ink)
-                panel(words("usage.balance")) { balance }
-                panel(words("usage.credits")) { credits }
+            VStack(alignment: .leading, spacing: 14) {
+                // The screen's name sits small and centred at the top, as on the iPad.
+                Text(words("usage.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    .frame(maxWidth: .infinity).padding(.top, 18).padding(.bottom, 8)
+                    .accessibilityAddTraits(.isHeader)
+                panel { balance }
+                panel {
+                    Eyebrow(text: words("usage.credits"))
+                    periods
+                    creditsTotal
+                }
+                creditsRows
             }
-            .padding(28)
-            .frame(maxWidth: 720, alignment: .leading)
+            .padding(.horizontal, Look.inset)
+            .padding(.bottom, Look.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
         .task { await model.load() }
     }
 
-    private func panel<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.dim)
-            content()
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10, content: content)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
     }
 
     @ViewBuilder private var balance: some View {
@@ -82,7 +87,7 @@ struct UsageView: View {
         case .unread(let why):
             Text(words("usage.balance_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let balance):
-            Text(balance.words).font(.system(size: 20, weight: .bold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
+            Text(balance.words).font(.system(size: 16, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
             if let meter = balance.meter {
                 GeometryReader { space in
                     ZStack(alignment: .leading) {
@@ -97,15 +102,33 @@ struct UsageView: View {
             }
             if let detail = balance.detail { Text(detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
             if let warning = balance.warning { Text(warning).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText) }
-            if let plan = balance.planLine { Text(plan).font(.system(size: 13)).foregroundColor(Theme.dim) }
+            if let plan = balance.planLine { Text(plan).font(.system(size: 13)).foregroundColor(Theme.soft) }
         }
     }
 
-    @ViewBuilder private var credits: some View {
-        HStack(spacing: 8) {
-            period(words("usage.this_period"), previous: false)
+    /// Last period and This period, as the iPad's two-part switch.
+    private var periods: some View {
+        HStack(spacing: 0) {
             period(words("usage.last_period"), previous: true)
+            period(words("usage.this_period"), previous: false)
         }
+        .padding(2)
+        .background(Capsule().fill(Theme.raised))
+    }
+
+    private func period(_ title: String, previous: Bool) -> some View {
+        let selected = model.previous == previous
+        return Button { Task { await model.show(previous: previous) } } label: {
+            Text(title).font(.system(size: 13, weight: selected ? .semibold : .regular)).foregroundColor(Theme.ink)
+                .frame(maxWidth: .infinity).padding(.vertical, 6)
+                .background(Capsule().fill(selected ? Theme.panel : Color.clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder private var creditsTotal: some View {
         switch model.credits {
         case .loading:
             reading
@@ -113,32 +136,33 @@ struct UsageView: View {
             Text(words("usage.credits_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let credits):
             Text(credits.words).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+        }
+    }
+
+    /// Each taf's line as its own panel, then what wasn't counted, then tafs cloud's note.
+    @ViewBuilder private var creditsRows: some View {
+        if case .loaded(let credits) = model.credits {
             ForEach(credits.rows) { row in
-                VStack(alignment: .leading, spacing: 2) {
+                panel {
                     Text(row.words).font(.system(size: 14)).foregroundColor(Theme.ink)
-                    if let pace = row.pace { Text(pace).font(.system(size: 12)).foregroundColor(Theme.dim) }
+                    if let pace = row.pace { Text(pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
                 }
             }
-            if let coach = credits.coach { Text(coach).font(.system(size: 14)).foregroundColor(Theme.coach) }
-            if let not = credits.notCounted { Text(not).font(.system(size: 13)).foregroundColor(Theme.dim) }
-            if let note = credits.note { Text(note).font(.system(size: 13)).foregroundColor(Theme.dim) }
+            if credits.coach != nil || credits.notCounted != nil {
+                panel {
+                    if let not = credits.notCounted { Text(not).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
+                    ForEach(credits.notCountedLines, id: \.self) { line in Text(line).font(.system(size: 14)).foregroundColor(Theme.soft) }
+                    if let coach = credits.coach { Text(coach).font(.system(size: 14)).foregroundColor(Theme.soft) }
+                }
+            }
+            if let note = credits.note { Text(note).font(.system(size: 13)).foregroundColor(Theme.soft).padding(.leading, 4) }
         }
     }
 
     private var reading: some View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text(words("usage.reading")).font(.system(size: 14)).foregroundColor(Theme.dim)
+            Text(words("usage.reading")).font(.system(size: 14)).foregroundColor(Theme.soft)
         }
-    }
-
-    private func period(_ title: String, previous: Bool) -> some View {
-        let selected = model.previous == previous
-        return Button(title) { Task { await model.show(previous: previous) } }
-            .buttonStyle(.plain).font(.system(size: 13, weight: .semibold))
-            .foregroundColor(selected ? Theme.onFill : Theme.ink)
-            .padding(.horizontal, 12).padding(.vertical, 5)
-            .background(Capsule().fill(selected ? Theme.ink : Theme.raised))
-            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
