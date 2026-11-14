@@ -19,7 +19,7 @@ enum Example {
     static let signature = "MEUCIBHu5hb8DkEcTgrMlRGZAqi4CSYe4Pb2UyeFztiUNs9YAiEAgzTPpXwDIEthTaifyK8u12QGLKNBT94E3kSf7CQkyaw="
 }
 
-let pairingTests: [Test] = [
+let pairingMessageTests: [Test] = [
     Test("a request's message is KIFF's worked example, with no trailing line") {
         let message = KIFFMessage.request(tenant: Example.tenant, method: "POST", path: "/v1/me/window",
                                           bodyHash: Example.bodyHash, signedAt: Example.signedAt)

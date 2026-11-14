@@ -7,3 +7,4 @@ happens in pull requests to `main`.
 - [The shared words and contracts](docs/shared.md)
 - [The window and its sidebar](docs/shell.md)
 - [Keys and signatures](docs/signing.md)
+- [Signing in and adding this Mac](docs/pairing.md)
