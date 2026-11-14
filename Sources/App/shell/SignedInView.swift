@@ -16,12 +16,17 @@ struct SignedInView: View {
     private let notifier = Notifier()
     private let account: AccountClient
     private let signedOut: () -> Void
+    private let addThisMac: () -> Void
+    private let route: ApprovalRoute
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
-    init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void) {
+    init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
+         addThisMac: @escaping () -> Void = {}) {
         self.account = account
         self.signedOut = signedOut
+        self.addThisMac = addThisMac
+        self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
@@ -61,6 +66,17 @@ struct SignedInView: View {
     private var accountScreen: some View {
         VStack(alignment: .leading, spacing: 0) {
             DevicesView(model: devices)
+            if route == .phoneOrPasskey {
+                // A Mac that can't approve: how to add it with a phone that can.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(words("pair.view_only.title")).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.dim)
+                    Text(words("pair.view_only.lead", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    Button(words("pair.view_only.add", ["device": words("device.mac")])) { addThisMac() }
+                        .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.coach)
+                }
+                .padding(.horizontal, 28).padding(.bottom, 8)
+                .frame(maxWidth: 720, alignment: .leading)
+            }
             Button(words("settings.devices.sign_out")) {
                 Task {
                     // Ended at KIFF first; this Mac forgets its session either way.
