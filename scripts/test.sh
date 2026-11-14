@@ -26,6 +26,7 @@ find Sources/Core Tests/Runner -name '*.swift' | sort >> "$FILES"
 [ "$CORE" = 1 ] || find Sources/App -name '*.swift' -not -path 'Sources/App/entry/*' | sort >> "$FILES"
 
 for part in $PARTS; do
+    case "$part" in *[!a-z0-9_]*) echo "No such part: $part" >&2; exit 2 ;; esac
     [ -d "Tests/$part" ] || { echo "No such part: $part" >&2; exit 2; }
     if ls "Tests/$part"/*.swift >/dev/null 2>&1; then
         ls "Tests/$part"/*.swift >> "$FILES"

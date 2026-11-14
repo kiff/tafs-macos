@@ -11,7 +11,11 @@ set -eu
 cd "$(dirname "$0")/.."
 
 ALL=$(ls Tests | grep -v '^Runner$' | tr '\n' ' ' | sed 's/ *$//')
-is_part() { [ -d "Tests/$1" ] && [ "$1" != "Runner" ]; }
+# A part is a plain name: test.sh writes it into Swift source.
+is_part() {
+    case "$1" in ""|*[!a-z0-9_]*) return 1 ;; esac
+    [ -d "Tests/$1" ]
+}
 
 if [ "${1:-}" = "all" ]; then
     echo "parts=$ALL"; echo "mac=true"; exit 0
