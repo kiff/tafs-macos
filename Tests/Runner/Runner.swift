@@ -6,6 +6,25 @@ struct Test {
     let name: String
     let body: () throws -> Void
     init(_ name: String, _ body: @escaping () throws -> Void) { self.name = name; self.body = body }
+
+    /// A test that waits on something: it runs off the main thread, which waits for it.
+    init(_ name: String, awaiting body: @escaping () async throws -> Void) {
+        self.name = name
+        self.body = {
+            let done = DispatchSemaphore(value: 0)
+            let outcome = Outcome()
+            Task.detached {
+                do { try await body() } catch { outcome.error = error }
+                done.signal()
+            }
+            done.wait()
+            if let error = outcome.error { throw error }
+        }
+    }
+}
+
+private final class Outcome: @unchecked Sendable {
+    var error: Error?
 }
 
 struct Failure: Error, CustomStringConvertible {
