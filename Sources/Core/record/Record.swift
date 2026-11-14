@@ -113,6 +113,41 @@ enum Record {
         }
     }
 
+    /// The Record's filters, the iPad's: each keeps the calls of some kinds.
+    enum Filter: String, CaseIterable, Identifiable {
+        case all, moneyMoved, stopped, waiting
+
+        var id: String { rawValue }
+
+        /// The shared key of its name.
+        var titleKey: String {
+            switch self {
+            case .all: return "record.filter.all"
+            case .moneyMoved: return "record.filter.money_moved"
+            case .stopped: return "record.filter.stopped"
+            case .waiting: return "record.filter.waiting"
+            }
+        }
+
+        func keeps(_ entry: Entry) -> Bool {
+            switch self {
+            case .all: return true
+            case .moneyMoved: return entry.amountText != nil && ["done", "approved"].contains(entry.kind)
+            case .stopped: return ["refused", "not_done", "revoked"].contains(entry.kind)
+            case .waiting: return ["held", "sending", "unknown"].contains(entry.kind)
+            }
+        }
+
+        /// The groups with only the calls it keeps; a group left with none is left out.
+        func keeping(_ groups: [Group]) -> [Group] {
+            guard self != .all else { return groups }
+            return groups.compactMap { group in
+                let kept = group.entries.filter(keeps)
+                return kept.isEmpty ? nil : Group(id: group.id, title: group.title, entries: kept)
+            }
+        }
+    }
+
     /// The longest search tafs cloud takes.
     static let longestSearch = 100
 }

@@ -18,7 +18,12 @@ answer as sent.
 
 ## The screen (`RecordView`, `RecordModel`)
 
+- To the iPad's layout: the title and its line, the search box across the screen, then the
+  filters as pills.
 - The search box shows tafs cloud's hint; Return searches.
+- **Filters** (`Record.Filter`), the iPad's: All, Money moved (done or approved, with an
+  amount), Stopped (refused, not done, revoked) and Waiting (held, sending, unknown). They
+  choose among the calls already read; a group left with none is left out.
 - Each group has tafs cloud's title; each row has a dot for how it went (green done, amber
   held, red refused), the call, its taf and what it is about, its amount and its time.
 - The next page loads when the end of the list comes into view, and joins its group.
