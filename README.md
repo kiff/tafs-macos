@@ -6,3 +6,4 @@ happens in pull requests to `main`.
 - [Building and testing](docs/building.md)
 - [The shared words and contracts](docs/shared.md)
 - [Keys and signatures](docs/signing.md)
+- [Signing in and adding this Mac](docs/pairing.md)
