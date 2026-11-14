@@ -11,8 +11,8 @@ Nothing is bought, raised or changed from the Mac.
 | `credits(previous:)` | `GET /v1/usage/credits`, or `?period=previous` | The period's total in words, a line for each taf that used credits, Coach's own use, what wasn't counted, and a note. |
 
 - Every amount and every line is tafs cloud's. The app works out nothing.
-- **A meter outside 0 to 100 is no meter**: the bar is left out, so it never lies about how
-  much is left.
+- **The meter is how much is used**, as tafs cloud's own page says, kept within 0 to 100 as
+  the phones keep it. With no number there is no bar.
 - A balance without its state or its words is unreadable. A credits row that doesn't read is
   left out; the period is still drawn.
 

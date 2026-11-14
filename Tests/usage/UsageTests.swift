@@ -22,8 +22,13 @@ let usageTests: [Test] = [
         try expectEqual(balance.warning, "At this pace they run out on the 24th.")
         try expectEqual(balance.planLine, "Solo · renews 1 December")
     }),
-    Test("a meter outside 0 to 100 is no meter, and a balance without its words is unreadable", awaiting: {
-        for pct in ["140", "-3", "null", "\"half\""] {
+    Test("the meter stays within 0 to 100 as on the phones, no number is no bar, and a balance without its words is unreadable", awaiting: {
+        for (pct, want) in [("140", 100), ("-3", 0), ("0", 0), ("100", 100)] {
+            let body = #"{"balance":{"state":"ok","meter_pct":\#(pct),"words":"Fine"}}"#
+            let balance = try await cloud([(200, body)]).0.balance()
+            try expectEqual(balance.meter, want)
+        }
+        for pct in ["null", "\"half\""] {
             let body = #"{"balance":{"state":"ok","meter_pct":\#(pct),"words":"Fine"}}"#
             let balance = try await cloud([(200, body)]).0.balance()
             try expectEqual(balance.meter, nil)

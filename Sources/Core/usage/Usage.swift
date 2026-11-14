@@ -7,7 +7,7 @@ enum Usage {
     struct Balance: Decodable, Equatable {
         /// `ok`, `warning` or `waiting` (the tafs wait for credits, a limit or a plan).
         let state: String
-        /// 0 to 100, or nil where nothing bounds it.
+        /// How much is used, 0 to 100, or nil where nothing bounds it.
         let meter: Int?
         let words: String
         let detail: String?
@@ -23,9 +23,9 @@ enum Usage {
             let c = try root.nestedContainer(keyedBy: BalanceKeys.self, forKey: .balance)
             state = try c.decode(String.self, forKey: .state)
             words = try c.decode(String.self, forKey: .words)
-            // A meter outside 0 to 100 is no meter: the bar never lies about how much is left.
+            // How much is used. Kept within 0 to 100, as the phones keep it; no number, no bar.
             let pct = (try? c.decodeIfPresent(Int.self, forKey: .meter)) ?? nil
-            meter = pct.flatMap { (0...100).contains($0) ? $0 : nil }
+            meter = pct.map { min(max($0, 0), 100) }
             detail = Usage.text((try? c.decodeIfPresent(String.self, forKey: .detail)) ?? nil)
             warning = Usage.text((try? c.decodeIfPresent(String.self, forKey: .warning)) ?? nil)
             planLine = Usage.text((try? root.decodeIfPresent(String.self, forKey: .planLine)) ?? nil)
