@@ -11,7 +11,7 @@ private let strings = URL(fileURLWithPath: ".shared/app/strings")
 
 private func shell(_ language: String, selection: Screen = .overview, needsYou: Int = 0) -> some View {
     Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
-    return ShellView(selection: selection, needsYou: needsYou).environment(\.words, Words.load(folder: strings, preferred: [language]))
+    return ShellView(selection: .constant(selection), needsYou: needsYou).environment(\.words, Words.load(folder: strings, preferred: [language]))
 }
 
 let shellMacTests: [Test] = [

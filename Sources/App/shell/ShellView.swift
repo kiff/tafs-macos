@@ -7,9 +7,11 @@ struct ShellView: View {
     static let minimumSize = CGSize(width: 900, height: 600)
 
     @Environment(\.words) private var words
-    @State var selection: Screen = .overview
+    @Binding var selection: Screen
     /// How many requests wait for the person: the number beside Needs you.
     var needsYou = 0
+    /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
+    var screen: (Screen) -> AnyView? = { _ in nil }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -76,7 +78,11 @@ struct ShellView: View {
     }
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.
-    private var detail: some View {
+    @ViewBuilder private var detail: some View {
+        if let built = screen(selection) { built } else { placeholder }
+    }
+
+    private var placeholder: some View {
         VStack(spacing: 14) {
             Mascot(size: 72)
             Text(words(selection.titleKey)).font(Theme.display(28)).foregroundColor(Theme.ink)
