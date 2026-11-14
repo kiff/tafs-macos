@@ -26,7 +26,13 @@ final class CoachModel: ObservableObject {
     @Published private(set) var pending: Pending?
     /// The AI-data consent to ask for before the message can go.
     @Published private(set) var consent: TafsCloud.AIConsent?
+    /// The answer as it is written, while a run streams.
+    @Published private(set) var live: LiveAnswer?
+    /// tafs cloud's words for why the last run stopped, when it stopped with a reason for the person.
+    @Published private(set) var stopped: String?
     private let cloud: CloudClient
+    /// Opens the answer's stream; nil sends plainly and reads the thread again instead.
+    private let streamer: LineStream?
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
     private var following = 0
@@ -36,9 +42,10 @@ final class CoachModel: ObservableObject {
     static let followEvery: TimeInterval = 4
     static let followAtMost = 30
 
-    init(cloud: CloudClient, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+    init(cloud: CloudClient, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          now: @escaping () -> Date = Date.init) {
         self.cloud = cloud
+        self.streamer = streamer
         self.sleep = sleep
         self.now = now
     }
@@ -92,15 +99,73 @@ final class CoachModel: ObservableObject {
 
     private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil) async {
         pending = Pending(text: text, at: firstTried ?? now())
+        stopped = nil
         do {
+            if let streamer, let request = cloud.streamRequest(text, to: coach.id) {
+                var opened: AsyncThrowingStream<String, Error>?
+                do {
+                    opened = try await streamer.lines(request)
+                } catch let refusal as CloudRefusal {
+                    throw refusal
+                } catch {
+                    // The stream couldn't open. If tafs cloud has the message all the same, the
+                    // thread is followed; only if it doesn't is the message sent plainly, below.
+                    if let page = try? await cloud.thread(of: coach.id), let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
+                        state = .loaded(coach, page)
+                        pending = nil
+                        await follow(coach)
+                        return
+                    }
+                }
+                if let opened {
+                    // tafs cloud answered the stream route: it has the message. Whatever the
+                    // stream does from here, the message is never sent again.
+                    await stream(opened, coach)
+                    return
+                }
+            }
             let sent = try await cloud.send(text, to: coach.id)
             pending?.id = sent.message?.id
             await follow(coach)
         } catch let refusal as CloudRefusal where refusal.needsConsent {
+            live = nil
             consent = refusal.consent
         } catch {
+            live = nil
             pending?.failed = Self.why(error)
         }
+    }
+
+    /// Draws the answer as its events come, then reads the thread, which has it whole. A
+    /// stream that breaks, at any point, only ends the drawing: the thread has the rest.
+    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach) async {
+        var reader = EventReader()
+        var answer = LiveAnswer()
+        live = answer
+        do {
+            for try await line in lines {
+                guard let event = reader.read(line) else { continue }
+                if case .session(let id) = event { pending?.id = id }
+                if case .end(let words) = event {
+                    stopped = words
+                    break
+                }
+                if case .broke = event { break }
+                if answer.take(event) { await reload(coach) }
+                live = answer
+            }
+        } catch {}
+        live = nil
+        await follow(coach)
+        // The message was taken even if the thread didn't show it in time: it is not left
+        // looking unsent, with a Retry that would send it again.
+        if pending?.failed == nil { pending = nil }
+    }
+
+    private func reload(_ coach: Coach) async {
+        guard let page = try? await cloud.thread(of: coach.id) else { return }
+        state = .loaded(coach, page)
+        if let id = pending?.id, page.has(message: id) { pending = nil }
     }
 
     /// Reads the thread again while an answer is owed. A newer send takes over the following.
@@ -154,7 +219,11 @@ struct CoachView: View {
                     if page.items.isEmpty { intro }
                     ForEach(page.items) { item($0) }
                     if let pending = model.pending { unsent(pending) }
-                    if page.working {
+                    if let live = model.live { writing(live) }
+                    if let stopped = model.stopped {
+                        Text(verbatim: stopped).font(.system(size: 13)).foregroundColor(Theme.no)
+                    }
+                    if page.working, model.live == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text(words("chat.working")).font(.system(size: 13)).foregroundColor(Theme.dim)
@@ -191,6 +260,25 @@ struct CoachView: View {
             .frame(maxWidth: 760 + 56, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.coachPanel)
+        }
+    }
+
+    /// The answer as it is written: Coach's words so far, and one line for where the run is.
+    private func writing(_ live: LiveAnswer) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !live.text.isEmpty {
+                HStack {
+                    Text(verbatim: live.text).font(.system(size: 14)).foregroundColor(Theme.ink)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+                    Spacer(minLength: 80)
+                }
+            }
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(verbatim: live.line ?? words("chat.thinking")).font(.system(size: 13)).foregroundColor(Theme.dim)
+            }
+            if let trouble = live.trouble { Text(verbatim: trouble).font(.system(size: 12)).foregroundColor(Theme.no) }
         }
     }
 
