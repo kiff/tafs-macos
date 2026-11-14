@@ -69,72 +69,125 @@ struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
 
+    /// The columns' widths, the same for the headings and every row.
+    private static let how: CGFloat = 170
+    private static let whose: CGFloat = 120
+    private static let status: CGFloat = 170
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(words("connect.apps.title")).font(Theme.display(28)).foregroundColor(Theme.ink)
-                TextField(words("connect.apps.search"), text: $model.search)
-                    .textFieldStyle(.roundedBorder).font(.system(size: 14)).frame(maxWidth: 420)
-                    .onSubmit { Task { await model.load() } }
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    ScreenTitle(title: words("connect.apps.title"))
+                    Spacer()
+                    // Search sits at the top right, as on the iPad.
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundColor(Theme.soft)
+                        TextField(words("connect.apps.search"), text: $model.search).textFieldStyle(.plain).font(.system(size: 14))
+                            .onSubmit { Task { await model.load() } }
+                    }
+                    .padding(.horizontal, 14).frame(width: 240, height: 36)
+                    .background(Capsule().fill(Theme.panel)).overlay(Capsule().stroke(Theme.line))
+                }
+                .padding(.top, 40)
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)
                 case .unread(let why):
                     Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded:
                     if model.apps.isEmpty, !model.partial {
-                        Text(words("connect.apps.none")).font(.system(size: 14)).foregroundColor(Theme.dim)
+                        Text(words("connect.apps.none")).font(.system(size: 14)).foregroundColor(Theme.soft)
                     }
-                    section(words("connect.apps.yours"), model.yours)
-                    section(words("connect.apps.discover"), model.discover)
+                    if !model.yours.isEmpty {
+                        heading(words("connect.apps.yours"))
+                        panel {
+                            HStack(spacing: 0) {
+                                column(words("connect.apps.column_app")).frame(maxWidth: .infinity, alignment: .leading)
+                                column(words("connect.apps.column_how")).frame(width: Self.how, alignment: .leading)
+                                column(words("connect.apps.column_whose")).frame(width: Self.whose, alignment: .leading)
+                                column(words("connect.apps.column_status")).frame(width: Self.status, alignment: .leading)
+                            }
+                            .padding(.vertical, 12)
+                            ForEach(model.yours) { app in
+                                Rectangle().fill(Theme.line).frame(height: 1)
+                                row(app, yours: true)
+                            }
+                        }
+                    }
+                    if !model.discover.isEmpty {
+                        heading(words("connect.apps.discover"))
+                        panel {
+                            ForEach(model.discover) { app in
+                                if app.id != model.discover.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
+                                row(app, yours: false)
+                            }
+                        }
+                    }
                     if model.canContinue {
                         Button(words("connect.apps.more")) { Task { await model.more() } }
-                            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.coach)
+                            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                     }
-                    Text(words("connect.apps.not_listed_why")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    Text(words("connect.apps.not_listed_why")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, Look.inset)
+            .padding(.bottom, Look.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
         .task { await model.load() }
     }
 
-    @ViewBuilder private func section(_ title: String, _ apps: [Apps.App]) -> some View {
-        if !apps.isEmpty {
-            Text(title).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.dim).padding(.top, 6)
-            VStack(spacing: 0) {
-                ForEach(apps) { app in
-                    row(app)
-                    if app.id != apps.last?.id { Rectangle().fill(Theme.line).frame(height: 1) }
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
-        }
+    private func heading(_ text: String) -> some View {
+        Text(text).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft).padding(.top, 10).padding(.leading, 18)
     }
 
-    private func row(_ app: Apps.App) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 7).fill(Theme.raised).frame(width: 30, height: 30)
-                .overlay(Text(verbatim: String(app.name.prefix(1)).uppercased()).font(.system(size: 14, weight: .bold)).foregroundColor(Theme.soft))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                if let subtitle = app.subtitle { Text(verbatim: subtitle).font(.system(size: 13)).foregroundColor(Theme.soft) }
-                // The second line is tafs cloud's; for an app to set up first, its own words.
-                if let line = app.words ?? app.line {
-                    Text(verbatim: line).font(.system(size: 12)).foregroundColor(app.needsReconnect ? Theme.amberText : Theme.dim)
+    private func column(_ text: String) -> some View {
+        Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+    }
+
+    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0, content: content)
+            .padding(.horizontal, 18).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+    }
+
+    /// One app, in the iPad's columns: its name, how it connects, whose it is, its status.
+    private func row(_ app: Apps.App, yours: Bool) -> some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 6).fill(Theme.raised).frame(width: 24, height: 24)
+                    .overlay(Text(verbatim: String(app.name.prefix(1)).uppercased()).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.soft))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    if let subtitle = app.subtitle { Text(verbatim: subtitle).font(.system(size: 12)).foregroundColor(Theme.soft) }
+                    // For an app an operator sets up first: tafs cloud's own line.
+                    if let words = app.words { Text(verbatim: words).font(.system(size: 12)).foregroundColor(Theme.soft) }
                 }
             }
-            Spacer()
-            if let whose = app.whose { Text(verbatim: whose).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft) }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(app.howKey.map { words($0) } ?? "").font(.system(size: 14)).foregroundColor(Theme.ink)
+                .frame(width: Self.how, alignment: .leading)
+            Text(verbatim: yours ? (app.whose ?? "") : "").font(.system(size: 14)).foregroundColor(Theme.ink)
+                .frame(width: Self.whose, alignment: .leading)
+            Group {
+                if app.needsReconnect {
+                    Text(words("connect.sign_in_again")).foregroundColor(Theme.amberText)
+                } else if app.isYours {
+                    Text(words("connect.status.connected")).foregroundColor(Theme.ok)
+                } else {
+                    Text(verbatim: "")
+                }
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .frame(width: Self.status, alignment: .leading)
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .padding(.vertical, 14)
         .accessibilityElement(children: .combine)
     }
 }
