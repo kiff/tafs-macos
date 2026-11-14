@@ -1,18 +1,5 @@
 import Foundation
 
-/// Answers each request with the next canned answer, and keeps what was sent.
-final class CannedTransport: Transport, @unchecked Sendable {
-    var answers: [(Int, String)]
-    private(set) var sent: [HTTPRequest] = []
-    init(_ answers: [(Int, String)]) { self.answers = answers }
-
-    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
-        sent.append(request)
-        let (status, body) = answers.isEmpty ? (500, "") : answers.removeFirst()
-        return (status, Data(body.utf8))
-    }
-}
-
 private let session = #"{"access_token":"tok","token_type":"Bearer","expires_in":7776000,"tenant":"t1","subject":"u1"}"#
 private let start = #"{"device_code":"dc","user_code":"ABCD-EFGH","verification_uri":"https://app.kiff.dev/device","verification_uri_complete":"https://app.kiff.dev/device?code=ABCD-EFGH","expires_in":600,"interval":5}"#
 
