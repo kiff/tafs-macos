@@ -42,7 +42,7 @@ someone's Mac.
 |---|---|---|
 | `ai-consent.json` | `TafsCloud.AIConsent`, `TafsCloud.Refusal` | read |
 | `setup-start.json`, `setup-start-draft-alone.json`, `setup-time-zone.json` | Coach's first start | with the Coach screens |
-| `recipes-home.json` | Home's recipes | with the Overview |
+| `recipes-home.json` | `HomeWords`: tafs cloud's line for an account with no taf | read |
 
 A fixture that is in kiff/tafs and in neither list of `Tests/contracts/ContractTests.swift`
 fails the tests: a new contract is read, or its screen is named. The contracts run on every

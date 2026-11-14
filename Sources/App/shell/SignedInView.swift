@@ -33,7 +33,7 @@ struct SignedInView: View {
     }
 
     var body: some View {
-        ShellView(selection: $selection, needsYou: needsYou.count) { screen in
+        ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.noTafsLine) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
             case .overview: return AnyView(OverviewView(model: overview))
@@ -46,6 +46,8 @@ struct SignedInView: View {
             }
         }
         .onAppear { notifier.opened = { selection = .needsYou } }
+        // The sidebar lists the tafs whatever screen is open.
+        .task { await overview.load() }
         .task {
             // KIFF's list is read again while the window is open, so a new call shows by itself.
             while !Task.isCancelled {

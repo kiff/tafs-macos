@@ -5,22 +5,22 @@ screen it opens beside it.
 
 ## The sidebar
 
-| Item | Opens | Its name's key |
-|---|---|---|
-| The mascot and "tafs" | Overview | `home.overview.title` |
-| Needs you, with the number waiting | Needs you | `needs_you.title` |
-| Record | Record | `record.title` |
-| Calendar | Calendar | `calendar.heading` |
-| Plan & usage | Plan and usage | `usage.title` |
-| Connect apps | Connect apps | `connect.apps.title` |
-| Coach, at the foot | Coach | `coach.title` |
-| Account, at the foot | Account | `settings.title` |
+Top to bottom, as on the iPad:
+
+| Part | What |
+|---|---|
+| The mascot and "tafs" | Opens the Overview. |
+| Needs you, Record, Calendar, Plan & usage, Connect apps | One row each: its symbol and its name. Needs you ends with the number waiting, as a plain number. The open screen's name is in a heavier weight. |
+| YOUR TAFS | Each taf with its coloured square, its name, and tafs cloud's line for where its work stands. With none, tafs cloud's own line for that ("Pick a job for your first taf."), and nothing when it sends none. |
+| Start a new taf | The brand's gradient button. It opens Coach, where a taf is made. |
+| Coach | The dark button under it. |
+| Account | With who is signed in under it. |
 
 - The order, the symbols and the names are the iPad app's (`Screen`, in `Sources/Core/shell`).
   Calendar is a sidebar item, so no screen draws a second way to it.
-- The selected item sits on a panel. The second lines of the sidebar use the soft text
-  colour: the dim one is under 4.5:1 on the raised ground.
-- Each screen arrives in its own pull request. Until then its place shows its name.
+- The sidebar's small lines use the soft text colour: the dim one is under 4.5:1 on the
+  raised ground.
+- The tafs in the sidebar don't open anything yet: a taf's own page arrives in its pull request.
 
 ## Words and the mascot
 

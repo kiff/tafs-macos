@@ -10,6 +10,11 @@ struct ShellView: View {
     @Binding var selection: Screen
     /// How many requests wait for the person: the number beside Needs you.
     var needsYou = 0
+    /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
+    var tafs: [Home.Taf] = []
+    var noTafsLine: String?
+    /// Who is signed in, under Account: their email, as KIFF says it.
+    var accountLine: String?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
     var screen: (Screen) -> AnyView? = { _ in nil }
 
@@ -19,7 +24,6 @@ struct ShellView: View {
                 .frame(width: Self.sidebarWidth)
                 .frame(maxHeight: .infinity)
                 .background(Theme.raised)
-            Rectangle().fill(Theme.line).frame(width: 1)
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.background)
@@ -27,54 +31,117 @@ struct ShellView: View {
         .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
     }
 
+    /// The sidebar, to the iPad's: the mark, the screens, the person's tafs, then Start a new
+    /// taf, Coach and Account at the foot.
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             // The app's own mark at the top: it opens the Overview, as on the iPad.
             Button { selection = .overview } label: {
                 HStack(spacing: 10) {
-                    Mascot(size: 34)
+                    Mascot(size: 30)
                     Text(words("app.name")).font(Theme.display(22)).foregroundColor(Theme.ink)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 10).padding(.vertical, 8)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(words(Screen.overview.titleKey))
-            .padding(.bottom, 8)
+            .padding(.top, 34).padding(.bottom, 22)
 
             ForEach(Screen.list) { item($0) }
-            Spacer(minLength: 12)
-            ForEach(Screen.foot) { item($0) }
+
+            Text(words("home.your_tafs").uppercased())
+                .font(Theme.mono(11)).tracking(2).foregroundColor(Theme.soft)
+                .padding(.top, 26).padding(.bottom, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if tafs.isEmpty, let line = noTafsLine {
+                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(tafs) { taf in tafRow(taf) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
+            }
+
+            foot
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 16)
     }
 
     private func item(_ screen: Screen) -> some View {
         let selected = selection == screen
         return Button { selection = screen } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Image(systemName: screen.symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(screen == .coach ? Theme.coach : Theme.soft)
-                    .frame(width: 24)
-                Text(words(screen.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    .font(.system(size: 17)).foregroundColor(Theme.ink)
+                    .frame(width: 24, alignment: .leading)
+                Text(words(screen.titleKey)).font(.system(size: 15, weight: selected ? .semibold : .regular)).foregroundColor(Theme.ink)
                 Spacer(minLength: 0)
                 if screen == .needsYou, needsYou > 0 {
-                    Text(words.number(needsYou))
-                        .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                        .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(Theme.amberFill))
+                    // The count as the iPad shows it: a plain number at the row's end.
+                    Text(words.number(needsYou)).font(.system(size: 15)).foregroundColor(Theme.soft)
                         .accessibilityLabel(words.count("needs_you.count", needsYou))
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Theme.panel : Color.clear))
+            .frame(height: 46)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// A taf in the sidebar: its coloured square with its first letter, its name, and tafs
+    /// cloud's line for where its work stands.
+    private func tafRow(_ taf: Home.Taf) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 7).fill(Theme.tafColor(taf.color)).frame(width: 28, height: 28)
+                .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 13, weight: .bold)).foregroundColor(.white))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: taf.name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                if let now = taf.now { Text(verbatim: now).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1) }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var foot: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { selection = .coach }
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill) { selection = .coach }
+            Button { selection = .account } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: Screen.account.symbol).font(.system(size: 20)).foregroundColor(Theme.ink)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(words(Screen.account.titleKey)).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                        if let accountLine { Text(verbatim: accountLine).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1) }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selection == .account ? .isSelected : [])
+        }
+        .padding(.horizontal, -12)
+    }
+
+    private func footButton(_ title: String, symbol: String, fill: AnyShapeStyle, text: Color = .white, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
+                Text(title).font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundColor(text)
+            .frame(maxWidth: .infinity).frame(height: 46)
+            .background(RoundedRectangle(cornerRadius: 14).fill(fill))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.

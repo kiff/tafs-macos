@@ -9,12 +9,21 @@ final class OverviewModel: ObservableObject {
     }
 
     @Published private(set) var state: State = .loading
+    /// tafs cloud's line for an account with no taf yet, for the sidebar.
+    @Published private(set) var noTafsLine: String?
     private let cloud: CloudClient
 
     init(cloud: CloudClient) { self.cloud = cloud }
 
+    var tafs: [Home.Taf] {
+        if case .loaded(let page) = state { return page.tafs }
+        return []
+    }
+
     func load() async {
         do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
+        // The line is only an invitation: if it can't be read, the sidebar just doesn't show one.
+        noTafsLine = (try? await cloud.homeWords())?.line
     }
 }
 
