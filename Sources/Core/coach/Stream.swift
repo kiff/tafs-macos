@@ -25,18 +25,18 @@ enum StreamEvent: Equatable {
     /// An event from its name and its line of JSON; nil for one this app doesn't draw.
     static func read(_ name: String, _ json: String) -> StreamEvent? {
         let o = ((try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]) ?? [:]
-        func words(_ key: String) -> String? {
+        func line(_ key: String) -> String? {
             guard let value = o[key] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
             return value
         }
         switch name {
         case "session": return .session(message: (o["message"] as? [String: Any])?["id"] as? String)
         case "text": return (o["text"] as? String).map(StreamEvent.text)
-        case "state": return .state(words: words("words"))
-        case "activity": return .activity(words: words("step"))
-        case "step": return .step(failed: o["failed"] as? Bool ?? false, why: words("why"))
+        case "state": return .state(words: line("words"))
+        case "activity": return .activity(words: line("step"))
+        case "step": return .step(failed: o["failed"] as? Bool ?? false, why: line("why"))
         case "held", "taken", "component", "part": return .threadChanged
-        case "end": return .end(words: words("words"))
+        case "end": return .end(words: line("words"))
         case "error": return .broke
         default: return nil
         }
