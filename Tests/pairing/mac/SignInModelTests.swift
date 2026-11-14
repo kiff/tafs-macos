@@ -53,6 +53,8 @@ let pairingModelTests: [Test] = [
         try expectEqual(payload.pub, Encoding.base64URL(key.publicKeyDER))
         try expectEqual(payload.approvalPub, nil)
         try expectEqual(payload.kind, .passkey)
+        try expectEqual(payload.keyStore, "software")
+        try expect(shown.text.contains(#""key_store":"software""#), shown.text)
         try expectEqual(payload.name, "A Mac")
         try expectEqual(payload.exp, "2026-11-14T18:05:00Z")
         try expectEqual(shown.check, Signing.checkCode(deviceKey: key.publicKeyDER, approvalKey: nil))

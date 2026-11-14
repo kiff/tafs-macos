@@ -27,6 +27,16 @@ let pairingClientTests: [Test] = [
         let sent = try fields(transport.sent[0])
         try expectEqual(sent["approval_public_key"], "CQk=")
         try expectEqual(sent["approval"], nil)
+        try expectEqual(sent["key_store"], nil)
+    }),
+    Test("a software device key is always passkey-only, even if an approval key is passed with it", awaiting: {
+        let transport = CannedTransport([(200, start)])
+        _ = try await KIFFClient(transport: transport).startSignIn(
+            publicKey: Data([1]), keyStore: "software", name: "A Mac", approval: .key(Data([9, 9])))
+        let sent = try fields(transport.sent[0])
+        try expectEqual(sent["key_store"], "software")
+        try expectEqual(sent["approval"], "passkey")
+        try expectEqual(sent["approval_public_key"], nil)
     }),
     Test("the token's answers are read as the contract names them", awaiting: {
         let cases: [(Int, String, KIFFError)] = [

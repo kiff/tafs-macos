@@ -38,9 +38,14 @@ Every signature is ECDSA over P-256 and SHA-256, written as ASN.1 DER in standar
 
 - **The QR code** holds `PairingPayload` (`kiff.pair.v1`): this Mac's public keys, its name,
   a nonce and when the code expires, at most 5 minutes ahead. No secret is in it.
+- **`key_store`**: a Mac whose device key isn't in hardware writes `"key_store": "software"` in
+  the QR code, and sends it when it signs in. The phone's signature covers it, so KIFF never
+  lets that key approve, open an approval window or take a tap inside one. Such a Mac never
+  puts an approval key in its code. A Mac whose key is in the Secure Enclave leaves the field out.
 - **The check code** (`Signing.checkCode`) is 6 characters made from the public keys. This
   Mac and the phone both show it before the phone asks for a fingerprint, so a page that
-  shows its own QR code can't have its key approved in this Mac's place.
+  shows its own QR code can't have its key approved in this Mac's place. A test holds it to the
+  vector every tafs app and KIFF share.
 
 ## Tests
 

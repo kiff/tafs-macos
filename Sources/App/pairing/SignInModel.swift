@@ -72,10 +72,11 @@ final class SignInModel: ObservableObject {
             let nonce = Signing.nonce()
             var approvalDER: Data?
             if case .key(let der) = approval { approvalDER = der }
-            let payload = PairingPayload(pub: Encoding.base64URL(key.publicKeyDER), approvalPub: approvalDER.map(Encoding.base64URL),
-                                         name: deviceName, kind: approvalDER == nil ? .passkey : .enclave, nonce: nonce,
-                                         exp: KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime)))
-            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: key.publicKeyDER, approvalKey: approvalDER)))
+            let payload = PairingPayload(deviceKey: key.publicKeyDER, keyStore: key.keyStore, approvalKey: approvalDER, name: deviceName,
+                                         nonce: nonce, exp: KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime)))
+            // The check code is made from exactly the keys the code carries.
+            let carried = payload.approvalPub == nil ? nil : approvalDER
+            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: key.publicKeyDER, approvalKey: carried)))
             let proof = try Signing.claimProof(key: key, nonce: nonce)
             let got = try await Waiting.until(interval: 3, expiresIn: PairingPayload.lifetime, sleep: sleep) {
                 guard self.attempt == mine else { throw CancellationError() }

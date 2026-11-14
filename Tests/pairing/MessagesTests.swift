@@ -52,6 +52,23 @@ let pairingMessageTests: [Test] = [
     Test("a fingerprint is the hash's first 8 bytes in four groups") {
         try expectEqual(Encoding.fingerprint(hashHex: "3f2a91c07b1e0d44aabbccdd"), "3f2a 91c0 7b1e 0d44")
     },
+    Test("a software-keyed Mac's QR code says key_store software, and a hardware one says nothing") {
+        let software = PairingPayload(deviceKey: Data([1, 2, 3]), keyStore: "software", approvalKey: nil, name: "A Mac", nonce: "N", exp: "E")
+        try expect(try software.text().contains(#""key_store":"software""#), "key_store software")
+        try expectEqual(software.kind, .passkey)
+        let enclave = PairingPayload(deviceKey: Data([1, 2, 3]), keyStore: "enclave", approvalKey: Data([4]), name: "A Mac", nonce: "N", exp: "E")
+        try expect(!(try enclave.text().contains("key_store")), "no key_store for a hardware key")
+        try expectEqual(enclave.kind, .enclave)
+        let hardwareNoApproval = PairingPayload(deviceKey: Data([1]), keyStore: "enclave", approvalKey: nil, name: "A Mac", nonce: "N", exp: "E")
+        try expect(!(try hardwareNoApproval.text().contains("key_store")), "a hardware key with no approval key")
+        try expectEqual(hardwareNoApproval.kind, .passkey)
+    },
+    Test("a software-keyed Mac never puts an approval key in its QR code") {
+        let payload = PairingPayload(deviceKey: Data([1]), keyStore: "software", approvalKey: Data([4, 5]), name: "A Mac", nonce: "N", exp: "E")
+        try expectEqual(payload.approvalPub, nil)
+        try expectEqual(payload.kind, .passkey)
+        try expectEqual(payload.keyStore, "software")
+    },
     Test("the QR code's text has the contract's fields, and no approval key for a passkey Mac") {
         let payload = PairingPayload(pub: "PUB", approvalPub: nil, name: "A Mac", kind: .passkey, nonce: "N", exp: "2026-11-14T18:05:00Z")
         try expectEqual(try payload.text(),
