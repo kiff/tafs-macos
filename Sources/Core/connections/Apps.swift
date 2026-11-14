@@ -17,12 +17,14 @@ enum Apps {
         let line: String?
         /// For `needs_setup`: the line shown in place of Connect.
         let words: String?
+        /// How it connects: `sign_in` or `key`.
+        let method: String?
         /// For the account's own connections: "Company" or "Yours", as sent.
         let whose: String?
 
         var id: String { entry }
 
-        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose }
+        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             entry = try c.decode(String.self, forKey: .entry)
@@ -41,6 +43,16 @@ enum Apps {
             line = text(.line)
             words = text(.words)
             whose = text(.whose)
+            method = text(.method)
+        }
+
+        /// The shared key for how it connects; nil for a way this app doesn't know.
+        var howKey: String? {
+            switch method {
+            case "sign_in": return "connect.how.sign_in"
+            case "key": return "connect.how.key"
+            default: return nil
+            }
         }
 
         /// One of the account's own connections: connected, or to sign in again.

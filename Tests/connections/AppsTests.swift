@@ -27,6 +27,7 @@ let connectionsTests: [Test] = [
         try expectEqual(page.apps[0].subtitle, "Invoicing: reads, and invoice drafts from quotes")
         try expectEqual(page.apps[0].line, "Sign in · Connected · Used by Refunds")
         try expectEqual(page.apps[0].whose, "Company")
+        try expectEqual(page.apps.map(\.howKey), ["connect.how.sign_in", "connect.how.sign_in", "connect.how.sign_in", nil])
         try expectEqual(page.apps[3].words, "An operator sets this app up first.")
         try expectEqual(page.nextCursor, "c2")
         try expectEqual(page.partial, false)
