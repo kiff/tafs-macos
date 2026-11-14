@@ -39,6 +39,25 @@ Approving with Touch ID, on the phone and with a passkey each arrive in their ow
 the refusal's exact body, each case where a refusal is not sent, and that a refusal's
 signature verifies with the device key and is not an approval's.
 
+## The approval key (`ApprovalKey`)
+
+The key that signs what grants authority on a Mac with Touch ID.
+
+- **Only in the Secure Enclave.** There is no software stand-in: a Mac with no Secure
+  Enclave, or with no fingerprint enrolled, has no approval key and approves on the phone or
+  with a passkey.
+- **Its own access control** is private-key use by the fingerprints enrolled when it was
+  made: never the password, never a fingerprint enrolled later. The key checks the prompt
+  itself, so code that skipped the prompt can't sign with it.
+- **Every signature asks for Touch ID again.** No unlock given before is reused.
+- **Changed fingerprints end it.** The kept key is forgotten and none takes its place by
+  itself: a new one must be approved again by a device that can approve.
+- **A software device key never approves**, even with an approval key beside it
+  (`ApprovalMeans.of`).
+
+It is not used by any screen yet. It has **not run on a Mac with Touch ID**: its tests cover
+the rules above and a Mac that can't hold one.
+
 ## The Needs you screen
 
 `NeedsYouView`, driven by `NeedsYouModel`, draws each held call as a card:
