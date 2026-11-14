@@ -1,0 +1,119 @@
+import Foundation
+
+/// A call KIFF holds for the person's answer (Needs you), as KIFF sends it. Its words are
+/// KIFF's and the taf's own, drawn as sent: the app never words a hold itself.
+struct HeldCall: Decodable, Identifiable, Equatable {
+    let id: String
+    /// The agent whose call it is.
+    let subject: String
+    let action: String
+    /// The call's tool, as KIFF names it for people.
+    let title: String?
+    /// Why it is held, in KIFF's words for people.
+    let reasonText: String?
+    /// What the call is on and why, in the taf's own words. Unsigned, possibly from a
+    /// customer's text: drawn plain, and never used to decide anything.
+    let tafAbout: String?
+    let tafReason: String?
+    /// The Card's next steps a refusal may name ("return first").
+    let nextSteps: [String]
+    /// Whether approving once can pass this call; true when KIFF doesn't say.
+    let canApproveOnce: Bool
+    let createdAt: Date
+    let expiresAt: Date?
+    /// The hold's accounting version: part of what is signed, so an answer counts only for
+    /// the hold as it stood when the person saw it.
+    let accountingVersion: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, subject, action, title, reasonText = "reason_text", tafAbout = "taf_about", tafReason = "taf_reason"
+        case nextSteps = "next_steps", canApproveOnce = "can_approve_once", createdAt = "created_at"
+        case expiresAt = "expires_at", accountingVersion = "accounting_version"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        subject = try c.decode(String.self, forKey: .subject)
+        action = try c.decode(String.self, forKey: .action)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)
+        accountingVersion = try c.decodeIfPresent(Int.self, forKey: .accountingVersion)
+        // Words that aren't text are left out, never the hold.
+        func text(_ key: CodingKeys) -> String? {
+            guard let value = (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil else { return nil }
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
+        }
+        title = text(.title)
+        reasonText = text(.reasonText)
+        tafAbout = text(.tafAbout)
+        tafReason = text(.tafReason)
+        nextSteps = ((try? c.decodeIfPresent([String].self, forKey: .nextSteps)) ?? nil) ?? []
+        canApproveOnce = ((try? c.decodeIfPresent(Bool.self, forKey: .canApproveOnce)) ?? nil) ?? true
+    }
+}
+
+/// The person's answer to a held call, as KIFF names it.
+enum Answer: String {
+    case approveOnce = "approve-once"
+    case reject
+    case changeCard = "change-card"
+
+    /// Whether the answer gives the taf authority it didn't have. Only a refusal doesn't.
+    var grants: Bool { self != .reject }
+}
+
+extension KIFFMessage {
+    /// What is signed to answer a held call: `kiff.answer.v1`, one field per line. An absent
+    /// next step or note is an empty line.
+    static func answer(tenant: String, callID: String, answer: Answer, nextStep: String?, noteHash: String = "",
+                       accountingVersion: Int, signedAt: String) -> String {
+        ["kiff.answer.v1", tenant, callID, answer.rawValue, nextStep ?? "", noteHash, String(accountingVersion), signedAt]
+            .joined(separator: "\n")
+    }
+}
+
+/// How an answer that grants authority is signed on this computer.
+enum ApprovalRoute: Equatable {
+    /// By this Mac's approval key, behind Touch ID.
+    case touchID
+    /// On the phone, or by a passkey: this Mac has no approval key.
+    case phoneOrPasskey
+
+    static func of(_ means: ApprovalMeans) -> ApprovalRoute {
+        switch means {
+        case .key: return .touchID
+        case .passkey: return .phoneOrPasskey
+        }
+    }
+}
+
+extension AccountClient {
+    /// The calls waiting for the person's answer.
+    func heldCalls() async throws -> [HeldCall] {
+        struct Answer: Decodable { let exceptions: [HeldCall] }
+        let answer: Answer = try read(try await send("GET", "/v1/me/card-exceptions?status=held"))
+        return answer.exceptions
+    }
+
+    /// Refuses a held call, signed by the device key over the hold as the person saw it.
+    /// A refusal takes authority away, so it needs no approval key: any signed-in Mac may
+    /// refuse. `nextStep` must be one of the call's own next steps.
+    func refuse(_ call: HeldCall, nextStep: String? = nil, at date: Date = Date()) async throws {
+        guard let signMessage else { throw KIFFError.refused(status: 0, code: "no_device_key") }
+        guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
+        if let nextStep, !call.nextSteps.contains(nextStep) { throw KIFFError.refused(status: 0, code: "not_a_next_step") }
+        let signedAt = KIFFMessage.time(date)
+        let message = KIFFMessage.answer(tenant: session.tenant, callID: call.id, answer: .reject, nextStep: nextStep,
+                                         accountingVersion: version, signedAt: signedAt)
+        struct Signature: Encodable { let signed_at: String; let value: String }
+        struct Body: Encodable { let next_step: String?; let signature: Signature }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let body = try encoder.encode(Body(next_step: nextStep, signature: Signature(signed_at: signedAt, value: try signMessage(message))))
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove("/")
+        let id = call.id.addingPercentEncoding(withAllowedCharacters: allowed) ?? call.id
+        _ = try await send("POST", "/v1/me/card-exceptions/\(id)/reject", body: body)
+    }
+}

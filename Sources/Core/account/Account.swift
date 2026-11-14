@@ -42,6 +42,8 @@ struct AccountClient {
     var language = "en"
     /// Makes the `KIFF-Device-Signature` header for a request, with the device key.
     var sign: ((HTTPRequest) throws -> String)?
+    /// Signs one of KIFF's messages with the device key: the signature in standard base64.
+    var signMessage: ((String) throws -> String)?
 
     /// The devices signed in as this person on the account.
     func devices() async throws -> [Device] {
@@ -79,7 +81,7 @@ struct AccountClient {
         return answer
     }
 
-    private func read<Answer: Decodable>(_ body: Data) throws -> Answer {
+    func read<Answer: Decodable>(_ body: Data) throws -> Answer {
         guard let answer = try? Self.decoder.decode(Answer.self, from: body) else { throw KIFFError.unreadable }
         return answer
     }
