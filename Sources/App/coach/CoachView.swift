@@ -13,6 +13,8 @@ final class CoachModel: ObservableObject {
     /// A message the person sent that the thread doesn't have yet, or that didn't go.
     struct Pending: Equatable {
         let text: String
+        /// When the person first sent it.
+        var at = Date()
         /// Why it didn't go, in tafs cloud's words when it sent some; nil while it is going.
         var failed: String?
         /// tafs cloud's id for it once taken: the thread's copy carries the same.
@@ -26,6 +28,7 @@ final class CoachModel: ObservableObject {
     @Published private(set) var consent: TafsCloud.AIConsent?
     private let cloud: CloudClient
     private let sleep: (TimeInterval) async throws -> Void
+    private let now: () -> Date
     private var following = 0
 
     /// As the phones do on the plain route: the thread is read again every 4 seconds, at
@@ -33,9 +36,11 @@ final class CoachModel: ObservableObject {
     static let followEvery: TimeInterval = 4
     static let followAtMost = 30
 
-    init(cloud: CloudClient, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
+    init(cloud: CloudClient, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+         now: @escaping () -> Date = Date.init) {
         self.cloud = cloud
         self.sleep = sleep
+        self.now = now
     }
 
     var canSend: Bool {
@@ -51,10 +56,18 @@ final class CoachModel: ObservableObject {
         await deliver(text, to: coach)
     }
 
-    /// Sends the message that didn't go, again.
+    /// Sends the message that didn't go, again. If the first try reached tafs cloud after all
+    /// (its answer was lost), the thread already has it: then nothing is sent a second time.
     func retry() async {
-        guard case .loaded(let coach, _) = state, let text = pending?.text, pending?.failed != nil else { return }
-        await deliver(text, to: coach)
+        guard case .loaded(let coach, _) = state, let tried = pending, tried.failed != nil else { return }
+        if let page = try? await cloud.thread(of: coach.id), page.hasPersonsLast(tried.text, since: tried.at) {
+            pending = Pending(text: tried.text, at: tried.at)
+            state = .loaded(coach, page)
+            pending = nil
+            if page.working { await follow(coach) }
+            return
+        }
+        await deliver(tried.text, to: coach, firstTried: tried.at)
     }
 
     /// The person read the consent's words and allows AI use: then their message goes.
@@ -63,20 +76,22 @@ final class CoachModel: ObservableObject {
         consent = nil
         do {
             try await cloud.allowAI(version: asked.version)
-            await deliver(text, to: coach)
+            await deliver(text, to: coach, firstTried: pending?.at)
         } catch {
             pending?.failed = Self.why(error)
         }
     }
 
-    /// Not now: nothing is allowed, and the message stays unsent.
+    /// Not now: nothing is allowed, and the message stays unsent. Only while the consent is
+    /// being asked: a sheet that closes after Allow calls this late, and then it does nothing.
     func declineAI() {
+        guard consent != nil else { return }
         consent = nil
         pending?.failed = ""
     }
 
-    private func deliver(_ text: String, to coach: Coach) async {
-        pending = Pending(text: text)
+    private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil) async {
+        pending = Pending(text: text, at: firstTried ?? now())
         do {
             let sent = try await cloud.send(text, to: coach.id)
             pending?.id = sent.message?.id
@@ -209,9 +224,10 @@ struct CoachView: View {
                 Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button(consent.words.notNow) { model.declineAI() }.keyboardShortcut(.cancelAction)
+                Button(consent.words.notNow) { model.declineAI() }.key(ConsentKeys.notNow)
                 Spacer()
-                Button(consent.words.allow) { Task { await model.allowAI() } }.keyboardShortcut(.defaultAction)
+                // No key allows: consent is a deliberate click, never the Return that sent the message.
+                Button(consent.words.allow) { Task { await model.allowAI() } }.key(ConsentKeys.allow)
             }
             .padding(.top, 6)
         }
@@ -258,5 +274,20 @@ struct CoachView: View {
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+    }
+}
+
+/// The keys of the AI-data consent's two answers. Return and Space answer nothing: the
+/// person has just pressed Return to send, and one more must not say yes to sending their
+/// words to the AI. Esc says Not now.
+enum ConsentKeys {
+    static let allow: KeyboardShortcut? = nil
+    static let notNow: KeyboardShortcut? = .cancelAction
+}
+
+private extension View {
+    /// A key for a button, or none. (The system's own optional form needs macOS 12.3.)
+    @ViewBuilder func key(_ shortcut: KeyboardShortcut?) -> some View {
+        if let shortcut { keyboardShortcut(shortcut) } else { self }
     }
 }

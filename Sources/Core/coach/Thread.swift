@@ -88,6 +88,17 @@ enum Thread {
             }
         }
 
+        /// Whether the person's latest message in the thread is this text, sent at or after
+        /// `since` (give or take a minute of clock difference): a first try that did arrive.
+        func hasPersonsLast(_ text: String, since: Date) -> Bool {
+            for item in items.reversed() {
+                guard case .message(let message, _) = item, message.fromPerson else { continue }
+                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines) == text, let at = message.at else { return false }
+                return at >= since.addingTimeInterval(-60)
+            }
+            return false
+        }
+
         /// Whether something in this chat waits for the person.
         var waitsForPerson: Bool {
             items.contains { item in

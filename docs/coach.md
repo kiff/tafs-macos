@@ -41,6 +41,10 @@ sent for what the person typed and sent with Return or Send.
 - **A message that didn't go stays where it was**, with tafs cloud's own words for why when
   it sent some ("Halted: nothing runs until it's resumed."), and Retry, which sends the same
   words.
+- **Retry never sends the same message twice.** tafs cloud's route takes no key that would
+  let it recognise a repeat. So before sending again, Retry reads the thread once: if the
+  person's latest message there is the same words, sent since the first try, the first try
+  did arrive (only its answer was lost) and nothing more is sent.
 - One message goes at a time: the box sends again once the last one is in the thread or failed.
 
 ### The AI-data consent
@@ -52,6 +56,8 @@ screen**: its title, its lines, Allow and Not now.
 - **Allow** sends the version of the words that were read (`POST /v1/me/ai-consent`), then
   the message.
 - **Not now** allows nothing and sends nothing more. The message stays unsent.
+- **No key allows.** The person has just pressed Return to send their message; Return on the
+  consent's screen answers nothing, so consent is always a deliberate click. Esc is Not now.
 - A consent without its words is no screen: the refusal is then shown as a failure.
 
 ## Not yet
