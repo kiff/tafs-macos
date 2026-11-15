@@ -82,6 +82,16 @@ let coachSendTests: [Test] = [
         _ = try await client.thread(of: "taf-coach", session: "s 1")
         try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s%201"])
     }),
+    Test("improving a taf posts the person's words to its improve route, and nothing that isn't a message", awaiting: {
+        let (client, transport) = cloud([(200, sentAnswer)])
+        let sent = try await client.improve("taf-1", text: " Why was it held? ")
+        try expectEqual(sent.session, "s1")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf%2D1/improve")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["text": "Why was it held?"])
+        let none = try? await client.improve("taf-1", text: "   ")
+        try expect(none == nil, "a blank message isn't sent")
+        try expectEqual(transport.sent.count, 1)
+    }),
     Test("what tafs cloud answers a message says whether it started a new chat", {
         let sent = try JSONDecoder().decode(Outgoing.Sent.self, from: Data(#"{"session":"s7","new_session":true,"message":{"id":"m9"}}"#.utf8))
         try expectEqual(sent.session, "s7")

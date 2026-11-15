@@ -160,4 +160,32 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.chat, "s7")
         try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-coach/conversation/s7")
     }),
+    Test("Coach on a taf: a new conversation that improves it, its words in the box, its first message to improve", awaiting: { @MainActor in
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why was the refund held?")
+        try expectEqual(model.improving, refunds)
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.draft, "Why was the refund held?")
+        try expectEqual(model.isEmpty, true)
+        try expectEqual(model.chatIsEmpty, false)
+        await model.send()
+        try expectEqual(transport.sent[3].path, "/v1/tafs/taf%2D1/improve")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "Why was the refund held?"])
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.chat, "s1")
+        try expectEqual(transport.sent[4].path, "/v1/tafs/taf%2Dcoach/conversation/s1")
+    }),
+    Test("an example on a taf's start sends as it is; New taf leaves the taf", awaiting: { @MainActor in
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        model.improve(CoachModel.Improving(id: "taf-1", name: "Refunds"))
+        model.newChat()
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.chatIsEmpty, true)
+        model.improve(CoachModel.Improving(id: "taf-1", name: "Refunds"))
+        model.draft = "kept"
+        await model.send(example: "How is it going?")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "How is it going?"])
+        try expectEqual(model.draft, "kept")
+    }),
 ]

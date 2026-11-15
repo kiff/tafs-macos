@@ -40,6 +40,15 @@ final class CoachModel: ObservableObject {
     @Published private(set) var fresh = false
     /// Moves on with each new conversation: what comes back for the one before is dropped.
     private var conversation = 0
+    /// The taf a new conversation improves, as the iPad's `setupImproving`: its first message
+    /// goes to tafs cloud's improve route, which puts the taf in front of it. Nil otherwise.
+    @Published private(set) var improving: Improving?
+
+    struct Improving: Equatable {
+        /// The taf's id in tafs cloud.
+        let id: String
+        let name: String
+    }
     private let cloud: CloudClient
     /// Opens the answer's stream; nil sends plainly and reads the thread again instead.
     private let streamer: LineStream?
@@ -101,8 +110,27 @@ final class CoachModel: ObservableObject {
         consent = nil
         chat = nil
         fresh = true
+        improving = nil
         state = .loaded(coach, .empty)
     }
+
+    /// A new conversation on a taf, as the iPad's `improveTaf`.
+    func improve(_ taf: Improving) {
+        guard isCoach, case .loaded = state else { return }
+        newChat()
+        improving = taf
+    }
+
+    /// Coach on a taf with these words in the box, nothing sent, as the iPad's `askCoachAbout`.
+    /// Whoever calls it checks first that the person may use Coach and manages the taf.
+    func ask(about taf: Improving, words: String) {
+        improve(taf)
+        if improving == taf { draft = words }
+    }
+
+    /// Nothing in this conversation and no taf it improves, as the iPad's `coachChatIsEmpty`:
+    /// New conversation then has nothing to start.
+    var chatIsEmpty: Bool { improving == nil && isEmpty }
 
     /// The new conversation's first message made its chat, as the iPad's `settleSetupChat`.
     private func settle(_ session: String) {
@@ -140,9 +168,17 @@ final class CoachModel: ObservableObject {
         }
     }
 
-    var canSend: Bool {
+    var canSend: Bool { canSend(draft) }
+
+    private func canSend(_ text: String) -> Bool {
         guard case .loaded = state else { return false }
-        return Outgoing.text(draft) != nil && (pending == nil || pending?.failed != nil)
+        return Outgoing.text(text) != nil && (pending == nil || pending?.failed != nil)
+    }
+
+    /// Sends one of the start screen's examples as it is, as the iPad's `submitSetup`.
+    func send(example: String) async {
+        guard case .loaded(let coach, _) = state, canSend(example), let text = Outgoing.text(example) else { return }
+        await deliver(text, to: coach)
     }
 
     /// Sends what the person wrote. It stays in view, as written, until the thread has it;
@@ -227,6 +263,17 @@ final class CoachModel: ObservableObject {
         stopped = nil
         var mine = conversation
         do {
+            // An improvement's first message goes through tafs cloud, which adds the taf's
+            // context; the conversation goes on as any other (the iPad's `deliverSetup`).
+            if isCoach, let taf = improving {
+                let sent = try await cloud.improve(taf.id, text: text)
+                guard mine == conversation else { return }
+                improving = nil
+                pending?.id = sent.message?.id
+                settle(sent.session)
+                await follow(coach)
+                return
+            }
             if let streamer, let request = cloud.streamRequest(text, to: coach.id, target: target) {
                 var opened: AsyncThrowingStream<String, Error>?
                 do {
@@ -398,7 +445,7 @@ struct CoachView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
                     // New conversation, as the iPad's pencil: an empty chat is already one.
                     .overlay(alignment: .trailing) {
-                        Button { if !model.isEmpty { model.newChat() } } label: {
+                        Button { if !model.chatIsEmpty { model.newChat() } } label: {
                             Image(systemName: "square.and.pencil").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft)
                         }
                         .buttonStyle(.plain)
@@ -620,13 +667,69 @@ struct CoachView: View {
     /// Coach mode's start, as the iPad's `introBefore`: its name in 30 rounded bold in Coach's
     /// colour, then the lead in 16 soft. The lead is the Mac's own shared line: the iPad's says
     /// the person approves with Face ID, which this Mac can't do yet.
-    private var intro: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(words("coach.coach_mode")).font(Theme.display(30)).foregroundColor(Theme.coach)
-                .accessibilityAddTraits(.isHeader)
-            Text(words("coach.ask_anything_line")).font(.system(size: 16)).foregroundColor(Theme.soft)
-                .fixedSize(horizontal: false, vertical: true)
+    @ViewBuilder private var intro: some View {
+        if let taf = model.improving {
+            improvingStart(taf)
+        } else {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(words("coach.coach_mode")).font(Theme.display(30)).foregroundColor(Theme.coach)
+                    .accessibilityAddTraits(.isHeader)
+                Text(words("coach.ask_anything_line")).font(.system(size: 16)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    /// A new conversation on a taf, as the iPad's `starts` while improving: what it's about as
+    /// a choice (a new taf, or this one), "Improve {taf}", what Coach starts from, and three
+    /// examples that send as they are.
+    private func improvingStart(_ taf: CoachModel.Improving) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 0) {
+                startChoice(words("home.new_taf"), selected: false) { model.newChat() }
+                startChoice(words("coach.improve_taf", ["taf": taf.name]), selected: true) {}
+            }
+            .padding(3)
+            .background(Theme.panel)
+            .overlay(Capsule().stroke(Theme.line))
+            .clipShape(Capsule())
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(words("coach.what_conversation_about"))
+            Text(words("coach.improve_taf", ["taf": taf.name])).font(.system(size: 26, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(words("coach.improve_line", ["name": taf.name])).font(.system(size: 15)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(Self.improveExamples, id: \.self) { key in
+                Button { Task { await model.send(example: words(key)) } } label: {
+                    Text(words(key)).font(.system(size: 15)).foregroundColor(Theme.ink).multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14).padding(.vertical, 12)
+                        .background(Theme.panel)
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.line))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(model.working)
+            }
+        }
+        .padding(.vertical, 16)
+    }
+
+    /// The iPad's `improveExamples`, by their keys.
+    static let improveExamples = ["coach.improve.how_is_it_going", "coach.improve.why_refused", "coach.improve.cant_find_work"]
+
+    private func startChoice(_ title: String, selected: Bool, _ action: @escaping () -> Void) -> some View {
+        Button { if !selected { action() } } label: {
+            Text(verbatim: title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                .foregroundColor(selected ? Theme.onFill : Theme.coach)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(selected ? Theme.coach : Color.clear)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.working)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
 

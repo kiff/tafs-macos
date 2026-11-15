@@ -112,6 +112,22 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
   dropped.
 - A taf's own chat has no conversations: its messages go to its live chat.
 
+## Improving a taf (`CoachModel.improve`, `ask(about:words:)`)
+
+As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
+(`AppModel.swift:6778-6792`, `7536-7553`) and `SetupChatView`'s `starts` (`:552-636`):
+
+- **Improving a taf is a new conversation on it**: nothing read, the taf kept as the one
+  it improves. `ask(about:words:)` also puts words in the box, nothing sent; whoever calls it
+  checks first that the person may use Coach and manages the taf.
+- **Its first message goes to `POST /v1/tafs/{taf}/improve`**, which puts the taf's job, Card
+  and latest calls in front of it. Its answer names the chat, which the conversation goes on
+  in as any other; the taf is no longer the one improved.
+- **Its start:** what the conversation is about as a choice, New taf or "Improve {taf}"
+  (`coach.what_conversation_about`); "Improve {taf}" (26 bold); `coach.improve_line`; and
+  three examples (`coach.improve.*`) that send as they are.
+- New conversation on an improvement with nothing sent starts a plain one.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
@@ -202,8 +218,8 @@ A message still going is at 0.7.
 ## Not yet
 
 Answering questions, approving a connection or a Card,
-the list of earlier conversations (Previous conversations, archiving), improving a taf in a
-new conversation (`/improve`, the next pull request), and attachments. Each is its own pull request; the ones
+the list of earlier conversations (Previous conversations, archiving), Coach mode over a
+taf's page, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests
