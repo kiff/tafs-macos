@@ -232,6 +232,32 @@ final class CoachModel: ObservableObject {
         }
     }
 
+    /// Answers a questions card with every one of its questions answered, as the iPad's
+    /// `answer(_:_:)` (AppModel.swift:8223-8251) with a questions card's answers: the run that
+    /// waited goes on, and it's followed. A card that no longer waits is read again as it is;
+    /// any other refusal stays on the card with why. An answer that comes back after sign-out
+    /// is the session before's: it's dropped (`gen == accountGeneration`).
+    func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer]) async {
+        guard case .loaded(let coach, _) = state, answering == nil, card.waitsForPerson, card.isQuestions,
+              answers.count == card.questions.count else { return }
+        answering = card.key
+        defer { answering = nil }
+        let gen = accountGeneration
+        do {
+            try await cloud.answer(card, questions: answers, in: coach.id)
+            guard gen == accountGeneration else { return }
+            notAnswered[card.key] = nil
+            await follow(coach)
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            guard gen == accountGeneration else { return }
+            notAnswered[card.key] = nil
+            await reload(coach)
+        } catch {
+            guard gen == accountGeneration else { return }
+            notAnswered[card.key] = Self.why(error)
+        }
+    }
+
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
     func decline(_ card: Thread.Card) async {
         guard case .loaded(let coach, _) = state, answering == nil, card.waitsForPerson, card.grants else { return }
@@ -872,6 +898,8 @@ struct CoachView: View {
             approval(card)
         } else if card.type == "notice" {
             notice(card)
+        } else if card.type == "questions" {
+            questions(card)
         } else if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
             choice(card)
         }
@@ -1066,6 +1094,18 @@ struct CoachView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
+        }
+    }
+
+    /// Several questions at once, as the iPad's `QuestionsCard`: answered, one folded line,
+    /// "Your answers · {tafs cloud's words}"; waiting, the card; else what it asks.
+    @ViewBuilder private func questions(_ card: Thread.Card) -> some View {
+        if let answered = card.answered {
+            outcomeLine("checkmark.circle.fill", Theme.ok, words("coach.questions.your_answers") + answered)
+        } else if card.waitsForPerson, card.isQuestions {
+            QuestionsCard(model: model, card: card)
+        } else {
+            asking(card)
         }
     }
 

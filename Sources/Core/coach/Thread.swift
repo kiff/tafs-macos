@@ -95,6 +95,9 @@ enum Thread {
         /// A card's own words for its yes and its no, as tafs cloud sends them.
         var yes: String?
         var no: String?
+        /// A questions card's questions, each Coach's own (`Question`). A card with one that
+        /// doesn't read keeps none, so it's never answered in part.
+        var questions: [Question] = []
 
         /// A hand-over's outcome (`answer.outcome`): the taf made, the version it became, why it
         /// failed, or the plan it needs.
@@ -162,7 +165,7 @@ enum Thread {
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
@@ -247,6 +250,14 @@ enum Thread {
                         }
                     }
                     made.at = outer(.at).flatMap(Thread.time)
+                    if var list = try? shown.nestedUnkeyedContainer(forKey: .questions) {
+                        var read: [Card.Question] = []
+                        var whole = true
+                        while !list.isAtEnd {
+                            if let question = try? list.decode(Card.Question.self) { read.append(question) } else { whole = false; _ = try? list.decode(Skipped.self) }
+                        }
+                        made.questions = whole ? read : []
+                    }
                     made.planLine = text(.line)
                     made.tone = text(.tone)
                     made.service = text(.service)
