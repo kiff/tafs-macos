@@ -114,18 +114,43 @@ final class CoachModel: ObservableObject {
         state = .loaded(coach, .empty)
     }
 
+    /// An improvement asked for before Coach was read: the iPad's `improveTaf` doesn't wait for
+    /// Coach, so here it's kept and started once Coach is read.
+    private var improveWhenRead: Improving?
+
     /// A new conversation on a taf, as the iPad's `improveTaf`.
     func improve(_ taf: Improving) {
-        guard isCoach, case .loaded = state else { return }
+        guard isCoach else { return }
+        guard case .loaded = state else { improveWhenRead = taf; return }
         newChat()
         improving = taf
     }
 
-    /// Coach on a taf with these words in the box, nothing sent, as the iPad's `askCoachAbout`.
-    /// Whoever calls it checks first that the person may use Coach and manages the taf.
-    func ask(about taf: Improving, words: String) {
+    /// Coach on a taf with these words in the box, nothing sent, as the iPad's `askCoachAbout`:
+    /// only for someone who may use Coach and manages the taf.
+    func ask(about taf: Improving, words: String, mayUseCoach: Bool, manages: Bool) {
+        guard isCoach, mayUseCoach, manages else { return }
         improve(taf)
-        if improving == taf { draft = words }
+        draft = words
+    }
+
+    /// The sent message is on its way, as the iPad's `setupSending`.
+    var sending: Bool { pending != nil && pending?.failed == nil }
+
+    /// How long a sent message waits for the thread to have it, as the iPad's `SentMessages.kept`.
+    static let kept: TimeInterval = 120
+
+    /// Drops the sent message once the thread has it, as the iPad's `SentMessages.merge`: by
+    /// tafs cloud's id for it when the send answered one; else by its words, written about
+    /// when it was sent (`/improve` answers none); and in any case after `kept`.
+    private func take(_ page: Thread.Page) {
+        guard let sent = pending, sent.failed == nil else { return }
+        if now().timeIntervalSince(sent.at) > Self.kept { pending = nil; return }
+        if let id = sent.id {
+            if page.has(message: id) { pending = nil }
+        } else if page.hasPersons(sent.text, since: sent.at.addingTimeInterval(-Self.kept)) {
+            pending = nil
+        }
     }
 
     /// Nothing in this conversation and no taf it improves, as the iPad's `coachChatIsEmpty`:
@@ -362,7 +387,7 @@ final class CoachModel: ObservableObject {
         let mine = conversation
         guard let page = try? await read(coach), mine == conversation else { return }
         state = .loaded(coach, page)
-        if let id = pending?.id, page.has(message: id) { pending = nil }
+        take(page)
     }
 
     /// Reads the thread again while an answer is owed. A newer send takes over the following.
@@ -372,7 +397,7 @@ final class CoachModel: ObservableObject {
         for _ in 0..<Self.followAtMost {
             guard mine == following, let page = try? await read(coach), mine == following else { return }
             state = .loaded(coach, page)
-            if let id = pending?.id, page.has(message: id) { pending = nil }
+            take(page)
             if pending == nil, !page.working { return }
             guard (try? await sleep(Self.followEvery)) != nil else { return }
         }
@@ -394,6 +419,10 @@ final class CoachModel: ObservableObject {
             }
             guard mine == conversation else { return }
             state = .loaded(coach, try await read(coach) ?? .empty)
+            if let taf = improveWhenRead {
+                improveWhenRead = nil
+                improve(taf)
+            }
         } catch {
             state = .unread(why: NeedsYouModel.why(error))
         }
@@ -710,7 +739,7 @@ struct CoachView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .disabled(model.working)
+                .disabled(model.sending)
             }
         }
         .padding(.vertical, 16)
@@ -728,7 +757,7 @@ struct CoachView: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(model.working)
+        .disabled(model.sending)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

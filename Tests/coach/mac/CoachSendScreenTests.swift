@@ -161,9 +161,12 @@ let coachSendMacTests: [Test] = [
         try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-coach/conversation/s7")
     }),
     Test("Coach on a taf: a new conversation that improves it, its words in the box, its first message to improve", awaiting: { @MainActor in
-        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        // tafs cloud's improve route answers no message id: the sent message is found by its words.
+        let improved = #"{"setup":"taf-coach","session":"s1","new_session":true}"#
+        let arrived = #"{"working":false,"items":[{"type":"message","message":{"id":"s1.in","at":"2026-11-14T18:00:02Z","from":"owner","text":"Why was the refund held?"}},{"type":"message","message":{"id":"s1.2","at":"2026-11-14T18:00:20Z","from":"taf","text":"It went over its limit."}}]}"#
+        let (model, transport, _) = await make([(200, improved), (200, arrived)])
         let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
-        model.ask(about: refunds, words: "Why was the refund held?")
+        model.ask(about: refunds, words: "Why was the refund held?", mayUseCoach: true, manages: true)
         try expectEqual(model.improving, refunds)
         try expectEqual(model.fresh, true)
         try expectEqual(model.draft, "Why was the refund held?")
@@ -175,6 +178,36 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.improving, nil)
         try expectEqual(model.chat, "s1")
         try expectEqual(transport.sent[4].path, "/v1/tafs/taf%2Dcoach/conversation/s1")
+        try expectEqual(model.pending, nil)
+        try expectEqual(model.working, false)
+        model.draft = "And now?"
+        try expectEqual(model.canSend, true)
+    }),
+    Test("asking Coach about a taf is only for someone who may use Coach and manages the taf, as the iPad's askCoachAbout", awaiting: { @MainActor in
+        let (model, _, _) = await make([])
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why?", mayUseCoach: false, manages: true)
+        model.ask(about: refunds, words: "Why?", mayUseCoach: true, manages: false)
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.draft, "")
+    }),
+    Test("asked before Coach is read, the improvement and its words wait, and start once Coach is read", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, now: { sendTime })
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why was the refund held?", mayUseCoach: true, manages: true)
+        try expectEqual(model.draft, "Why was the refund held?")
+        await model.load()
+        try expectEqual(model.improving, refunds)
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.draft, "Why was the refund held?")
+    }),
+    Test("a sent message with no id is found by its words, and goes after two minutes in any case, as the iPad's SentMessages", {
+        let page = try AccountClient.decoder.decode(Thread.Page.self, from: Data(#"{"items":[{"type":"message","message":{"id":"a","at":"2026-11-14T18:00:02Z","from":"owner","text":"Hi"}},{"type":"message","message":{"id":"b","at":"2026-11-14T18:00:03Z","from":"taf","text":"Hello"}}]}"#.utf8))
+        try expectEqual(page.hasPersons("Hi", since: sendTime.addingTimeInterval(-120)), true)
+        try expectEqual(page.hasPersons("Hello", since: sendTime.addingTimeInterval(-120)), false)
+        try expectEqual(page.hasPersons("Hi", since: sendTime.addingTimeInterval(10)), false)
+        try expectEqual(CoachModel.kept, 120)
     }),
     Test("an example on a taf's start sends as it is; New taf leaves the taf", awaiting: { @MainActor in
         let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])

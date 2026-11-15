@@ -65,7 +65,7 @@ let coachScreenTests: [Test] = [
         let start = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let bitmap = Snapshot.bitmap(of: start, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try png.write(to: folder.appendingPathComponent("coach-start-en.png"))
-        empty.ask(about: CoachModel.Improving(id: "taf-1", name: "Refunds"), words: "")
+        empty.ask(about: CoachModel.Improving(id: "taf-1", name: "Refunds"), words: "", mayUseCoach: true, manages: true)
         let improving = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let shot = Snapshot.bitmap(of: improving, size: CGSize(width: 980, height: 600)), let improvePNG = Snapshot.png(shot) else { throw Failure(description: "no PNG") }
         try improvePNG.write(to: folder.appendingPathComponent("coach-improve-en.png"))

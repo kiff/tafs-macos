@@ -293,6 +293,15 @@ enum Thread {
 
         /// Whether the person's latest message in the thread is this text, sent at or after
         /// `since` (give or take a minute of clock difference): a first try that did arrive.
+        /// Whether the person's words are in the thread, written at or after `since`: how a sent
+        /// message tafs cloud gave no id for is found, as the iPad's `SentMessages.merge`.
+        func hasPersons(_ text: String, since: Date) -> Bool {
+            items.contains { item in
+                guard case .message(let message, _) = item, message.fromPerson, let at = message.at else { return false }
+                return message.text == text && at >= since
+            }
+        }
+
         func hasPersonsLast(_ text: String, since: Date) -> Bool {
             for item in items.reversed() {
                 guard case .message(let message, _) = item, message.fromPerson else { continue }

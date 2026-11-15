@@ -112,20 +112,25 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
   dropped.
 - A taf's own chat has no conversations: its messages go to its live chat.
 
-## Improving a taf (`CoachModel.improve`, `ask(about:words:)`)
+## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
 
 As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
 (`AppModel.swift:6778-6792`, `7536-7553`) and `SetupChatView`'s `starts` (`:552-636`):
 
 - **Improving a taf is a new conversation on it**: nothing read, the taf kept as the one
-  it improves. `ask(about:words:)` also puts words in the box, nothing sent; whoever calls it
-  checks first that the person may use Coach and manages the taf.
+  it improves. `ask(about:…)` also puts words in the box, nothing sent, and only for someone
+  who may use Coach and manages the taf: the iPad's guard, in the model. Asked before Coach is
+  read, the improvement and its words wait, and start once Coach is read.
 - **Its first message goes to `POST /v1/tafs/{taf}/improve`**, which puts the taf's job, Card
   and latest calls in front of it. Its answer names the chat, which the conversation goes on
-  in as any other; the taf is no longer the one improved.
+  in as any other; the taf is no longer the one improved. tafs cloud answers no message id
+  there, so the sent message is found in the thread by its words, written about when it was
+  sent, as the iPad's `SentMessages.merge`; any sent message goes after two minutes in any
+  case. The Mac then follows the thread, as after any send (the iPad reads it once).
 - **Its start:** what the conversation is about as a choice, New taf or "Improve {taf}"
   (`coach.what_conversation_about`); "Improve {taf}" (26 bold); `coach.improve_line`; and
-  three examples (`coach.improve.*`) that send as they are.
+  three examples (`coach.improve.*`) that send as they are. The choice and the examples wait
+  while a message is on its way (`setupSending`).
 - New conversation on an improvement with nothing sent starts a plain one.
 
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
