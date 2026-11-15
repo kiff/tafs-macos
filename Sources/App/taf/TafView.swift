@@ -103,6 +103,8 @@ struct TafView: View {
     var halted: () async -> Void = {}
     /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
+    /// Who uses the taf, under its head for whoever manages it; nil where nothing reads it.
+    var shareLine: ShareLine? = nil
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
@@ -118,9 +120,14 @@ struct TafView: View {
                 if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
             }
             .padding(.top, 40)
-            // Under the header, as the first row of the iPad's `headerLine`: its live version,
-            // which opens Versions, for whoever manages the taf.
-            if manages, let pages { versionLine(pages) }
+            // Under the header, as the iPad's `headerLine`: its live version, which opens
+            // Versions, then who it's shared with, for whoever manages the taf.
+            if manages {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let pages { versionLine(pages) }
+                    if let shareLine { shareLine }
+                }
+            }
             HStack(spacing: 0) {
                 ForEach(Tab.allCases) { choice in
                     let chosen = tab == choice
