@@ -18,10 +18,22 @@ Nothing is bought, raised or changed from the Mac.
 
 ## The screen (`UsageView`, `UsageModel`)
 
-- **Balance**: the words (red while the tafs wait), the meter (green when fine, amber
+Laid out as the iPad's: the screen's name small and centred at the top, then panels (radius
+18, as `Look.panelRadius`). The balance's panel is edged in red while the tafs wait and in
+amber with a warning, and the warning takes the same colour.
+
+- **Balance**, a panel: the words (red while the tafs wait), the meter (green when fine, amber
   otherwise), then the detail, the warning and the plan's line.
-- **Credits**: This period or Last period, the total, each taf's line with its pace under
-  it, then Coach, what wasn't counted, and the note.
+- **Credits**, a panel: its heading, Last period and This period as the iPad's two-part
+  switch, and the total.
+- **Each taf's line** is its own panel, with its pace under it.
+- **Coach's use past what's included** (`coach`) is a panel of its own after the tafs' rows,
+  as on the iPad. It is counted, so it is never under what wasn't.
+- **What wasn't counted**, a panel: tafs cloud's total line, then **why each wasn't**, a line
+  each (`not_counted.lines[].words`: "Coach, included · 3 runs"). A reason with no words, or
+  one that doesn't read, is left out, never the others.
+- tafs cloud's note under them.
+- Every line is drawn as sent (`Text(verbatim:)`).
 - **Each half is read on its own.** One that can't be read says so and leaves the other.
 
 ## Not on the Mac
