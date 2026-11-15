@@ -151,6 +151,9 @@ struct SignedInView: View {
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()
+                // What's still on its way in a chat is the session before's.
+                coach.signedOut()
+                tafChat?.signedOut()
                 signedOut()
             }
         })

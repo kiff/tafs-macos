@@ -8,7 +8,8 @@ Coach is where a taf is set up, an app is connected and a taf is changed, in con
 | Call | Route | What |
 |---|---|---|
 | `coach()` | `GET /v1/setup` | The account's Coach, or none before Coach is started. A plain read: unlike the phones' first read it sends no time zone, so it changes nothing on the account. |
-| `thread(of:)` | `GET /v1/tafs/{id}/conversation` | The chat as one ordered list (`items`): messages, cards and held calls by time. |
+| `thread(of:session:)` | `GET /v1/tafs/{id}/conversation[/{session}]` | The chat as one ordered list (`items`): messages, cards and held calls by time; with a session, that chat's alone. |
+| `chats(of:)` | `GET /v1/tafs/{id}/chats` | Coach's chats (`session`, `started`, `updated`, `title`), each one strictly. |
 
 The app draws the list as it comes. It places and folds nothing itself.
 
@@ -87,6 +88,68 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
   sign-in, and refuses any other card before anything is sent. Saying no grants nothing, so
   it is never signed. Those two words are the only answers this app ever sends such a card.
 
+## Coach's conversations (`CoachModel.chat`, `fresh`, `ChatTarget`)
+
+As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-6720`,
+`7000-7014`, `7164-7188`, `7285-7303`):
+
+- **Coach opens on its newest chat** (`updated`), read by its session. Without the list, or with
+  none yet, the thread reads as before.
+- **New conversation** (the pencil by Coach's title, `coach.new_conversation`) empties the
+  chat and reads nothing until its first message; an empty chat is already one, so it does
+  nothing there. What's typed stays in the box. It cancels the answer streaming in the
+  conversation before, as the iPad's `newSetupChat`, and that answer touches nothing of the
+  new one after any wait: its end, a read of its thread, or its words.
+- **A Mac difference:** a message refused for want of the AI-data consent stays here as the
+  sent message (the iPad puts it back in the box), so New conversation also drops its consent
+  ask. Card states are left as they are, as on the iPad.
+- **Where a message goes:** a new chat (`new_chat: true`), else the chat shown (`session`),
+  else the live one. Coach's say `new_chat_after_handover: true`: tafs cloud starts a new chat
+  for a message to one that already handed a taf over.
+- **The first message's answer** (or the stream's `session` event) names the new chat, which
+  is then the one shown. When it says `new_session: true` with another chat, Coach goes on in
+  that one; the old one stays tafs cloud's. What comes back for an earlier conversation is
+  dropped.
+- A taf's own chat has no conversations: its messages go to its live chat.
+
+## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
+
+As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
+(`AppModel.swift:6778-6792`, `7536-7553`) and `SetupChatView`'s `starts` (`:552-636`):
+
+- **Improving a taf is a new conversation on it**: nothing read, the taf kept as the one
+  it improves. `ask(about:…)` also puts words in the box, nothing sent, and only for someone
+  who may use Coach and manages the taf: the iPad's guard, in the model. Asked before Coach is
+  read, the improvement and its words wait, and start once Coach is read.
+- **Its first message goes to `POST /v1/tafs/{taf}/improve`**, which puts the taf's job, Card
+  and latest calls in front of it. Its answer names the chat, which the conversation goes on
+  in as any other; the taf is no longer the one improved. tafs cloud answers no message id
+  there, so the sent message is found in the thread by its words, written about when it was
+  sent, as the iPad's `SentMessages.merge`; any sent message goes after two minutes in any
+  case. The Mac then follows the thread, as after any send (the iPad reads it once).
+- **Its start:** what the conversation is about as a choice, New taf or "Improve {taf}"
+  (`coach.what_conversation_about`); "Improve {taf}" (26 bold); `coach.improve_line`; and
+  three examples (`coach.improve.*`) that send as they are. The choice and the examples wait
+  while a message is on its way (`setupSending`).
+- New conversation on an improvement with nothing sent starts a plain one.
+
+## Reporting an answer (`AnswerReport`, `ReportAnswerSheet`)
+
+As the iPad's `reportable`, `ReportAnswerSheet`, `canReport` and `reportAnswer`
+(`ReportAnswerSheet.swift:1-137`, `AppModel.swift:5429-5465`, `TafsCloud.swift:1483-1512`):
+
+- **Report this answer**, with the flag mark, is in the context menu of an answer Coach or a taf wrote: never the
+  person's own, a run's kickoff, an empty one, or one tafs cloud has no id for yet.
+- Its sheet: what's wrong with it (Offensive, Harmful, Wrong, Other), a note of at most 1,000
+  characters (optional), and that a person at KIFF reads the report with the answer as it
+  was written. Send needs a reason.
+- `POST /v1/tafs/{id}/messages/{message}/report` with the reason, the note when there is one,
+  and the chat it's in (`session`, as the thread names each message).
+- Sent, it thanks the person, or says they had reported it already. Not sent, it stays open
+  with why: tafs cloud's words when it sent some, "This answer isn't on tafs cloud any more"
+  for a 404, else the app's own line. An answer that comes after the person signed out says
+  "You signed out." (`common.you_signed_out`), as the iPad's account guard.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
@@ -113,7 +176,7 @@ shows as Coach writes it. tafs cloud trims the stream to what an app shows.
 
 | Event | What the app does |
 |---|---|
-| `session` | Notes the person's message's id, to match it in the thread. |
+| `session` | Notes the person's message's id, to match it in the thread, and the chat it went to (a new one, or one tafs cloud started after a hand-over). |
 | `text` | Adds to the answer, drawn under the person's message. |
 | `state`, `activity` | The one line of where the run is, in tafs cloud's words; "Thinking…" before either. |
 | `step` | If it failed, tafs cloud's one line of why, under the answer. |
@@ -177,7 +240,8 @@ A message still going is at 0.7.
 ## Not yet
 
 Answering questions, approving a connection or a Card,
-the list of earlier conversations, and attachments. Each is its own pull request; the ones
+the list of earlier conversations (Previous conversations, archiving), Coach mode over a
+taf's page, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests

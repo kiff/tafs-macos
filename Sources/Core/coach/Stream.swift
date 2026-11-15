@@ -5,7 +5,8 @@ import Foundation
 /// come, and the model's thinking is never drawn.
 enum StreamEvent: Equatable {
     /// First: the person's message as the thread names it, to match the send by id.
-    case session(message: String?)
+    /// tafs cloud's chat for it, and whether it started a new one (`new_session`).
+    case session(String, newSession: Bool, message: String?)
     /// More of the answer.
     case text(String)
     /// tafs cloud's word for where the run is ("Working…" lines), when it sends one.
@@ -31,7 +32,10 @@ enum StreamEvent: Equatable {
             return value
         }
         switch name {
-        case "session": return .session(message: (o["message"] as? [String: Any])?["id"] as? String)
+        case "session":
+            return (o["session"] as? String).map {
+                .session($0, newSession: o["new_session"] as? Bool ?? false, message: (o["message"] as? [String: Any])?["id"] as? String)
+            }
         case "text": return (o["text"] as? String).map(StreamEvent.text)
         case "state": return .state(words: line("words"))
         case "activity": return .activity(words: line("step"), call: line("call_id"))
@@ -140,11 +144,11 @@ protocol LineStream {
 extension CloudClient {
     /// The request that sends a message with its answer streamed. Nil when what was typed
     /// isn't a message.
-    func streamRequest(_ typed: String, to taf: String) -> HTTPRequest? {
+    func streamRequest(_ typed: String, to taf: String, target: ChatTarget = .live) -> HTTPRequest? {
         guard let text = Outgoing.text(typed) else { return nil }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let body = try? encoder.encode(["text": text]) else { return nil }
+        guard let body = try? encoder.encode(ChatTarget.Message(text, target)) else { return nil }
         return HTTPRequest(method: "POST", path: "/v1/tafs/\(Self.escaped(taf))/messages/stream", headers: [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "text/event-stream", "Content-Type": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
