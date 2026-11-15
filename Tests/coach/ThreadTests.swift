@@ -3,6 +3,8 @@ import Foundation
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
 let setupAnswer = #"{"setup":{"id":"taf-coach","name":"Coach","job":"setup","status":"active","next_run":null,"last_run":null},"tools":{"state":"given"}}"#
+/// Coach has no chats listed yet: it reads its thread as before.
+let noChats = #"{"chats":[]}"#
 let threadAnswer = #"""
 {"messages":[],"components":[],"working":true,"items":[
   {"type":"message","message":{"id":"m1","at":"2026-11-14T18:00:00.000Z","from":"owner","kind":"message","text":"Connect Qonto for my refunds taf","session":"s1"}},

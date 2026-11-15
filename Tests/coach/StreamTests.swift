@@ -16,11 +16,17 @@ let streamLines = [
 ]
 
 let coachStreamTests: [Test] = [
+    Test("the stream's session says its chat and whether it is a new one; without a chat it says nothing") {
+        var reader = EventReader()
+        let lines = ["event: session", #"data: {"session":"s7","new_session":true,"message":{"id":"m9"}}"#, "",
+                     "event: session", #"data: {"message":{"id":"m9"}}"#, ""]
+        try expectEqual(lines.compactMap { reader.read($0) }, [.session("s7", newSession: true, message: "m9")])
+    },
     Test("the stream's lines are read as tafs cloud's events, and thinking is never one") {
         var reader = EventReader()
         let events = streamLines.compactMap { reader.read($0) }
         try expectEqual(events, [
-            .session(message: "m9"),
+            .session("s1", newSession: false, message: "m9"),
             .state(words: "Looking at Qonto…"),
             .activity(words: "Asking KIFF: connect Qonto…", call: "c1"),
             .step(call: "c1", status: "error", why: "Why: managed sign-in isn't set up for this app"),
