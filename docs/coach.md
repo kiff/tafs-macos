@@ -306,6 +306,38 @@ screen**: its title, its lines, Allow and Not now.
   consent's screen answers nothing, so consent is always a deliberate click. Esc is Not now.
 - A consent without its words is no screen: the refusal is then shown as a failure.
 
+### Files with a message (`ChatFiles`, `FilePrep`, `AttachButton`, `FileTray`, `MessageFiles`)
+
+As the iPad's `AttachViews.swift`, `Services/Attachments.swift`, `AppModel`'s attachments
+(`AppModel.swift:4723-4835`) and `TafsCloud`'s routes (`TafsCloud.swift:1059-1110`), in Coach's
+chat and a taf's alike:
+
+- **The paperclip**, in the box's foot, offers Choose photos and Choose file, each an open panel
+  for as many as the message has room for (5 at most, `FilePrep.perMessage`). With five, it's
+  off, and says so. A new conversation that improves a taf takes none: tafs cloud writes its
+  first message (`filesTarget`).
+- **Each file is made ready first:** the kinds tafs takes (photos, PDF, text, CSV, Markdown,
+  Word, Excel) under their limits (10 MB a photo, 25 MB a PDF, 2 MB the rest). Every image is
+  made a JPEG, its long edge at most 2576 px, drawn again on white so it carries no metadata.
+  A file that isn't a photo and is over 25 MB is refused before it's read. Each refusal says
+  why above the box, in the shared words.
+- **Then it goes up at once:** declared to tafs cloud (`POST /v1/tafs/{id}/attachments` with
+  its type, name, size and SHA-256), which checks it and answers where to put it; its bytes go
+  straight to storage, with no session (`FileStore`). Its chip says Uploading, Ready, or why it
+  didn't upload, with Remove. One that comes back after sign-out is dropped.
+- **Send takes the ready files** with the words, as a message of its own: by id
+  (`attachments`), words optional. Send waits while a file is still going up, and while files
+  are ready but the chat is at work. A message with files that doesn't go goes back to the
+  composer, words and files, with why above the box; one refused for want of the AI-data
+  consent goes back too, to send once allowed.
+- **A sent message's files** show under it, and each opens: tafs cloud says where it is
+  (`GET /v1/tafs/{id}/attachments/{file}`), it's copied under its own name to a temporary
+  folder, and opened in the app this Mac opens its kind with. Sign-out removes the copies and
+  the files picked.
+- **Mac differences:** no Take photo (the iPad's camera); photos come from files, so each keeps
+  its own name where the iPad's picker gives "Photo {n}"; a file opens in its app, not in
+  Quick Look in place; nothing is dropped onto the box, as on the iPad.
+
 ## The layout
 
 To the iPad's: the screen's name small and centred at the top; the chat on Coach's own wash;
@@ -319,7 +351,7 @@ A message still going is at 0.7.
 
 Approving a connection or a Card,
 archiving a conversation and the archived ones (Previous conversations' swipe and
-Archived), Coach mode over a taf's page, and attachments. Each is its own pull request; the ones
+Archived), and Coach mode over a taf's page. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests

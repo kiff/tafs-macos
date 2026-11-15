@@ -19,6 +19,8 @@ final class CoachModel: ObservableObject {
         var failed: String?
         /// tafs cloud's id for it once taken: the thread's copy carries the same.
         var id: String?
+        /// The files that went with it, shown with it until the thread has it.
+        var files: [AttachmentRef] = []
     }
 
     @Published private(set) var state: State = .loading {
@@ -47,6 +49,13 @@ final class CoachModel: ObservableObject {
     /// The taf a new conversation improves, as the iPad's `setupImproving`: its first message
     /// goes to tafs cloud's improve route, which puts the taf in front of it. Nil otherwise.
     @Published private(set) var improving: Improving?
+    /// The files picked for the next message, as they go up, as the iPad's `chatFiles[key]`
+    /// (AppModel.swift:4727): sent with the message, and taken from here once it goes.
+    @Published private(set) var files = ChatFiles()
+    /// Why a file wasn't added, or a message with files didn't go, as the iPad's `fileNotices[key]`.
+    @Published private(set) var fileNotice: String?
+    /// Where files' bytes go and come from.
+    private let store: FileStore
 
     struct Improving: Equatable {
         /// The taf's id in tafs cloud.
@@ -71,12 +80,13 @@ final class CoachModel: ObservableObject {
     private let fixed: Coach?
 
     init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
-         now: @escaping () -> Date = Date.init) {
+         now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore()) {
         self.cloud = cloud
         self.fixed = taf
         self.streamer = streamer
         self.sleep = sleep
         self.now = now
+        self.store = store
     }
 
     /// Coach's own chat, not a taf's: only it has conversations, and only its cards are answered.
@@ -254,7 +264,15 @@ final class CoachModel: ObservableObject {
         }
     }
 
-    var canSend: Bool { canSend(draft) }
+    /// Whether Send goes: words, or files ready, and nothing that holds it (a file still going
+    /// up, or files while the chat is at work, as the iPad's `holdsSend`).
+    var canSend: Bool {
+        guard !files.holdsSend(working: working) else { return false }
+        let ready = files.files.compactMap(\.ref)
+        guard !ready.isEmpty else { return canSend(draft) }
+        guard case .loaded = state else { return false }
+        return Outgoing.text(draft, files: ready) != nil && (pending == nil || pending?.failed != nil)
+    }
 
     private func canSend(_ text: String) -> Bool {
         guard case .loaded = state else { return false }
@@ -270,9 +288,106 @@ final class CoachModel: ObservableObject {
     /// Sends what the person wrote. It stays in view, as written, until the thread has it;
     /// if it doesn't go, it stays with why, to send again.
     func send() async {
-        guard case .loaded(let coach, _) = state, canSend, let text = Outgoing.text(draft) else { return }
+        guard case .loaded(let coach, _) = state, canSend else { return }
+        // A message with files goes as a message of its own, with the ready ones, as the iPad's
+        // `submitSetup` (AppModel.swift:7825-7826); ones that failed stay in the tray.
+        let taken = files.take()
+        let refs = taken.compactMap(\.ref)
+        guard let text = refs.isEmpty ? Outgoing.text(draft) : Outgoing.text(draft, files: refs) else {
+            files.putBack(taken)
+            return
+        }
         draft = ""
-        await deliver(text, to: coach)
+        if refs.isEmpty {
+            await deliver(text, to: coach)
+            return
+        }
+        fileNotice = nil
+        // Not taken: left with the composer, files and all (SetupChatView.swift:790-795).
+        if !(await deliver(text, to: coach, files: refs)) {
+            if draft.isEmpty { draft = text }
+            files.putBack(taken)
+        }
+    }
+
+    // MARK: Files (the iPad's AppModel.swift:4723-4835)
+
+    /// Where this chat's files go on tafs cloud: Coach's, or the taf's. Nil where nothing can be
+    /// attached: before the chat is read, or a new conversation that improves a taf, whose first
+    /// message tafs cloud writes (the iPad's `filesTarget`).
+    var filesTarget: String? {
+        guard case .loaded(let coach, _) = state else { return nil }
+        if isCoach { return improving == nil ? coach.id : nil }
+        return coach.id
+    }
+
+    /// Adds a file to the next message and uploads it, as the iPad's `attach(_:to:)`: declared
+    /// to tafs cloud, which checks its type and size, then its bytes straight to storage. One
+    /// that can't go says why in the tray, and is left out of the message. One that comes back
+    /// after sign-out is the session before's: dropped.
+    func attach(_ file: PreparedFile) async {
+        guard let target = filesTarget else { return }
+        fileNotice = nil
+        guard files.count < FilePrep.perMessage else {
+            fileNotice = Words.app("chat.message_carries_most_files", ["per_message": String(FilePrep.perMessage)])
+            return
+        }
+        let pending = PendingFile(id: UUID(), name: file.name, mediaType: file.mediaType, thumbnail: file.thumbnail, state: .uploading)
+        files.add(pending)
+        let gen = accountGeneration
+        let state: PendingFile.State
+        do {
+            let (ref, upload) = try await cloud.attach(target, mediaType: file.mediaType, name: file.name, size: file.data.count,
+                                                       sha256: FilePrep.sha256(file.data))
+            try await store.put(file.data, to: upload)
+            state = .ready(ref)
+        } catch {
+            state = .failed(Self.fileWhy(error))
+        }
+        guard gen == accountGeneration else { return }
+        files.set(pending.id, state)
+    }
+
+    /// A file picked that can't be attached: said in the tray, never uploaded.
+    func refuseFile(_ problem: Error) {
+        fileNotice = Self.fileWhy(problem)
+    }
+
+    func removeFile(_ id: UUID) {
+        files.remove(id)
+    }
+
+    /// A file the person attached, downloaded to open full size, as the iPad's `openFile`: a
+    /// temporary copy under its own name, removed at sign-out. Nil when it couldn't be read; the
+    /// notice says why.
+    func openFile(_ ref: AttachmentRef) async -> URL? {
+        guard case .loaded(let coach, _) = state else { return nil }
+        do {
+            let url = try await cloud.attachmentURL(coach.id, file: ref.id)
+            let data = try await store.get(url)
+            let dir = Self.openedFiles.appendingPathComponent(ref.id, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let local = dir.appendingPathComponent((ref.name as NSString).lastPathComponent)
+            try data.write(to: local, options: .atomic)
+            return local
+        } catch {
+            fileNotice = Words.app("chat.file.not_opened", ["file": ref.name, "why": Self.fileWhy(error)])
+            return nil
+        }
+    }
+
+    /// Where files opened full size are copied: removed at sign-out, so nothing a person attached
+    /// stays on the Mac after them (the iPad's `openedFiles`).
+    static let openedFiles = FileManager.default.temporaryDirectory.appendingPathComponent("attachments", isDirectory: true)
+
+    static func removeOpenedFiles() {
+        try? FileManager.default.removeItem(at: openedFiles)
+    }
+
+    /// Why a file didn't go or open: its own words, else tafs cloud's, as the iPad's
+    /// `localizedDescription`.
+    static func fileWhy(_ error: Error) -> String {
+        (error as? FileProblem)?.message ?? why(error)
     }
 
     /// Answers a card with one of its options. A card that no longer waits is read again as
@@ -393,8 +508,12 @@ final class CoachModel: ObservableObject {
         pending?.failed = ""
     }
 
-    private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil) async {
-        pending = Pending(text: text, at: firstTried ?? now())
+    /// Sends a message, with its files when it has some. False when a message with files
+    /// wasn't taken: it goes back to the composer, files and all, with why, as the iPad's
+    /// `deliverSetupOnce` (AppModel.swift:7781-7790); one without files stays as not sent.
+    @discardableResult
+    private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil, files sent: [AttachmentRef] = []) async -> Bool {
+        pending = Pending(text: text, at: firstTried ?? now(), files: sent)
         stopped = nil
         var mine = conversation
         do {
@@ -402,14 +521,14 @@ final class CoachModel: ObservableObject {
             // context; the conversation goes on as any other (the iPad's `deliverSetup`).
             if isCoach, let taf = improving {
                 let sent = try await cloud.improve(taf.id, text: text)
-                guard mine == conversation else { return }
+                guard mine == conversation else { return true }
                 improving = nil
                 pending?.id = sent.message?.id
                 settle(sent.session)
                 await follow(coach)
-                return
+                return true
             }
-            if let streamer, let request = cloud.streamRequest(text, to: coach.id, target: target) {
+            if let streamer, let request = cloud.streamRequest(text, to: coach.id, target: target, files: sent) {
                 var opened: AsyncThrowingStream<String, Error>?
                 do {
                     opened = try await streamer.lines(request)
@@ -422,7 +541,7 @@ final class CoachModel: ObservableObject {
                         state = .loaded(coach, page)
                         pending = nil
                         await follow(coach)
-                        return
+                        return true
                     }
                 }
                 if let opened {
@@ -432,24 +551,32 @@ final class CoachModel: ObservableObject {
                     let task = Task { await self.stream(opened, coach, started) }
                     streaming = task
                     await task.value
-                    return
+                    return true
                 }
             }
-            let sent = try await cloud.send(text, to: coach.id, target: target)
-            guard mine == conversation else { return }
-            settle(sent.session)
-            if followNew(sent.session, newSession: sent.newSession, coach) { mine = conversation }
-            pending?.id = sent.message?.id
+            let answer = try await cloud.send(text, to: coach.id, target: target, files: sent)
+            guard mine == conversation else { return true }
+            settle(answer.session)
+            if followNew(answer.session, newSession: answer.newSession, coach) { mine = conversation }
+            pending?.id = answer.message?.id
             await follow(coach)
         } catch let refusal as CloudRefusal where refusal.needsConsent {
-            guard mine == conversation else { return }
+            guard mine == conversation else { return true }
             live = nil
             consent = refusal.consent
+            // With files, it goes back to the composer, to send once allowed.
+            if !sent.isEmpty { pending = nil; return false }
         } catch {
-            guard mine == conversation else { return }
+            guard mine == conversation else { return true }
             live = nil
+            if !sent.isEmpty {
+                pending = nil
+                fileNotice = Self.fileWhy(error)
+                return false
+            }
             pending?.failed = Self.why(error)
         }
+        return true
     }
 
     /// Draws the answer as its events come, then reads the thread, which has it whole. A
@@ -518,7 +645,14 @@ final class CoachModel: ObservableObject {
     /// Moves on when the person signs out, as the iPad's `accountGeneration`: an answer that
     /// comes after is the session before's.
     private(set) var accountGeneration = 0
-    func signedOut() { accountGeneration += 1 }
+    /// The session ended: what comes back for it is dropped, and the files picked or opened
+    /// with it go, as the iPad's sign-out (`chatFiles = [:]`, `removeOpenedFiles`).
+    func signedOut() {
+        accountGeneration += 1
+        files = ChatFiles()
+        fileNotice = nil
+        Self.removeOpenedFiles()
+    }
 
     /// Reports an answer in this chat to tafs cloud, with its chat's session, as the iPad's
     /// `reportAnswer`: tafs cloud's words when it refuses with some; a gone answer says so; any
@@ -741,6 +875,9 @@ struct CoachView: View {
     /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
+            VStack(alignment: .leading, spacing: 0) {
+            // The files for the next message, above the box, as the iPad's `FileTray`.
+            FileTray(model: model)
             VStack(alignment: .leading, spacing: 4) {
                 // While Coach or the taf works, the box asks for the next message, as on the iPad.
                 TextField(placeholder, text: $model.draft)
@@ -748,6 +885,8 @@ struct CoachView: View {
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .onSubmit { Task { await model.send() } }
                 HStack {
+                    // The paperclip, where files can go: not on a new conversation that improves a taf.
+                    if model.filesTarget != nil { AttachButton(model: model) }
                     Spacer()
                     Button { Task { await model.send() } } label: {
                         Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundColor(Theme.onFill)
@@ -763,6 +902,7 @@ struct CoachView: View {
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line))
             .padding(.horizontal, 12).padding(.vertical, 10)
+            }
             // The iPad's bar: the background with a faint shadow upward, apart from the wash.
             .background(Theme.background.shadow(color: Theme.ink.opacity(0.06), radius: 6, x: 0, y: -2))
         }
@@ -856,11 +996,14 @@ struct CoachView: View {
             HStack {
                 Spacer(minLength: 48)
                 // Still going: the whole bubble at 0.7, as on the iPad; one that didn't go, fainter.
-                Text(verbatim: pending.text).font(.system(size: 15)).foregroundColor(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
-                    .opacity(pending.failed == nil ? 0.7 : 0.45)
+                if !pending.text.isEmpty {
+                    Text(verbatim: pending.text).font(.system(size: 15)).foregroundColor(.white)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
+                        .opacity(pending.failed == nil ? 0.7 : 0.45)
+                }
             }
+            if !pending.files.isEmpty { MessageFiles(model: model, files: pending.files).opacity(0.7) }
             if let why = pending.failed {
                 HStack(spacing: 8) {
                     Text(why.isEmpty ? words("chat.not_sent_short") : words("coach.answer.failed_why", ["value": why]))
@@ -996,14 +1139,20 @@ struct CoachView: View {
             } else {
                 // The words are a person's or the model's: plain text, never a line of the app's.
                 if message.fromPerson {
-                    // The person's words on the brand's gradient.
-                    HStack {
-                        Spacer(minLength: 48)
-                        Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(.white)
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 14).padding(.vertical, 10)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
+                    // The person's words on the brand's gradient, then the files sent with them.
+                    VStack(alignment: .trailing, spacing: 6) {
+                        if !message.text.isEmpty {
+                            HStack {
+                                Spacer(minLength: 48)
+                                Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(.white)
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14).padding(.vertical, 10)
+                                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
+                            }
+                        }
+                        if !message.attachments.isEmpty { MessageFiles(model: model, files: message.attachments) }
                     }
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                 } else {
                     // Coach's words, as text on the page, with no bubble; its work folded above them.
                     VStack(alignment: .leading, spacing: 8) {
