@@ -243,6 +243,7 @@ struct CoachView: View {
     /// Whether an approval can be signed on this Mac. When it can't, the card says where to.
     var canApprove = false
     /// Opens the taf a hand-over made.
+    /// Opens a hand-over's taf, by its KIFF agent.
     var openTaf: (String?) -> Void = { _ in }
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
@@ -332,7 +333,7 @@ struct CoachView: View {
             if !live.steps.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
                     ForEach(Array(live.steps.enumerated()), id: \.offset) { _, step in
-                        stepRow(step.words, done: step.done, failed: step.failed, why: nil, notMade: false)
+                        stepRow(step.words, done: step.done, failed: step.failed, why: nil, notMade: step.notMade)
                     }
                 }
                 .padding(.leading, 10)
@@ -354,28 +355,43 @@ struct CoachView: View {
         }
     }
 
-    /// Coach's or a taf's words: bold and list items read, everything else as written.
+    /// Coach's or a taf's words, as the iPad's `MarkdownText` draws them: no mark shows, and a
+    /// link is its label only.
     private func rich(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(Rich.blocks(text).enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .paragraph(let spans):
                     line(spans)
+                case .heading(let spans):
+                    line(spans, size: 17, weight: .semibold)
                 case .bullet(let spans):
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: "•").font(.system(size: 16)).foregroundColor(Theme.ink)
-                        line(spans)
-                    }
-                    .padding(.leading, 4)
+                    item("•", spans)
+                case .numbered(let number, let spans):
+                    item(number, spans)
                 }
             }
         }
         .textSelection(.enabled)
     }
 
-    private func line(_ spans: [Rich.Span]) -> some View {
-        spans.reduce(Text(verbatim: "")) { $0 + Text(verbatim: $1.text).fontWeight($1.bold ? .semibold : .regular) }
-            .font(.system(size: 16)).foregroundColor(Theme.ink).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+    private func item(_ mark: String, _ spans: [Rich.Span]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(verbatim: mark).font(.system(size: 16)).foregroundColor(Theme.ink)
+            line(spans)
+        }
+        .padding(.leading, 4)
+    }
+
+    private func line(_ spans: [Rich.Span], size: CGFloat = 16, weight: Font.Weight = .regular) -> some View {
+        spans.reduce(Text(verbatim: "")) { all, span in
+            var piece = Text(verbatim: span.text)
+            if span.code { piece = piece.font(.system(size: size - 1, design: .monospaced)) }
+            if span.bold { piece = piece.fontWeight(.semibold) }
+            if span.italic { piece = piece.italic() }
+            return all + piece
+        }
+        .font(.system(size: size, weight: weight)).foregroundColor(Theme.ink).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
     }
 
     /// The person's message, faded until the thread has it; with why and Retry if it didn't go.
@@ -441,7 +457,7 @@ struct CoachView: View {
                 if unfolded.contains(id) { unfolded.remove(id) } else { unfolded.insert(id) }
             } label: {
                 HStack(spacing: 4) {
-                    Text(words("chat.work.worked_for", ["ms": work.took])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    Text(words("chat.work.worked_for", ["ms": work.took(words)])).font(.system(size: 13)).foregroundColor(Theme.soft)
                     if !work.steps.isEmpty {
                         Image(systemName: unfolded.contains(id) ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.soft)
                     }
@@ -522,7 +538,8 @@ struct CoachView: View {
                 HStack(spacing: 10) {
                     Circle().stroke(Theme.amber, lineWidth: 2).frame(width: 16, height: 16).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(words("coach.plan.progress", ["done": words.number(card.planDone), "total": words.number(card.plan.count)]).uppercased())
+                        // tafs cloud's line for the plan, else the shared words for its count.
+                        Text(verbatim: (card.planLine ?? words("coach.plan.progress", ["done": words.number(card.planDone), "total": words.number(card.plan.count)])).uppercased())
                             .font(Theme.mono(10)).tracking(1.5).foregroundColor(Theme.soft)
                         Text(verbatim: card.title ?? current?.label ?? "").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
                     }
@@ -562,7 +579,14 @@ struct CoachView: View {
             if !card.tools.isEmpty {
                 Text(verbatim: card.tools.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
-            Button { openTaf(card.tafID) } label: {
+            // What came of it, in tafs cloud's words, when it didn't simply make the taf.
+            if let failed = card.outcome?.failed {
+                Text(verbatim: failed).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+            }
+            if let needed = card.outcome?.planNeeded {
+                Text(verbatim: needed).font(.system(size: 13)).foregroundColor(Theme.amberText).fixedSize(horizontal: false, vertical: true)
+            }
+            Button { openTaf(card.tafAgent) } label: {
                 Text(words("coach.result.open", ["taf": name])).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
                     .frame(maxWidth: .infinity).frame(height: 44)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Theme.brand)).contentShape(Rectangle())
