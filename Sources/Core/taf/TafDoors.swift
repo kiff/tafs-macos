@@ -189,7 +189,7 @@ extension CloudClient {
         return answer.door
     }
 
-    private func doorsPath(_ taf: String) -> String { "/v1/tafs/\(Self.query(taf))/doors" }
+    private func doorsPath(_ taf: String) -> String { "/v1/tafs/\(Self.escaped(taf))/doors" }
 
     func doors(of taf: String) async throws -> TafDoors.Page {
         try await get(doorsPath(taf))
@@ -203,23 +203,23 @@ extension CloudClient {
     }
 
     func setDoorOpen(_ taf: String, door id: String, open: Bool) async throws -> TafDoors.Door {
-        try door(try await doorChange("PATCH", doorsPath(taf) + "/\(Self.query(id))", body: ["open": open]))
+        try door(try await doorChange("PATCH", doorsPath(taf) + "/\(Self.escaped(id))", body: ["open": open]))
     }
 
     func removeDoor(_ taf: String, door id: String) async throws {
         struct Answer: Decodable { let removed: String }
-        let data = try await doorChange("DELETE", doorsPath(taf) + "/\(Self.query(id))", body: Optional<[String: String]>.none)
+        let data = try await doorChange("DELETE", doorsPath(taf) + "/\(Self.escaped(id))", body: Optional<[String: String]>.none)
         guard (try? JSONDecoder().decode(Answer.self, from: data)) != nil else { throw KIFFError.unreadable }
     }
 
     func pair(_ taf: String, door id: String, sender: String, name: String?) async throws -> TafDoors.Door {
         var body = ["id": sender]
         if let name, !name.isEmpty { body["name"] = name }
-        return try door(try await doorChange("POST", doorsPath(taf) + "/\(Self.query(id))/keys", body: body))
+        return try door(try await doorChange("POST", doorsPath(taf) + "/\(Self.escaped(id))/keys", body: body))
     }
 
     func unpair(_ taf: String, door id: String, sender: String) async throws -> TafDoors.Door {
-        try door(try await doorChange("DELETE", doorsPath(taf) + "/\(Self.query(id))/keys/\(Self.query(sender))", body: Optional<[String: String]>.none))
+        try door(try await doorChange("DELETE", doorsPath(taf) + "/\(Self.escaped(id))/keys/\(Self.escaped(sender))", body: Optional<[String: String]>.none))
     }
 
     /// The owner's answer to a knock: "do" (with their own words, if they wrote some), "pair" or "ignore".
@@ -227,7 +227,7 @@ extension CloudClient {
         struct Answer: Decodable { let state: String }
         var body = ["action": action]
         if let say, !say.isEmpty { body["say"] = say }
-        let data = try await doorChange("POST", doorsPath(taf) + "/knocks/\(Self.query(knock))", body: body)
+        let data = try await doorChange("POST", doorsPath(taf) + "/knocks/\(Self.escaped(knock))", body: body)
         guard (try? JSONDecoder().decode(Answer.self, from: data)) != nil else { throw KIFFError.unreadable }
     }
 }

@@ -20,7 +20,7 @@ let tafDoorsTests: [Test] = [
     Test("a taf's doors read as the iPad reads them: what's missing defaults, what must be there must", awaiting: {
         let (client, transport) = cloud([(200, doorPage), (200, #"{"doors":[],"apps":[],"knocks":[{"id":"k","door":"d","app":"email","from":"a"}]}"#)])
         let page = try await client.doors(of: "taf-1")
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf%2D1/doors")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf-1/doors")
         let door = page.doors[0]
         try expectEqual(door.holdsKeys, true)
         try expectEqual(door.keys.map(\.id), ["you@acme.example", "ana@acme.example", "bo@acme.example"])
@@ -51,10 +51,10 @@ let tafDoorsTests: [Test] = [
         try await client.answerKnock("taf-1", knock: "k1", action: "ignore", say: "")
         try expectEqual(closed.open, false)
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, [
-            "POST /v1/tafs/taf%2D1/doors", "PATCH /v1/tafs/taf%2D1/doors/d1", "DELETE /v1/tafs/taf%2D1/doors/d1",
-            "POST /v1/tafs/taf%2D1/doors/d1/keys", "POST /v1/tafs/taf%2D1/doors/d1/keys",
-            "DELETE /v1/tafs/taf%2D1/doors/d1/keys/ana%40acme%2Eexample",
-            "POST /v1/tafs/taf%2D1/doors/knocks/k1", "POST /v1/tafs/taf%2D1/doors/knocks/k1",
+            "POST /v1/tafs/taf-1/doors", "PATCH /v1/tafs/taf-1/doors/d1", "DELETE /v1/tafs/taf-1/doors/d1",
+            "POST /v1/tafs/taf-1/doors/d1/keys", "POST /v1/tafs/taf-1/doors/d1/keys",
+            "DELETE /v1/tafs/taf-1/doors/d1/keys/ana%40acme%2Eexample",
+            "POST /v1/tafs/taf-1/doors/knocks/k1", "POST /v1/tafs/taf-1/doors/knocks/k1",
         ])
         try expectEqual(try json(transport.sent[0].body), ["app": "email"])
         try expectEqual(try json(transport.sent[1].body), ["open": false])
