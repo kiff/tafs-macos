@@ -123,27 +123,38 @@ let accountTests: [Test] = [
         try expectEqual(Set(declared), Set(shipped))
         try expectEqual(AppInfo.version(info), "0.1 (1)")
     },
-    Test("people and groups are read as KIFF lists them, one that doesn't read left out, and only read", awaiting: {
-        let groups = #"{"groups":[{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"},{"role":"x"}],"agents":["refunds","gone"]},{"id":"g2","name":"Finance","members":[]},{"name":"no id"}]}"#
-        let people = #"{"members":[{"subject":"u1","role":"admin","status":"active","email":"zoe@example.com","you":true},{"subject":"u2","role":"member","status":"active","email":""},{"role":"x"}]}"#
+    Test("people and groups are read as KIFF lists them and kept as the iPad keeps them; only read", awaiting: {
+        let groups = #"{"groups":[{"id":"g2","name":"finance","members":[{"subject":"u2","role":"member"}],"agents":[]},{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"}],"agents":["refunds","gone"]},{"id":"g3","name":"Accounts","members":[],"agents":[]}]}"#
+        let people = #"{"members":[{"subject":"u1","role":"admin","status":"active","email":"zoe@example.com","you":true},{"subject":"u2","role":"member","status":"active","email":""},{"subject":"u3","role":"member","status":"invited","email":"amy@example.com"}]}"#
         let (account, transport) = client([(200, groups), (200, people)])
         let read = try await account.groups()
         let persons = try await account.people()
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/groups", "GET /v1/tenant/members"])
-        try expectEqual(read.map(\.id), ["g1", "g2"])
-        try expectEqual(read[0].members.map(\.subject), ["u1", "u2"])
-        try expectEqual(read[0].everyone, true)
-        try expectEqual(persons.map(\.label), ["zoe@example.com", "u2"])
+        // Only those on the account now, by label; the default group first, then by name, case aside.
+        let (shownGroups, shownPeople) = People.shown(groups: read, people: persons)
+        try expectEqual(shownGroups.map(\.id), ["g1", "g3", "g2"])
+        try expectEqual(shownPeople.map(\.label), ["u2", "zoe@example.com"])
         try expectEqual(persons[0].you, true)
         // Managers first, then by label.
-        try expectEqual(People.sorted(read[0], people: persons).map(\.subject), ["u2", "u1"])
+        try expectEqual(People.sorted(shownGroups[0], people: shownPeople).map(\.subject), ["u2", "u1"])
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
-        try expectEqual(read[0].shownName(words), "Everyone")
-        try expectEqual(read[1].shownName(words), "Finance")
+        try expectEqual(shownGroups[0].shownName(words), "Everyone")
+        try expectEqual(shownGroups[2].shownName(words), "finance")
         let names = ["refunds": "Refunds"]
-        try expectEqual(People.uses(read[0], name: { names[$0] }, words: words), "Uses Refunds")
-        try expectEqual(People.uses(read[1], name: { names[$0] }, words: words), "Uses no taf yet")
-        try expectEqual(People.accountLine(account: "Acme", signedInAs: "zoe@example.com", email: "zoe@example.com", count: 2, words: words), "Acme · 2 people")
+        try expectEqual(People.uses(shownGroups[0], name: { names[$0] }, words: words), "Uses Refunds")
+        try expectEqual(People.uses(shownGroups[1], name: { names[$0] }, words: words), "Uses no taf yet")
+        try expectEqual(People.accountLine(account: "Acme", signedInAs: "zoe@example.com", email: "zoe@example.com", count: shownPeople.count, words: words), "Acme · 2 people")
         try expectEqual(People.accountLine(account: "zoe@example.com", signedInAs: nil, email: "zoe@example.com", count: 1, words: words), "1 person")
+    }),
+    Test("a group or person that doesn't read fails the read, as the iPad's, never a list with someone missing", awaiting: {
+        for (path, body) in [("groups", #"{"groups":[{"id":"g1","name":"A","members":[]}]}"#), ("people", #"{"members":[{"subject":"u1","status":"active"}]}"#)] {
+            let (account, _) = client([(200, body)])
+            do {
+                if path == "groups" { _ = try await account.groups() } else { _ = try await account.people() }
+                throw Failure(description: "\(path) was read")
+            } catch let error as KIFFError {
+                try expectEqual(error, .unreadable)
+            }
+        }
     }),
 ]

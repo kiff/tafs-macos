@@ -104,11 +104,16 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
 | The groups | KIFF's `GET /v1/groups`: `id`, `name`, `everyone`, `members` (`subject`, `role`), `agents` | Each group's name, KIFF's default one ("Everyone") in the app's language; "Uses {tafs}", the tafs by name from the agents it is shared, or that it uses none; then its people, managers first, then by label. |
 | The people | KIFF's `GET /v1/tenant/members`: `subject`, `role`, `status`, `email`, `you` | A person as their email, else KIFF's id for them, with their initial on a raised circle, and "Manager" (amber) or "Member". |
 
+- **Who and in what order,** as the iPad's `refreshPeople`: only the people on the account now
+  (`status` active), by label; the default group first, then the others by name, case aside.
 - The line over the groups is the account's name and how many people, or the count alone
-  for an account named after its owner's email, as the iPad's `AccountLines.people`.
-- Read when it opens and every 20 seconds while open. A read that fails after one that
-  worked keeps what is shown; a first one says why.
-- A group or person that doesn't read is left out, never the list.
+  for an account named after its owner's email, as the iPad's `AccountLines.people`. The Mac
+  also gives the count alone when KIFF names no account, which the iPad's account always has.
+- Read when it opens and every 20 seconds while open (the two lists one after the other, where
+  the iPad reads them together). A read that fails after one that worked keeps what is shown,
+  with "People and groups couldn't be read" over it until a read works; a first one says why.
+- Decoded as the iPad's: a group's members and agents, and a person's role and status, must
+  be there; one that doesn't read fails the read, which says why.
 - **It only reads.** Making, renaming or deleting a group and changing its people are each
   the person's act behind their device's key on the iPad, so on the Mac they come with
   approvals (#16).

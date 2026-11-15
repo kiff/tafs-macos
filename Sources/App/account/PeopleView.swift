@@ -11,6 +11,8 @@ final class PeopleModel: ObservableObject {
     }
 
     @Published private(set) var state: State = .loading
+    /// Why the last read failed, shown over what was read before, until a read works.
+    @Published private(set) var notRead: String?
     private let account: AccountClient
 
     init(account: AccountClient) { self.account = account }
@@ -18,13 +20,20 @@ final class PeopleModel: ObservableObject {
     /// Both lists, together: a page with groups and no people, or the other way round, isn't one.
     func load() async {
         do {
+            // One after the other: the same lists as the iPad's two reads at once.
             let groups = try await account.groups()
             let people = try await account.people()
-            state = .loaded(groups, people)
+            let (shownGroups, shownPeople) = People.shown(groups: groups, people: people)
+            state = .loaded(shownGroups, shownPeople)
+            notRead = nil
         } catch {
-            // What was shown stays when a later read fails; a first read that fails says why.
-            if case .loaded = state { return }
-            state = .unread(why: NeedsYouModel.why(error))
+            // What was shown stays when a later read fails, with why over it, as the iPad's
+            // `peopleError`; a first read that fails says why alone.
+            if case .loaded = state {
+                notRead = NeedsYouModel.why(error)
+            } else {
+                state = .unread(why: NeedsYouModel.why(error))
+            }
         }
     }
 
@@ -52,6 +61,9 @@ struct PeopleView: View {
                 case .unread(let why):
                     Text(words("people.not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                 case .loaded(let groups, let people):
+                    if let why = model.notRead {
+                        Text(words("people.not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
+                    }
                     Text(People.accountLine(account: me?.account, signedInAs: me?.signedInAs, email: me?.email, count: people.count, words: words))
                         .font(.system(size: 14)).foregroundColor(Theme.soft)
                     if groups.isEmpty {

@@ -14,14 +14,16 @@ enum People {
         /// The KIFF agents the group is shared.
         let agents: [String]
 
+        // As the iPad's `KIFFClient.Group`: its members and agents must be there, as KIFF sends
+        // them, and one that doesn't read fails the read, which then says why.
         enum Keys: String, CodingKey { case id, name, everyone, members, agents }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
             id = try c.decode(String.self, forKey: .id)
             name = try c.decode(String.self, forKey: .name)
-            everyone = ((try? c.decodeIfPresent(Bool.self, forKey: .everyone)) ?? nil) ?? false
-            members = ((try? c.decodeIfPresent([Lenient<Member>].self, forKey: .members)) ?? nil)?.compactMap(\.value) ?? []
-            agents = ((try? c.decodeIfPresent([String].self, forKey: .agents)) ?? nil) ?? []
+            everyone = try c.decodeIfPresent(Bool.self, forKey: .everyone) ?? false
+            members = try c.decode([Member].self, forKey: .members)
+            agents = try c.decode([String].self, forKey: .agents)
         }
 
         /// The name as the person reads it: KIFF's default group in the app's language, since
@@ -44,18 +46,29 @@ enum People {
         let you: Bool
         var id: String { subject }
 
+        // As the iPad's `KIFFClient.Person`: subject, role and status must be there.
         enum Keys: String, CodingKey { case subject, role, status, email, you }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
             subject = try c.decode(String.self, forKey: .subject)
-            role = ((try? c.decodeIfPresent(String.self, forKey: .role)) ?? nil) ?? ""
-            status = ((try? c.decodeIfPresent(String.self, forKey: .status)) ?? nil) ?? ""
-            email = (try? c.decodeIfPresent(String.self, forKey: .email)) ?? nil
-            you = ((try? c.decodeIfPresent(Bool.self, forKey: .you)) ?? nil) ?? false
+            role = try c.decode(String.self, forKey: .role)
+            status = try c.decode(String.self, forKey: .status)
+            email = try c.decodeIfPresent(String.self, forKey: .email)
+            you = try c.decodeIfPresent(Bool.self, forKey: .you) ?? false
         }
 
         /// What the app shows: their email, else KIFF's id for them.
         var label: String { email.flatMap { $0.isEmpty ? nil : $0 } ?? subject }
+        /// Someone on the account now, not invited or removed.
+        var active: Bool { status == "active" }
+    }
+
+    /// The lists as the iPad's `refreshPeople` keeps them: only the people on the account now,
+    /// by label; the default group first, then the others by name, case aside.
+    static func shown(groups: [Group], people: [Person]) -> ([Group], [Person]) {
+        let groups = groups.sorted { ($0.everyone ? 0 : 1, $0.name.lowercased()) < ($1.everyone ? 0 : 1, $1.name.lowercased()) }
+        let people = people.filter(\.active).sorted { $0.label.lowercased() < $1.label.lowercased() }
+        return (groups, people)
     }
 
     /// A member's label: the person's, else KIFF's id for them.
@@ -87,24 +100,18 @@ enum People {
     }
 }
 
-/// Reads one item of a list, or nothing: an item that doesn't read is left out, never the list.
-private struct Lenient<Value: Decodable>: Decodable {
-    let value: Value?
-    init(from decoder: Decoder) throws { value = try? Value(from: decoder) }
-}
-
 extension AccountClient {
     /// The account's groups, each with its people and the agents it is shared.
     func groups() async throws -> [People.Group] {
-        struct Answer: Decodable { let groups: [Lenient<People.Group>] }
+        struct Answer: Decodable { let groups: [People.Group] }
         let answer: Answer = try read(try await send("GET", "/v1/groups"))
-        return answer.groups.compactMap(\.value)
+        return answer.groups
     }
 
     /// The account's people.
     func people() async throws -> [People.Person] {
-        struct Answer: Decodable { let members: [Lenient<People.Person>] }
+        struct Answer: Decodable { let members: [People.Person] }
         let answer: Answer = try read(try await send("GET", "/v1/tenant/members"))
-        return answer.members.compactMap(\.value)
+        return answer.members
     }
 }

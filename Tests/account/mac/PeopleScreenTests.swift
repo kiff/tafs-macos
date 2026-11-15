@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
-private let groups = #"{"groups":[{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"}],"agents":["agent_refunds"]},{"id":"g2","name":"Finance","members":[{"subject":"u2","role":"member"}]}]}"#
+private let groups = #"{"groups":[{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"}],"agents":["agent_refunds"]},{"id":"g2","name":"Finance","members":[{"subject":"u2","role":"member"}],"agents":[]}]}"#
 private let people = #"{"members":[{"subject":"u1","role":"admin","status":"active","email":"you@example.com","you":true},{"subject":"u2","role":"member","status":"active","email":"sam@example.com"}]}"#
 
 @MainActor
@@ -12,7 +12,7 @@ private func make(_ answers: [(Int, String)]) -> (PeopleModel, CannedTransport) 
 }
 
 let accountPeopleTests: [Test] = [
-    Test("People & groups reads both lists and only reads; a failed first read says why, a later one keeps what's shown", awaiting: { @MainActor in
+    Test("People & groups reads both lists and only reads; a failed first read says why, a later one keeps what's shown and says why over it", awaiting: { @MainActor in
         let (model, transport) = make([(200, groups), (200, people), (500, ""), (500, "")])
         await model.load()
         guard case .loaded(let read, let persons) = model.state else { throw Failure(description: "not loaded") }
@@ -21,6 +21,8 @@ let accountPeopleTests: [Test] = [
         await model.load()
         try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
         if case .unread = model.state { throw Failure(description: "a later failure hid the groups") }
+        // Why it failed is said over what is kept, until a read works.
+        try expectEqual(model.notRead, "500")
         let (unread, _) = make([(500, ""), (500, "")])
         await unread.load()
         if case .loaded = unread.state { throw Failure(description: "a failed read was shown as loaded") }
