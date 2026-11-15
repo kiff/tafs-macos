@@ -63,3 +63,20 @@ struct Eyebrow: View {
         Text(text.uppercased()).tracking(0.7).font(.system(size: 12, design: .monospaced)).foregroundColor(color)
     }
 }
+
+/// A taf's avatar, as the iPad's `TafAvatar`: its colour, a continuous square with corners at
+/// 0.3 of its size, and its initial in white, rounded bold at half its size.
+struct TafAvatar: View {
+    let name: String
+    let color: Int
+    var size: CGFloat = 40
+
+    var body: some View {
+        Text(verbatim: String(name.prefix(1)).uppercased())
+            .font(Theme.display(size * 0.5))
+            .foregroundColor(.white)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(Theme.tafColor(color)))
+            .accessibilityHidden(true)
+    }
+}
