@@ -53,9 +53,9 @@ The build copies each shipped language's lines and the mascot from kiff/tafs at 
 the app ([shared.md](shared.md)). `Words.load()` picks the person's language, and every view
 reads `@Environment(\.words)`.
 
-**Dates and times are in the app's language, never this Mac's** (`AppDates`): a Mac set to
-Spanish that shows the app in English reads "Nov 15, 2026", as the iPad's formatters in its app
-language. A fixed clock ("HH:mm") is `en_US_POSIX`, so no language or Mac setting makes it
+**Dates and times are in the app's language, with this Mac's region** (`AppDates.locale`), as
+the iPad's `Locale.current` with a per-app language: a Mac set to Spanish that shows the app in
+English reads English dates, and an English app on a British Mac reads "15 Nov 2026" and 14:05. A fixed clock ("HH:mm") is `en_US_POSIX`, so no language or Mac setting makes it
 12-hour. The Record's day titles (`AccountTime.dayTitle`) and the dial's times (`zonedShown`)
 take the words' language too.
 
