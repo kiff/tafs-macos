@@ -151,8 +151,11 @@ screen**: its title, its lines, Allow and Not now.
 ## The layout
 
 To the iPad's: the screen's name small and centred at the top; the chat on Coach's own wash;
-a card's choices as white pills under what it asks; and the message box as a rounded panel
-at the foot, with the send circle in it.
+Coach's words at 16; the person's bubble with a continuous corner of 18; a card's choices
+as white pills under what it asks (14, padding 14 and 9, edged in ink at 0.18) that **wrap
+onto more rows** rather than squeeze; and the message box as a rounded panel (corner 20) at
+the foot, its field at 16 and a 40-point send circle, on a bar with a faint shadow upward.
+A message still going is at 0.7.
 
 ## Not yet
 

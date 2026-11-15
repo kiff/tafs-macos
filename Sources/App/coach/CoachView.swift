@@ -298,13 +298,13 @@ struct CoachView: View {
         if case .loaded = model.state {
             VStack(alignment: .leading, spacing: 10) {
                 TextField(words("coach.ask_anything"), text: $model.draft)
-                    .textFieldStyle(.plain).font(.system(size: 15))
+                    .textFieldStyle(.plain).font(.system(size: 16))
                     .onSubmit { Task { await model.send() } }
                 HStack {
                     Spacer()
                     Button { Task { await model.send() } } label: {
-                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
-                            .frame(width: 32, height: 32)
+                        Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundColor(Theme.onFill)
+                            .frame(width: 40, height: 40)
                             .background(Circle().fill(Theme.coach.opacity(model.canSend ? 1 : 0.4)))
                     }
                     .buttonStyle(.plain)
@@ -313,10 +313,11 @@ struct CoachView: View {
                 }
             }
             .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
-            .background(RoundedRectangle(cornerRadius: 18).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.line))
-            .padding(.horizontal, 12).padding(.vertical, 12)
-            .background(Theme.background)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line))
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            // The iPad's bar: the background with a faint shadow upward, apart from the wash.
+            .background(Theme.background.shadow(color: Theme.ink.opacity(0.06), radius: 6, x: 0, y: -2))
         }
     }
 
@@ -362,7 +363,7 @@ struct CoachView: View {
                     line(spans)
                 case .bullet(let spans):
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: "•").font(.system(size: 15)).foregroundColor(Theme.ink)
+                        Text(verbatim: "•").font(.system(size: 16)).foregroundColor(Theme.ink)
                         line(spans)
                     }
                     .padding(.leading, 4)
@@ -374,7 +375,7 @@ struct CoachView: View {
 
     private func line(_ spans: [Rich.Span]) -> some View {
         spans.reduce(Text(verbatim: "")) { $0 + Text(verbatim: $1.text).fontWeight($1.bold ? .semibold : .regular) }
-            .font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            .font(.system(size: 16)).foregroundColor(Theme.ink).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
     }
 
     /// The person's message, faded until the thread has it; with why and Retry if it didn't go.
@@ -382,9 +383,11 @@ struct CoachView: View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack {
                 Spacer(minLength: 80)
+                // Still going: the whole bubble at 0.7, as on the iPad; one that didn't go, fainter.
                 Text(verbatim: pending.text).font(.system(size: 15)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Theme.brand).opacity(pending.failed == nil ? 0.6 : 0.4))
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
+                    .opacity(pending.failed == nil ? 0.7 : 0.45)
             }
             if let why = pending.failed {
                 HStack(spacing: 8) {
@@ -477,7 +480,7 @@ struct CoachView: View {
                         Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(.white)
                             .textSelection(.enabled)
                             .padding(.horizontal, 14).padding(.vertical, 10)
-                            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.brand))
+                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.brand))
                     }
                 } else {
                     // Coach's words, as text on the page, with no bubble; its work folded above them.
@@ -631,17 +634,17 @@ struct CoachView: View {
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 } else {
-                    HStack(spacing: 8) {
-                        ForEach(card.options, id: \.value) { option in
-                            Button { Task { await model.answer(card, with: option) } } label: {
-                                Text(verbatim: option.label).font(.system(size: 14)).foregroundColor(Theme.ink)
-                                    .padding(.horizontal, 14).padding(.vertical, 8)
-                                    .background(Capsule().fill(Theme.panel)).overlay(Capsule().stroke(Theme.line))
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model.answering != nil)
+                    // The choices wrap onto more rows, as the iPad's WrapRow, never squeezed.
+                    WrapRow(count: card.options.count) { index in
+                        let option = card.options[index]
+                        Button { Task { await model.answer(card, with: option) } } label: {
+                            Text(verbatim: option.label).font(.system(size: 14)).foregroundColor(Theme.ink)
+                                .padding(.horizontal, 14).padding(.vertical, 9)
+                                .background(Capsule().fill(Theme.panel)).overlay(Capsule().stroke(Theme.ink.opacity(0.18)))
+                                .contentShape(Capsule())
                         }
+                        .buttonStyle(.plain)
+                        .disabled(model.answering != nil)
                     }
                 }
                 if let why = model.notAnswered[card.key] {
@@ -677,4 +680,57 @@ private extension View {
     @ViewBuilder func key(_ shortcut: KeyboardShortcut?) -> some View {
         if let shortcut { keyboardShortcut(shortcut) } else { self }
     }
+}
+
+/// Cells in rows that wrap at the width they are given, as the iPad's `WrapRow`. A Mac on
+/// macOS 12 has no `Layout`, so each cell is placed by alignment guides.
+struct WrapRow<Cell: View>: View {
+    let count: Int
+    let spacing: CGFloat
+    let cell: (Int) -> Cell
+    @State private var height: CGFloat = 0
+
+    init(count: Int, spacing: CGFloat = 8, @ViewBuilder cell: @escaping (Int) -> Cell) {
+        self.count = count
+        self.spacing = spacing
+        self.cell = cell
+    }
+
+    var body: some View {
+        GeometryReader { space in placed(in: space.size.width) }
+            .frame(height: height)
+    }
+
+    private func placed(in width: CGFloat) -> some View {
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        return ZStack(alignment: .topLeading) {
+            ForEach(0..<count, id: \.self) { index in
+                cell(index)
+                    .padding(.trailing, spacing).padding(.bottom, spacing)
+                    .alignmentGuide(.leading) { d in
+                        // A cell that doesn't fit what is left of the row starts the next one.
+                        if x != 0, abs(x - d.width) > width {
+                            x = 0
+                            y -= d.height
+                        }
+                        let placedAt = x
+                        x = index == count - 1 ? 0 : x - d.width
+                        return placedAt
+                    }
+                    .alignmentGuide(.top) { _ in
+                        let placedAt = y
+                        if index == count - 1 { y = 0 }
+                        return placedAt
+                    }
+            }
+        }
+        .background(GeometryReader { drawn in Color.clear.preference(key: WrapHeight.self, value: drawn.size.height) })
+        .onPreferenceChange(WrapHeight.self) { height = $0 }
+    }
+}
+
+private struct WrapHeight: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
