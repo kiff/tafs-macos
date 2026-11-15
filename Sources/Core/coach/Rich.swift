@@ -21,6 +21,8 @@ enum Rich {
         case numbered(String, [Span])
         /// A heading ("## What I'll do"), drawn a step larger and semibold.
         case heading([Span])
+        /// A fenced code block's lines, as written: no mark is read inside it.
+        case code(String)
     }
 
     /// The longest text read for marks; a longer one is drawn plain.
@@ -29,8 +31,21 @@ enum Rich {
     static func blocks(_ text: String) -> [Block] {
         guard text.count <= longest else { return [.paragraph([Span(text: text)])] }
         var out: [Block] = []
-        for line in text.components(separatedBy: "\n") {
+        // Lines inside a ``` fence, while one is open. One never closed stays code to the end,
+        // as the iPad's `MarkdownText` draws it while an answer streams.
+        var code: [String]?
+        for line in text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                if let lines = code {
+                    out.append(.code(lines.joined(separator: "\n")))
+                    code = nil
+                } else {
+                    code = []
+                }
+                continue
+            }
+            if code != nil { code?.append(line); continue }
             if trimmed.isEmpty { continue }
             if let words = heading(trimmed) {
                 out.append(.heading(spans(words)))
@@ -42,6 +57,7 @@ enum Rich {
                 out.append(.paragraph(spans(trimmed)))
             }
         }
+        if let lines = code { out.append(.code(lines.joined(separator: "\n"))) }
         return out
     }
 

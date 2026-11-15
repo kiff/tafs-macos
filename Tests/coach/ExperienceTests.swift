@@ -127,4 +127,14 @@ let coachExperienceTests: [Test] = [
         }
         try expectEqual(Rich.blocks(String(repeating: "**a** ", count: 5000)).count, 1)
     },
+    Test("a fenced code block is its lines as written, no mark read inside; one never closed is code to the end") {
+        try expectEqual(Rich.blocks("Run this:\n```swift\nlet **total** = [a](b)\n\n  indented\n```\nDone."), [
+            .paragraph([.init(text: "Run this:")]),
+            .code("let **total** = [a](b)\n\n  indented"),
+            .paragraph([.init(text: "Done.")]),
+        ])
+        // While an answer streams, an open fence is code until it closes.
+        try expectEqual(Rich.blocks("Here:\n```\nstep 1\r\nstep 2"), [.paragraph([.init(text: "Here:")]), .code("step 1\nstep 2")])
+        try expectEqual(Rich.blocks("```\n```"), [.code("")])
+    },
 ]

@@ -437,6 +437,13 @@ struct CoachView: View {
                     item("•", spans)
                 case .numbered(let number, let spans):
                     item(number, spans)
+                case .code(let lines):
+                    // As the iPad's code block: the lines as written, in mono, on the raised ground.
+                    Text(verbatim: lines).font(.system(size: 14, design: .monospaced)).foregroundColor(Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
                 }
             }
         }
