@@ -109,14 +109,12 @@ struct DevicesView: View {
         }
     }
 
+    /// A device, as the iPad's row: its name (15 semibold) and when it was last used (13 dim).
     private func row(_ device: Device) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(device.name ?? words("settings.devices.unnamed")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 Text(lastUsed(device.lastUsed)).font(.system(size: 13)).foregroundColor(Theme.dim)
-                if let fingerprint = device.keyFingerprint {
-                    Text(verbatim: fingerprint).font(Theme.mono(12)).foregroundColor(Theme.dim).textSelection(.enabled)
-                }
             }
             Spacer()
             if device.thisDevice {

@@ -6,20 +6,18 @@ struct Device: Decodable, Identifiable, Equatable {
     /// KIFF's name for it in the app's language, else the name it gave when it signed in.
     let name: String?
     let platform: String?
-    /// Its key's fingerprint, as KIFF shows it: "3f2a 91c0 7b1e 0d44".
-    let keyFingerprint: String?
     /// When it last reached KIFF; nil before its first use.
     let lastUsed: Date?
     let thisDevice: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, name, displayName = "display_name", platform, keyFingerprint = "key_fingerprint"
+        case id, name, displayName = "display_name", platform
         case lastUsedAt = "last_used_at", lastSeenAt = "last_seen_at", thisDevice = "this_device"
     }
 
-    init(id: String, name: String?, platform: String? = nil, keyFingerprint: String? = nil, lastUsed: Date? = nil, thisDevice: Bool = false) {
+    init(id: String, name: String?, platform: String? = nil, lastUsed: Date? = nil, thisDevice: Bool = false) {
         self.id = id; self.name = name; self.platform = platform
-        self.keyFingerprint = keyFingerprint; self.lastUsed = lastUsed; self.thisDevice = thisDevice
+        self.lastUsed = lastUsed; self.thisDevice = thisDevice
     }
 
     init(from decoder: Decoder) throws {
@@ -27,7 +25,6 @@ struct Device: Decodable, Identifiable, Equatable {
         id = try c.decode(String.self, forKey: .id)
         name = try c.decodeIfPresent(String.self, forKey: .displayName) ?? c.decodeIfPresent(String.self, forKey: .name)
         platform = try c.decodeIfPresent(String.self, forKey: .platform)
-        keyFingerprint = try c.decodeIfPresent(String.self, forKey: .keyFingerprint)
         lastUsed = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt) ?? c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
         thisDevice = try c.decodeIfPresent(Bool.self, forKey: .thisDevice) ?? false
     }
