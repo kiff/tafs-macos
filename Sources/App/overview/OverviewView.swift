@@ -43,6 +43,8 @@ struct OverviewView: View {
     var held: [HeldRow] = []
     /// Opens Needs you, where each is answered.
     var openNeedsYou: () -> Void = {}
+    /// Opens a taf's page from its line.
+    var openTaf: ((Home.Taf) -> Void)?
 
     var body: some View {
         ScrollView {
@@ -60,6 +62,9 @@ struct OverviewView: View {
                     let count = page.needsYouCount ?? 0
                     if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
                     table(page.tafs)
+                    if openTaf != nil, !page.tafs.isEmpty {
+                        Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
+                    }
                 }
             }
             .padding(.horizontal, Look.inset)
@@ -125,7 +130,11 @@ struct OverviewView: View {
             }
             ForEach(tafs) { taf in
                 Rectangle().fill(Theme.line).frame(height: 1)
-                row(taf)
+                if let openTaf {
+                    Button { openTaf(taf) } label: { row(taf).contentShape(Rectangle()) }.buttonStyle(.plain)
+                } else {
+                    row(taf)
+                }
             }
         }
     }

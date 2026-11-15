@@ -26,8 +26,28 @@ and works out one thing only: what is left, as KIFF's limit less what KIFF says 
   "€12.50". Whole amounts lose their zeros, as the apps write money everywhere. A unit that
   isn't a currency's code follows the number as written.
 
+## The page (`TafView`)
+
+A taf in the sidebar opens its page in place of the screen, as on the iPad. The open taf sits
+on the chosen row's grey; no screen row is the chosen one while it is open. Choosing anything in the
+sidebar, the screen already open too, closes it. An agent tafs doesn't run (no `id`) has no
+page. Coach's **Open** on a hand-over opens the taf it made, when the list has it, else the
+Overview.
+
+| Part | What |
+|---|---|
+| The head | The taf's coloured square with its initial, and its name. |
+| The tabs | **Chat** and **Card**, as the iPad's two-part switch. Activity and Setup are still to come. |
+| Chat | The taf's own conversation (`GET /v1/tafs/{id}/conversation`), drawn as Coach's is, with no title of its own and "Write your next message". Its first Card is beside it, with a button to all its Cards. tafs cloud is never asked which taf is Coach. |
+| Card | Each Card's face in the taf's colour (its title, the figure, how many tools, when it ends), then a panel of what it lets the taf do: KIFF's label, what happens outside it, and its limit with tafs cloud's words for the window. **A Card with no rules has no panel**, never an empty one. With no Card: "card.card_revoked". |
+
+- Every word from KIFF or tafs cloud (a name, a title, a label, a window) is drawn as sent,
+  with `Text(verbatim:)`.
+
 ## Tests
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card
 with no rules, the figure from money and from calls, no figure when used is unknown or the
-units differ, a used over the limit, and money in its language.
+units differ, a used over the limit, and money in its language. On a Mac: a taf's chat reads
+that taf's conversation without asking which taf is Coach, a Card with no rules has no panel
+under it, and the screenshots `build/screenshots/taf-<tab>-<language>.png`.

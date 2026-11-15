@@ -15,6 +15,11 @@ struct ShellView: View {
     var noTafsLine: String?
     /// The calls held for the person, listed under NEEDS YOU above the tafs.
     var held: [HeldRow] = []
+    /// The open taf's page, drawn in place of the screen.
+    var tafPage: AnyView?
+    /// The taf whose page is open, by its agent; and what opens one.
+    var openTaf: String?
+    var open: (Home.Taf) -> Void = { _ in }
     /// Who is signed in, under Account: their email, as KIFF says it.
     var accountLine: String?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
@@ -65,7 +70,17 @@ struct ShellView: View {
                         Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    ForEach(tafs) { taf in tafRow(taf) }
+                    ForEach(tafs) { taf in
+                        // The open taf sits on the chosen row's grey, as on the iPad.
+                        Button { open(taf) } label: {
+                            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.chosen : Color.clear))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, -10)
+                        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 26)
@@ -111,7 +126,8 @@ struct ShellView: View {
     }()
 
     private func item(_ screen: Screen) -> some View {
-        let selected = selection == screen
+        // A taf's page open in place of the screen: no screen row is the chosen one.
+        let selected = selection == screen && openTaf == nil
         return Button { selection = screen } label: {
             HStack(spacing: 12) {
                 Image(systemName: screen.symbol)
@@ -154,7 +170,7 @@ struct ShellView: View {
     private var foot: some View {
         VStack(alignment: .leading, spacing: 8) {
             footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { selection = .coach }
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach) { selection = .coach }
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { selection = .coach }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     Image(systemName: Screen.account.symbol).font(.system(size: 20)).foregroundColor(Theme.ink)
@@ -168,7 +184,7 @@ struct ShellView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityAddTraits(selection == .account ? .isSelected : [])
+            .accessibilityAddTraits(selection == .account && openTaf == nil ? .isSelected : [])
         }
         .padding(.horizontal, -12)
     }
@@ -190,7 +206,7 @@ struct ShellView: View {
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.
     @ViewBuilder private var detail: some View {
-        if let built = screen(selection) { built } else { placeholder }
+        if let page = tafPage { page } else if let built = screen(selection) { built } else { placeholder }
     }
 
     private var placeholder: some View {

@@ -13,6 +13,11 @@ struct SignedInView: View {
     @StateObject private var connect: ConnectAppsModel
     @StateObject private var coach: CoachModel
     @State private var selection: Screen = .overview
+    /// The taf whose page is open, by its agent, and its chat.
+    @State private var openTaf: String?
+    @State private var tafChat: CoachModel?
+    private let cloud: CloudClient
+    private let streamer: LineStream?
     @State private var announced = Announced()
     private let notifier = Notifier()
     private let account: AccountClient
@@ -25,6 +30,8 @@ struct SignedInView: View {
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
          addThisMac: @escaping () -> Void = {}) {
         self.account = account
+        self.cloud = cloud
+        self.streamer = streamer
         self.signedOut = signedOut
         self.addThisMac = addThisMac
         self.route = route
@@ -40,21 +47,27 @@ struct SignedInView: View {
     }
 
     var body: some View {
-        ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
-                  held: heldRows, accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
+        // Every choice in the sidebar closes the taf's page, the screen already open too.
+        let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
+        ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open))
             case .record: return AnyView(RecordView(model: record))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
             case .connectApps: return AnyView(ConnectAppsView(model: connect))
-            case .coach: return AnyView(CoachView(model: coach, canApprove: false, openTaf: { _ in selection = .overview },
+            case .coach: return AnyView(CoachView(model: coach, canApprove: false,
+                                                  openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
                                                   listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))
             case .account: return AnyView(accountScreen)
             }
         }
         .onAppear { notifier.opened = { selection = .needsYou } }
+        // A screen chosen from elsewhere (a notification) closes it too.
+        .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         .task {
@@ -76,6 +89,18 @@ struct SignedInView: View {
     private var heldRows: [HeldRow] {
         guard case .loaded(let calls) = needsYou.state else { return [] }
         return calls.map { HeldRow($0, tafs: overview.tafs) }
+    }
+
+    /// Opens a taf's page, with its own chat. An agent tafs doesn't run has no page.
+    private func open(_ taf: Home.Taf) {
+        guard let id = taf.tafID else { return }
+        tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
+        openTaf = taf.id
+    }
+
+    private var tafPage: AnyView? {
+        guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
+        return AnyView(TafView(taf: taf, chat: chat).id(taf.id))
     }
 
     private var accountScreen: some View {

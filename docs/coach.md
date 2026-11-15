@@ -36,7 +36,7 @@ The app draws the list as it comes. It places and folds nothing itself.
 - **A decline** is known only by tafs cloud's words for the answer, which it writes in the
   app's language: "Declined". An approval or sign-in answered another way (`wrote`,
   `no_answer`) draws nothing.
-- **See it on** goes to the Overview until a taf's own page is built.
+- **See it on** opens the taf's own page, or the Overview when the list doesn't have it.
 - A card is known by its `key`, which is unique in the thread, never only by the name the
   model gave it: the model may reuse a name.
 - An item that doesn't read is left out. An answer with no ordered list is unreadable, never

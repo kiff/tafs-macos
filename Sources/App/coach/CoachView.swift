@@ -45,9 +45,13 @@ final class CoachModel: ObservableObject {
     static let followEvery: TimeInterval = 4
     static let followAtMost = 30
 
-    init(cloud: CloudClient, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+    /// The taf whose chat this is, when it isn't Coach's: then nothing is read to find it.
+    private let fixed: Coach?
+
+    init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          now: @escaping () -> Date = Date.init) {
         self.cloud = cloud
+        self.fixed = taf
         self.streamer = streamer
         self.sleep = sleep
         self.now = now
@@ -227,7 +231,8 @@ final class CoachModel: ObservableObject {
 
     func load() async {
         do {
-            guard let coach = try await cloud.coach() else { state = .notStarted; return }
+            let found = try await (fixed == nil ? cloud.coach() : fixed)
+            guard let coach = found else { state = .notStarted; return }
             state = .loaded(coach, try await cloud.thread(of: coach.id))
         } catch {
             state = .unread(why: NeedsYouModel.why(error))
@@ -249,6 +254,8 @@ struct CoachView: View {
     var listed: Set<String> = []
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
+    /// Coach's own screen has its name at the top and its wash; a taf's chat sits in its page.
+    var embedded = false
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
     @State private var planOpen = false
@@ -260,12 +267,12 @@ struct CoachView: View {
                 case .loading:
                     ProgressView().controlSize(.small)
                 case .notStarted:
-                    intro
+                    if !embedded { intro }
                 case .unread(let why):
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
-                    if page.items.isEmpty { intro }
+                    if page.items.isEmpty, !embedded { intro }
                     ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
                         // A time on the first item, and after an hour's gap, as on the iPad.
                         if page.showsTime(at: index), let at = item.at {
@@ -289,12 +296,14 @@ struct CoachView: View {
             .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Theme.coachWash)
+        .background(embedded ? Theme.background : Theme.coachWash)
         // The screen's name sits small and centred on the background's own colour, as on the iPad.
         .safeAreaInset(edge: .top, spacing: 0) {
-            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
-                .accessibilityAddTraits(.isHeader)
+            if !embedded {
+                Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
+                    .accessibilityAddTraits(.isHeader)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .task { await model.load() }
@@ -308,7 +317,7 @@ struct CoachView: View {
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
             VStack(alignment: .leading, spacing: 10) {
-                TextField(words("coach.ask_anything"), text: $model.draft)
+                TextField(words(embedded ? "chat.write_next" : "coach.ask_anything"), text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
                     .onSubmit { Task { await model.send() } }
                 HStack {
