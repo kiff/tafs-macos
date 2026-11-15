@@ -203,6 +203,40 @@ let overviewTests: [Test] = [
         let recipes = try JSONDecoder().decode(Recipes.self, from: Data(#"{"labels":{"hand":"Hand it over"}}"#.utf8))
         try expectEqual(try gallery("{}", "{}").asRecipes(labels: recipes.labels).labels?.hand, "Hand it over")
     },
+    Test("the list last read is kept for its account alone, as the iPad's remembered list, and forgotten at sign-out", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let (client, transport) = cloud([(200, homePage)])
+        let read = try await client.homeRead()
+        try expectEqual(transport.sent.map(\.path), ["/v1/home"])
+        try expectEqual(read.page, try AccountClient.decoder.decode(Home.Page.self, from: Data(homePage.utf8)))
+        RememberedHome.remember(read.body, tenant: "t1", in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs, read.page.tafs)
+        // Another account's list never shows.
+        try expectEqual(RememberedHome.shown(tenant: "t2", in: defaults), nil)
+        RememberedHome.forget(in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), nil)
+    }),
+    Test("only the tafs are kept, as the iPad's remembered list: never the rest of Home", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let home = #"{"tafs":[{"name":"Bare","kiff_agent":"agent_bare","state":"stopped"}],"coach_waiting":{"chat":"c1","line":"Your draft is waiting."},"headline":{"words":"1 taf."}}"#
+        RememberedHome.remember(Data(home.utf8), tenant: "t1", in: defaults)
+        guard let data = defaults.data(forKey: RememberedHome.key), let kept = String(data: data, encoding: .utf8) else { throw Failure(description: "nothing kept") }
+        // Kept as base64 inside the record: read it back to look for what mustn't be there.
+        let record = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let inner = (record?["home"] as? String).flatMap({ Data(base64Encoded: $0) }) else { throw Failure(description: "no list in \(kept)") }
+        let body = try JSONSerialization.jsonObject(with: inner) as? [String: Any]
+        try expectEqual(body.map { Array($0.keys) }, ["tafs"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs.map(\.name), ["Bare"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.headline, nil)
+        // An answer without tafs keeps nothing.
+        RememberedHome.forget(in: defaults)
+        RememberedHome.remember(Data(#"{"coach_waiting":{"chat":"c1"}}"#.utf8), tenant: "t1", in: defaults)
+        try expectEqual(defaults.data(forKey: RememberedHome.key), nil)
+    }),
     Test("a taf's health keeps tafs cloud's fixes for its lines, only of the kinds the app acts on", awaiting: {
         let json = #"{"tafs":[{"kiff_agent":"a","name":"A","state":"idle","health":{"level":"at_risk","lines":["Its bank needs signing in again.","  ","Credits are low."],"fixes":[{"line":0,"kind":"coach","words":"Fix it with Coach","say":"Sign my bank in again"},{"line":0,"kind":"coach","words":"No say"},{"line":1,"kind":"credits","words":"Add credits"},{"line":0,"kind":"teleport","words":"Beam it"},{"kind":7}]}}]}"#
         let taf = try await cloud([(200, json)]).0.home().tafs[0]

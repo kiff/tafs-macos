@@ -19,8 +19,20 @@ final class OverviewModel: ObservableObject {
     /// Each taf's Last result, by its id at tafs cloud, once read.
     @Published private(set) var lastResults: [String: String] = [:]
     private let cloud: CloudClient
+    /// Where the list last read is kept for the next launch's first frame; nil keeps none.
+    private let remembered: UserDefaults?
+    /// Set at sign-out before its first wait: a read still on its way then keeps nothing.
+    private var ended = false
 
-    init(cloud: CloudClient) { self.cloud = cloud }
+    /// With `remembered`, the list last read for this account shows at once, as the iPad's
+    /// `showRememberedList`, and is read again with the first read.
+    init(cloud: CloudClient, remembered: UserDefaults? = nil) {
+        self.cloud = cloud
+        self.remembered = remembered
+        if let remembered, let page = RememberedHome.shown(tenant: cloud.session.tenant, in: remembered) {
+            state = .loaded(page)
+        }
+    }
 
     var tafs: [Home.Taf] {
         if case .loaded(let page) = state { return page.tafs }
@@ -34,16 +46,35 @@ final class OverviewModel: ObservableObject {
         return false
     }
 
+    /// The session is ending: nothing read from now on is kept for the next launch.
+    func endSession() { ended = true }
+
     func load() async {
-        do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
+        // Whether this read worked: a list kept on screen after a failed read doesn't count.
+        var readNow = false
+        do {
+            let read = try await cloud.homeRead()
+            state = .loaded(read.page)
+            readNow = true
+            // Kept for the next launch's first frame, as the iPad's `rememberList` after `show`;
+            // never once the session ends or this read was given up.
+            if let remembered, !ended, !Task.isCancelled {
+                RememberedHome.remember(read.body, tenant: cloud.session.tenant, in: remembered)
+            }
+            LaunchClock.mark("first list read")
+        } catch {
+            // A list on screen stays when a read fails, as the iPad's (AppModel.swift:1909-1916);
+            // only an empty screen says why.
+            if case .loaded = state {} else { state = .unread(why: NeedsYouModel.why(error)) }
+        }
         // As the iPad's `refresh` and `loadRecipes` (AppModel.swift:1852-1857, 7210-7215): read
         // with each list read that has no taf, and a read that fails keeps what was read.
         if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
         noTafsLine = recipes?.home?.shown == true ? recipes?.homeWords : nil
         // The gallery, with each list read that worked, as the iPad's `refresh`: reached only
         // after `try await home` (AppModel.swift:1823-1824, 1867), so a failed read asks nothing
-        // and keeps the gallery read before.
-        guard case .loaded = state else { return }
+        // and keeps the gallery read before, even with a list kept on screen.
+        guard readNow else { return }
         await loadGallery()
     }
 
@@ -228,9 +259,10 @@ struct OverviewView: View {
     }
 
     /// One taf: its name; tafs cloud's line for now; its Card's line; and its last result,
-    /// "–" until it is read.
+    /// "–" until it is read. Every cell is centred on the row's height, which the avatar sets,
+    /// so the lines sit level with the taf's name (the owner's ask, from macOS 12).
     private func row(_ taf: Home.Taf) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .center, spacing: 16) {
             HStack(alignment: .center, spacing: 10) {
                 RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
                     .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(.white))

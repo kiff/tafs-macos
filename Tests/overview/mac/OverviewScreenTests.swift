@@ -64,6 +64,65 @@ let overviewMacTests: [Test] = [
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
         try png.write(to: URL(fileURLWithPath: "build/screenshots/gallery-en.png"))
     }),
+    Test("the list last read for this account shows in the first frame, and is read again and kept with the first read", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let first = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, homePage)]), session: session), remembered: defaults)
+        try expectEqual(first.state, .loading)
+        await first.load()
+        guard case .loaded(let page) = first.state else { throw Failure(description: "not read") }
+        // The next launch draws its tafs before any read: the tafs alone are kept.
+        let next = OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: session), remembered: defaults)
+        guard case .loaded(let shown) = next.state else { throw Failure(description: "nothing shown") }
+        try expectEqual(shown.tafs, page.tafs)
+        try expectEqual(shown.headline, nil)
+        // Another account's list doesn't show.
+        let other = Session(accessToken: "tok", expiresIn: 60, tenant: "t2", subject: "u9", deviceID: nil)
+        try expectEqual(OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: other), remembered: defaults).state, .loading)
+    }),
+    Test("a list on screen stays when a read fails, as the iPad's; only an empty screen says why", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        RememberedHome.remember(Data(homePage.utf8), tenant: session.tenant, in: defaults)
+        let failing = #"{"error":{"code":"internal","message":"x"}}"#
+        let next = OverviewModel(cloud: CloudClient(transport: CannedTransport([(500, failing)]), session: session), remembered: defaults)
+        guard case .loaded(let shown) = next.state else { throw Failure(description: "nothing shown") }
+        await next.load()
+        try expectEqual(next.state, .loaded(shown))
+        // Nothing on screen: the failed read says why.
+        let empty = model([(500, failing)])
+        await empty.load()
+        guard case .unread = empty.state else { throw Failure(description: "not said") }
+    }),
+    Test("a failed read with a list kept on screen asks no gallery, as the iPad's refresh", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        RememberedHome.remember(Data(homePage.utf8), tenant: session.tenant, in: defaults)
+        let transport = CannedTransport([(503, "")])
+        let kept = OverviewModel(cloud: CloudClient(transport: transport, session: session), remembered: defaults)
+        await kept.load()
+        try expectEqual(transport.sent.map(\.path), ["/v1/home"])
+    }),
+    Test("once the session ends, a read still on its way keeps nothing for the next launch", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let ending = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, homePage)]), session: session), remembered: defaults)
+        ending.endSession()
+        await ending.load()
+        try expectEqual(RememberedHome.shown(tenant: session.tenant, in: defaults), nil)
+    }),
+    Test("the screenshot: the Overview's rows, each cell centred on the row", awaiting: { @MainActor in
+        let loaded = model([(200, homePage)])
+        await loaded.load()
+        let view = OverviewView(model: loaded).environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/overview-rows-en.png"))
+    }),
     Test("with no taf, tafs cloud's recipes are read with each list read, and a read that fails keeps them, as the iPad's", awaiting: { @MainActor in
         let transport = CannedTransport([(200, #"{"tafs":[]}"#), (200, listedRecipes), (404, ""), (200, #"{"tafs":[]}"#), (500, ""), (404, "")])
         let none = OverviewModel(cloud: CloudClient(transport: transport, session: session))

@@ -36,6 +36,11 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
   taf's page**, and "Each line opens the taf." says so under the table.
 
+Every cell of a taf's row is centred on the row's height, which its avatar sets, so Now,
+Card and Last result sit level with its name. The iPad's grid aligns its cells to the top
+(`Grid(alignment: .topLeading)`, `ShareViews.swift:315`); on macOS 12 the owner asked for
+them centred, so the Mac differs here.
+
 ## Last result (`Runs`)
 
 While the Overview is shown, each taf's runs are read once (`GET /v1/tafs/{id}/runs`), then

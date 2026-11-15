@@ -37,6 +37,8 @@ struct SignedInView: View {
     private let account: AccountClient
     private let signedOut: () -> Void
     private let addThisMac: () -> Void
+    /// This Mac's device key is a software key: pairing it again with the phone gives no more.
+    private let softwareKey: Bool
     private let route: ApprovalRoute
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
@@ -46,7 +48,7 @@ struct SignedInView: View {
     @State private var planque: PlanqueClient
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
-         addThisMac: @escaping () -> Void = {}) {
+         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false) {
         self.account = account
         let planque = PlanqueClient()
         // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
@@ -60,6 +62,7 @@ struct SignedInView: View {
         self.streamer = streamer
         self.signedOut = signedOut
         self.addThisMac = addThisMac
+        self.softwareKey = softwareKey
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
@@ -68,7 +71,8 @@ struct SignedInView: View {
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
-        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
+        // The list last read shows in the first frame, as the iPad's remembered list.
+        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
@@ -118,6 +122,7 @@ struct SignedInView: View {
         .onAppear {
             notifier.opened = { selection = .needsYou }
             notifier.account = account.session.tenant
+            LaunchClock.mark("first window")
         }
         // A screen chosen from elsewhere (a notification) closes it too.
         .onChange(of: selection) { _ in openTaf = nil }
@@ -126,10 +131,14 @@ struct SignedInView: View {
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
-                await needsYou.load()
-                // The tafs, for the sidebar and the Overview: read once here, and again with each round,
-                // so a taf made in Coach shows without opening the Overview.
-                await readTafs()
+                // The held calls and the tafs side by side, as the iPad's `refresh`
+                // (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the
+                // sidebar and the Overview, are read once here and again with each round, so a
+                // taf made in Coach shows without opening the Overview; what this person may do
+                // with each is read after the list, as there (`readTafs`).
+                async let held: Void = needsYou.load()
+                async let tafs: Void = readTafs()
+                _ = await (held, tafs)
                 if case .loaded(let calls) = needsYou.state {
                     notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
                 }
@@ -221,11 +230,14 @@ struct SignedInView: View {
     private var accountScreen: some View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
-                    open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
+            // A list read still on its way keeps nothing from here.
+            overview.endSession()
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
             Task {
-                // Ended at KIFF first; this Mac forgets its session either way.
+                // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
+                // either way.
                 try? await account.signOut()
                 // What's still on its way in a chat is the session before's.
                 coach.signedOut()
