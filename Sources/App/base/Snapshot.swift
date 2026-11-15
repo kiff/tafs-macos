@@ -14,6 +14,34 @@ enum Snapshot {
         return bitmap
     }
 
+    /// The same view drawn until `drawn` holds for its bitmap, up to `tries` times, in one host
+    /// in a window off screen, the run loop turned between: a screen whose scrolled content is
+    /// laid out a turn later (as on a test runner) is seen once it has been. The last drawing is
+    /// answered either way, for the caller's check.
+    static func settled<V: View>(of view: V, size: CGSize, tries: Int = 20,
+                                 until drawn: (NSBitmapImageRep) -> Bool) -> NSBitmapImageRep? {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        host.frame = CGRect(origin: .zero, size: size)
+        host.appearance = NSAppearance(named: .aqua)
+        // A window needs the app object, which a test run doesn't start on its own.
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: size.width, height: size.height),
+                              styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.contentView = nil; window.close() }
+        var last: NSBitmapImageRep?
+        for _ in 0..<tries {
+            host.layoutSubtreeIfNeeded()
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            last = bitmap
+            if drawn(bitmap) { return bitmap }
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
+        return last
+    }
+
     /// The colour at a point of `bitmap`, as `0xRRGGBB`, with the point's origin at the top left.
     static func hex(_ bitmap: NSBitmapImageRep, x: Int, y: Int) -> UInt32? {
         let scale = bitmap.pixelsWide / max(Int(bitmap.size.width), 1)

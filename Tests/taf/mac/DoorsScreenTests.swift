@@ -55,22 +55,26 @@ let tafDoorsMacTests: [Test] = [
         guard case .unread = needsYou.state else { throw Failure(description: "the held list read") }
         let view = NeedsYouView(model: needsYou, tafs: page.tafs, now: Date(timeIntervalSince1970: 1_794_679_800))
             .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
-        // The knocked row's avatar, in the taf's colour, is drawn under the unread line. The screen
-        // is drawn until it shows, a few times over, the run loop turned between, not once:
-        // a runner can lay it out a turn later than a Mac at a desk.
+        // The knocked row's avatar, in the taf's colour, is drawn under the unread line. One host
+        // is drawn again until it shows, the run loop turned between: a runner can lay out the
+        // scrolled content a turn later than a Mac at a desk.
         let wanted = Palette.tafColor(1)
-        var found = false
-        for _ in 0..<10 where !found {
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
-            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 900)) else { continue }
-            for y in stride(from: 0, to: 900, by: 2) where !found {
+        func shows(_ bitmap: NSBitmapImageRep) -> Bool {
+            for y in stride(from: 0, to: 900, by: 2) {
                 for x in stride(from: 0, to: 980, by: 2) {
                     guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
-                    if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { found = true; break }
+                    if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
                 }
             }
+            return false
         }
-        try expect(found, "the knocked taf's row is drawn")
+        let drawn = Snapshot.settled(of: view, size: CGSize(width: 980, height: 900), until: shows)
+        // What was drawn, for the run's screenshots either way.
+        if let drawn, let png = Snapshot.png(drawn) {
+            try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+            try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-knocks-en.png"))
+        }
+        try expect(drawn.map(shows) == true, "the knocked taf's row is drawn")
     }),
     Test("the screenshot: a door's own screen, with who may give it work and a knock waiting", awaiting: { @MainActor in
         let (model, _) = doors([(200, doorPage), (200, doorPage)])

@@ -41,8 +41,11 @@ let overviewMacTests: [Test] = [
         let transport = CannedTransport([(200, homePage), (200, galleryAnswer), (503, "")])
         let overview = OverviewModel(cloud: CloudClient(transport: transport, session: session))
         await overview.load()
+        let first = overview.state
         await overview.load()
-        try expectEqual(overview.state, .unread(why: "503"))
+        // The list read first stays on screen when a later read fails (#90's rule, the iPad's).
+        try expectEqual(overview.state, first)
+        guard case .loaded = first else { throw Failure(description: "the first read didn't load") }
         try expectEqual(overview.gallery?.recipes.map(\.id), ["r1", "r9", "r2"])
         try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery", "/v1/home"])
     }),
