@@ -62,7 +62,7 @@ struct DevicesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(words("settings.devices.title")).font(Theme.display(28)).foregroundColor(Theme.ink)
+                Text(words("settings.devices.title")).font(.system(size: 34, weight: .bold)).foregroundColor(Theme.ink)
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)

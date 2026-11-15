@@ -80,7 +80,7 @@ struct ConnectAppsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top) {
-                    ScreenTitle(title: words("connect.apps.title"))
+                    ScreenTitle(title: words("connect.apps.title"), size: 34, rounded: false)
                     Spacer()
                     // Search sits at the top right, as on the iPad.
                     HStack(spacing: 8) {

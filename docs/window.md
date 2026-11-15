@@ -35,3 +35,14 @@ and the window goes back to sign-in.
 
 If KIFF couldn't be reached, this Mac is signed out here but its session is still valid at
 KIFF until it expires. To end it for certain, sign this Mac out from another device's Devices.
+
+## The pieces every screen shares (`Sources/App/base/Components.swift`)
+
+Each is the iPad's own, at its sizes:
+
+| Piece | As the iPad's |
+|---|---|
+| `ScreenTitle` | Rounded bold at 30 (the Overview) or 34 (the Record; Needs you draws its own at 34), and plain bold at 34 for the iPad's navigation titles (Account, Connect apps; Devices draws its own). Its line is 14 in `dim`. |
+| `Eyebrow` | 12 monospaced, capitals, tracking 0.7, in `dim` unless a colour is given. |
+| `Chip` | A pill, always 13 regular, padding 11/5: chosen, ink-filled with its words on the fill; else white, outlined, its words in `soft`. Clipped to its shape. |
+
