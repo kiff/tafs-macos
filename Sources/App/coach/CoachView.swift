@@ -705,7 +705,7 @@ struct CoachView: View {
                     ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
                         // A time on the first item, and after an hour's gap, as on the iPad.
                         if page.showsTime(at: index), let at = item.at {
-                            Text(verbatim: Self.when(at)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                            Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
                         }
                         self.item(item)
                     }
@@ -1007,8 +1007,8 @@ struct CoachView: View {
     }
 
     /// A time in the chat: the time today, else the date and the time.
-    static func when(_ at: Date) -> String {
-        DateFormatter.localizedString(from: at, dateStyle: Calendar.current.isDateInToday(at) ? .none : .medium, timeStyle: .short)
+    static func when(_ at: Date, words: Words) -> String {
+        AppDates.formatter(words, date: Calendar.current.isDateInToday(at) ? .none : .medium, time: .short).string(from: at)
     }
 
     @ViewBuilder private func item(_ item: Thread.Item) -> some View {

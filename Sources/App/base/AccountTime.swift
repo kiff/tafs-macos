@@ -19,10 +19,7 @@ struct AccountTime {
 
     /// The time of day, as 14:05, in the account's zone (the iPad's `shortTime`).
     func shortTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.timeZone = zone
-        return f.string(from: date)
+        AppDates.fixed("HH:mm", zone: zone).string(from: date)
     }
 
     /// `shortTime`, with the zone's short name when it isn't this Mac's (`zonedShortTime`).
@@ -41,10 +38,10 @@ struct AccountTime {
     /// A day's title in the Record, as the iPad's `RecordView.dayTitle` (RecordView.swift:146-151):
     /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone and
     /// the app's language.
-    func dayTitle(_ day: Date, words: Words, now: Date = Date()) -> String {
-        // In the app's language, the words' own, never this Mac's: a Spanish Mac showing the app
+    func dayTitle(_ day: Date, words: Words, now: Date = Date(), region: String? = Locale.current.regionCode) -> String {
+        // In the app's language, the words' own, with this Mac's region: a Spanish Mac showing the app
         // in English reads "Today · Nov 15", as the iPad's formatter in its app language.
-        let locale = Locale(identifier: words.language)
+        let locale = AppDates.locale(words, region: region)
         var short = Date.FormatStyle(locale: locale).day().month(.abbreviated)
         short.timeZone = zone
         let date = day.formatted(short)
@@ -61,8 +58,8 @@ struct AccountTime {
     /// A date in a style, in the account's zone, with its short name when it isn't this
     /// Mac's (`zonedShown(date:time:)`).
     func zonedShown(_ date: Date, date dateStyle: Date.FormatStyle.DateStyle, time timeStyle: Date.FormatStyle.TimeStyle,
-                    here: TimeZone = .current) -> String {
-        var style = Date.FormatStyle(date: dateStyle, time: timeStyle)
+                    words: Words, here: TimeZone = .current, region: String? = Locale.current.regionCode) -> String {
+        var style = Date.FormatStyle(date: dateStyle, time: timeStyle, locale: AppDates.locale(words, region: region))
         style.timeZone = zone
         return date.formatted(style) + label(at: date, here: here)
     }

@@ -335,7 +335,7 @@ struct StartsWhenView: View {
                             Text(verbatim: item.words.isEmpty ? item.label : item.words)
                                 .font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
                             if let at = item.expires.flatMap(Self.date) {
-                                Text(verbatim: AccountTime(timeZone).zonedShown(at, date: .abbreviated, time: .shortened)).font(.system(size: 12)).foregroundColor(Theme.dim)
+                                Text(verbatim: AccountTime(timeZone).zonedShown(at, date: .abbreviated, time: .shortened, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim)
                             }
                         }
                         Spacer()

@@ -111,12 +111,8 @@ struct HaltView: View {
     var halted: () async -> Void = {}
     let close: () -> Void
 
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    /// A time as the app shows it, in its language.
+    private var clock: DateFormatter { AppDates.formatter(words, time: .short) }
 
     var body: some View {
         let h = model.halt
@@ -129,7 +125,7 @@ struct HaltView: View {
             panel {
                 Eyebrow(text: name ?? words("taf.halt.all_tafs"), color: h.state == .running ? Theme.dim : Theme.no)
                 Text(h.headline(words)).font(Theme.display(26)).foregroundColor(Theme.ink)
-                Text(h.explanation(all: model.taf == nil, words, time: { Self.clock.string(from: $0) }))
+                Text(h.explanation(all: model.taf == nil, words, time: { clock.string(from: $0) }))
                     .font(.system(size: 15)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             if h.state != .running {
