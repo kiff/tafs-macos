@@ -55,8 +55,9 @@ enum PasskeyRefusal: Error, Equatable {
     /// No user presence, or no user verification (the key's PIN wasn't checked).
     case notVerified
     /// A synced passkey (backup eligible, or backed up), which the public spec doesn't take for a
-    /// computer's approval. A USB security key reports neither: it belongs to the person's account,
-    /// can be used from another computer with its PIN, and is listed and removed in Devices.
+    /// computer's approval. A USB security key reports neither: it goes with the computer it was
+    /// paired with, and signing that computer out removes it; plugged in elsewhere, its PIN is
+    /// still asked.
     case canLeave
     /// Passkey approvals are switched off (`Features.macPasskeyApprovals`): nothing was asked.
     case off

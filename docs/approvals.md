@@ -113,8 +113,9 @@ Mac can be the person's passkey: a USB security key signing the exact request, s
 approved on the phone ("Approve on your phone"). macOS 12 has no system cross-device passkey (it
 came in macOS 13), and its platform authenticator needs Touch ID, so neither is used.
 
-**A security key belongs to the person's account,** is registered through pairing, and is listed
-and removable in Devices → Passkeys. It isn't bound to one computer, so its PIN is asked for each
+**A security key goes with its computer.** It's registered through pairing, and KIFF lists it
+with that computer ("Goes with its computer", no Remove of its own): signing the computer out in
+Devices removes it. The key itself can be plugged in elsewhere, so its PIN is asked for each
 approval.
 
 **Off for now** (`Features.macPasskeyApprovals = false`): a switched-off `PasskeyApprover` refuses
@@ -158,8 +159,8 @@ before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
      Input Monitoring prompt.
 2. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
    credential, shows the `kind: "passkey"` pairing QR naming it, the phone approves the pairing,
-   and the claim proves it with `credential_proof`. The key then belongs to the person's account,
-   listed and removable in Devices → Passkeys.
+   and the claim proves it with `credential_proof`. The key then goes with this Mac: signing
+   this Mac out in Devices removes it.
 3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on
    once the public spec's route has merged.
 
