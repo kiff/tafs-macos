@@ -145,6 +145,13 @@ struct SignedInView: View {
         }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
+        // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
+        // every account change (AppModel.swift:887, :1472).
+        .onDisappear {
+            coach.signedOut()
+            tafChat?.signedOut()
+        }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
@@ -183,28 +190,35 @@ struct SignedInView: View {
 
     /// The session signing with this Mac's approval key, for what grants authority (the iPad's
     /// `kiff.approvalSigner`): none on any Mac yet, whose approvals go to the phone or a passkey.
-    /// Never the device key in its place.
-    private var approvalAccount: AccountClient? { nil }
+    /// Never the device key in its place. When one comes, it keeps `ApprovalSession`'s contract: a
+    /// Secure Enclave key made with `[.privateKeyUsage, .biometryCurrentSet]`, signing only under
+    /// the `LAContext` Start's Touch ID just passed, within 120 seconds, as the iPad's
+    /// (`ApprovalSigner.swift:185-191`, `:246-258`).
+    private var approvalSession: ApprovalSession? { nil }
 
     /// Coach's Start, on a Mac that may start it (`CoachStart.mayStart`); nil on one that can't
     /// approve, whose Coach says so and follows the start made on the phone.
     private var coachStart: (() async -> Void)? {
-        guard CoachStart.mayStart(route: route, approval: approvalAccount) else { return nil }
+        guard CoachStart.mayStart(route: route, approval: approvalSession) else { return nil }
         return { await startCoach() }
     }
 
-    /// Starts Coach, as the iPad's `startSetup`: one Touch ID first (`grants: true`, the approval
+    /// Starts Coach, as the iPad's `startSetup`: one Touch ID first (`grants: true`; the approval
     /// key signs under it), then planque's calls and KIFF's mint signed by the device key with no
-    /// prompt (`signConfirmed`), and Setup's draft by the approval key.
+    /// prompt (`signConfirmed`), and Setup's draft by the approval key under that Touch ID.
+    /// planque's signer is armed only inside the enrolment, after the prompt and its account check,
+    /// and cleared when it ends (`AppModel.swift:7569-7575`).
     private func startCoach() async {
-        planque.tenant = account.session.tenant
-        planque.signer = account.signMessage
-        planque.bodyHash = Signing.sha256Hex
-        planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!)
-        defer { planque.signer = nil }
         let key = deviceKey, reason = words("coach.prompt.connect_tools")
-        await coach.startSetup(account: account, approval: approvalAccount,
-                               enrol: { [planque, account] in await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key) },
+        await coach.startSetup(account: account, approval: approvalSession,
+                               enrol: { [planque, account] ended in
+                                   planque.tenant = account.session.tenant
+                                   planque.signer = account.signMessage
+                                   planque.bodyHash = Signing.sha256Hex
+                                   planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!)
+                                   defer { planque.signer = nil }
+                                   return await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key, ended: ended)
+                               },
                                confirm: { try await CoachModel.confirmWithTouchID(reason) }, words: words)
     }
 

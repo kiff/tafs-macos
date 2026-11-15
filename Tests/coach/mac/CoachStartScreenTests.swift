@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -12,6 +13,17 @@ private func coachModel(_ answers: [(Int, String)], sleep: @escaping (TimeInterv
 }
 
 private func english() -> Words { Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]) }
+
+/// What the Touch ID answers in these tests: the context the approval key signs under.
+private final class Confirmed {}
+
+/// An approval session over `transport`, signing with `key` only under `confirmed`.
+private func approvalSession(_ transport: Transport, key: P256.Signing.PrivateKey = .init(), confirmed: AnyObject) -> ApprovalSession {
+    ApprovalSession(transport: transport, session: session, bodyHash: Signing.sha256Hex, sign: { message, context in
+        guard context === confirmed else { throw Failure(description: "not under the Touch ID") }
+        return try key.signature(for: message).derRepresentation.base64EncodedString()
+    })
+}
 
 let coachStartMacTests: [Test] = [
     Test("a Mac that can't approve follows the start made on the phone: Setup is read again until Coach is there", awaiting: { @MainActor in
@@ -39,11 +51,12 @@ let coachStartMacTests: [Test] = [
     Test("Start on a Mac that may: started reads Coach's thread; a first start or a stop says why and keeps Start", awaiting: { @MainActor in
         let words = english()
         let kiff = CannedTransport([(201, draft)])
-        let approval = AccountClient(transport: kiff, session: session, sign: { _ in "t=x,v1=APPROVAL" })
+        let touch = Confirmed()
+        let approval = approvalSession(kiff, confirmed: touch)
         let device = AccountClient(transport: CannedTransport([]), session: session, sign: { _ in "t=x,v1=DEVICE" })
         let (model, transport) = coachModel([(200, none), (200, none), (201, setupAnswer), (200, setupAnswer), (200, noChats), (200, threadAnswer)])
         await model.load()
-        let started = await model.startSetup(account: device, approval: approval, enrol: { nil }, confirm: {}, words: words)
+        let started = await model.startSetup(account: device, approval: approval, enrol: { _ in nil }, confirm: { touch }, words: words)
         try expectEqual(started, true)
         guard case .loaded(let coach, _) = model.state else { throw Failure(description: "not read") }
         try expectEqual(coach.id, "taf-coach")
@@ -53,16 +66,56 @@ let coachStartMacTests: [Test] = [
         // Without an approval key the draft isn't sent, and Start says to approve on another device.
         let (phone, _) = coachModel([(200, none), (200, none)])
         await phone.load()
-        let tried = await phone.startSetup(account: device, approval: nil, enrol: { nil }, confirm: {}, words: words)
+        var asked = 0
+        let tried = await phone.startSetup(account: device, approval: nil, enrol: { _ in nil }, confirm: { asked += 1; return touch }, words: words)
         try expectEqual(tried, false)
         try expectEqual(phone.setupError, words("approval.device_can_not_approve_approve"))
         try expectEqual(phone.state, .notStarted)
+        try expectEqual(asked, 0)
         // A taf's own chat never starts Coach.
         let tafSent = CannedTransport([])
         let taf = CoachModel(cloud: CloudClient(transport: tafSent, session: session), taf: Coach(id: "taf-1", name: "Refunds"))
-        let fromTaf = await taf.startSetup(account: device, approval: approval, enrol: { nil }, confirm: {}, words: words)
+        let fromTaf = await taf.startSetup(account: device, approval: approval, enrol: { _ in nil }, confirm: { touch }, words: words)
         try expectEqual(fromTaf, false)
         try expectEqual(tafSent.sent.count, 0)
+    }),
+    Test("the mint and Setup's draft are signed at two different times, in milliseconds, each verified as KIFF reads it", awaiting: { @MainActor in
+        let deviceKey = SoftwareKey(key: .init())
+        let approvalKey = P256.Signing.PrivateKey()
+        let kiff = CannedTransport([(201, #"{"id":"key_c","plaintext":"kiff_live_connector","roles":["connector"]}"#)])
+        let account = AccountClient(session: session, key: deviceKey, language: "en", transport: kiff)
+        let planqueSent = CannedTransport([(409, #"{"code":"needs_key"}"#), (201, #"{"tenant":"t1","device":"ab12","kept":true}"#)])
+        let planque = PlanqueClient(baseURL: "https://planque.test")
+        planque.tenant = "t1"
+        planque.deviceID = "dev_9"
+        planque.transport = planqueSent
+        planque.bodyHash = Signing.sha256Hex
+        planque.signer = { try deviceKey.sign(Data($0.utf8)).base64EncodedString() }
+        let approvalKIFF = CannedTransport([(201, draft)])
+        let touch = Confirmed()
+        let cloud = CannedTransport([(200, none), (201, setupAnswer)])
+        let (outcome, _) = await CoachStart.start(
+            coach: nil, planqueReady: false, cloud: CloudClient(transport: cloud, session: session), account: account,
+            approval: approvalSession(approvalKIFF, key: approvalKey, confirmed: touch), confirm: { touch },
+            enrol: { ended in await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: deviceKey.publicKeyDER, ended: ended) },
+            ended: { false }, words: english())
+        guard case .started = outcome else { throw Failure(description: "\(outcome)") }
+        func fields(_ header: String?) -> [String: String] {
+            Dictionary(uniqueKeysWithValues: (header ?? "").split(separator: ",").compactMap { part -> (String, String)? in
+                let pair = part.split(separator: "=", maxSplits: 1)
+                return pair.count == 2 ? (String(pair[0]), String(pair[1])) : nil
+            })
+        }
+        let mint = kiff.sent[0], draftSent = approvalKIFF.sent[0]
+        let mintFields = fields(mint.headers["KIFF-Device-Signature"]), draftFields = fields(draftSent.headers["KIFF-Device-Signature"])
+        let mintAt = mintFields["t"] ?? "", draftAt = draftFields["t"] ?? ""
+        try expect(mintAt.contains(".") && draftAt.contains("."), "milliseconds: \(mintAt), \(draftAt)")
+        try expect(mintAt != draftAt, "two times: \(mintAt)")
+        let mintMessage = KIFFMessage.request(tenant: "t1", method: "POST", path: "/v1/keys", bodyHash: Signing.sha256Hex(mint.body), signedAt: mintAt)
+        try expect(Signing.verifies(mintFields["v1"] ?? "", over: mintMessage, publicKeyDER: deviceKey.publicKeyDER), "the mint is the device key's")
+        let draftMessage = KIFFMessage.request(tenant: "t1", method: "POST", path: "/v1/me/agent-drafts", bodyHash: Signing.sha256Hex(draftSent.body), signedAt: draftAt)
+        try expect(Signing.verifies(draftFields["v1"] ?? "", over: draftMessage, publicKeyDER: approvalKey.publicKey.derRepresentation), "the draft is the approval key's")
+        try expect(!Signing.verifies(draftFields["v1"] ?? "", over: draftMessage, publicKeyDER: deviceKey.publicKeyDER), "never the device key's")
     }),
     Test("the screenshots: Coach's start on a Mac that can't approve, and on one that may", awaiting: { @MainActor in
         let folder = URL(fileURLWithPath: "build/screenshots")

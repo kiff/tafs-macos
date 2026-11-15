@@ -142,7 +142,7 @@ and `loadSetupThread` (`:7328-7375`):
 - **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
   Coach closes a taf's page first, so Back from there lands on the screen under it.
 
-## Starting Coach (`CoachStart`, `CoachModel.startSetup`, `followStart`)
+## Starting Coach (`CoachStart`, `ApprovalSession`, `CoachModel.startSetup`, `followStart`)
 
 As the iPad's `startSetup` (`AppModel.swift:7556-7635`), `TafsCloud.startSetup` and
 `CoachStart.startable` (`TafsCloud.swift:2247-2290`, `2470-2478`), `KIFFClient.submitNoToolsDraft`
@@ -150,31 +150,52 @@ As the iPad's `startSetup` (`AppModel.swift:7556-7635`), `TafsCloud.startSetup` 
 for an account with no Coach yet:
 
 - **Who may start it** (`CoachStart.mayStart`): a Mac whose approvals are its own Touch ID's
-  (`ApprovalRoute.touchID`), with the approval key's signer. Setup's draft grants authority,
-  so it is that key's to sign, and never the device key's in its place.
+  (`ApprovalRoute.touchID`), with an approval session (`ApprovalSession`). Setup's draft grants
+  authority, so it is the approval key's to sign, under the Touch ID that confirmed Start.
+- **It fails closed.** Without an approval session, `start` asks nothing, enrols nothing, mints
+  nothing and sends nothing: it says "This device can't approve…". The device key never signs
+  the draft in its place (the iPad's `approvalSigner ?? current` fallback, `KIFFClient.swift:1620`,
+  isn't here), and `ApprovalSession` is its own type, so the device-key session can't be passed.
+- **The approval key's contract** (`ApprovalSession.sign`, `SignedInView.approvalSession`), as the
+  iPad's (`ApprovalSigner.swift:185-191`, `:246-258`): a Secure Enclave key made with
+  `[.privateKeyUsage, .biometryCurrentSet]`, signing only under the `LAContext` Start's Touch ID
+  just passed (`confirmWithTouchID` answers it), within 120 seconds; the key itself checks the
+  prompt. Its signature time is `SigningTime.next()`.
 - **Every Mac today can't**: its approvals go to the phone or a passkey (it signs in with
-  `approval: passkey`, and a software key pairs view-only, kiff/tafs#1050). So Coach's start
-  says, where Start would be, "This device can't approve. Approve on another device signed in
-  to your account." (`approval.device_can_not_approve_approve`), and **follows the start made
-  on the phone**: Setup is read again every 10 seconds while it shows, and once the phone has
-  started Coach its thread shows here. Only reads: nothing is started from this Mac.
+  `approval: passkey`, and a software key pairs view-only, kiff/tafs#1050), and no Mac holds an
+  approval session yet. So Coach's start says, where Start would be, "This device can't approve.
+  Approve on another device signed in to your account." (`approval.device_can_not_approve_approve`),
+  and **follows the start made on the phone**: Setup is read again every 10 seconds while it
+  shows, and once the phone has started Coach its thread shows here. Only reads.
 - **On a Mac that may**, Start and "Starting asks for Touch ID once." (`coach.starting_asks`), in
   the iPad's order:
-  1. no device key: "Sign in with KIFF again…" (`sign_in.again_to_sign`);
+  1. no device key: "Sign in with KIFF again: this sign-in can't sign for the Mac."
+     (`sign_in.again_to_sign_device`);
   2. planque set up and Coach there: nothing more;
-  3. one Touch ID, never the password (the iPad's `sign(…, grants: true)`: the approval key
-     signs under it); closed, nothing is sent or said;
-  4. planque's enrolment, if this Mac isn't set up (`PlanqueEnrolment`, see
+  3. no approval session: it stops (above), before anything is asked;
+  4. one Touch ID, never the password (the iPad's `sign(…, grants: true)`); closed, nothing is
+     sent or said;
+  5. planque's enrolment, if this Mac isn't set up (`PlanqueEnrolment`, see
      [connections.md](connections.md)), signed by the device key with no prompt, as the iPad's
-     `signConfirmed`; what stops it says why;
-  5. Setup read (`GET /v1/setup`): Coach there, nothing more; tafs cloud's first start, signed
+     `signConfirmed`. planque's signer is armed only inside it, after the prompt and its account
+     check, and cleared when it ends (`AppModel.swift:7569-7575`). The account check is passed
+     in and read inside it too. What stops it says why;
+  6. Setup read (`GET /v1/setup`): Coach there, nothing more; tafs cloud's first start, signed
      once with Coach's tools, isn't here yet (below), and nothing is sent; else Setup's draft
      with no tools (`{"agent_id":"setup","label":"Setup","no_tools":true}`), signed by the
      approval key, then tafs cloud claims its key (`POST /v1/setup`, `{draft_id, claim_secret}`);
-  6. then Coach's thread is read.
-  A draft without its secret says "KIFF didn't answer as expected"; anything else says
-  "Couldn't start." with tafs cloud's words, else KIFF's plain line, never a code. A session
-  that ends meanwhile drops what comes back, as the iPad's `gen == accountGeneration`.
+  7. then Coach's thread is read.
+  A draft without its secret says "KIFF didn't answer as expected". KIFF's
+  `approval_key_required` (in `error` or `reason`) says the iPad's `approvalKeyLost` words
+  (`approval.key_gone_biometry`, with "Touch ID"); anything else says "Couldn't start." with
+  tafs cloud's words, else KIFF's plain line, never a code.
+- **The account is checked after every step**: the prompt, the enrolment (and inside it), the
+  read, the draft, and the claim (one more than the iPad's `:7615`). A session that ends drops
+  what comes back and says nothing. Any change of session (a sign-out, a pairing, a new sign-in)
+  rebuilds the window, and its going ends what the old one started (`coach.signedOut()` and the
+  taf chat's, on `onDisappear`), as the iPad's `accountGeneration` (`AppModel.swift:887`, `:1472`).
+- **The planque-only path** (Coach there, this Mac not set up with planque) isn't reachable from
+  the screen: Start shows only while Coach isn't there. It's ported and tested in `CoachStart`.
 - **Not here yet:** tafs cloud's first start, the tools batch and Coach's Cards signed once
   (`startCoachTogether`, the next part); `registerApprovalKey` and `keepKIFFAlerts`; the tools
   step; keeping planque's enrolment across launches (it lasts this session; asked again, planque

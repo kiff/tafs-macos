@@ -531,20 +531,22 @@ final class CoachModel: ObservableObject {
     /// for this session.
     private(set) var planqueReady = false
 
-    /// Touch ID, never the password, as the iPad's `sign(_:reason:grants: true)`: the approval key
-    /// signs under it. Throws when not confirmed.
-    nonisolated static func confirmWithTouchID(_ reason: String) async throws {
+    /// Touch ID, never the password, as the iPad's `sign(_:reason:grants: true)`: it answers the
+    /// `LAContext` that passed, for the approval key to sign under (`ApprovalSession`), as the iPad's
+    /// step (`ApprovalSigner.swift:288-320`). Throws when not confirmed.
+    nonisolated static func confirmWithTouchID(_ reason: String) async throws -> AnyObject {
         let context = LAContext()
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else { throw error ?? LAError(.biometryNotAvailable) }
         guard try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) else { throw LAError(.authenticationFailed) }
+        return context
     }
 
     /// Starts Coach, as the iPad's `startSetup` (`AppModel.swift:7556-7635`), in its order
     /// (`CoachStart.start`); then reads Coach's thread. Only Coach's own chat starts.
     @discardableResult
-    func startSetup(account: AccountClient, approval: AccountClient?, enrol: @escaping () async -> PlanqueEnrolment.Stop?,
-                    confirm: @escaping () async throws -> Void, words: Words) async -> Bool {
+    func startSetup(account: AccountClient, approval: ApprovalSession?, enrol: @escaping (@escaping () -> Bool) async -> PlanqueEnrolment.Stop?,
+                    confirm: @escaping () async throws -> AnyObject, words: Words) async -> Bool {
         guard isCoach else { return false }
         guard !startingSetup else { return false }
         startingSetup = true
