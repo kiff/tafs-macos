@@ -117,4 +117,27 @@ let tafTabsTests: [Test] = [
         try expectEqual(TafVersions.byline(state.versions[0], words, when: { _ in "1 Nov" }), "1 Nov")
         try expectEqual(TafVersions.tried(state.versions[0].trials[0], words, day: { _ in "2 Nov" }), "Tried 2 Nov · 3 calls, 1 held · went back")
     }),
+    Test("versions are as strict as the iPad's: a trial needs its end, a switch its time, and who made it is words", {
+        func read(_ json: String) -> TafVersions.State? { try? AccountClient.decoder.decode(TafVersions.State.self, from: Data(json.utf8)) }
+        func version(_ extra: String) -> String { #"{"n":1,"created":"2026-11-01T09:00:00Z","live":true"# + extra + "}" }
+        let trial = #","trials":[{"started":"2026-11-02T09:00:00Z","why":"back","calls":1,"held":0,"refused":0}]"#
+        let bySeven = #","by":7"#
+        let bySetup = #","by":"setup""#
+        try expect(read(#"{"versions":["# + version("") + #"],"switching":{"n":2,"draft":"d1","at":"2026-11-12T09:00:00Z"}}"#)?.switching?.draft == "d1", "a switch reads")
+        try expect(read(#"{"versions":["# + version("") + #"],"switching":{"n":2}}"#) == nil, "a switch without its time doesn't read")
+        try expect(read(#"{"versions":["# + version(trial) + "]}") == nil, "a trial without its end doesn't read")
+        try expect(read(#"{"versions":["# + version(bySeven) + "]}") == nil, "who made it isn't words")
+        try expectEqual(read(#"{"versions":["# + version(bySetup) + "]}")?.versions.first?.by, "setup")
+    }),
+    Test("cancelling a switch under way is one DELETE with the session, as the iPad's", awaiting: {
+        let transport = CannedTransport([(200, #"{"cancelled":true}"#), (409, #"{"error":"no_switch","words":"Nothing to cancel."}"#)])
+        let client = CloudClient(transport: transport, session: session)
+        let cancelled = try await client.cancelSwitch(of: "taf-1")
+        try expectEqual(cancelled, true)
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "DELETE /v1/tafs/taf%2D1/switching")
+        try expectEqual(transport.sent[0].headers["Authorization"], "Bearer tok")
+        do { _ = try await client.cancelSwitch(of: "taf-1"); throw Failure(description: "cancelled") } catch let refusal as CloudRefusal {
+            try expectEqual(refusal.words, "Nothing to cancel.")
+        }
+    }),
 ]

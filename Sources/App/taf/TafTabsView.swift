@@ -11,8 +11,13 @@ final class TafPagesModel: ObservableObject {
 
     @Published private(set) var activity: State<TafActivity> = .loading
     @Published private(set) var setup: State<TafSetup> = .loading
-    /// Its versions, for the header's line and the Versions sheet.
-    @Published private(set) var versions: State<TafVersions.State> = .loading
+    /// Its versions, oldest first, once read, as the iPad's `versions[tafID]`: a read that fails
+    /// keeps them, with why beside them.
+    @Published private(set) var versionList: [TafVersions.Version]?
+    /// A switch under way, as tafs cloud keeps it: the taf doesn't run until it ends.
+    @Published private(set) var switching: TafVersions.Switching?
+    /// Why the versions couldn't be read, or the switch wasn't cancelled.
+    @Published private(set) var versionError: String?
     /// The Activity filter shown, as tafs cloud names it.
     @Published private(set) var filter = "all"
     /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
@@ -70,8 +75,26 @@ final class TafPagesModel: ObservableObject {
         activity = .loading
     }
 
+    /// Reads the versions, as the iPad's `loadVersions` (AppModel.swift:3906-3922): what was read
+    /// stays when a later read fails, with tafs cloud's why under it.
     func loadVersions() async {
-        do { versions = .loaded(try await cloud.versions(of: taf)) } catch { versions = .unread(why: NeedsYouModel.why(error)) }
+        do {
+            let state = try await cloud.versions(of: taf)
+            versionList = state.versions
+            switching = state.switching
+            versionError = nil
+        } catch {
+            versionError = Words.app("version.not_loaded", ["why": NeedsYouModel.why(error)])
+        }
+    }
+
+    /// Cancels a switch under way, then reads the versions again, as the iPad's `cancelSwitch`
+    /// (AppModel.swift:4145-4153). It gives no authority back, so it isn't signed.
+    func cancelSwitch() async {
+        do { try await cloud.cancelSwitch(of: taf) } catch {
+            versionError = Words.app("version.switch_not_cancelled", ["why": NeedsYouModel.why(error)])
+        }
+        await loadVersions()
     }
 
     func loadSetup() async {
@@ -85,7 +108,7 @@ struct TafActivityTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let taf: Home.Taf
-    /// Coach with tafs cloud's words in its box; Plan & usage.
+    /// Plan & usage, from the credits fix.
     var openUsage: () -> Void = {}
     /// Opens the Card tab, from the Card's line.
     let openCard: () -> Void
@@ -95,9 +118,11 @@ struct TafActivityTab: View {
             // Lazy, so the list's end shows only when it's scrolled to, and the next page is
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
-                // Its health, as tafs cloud reads it, over its work, as the iPad's `WorkPanel`.
-                if let health = taf.health, health.needsAttention { healthLines(health) }
                 if let card = taf.cards.first { cardLine(card) }
+                // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
+                // then its work, under which its health sits (`WorkPanel`).
+                if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
+                if let health = taf.health, health.needsAttention { workPanel(health) }
                 switch model.activity {
                 case .loading:
                     ProgressView().controlSize(.small)
@@ -106,7 +131,6 @@ struct TafActivityTab: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadActivity() } }
                 case .loaded(let page):
-                    ForEach(page.exceptions) { CardUnitPanel(exception: $0) }
                     if !page.filters.isEmpty {
                         HStack(spacing: 8) {
                             ForEach(page.filters) { choice in
@@ -134,6 +158,18 @@ struct TafActivityTab: View {
         .task { await model.loadActivity() }
     }
 
+    /// Its work, as the iPad's `WorkPanel` (TafDetailView.swift:564-612): "Its work", then its
+    /// health as Home read it (`HealthLines`). The rest of the panel comes with `GET …/work`.
+    private func workPanel(_ health: Home.Taf.Health) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: words("taf.its_work"))
+            healthLines(health)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+
     /// A taf that isn't healthy, as the iPad's `HealthLines`: each line, amber when at risk and
     /// red when failing, with the fixes tafs cloud decided for it. The credits fix opens Plan &
     /// usage. A fix of a kind the app doesn't know is no button.
@@ -143,21 +179,20 @@ struct TafActivityTab: View {
                 Text(verbatim: line).font(.system(size: 14)).foregroundColor(health.failing ? Theme.no : Theme.amberText)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(Array(health.fixes(for: index).enumerated()), id: \.offset) { _, fix in
-                    if let act = action(fix) {
+                    if let act = Self.action(fix, openUsage: openUsage) {
                         Button(action: act) { Text(verbatim: fix.words).padding(.horizontal, 16) }
                             .buttonStyle(OutlineButtonStyle())
                             .fixedSize()
+                            .accessibilityIdentifier("taf.health.fix.\(fix.kind)")
                     }
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .accessibilityIdentifier("taf.health")
     }
 
-    /// What a fix does here; nil draws no button.
-    private func action(_ fix: Home.Taf.Health.Fix) -> (() -> Void)? {
+    /// What a fix does here, as `HealthLines.action`; nil draws no button.
+    static func action(_ fix: Home.Taf.Health.Fix, openUsage: @escaping () -> Void) -> (() -> Void)? {
         switch fix.kind {
         case "coach":
             // The iPad's improves the taf in Coach mode (`askCoachAbout`): it comes with Coach

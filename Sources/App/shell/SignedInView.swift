@@ -132,12 +132,18 @@ struct SignedInView: View {
         selection = .coach
     }
 
+    /// Plan & usage in place of the taf's page, as the iPad's `usageRequested` from a health fix.
+    static func showUsage(openTaf: inout String?, selection: inout Screen) {
+        openTaf = nil
+        selection = .usage
+    }
+
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
                                halted: { await readTafs() },
                                // Plan & usage in place of the taf's page.
-                               openUsage: { openTaf = nil; selection = .usage }).id(taf.id))
+                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }).id(taf.id))
     }
 
     private var accountScreen: some View {

@@ -36,7 +36,10 @@ enum Home {
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
                 level = ((try? c.decodeIfPresent(String.self, forKey: .level)) ?? nil) ?? "healthy"
-                lines = (((try? c.decodeIfPresent([String].self, forKey: .lines)) ?? nil) ?? [])
+                // Each line on its own, as the iPad's `LenientItem<String>`: one that isn't words is
+                // left out, never the others.
+                struct Line: Decodable { let line: String?; init(from decoder: Decoder) throws { line = try? String(from: decoder) } }
+                lines = (((try? c.decodeIfPresent([Line].self, forKey: .lines)) ?? nil) ?? []).compactMap(\.line)
                     .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 struct Lenient: Decodable { let fix: Fix?; init(from decoder: Decoder) throws { fix = try? Fix(from: decoder) } }
                 fixes = (((try? c.decodeIfPresent([Lenient].self, forKey: .fixes)) ?? nil) ?? []).compactMap(\.fix)

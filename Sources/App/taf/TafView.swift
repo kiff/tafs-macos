@@ -117,10 +117,10 @@ struct TafView: View {
                 Spacer(minLength: 8)
                 if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
             }
-            // Under the header, as the iPad's `headerLine`: its live version, which opens Versions,
-            // for whoever manages the taf.
-            if manages, let pages { versionLine(pages) }
             .padding(.top, 40)
+            // Under the header, as the first row of the iPad's `headerLine`: its live version,
+            // which opens Versions, for whoever manages the taf.
+            if manages, let pages { versionLine(pages) }
             HStack(spacing: 0) {
                 ForEach(Tab.allCases) { choice in
                     let chosen = tab == choice
@@ -313,7 +313,7 @@ struct VersionLine: View {
         Button { open = true } label: {
             HStack(spacing: 6) {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
-                Text(TafVersions.headerLine(loaded, words)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Text(TafVersions.headerLine(model.versionList, words)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.dim).accessibilityHidden(true)
             }
             .foregroundColor(Theme.soft)
@@ -323,16 +323,12 @@ struct VersionLine: View {
         .task { await model.loadVersions() }
         .sheet(isPresented: $open) { VersionsView(model: model) { open = false } }
     }
-
-    private var loaded: [TafVersions.Version]? {
-        if case .loaded(let state) = model.versions { return state.versions }
-        return nil
-    }
 }
 
 /// The taf's versions, as the iPad's `VersionsPanel`: newest first, the live one marked, each
-/// with what changed, who made it and when, and what each ended trial came to. Installing one
-/// and trying one are signed by the phone, so this Mac lists them only.
+/// with what changed, who made it and when, and what each ended trial came to; a switch under
+/// way, with Cancel. Installing one and trying one are signed by the phone, so this Mac lists
+/// them only.
 struct VersionsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
@@ -358,31 +354,44 @@ struct VersionsView: View {
                 Spacer()
                 Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
             }
-            switch model.versions {
-            case .loading:
-                ProgressView().controlSize(.small)
-            case .unread(let why):
-                Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
-            case .loaded(let state):
-                if let switching = state.switching {
-                    // A switch that didn't finish: the taf doesn't run until it's finished, on the phone.
-                    Text(words("version.installing_number", ["version": String(switching.n)])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
-                    Text(words("version.doesnt_run_until")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                }
-                if state.versions.count == 1 {
-                    Text(words("version.first_only")).font(.system(size: 13)).foregroundColor(Theme.dim)
+            Text(words("taf.try_version_first_you_chat")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            if let switching = model.switching { switchUnderWay(switching) }
+            if let list = model.versionList {
+                if list.isEmpty {
+                    Text(words("version.first_only")).font(.system(size: 14)).foregroundColor(Theme.soft)
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
-                        ForEach(state.versions.reversed()) { row($0) }
+                        ForEach(list.reversed()) { row($0) }
                     }
                 }
+            } else if model.versionError == nil {
+                ProgressView().controlSize(.small)
+            }
+            if let error = model.versionError {
+                Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .task { await model.loadVersions() }
         .padding(20)
         .frame(width: 520, height: 520)
         .background(Theme.background)
+    }
+
+    /// A switch that didn't finish, as the iPad's `switchUnderWay`: the taf doesn't run until it's
+    /// finished or cancelled. Finishing it is signed by the phone; Cancel isn't.
+    private func switchUnderWay(_ sw: TafVersions.Switching) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(words("version.installing_number", ["version": String(sw.n)])).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+            Text(words("version.doesnt_run_until")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(words("common.cancel")) { Task { await model.cancelSwitch() } }
+                .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                .fixedSize()
+        }
+        .padding(.vertical, 4)
     }
 
     private func row(_ v: TafVersions.Version) -> some View {

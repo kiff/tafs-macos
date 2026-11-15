@@ -7,6 +7,7 @@ enum TafVersions {
     /// One trial of a version that ended: when, how many calls, and how it ended.
     struct Trial: Decodable, Equatable {
         let started: Date
+        let ended: Date
         /// installed, back, idle or replaced.
         let why: String
         let calls: Int
@@ -18,6 +19,8 @@ enum TafVersions {
         let n: Int
         /// What changed, in plain words.
         let note: String?
+        /// Who made it: the owner's subject, or "setup".
+        let by: String?
         /// Who made it, in tafs cloud's words ("By Coach mode", "By you").
         let byWords: String?
         let created: Date
@@ -27,11 +30,12 @@ enum TafVersions {
         let trials: [Trial]
         var id: Int { n }
 
-        enum CodingKeys: String, CodingKey { case n, note, created, live, draft, trials, byWords = "by_words" }
+        enum CodingKeys: String, CodingKey { case n, note, by, created, live, draft, trials, byWords = "by_words" }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             n = try c.decode(Int.self, forKey: .n)
             note = try c.decodeIfPresent(String.self, forKey: .note)
+            by = try c.decodeIfPresent(String.self, forKey: .by)
             byWords = try c.decodeIfPresent(String.self, forKey: .byWords)
             created = try c.decode(Date.self, forKey: .created)
             live = try c.decode(Bool.self, forKey: .live)
@@ -43,6 +47,9 @@ enum TafVersions {
     /// A switch to version n under way: nothing of the taf runs until it ends.
     struct Switching: Decodable, Equatable {
         let n: Int
+        /// The KIFF draft whose confirmation it waits for.
+        let draft: String?
+        let at: Date
     }
 
     struct State: Decodable, Equatable {
@@ -81,5 +88,20 @@ extension CloudClient {
     /// A taf's versions, oldest first, the live one marked, and a switch under way.
     func versions(of taf: String) async throws -> TafVersions.State {
         try await get("/v1/tafs/\(Self.query(taf))/versions")
+    }
+
+    /// Drops a switch under way, as the iPad's `cancelSwitch`: the live version runs again. It
+    /// gives no authority, so it isn't signed.
+    @discardableResult
+    func cancelSwitch(of taf: String) async throws -> Bool {
+        struct Answer: Decodable { let cancelled: Bool }
+        let request = HTTPRequest(method: "DELETE", path: "/v1/tafs/\(Self.query(taf))/switching", headers: [
+            "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
+            "Accept-Language": language, "User-Agent": "tafs-macos",
+        ])
+        let (status, body) = try await transport.send(request)
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: body) }
+        guard let answer = try? JSONDecoder().decode(Answer.self, from: body) else { throw KIFFError.unreadable }
+        return answer.cancelled
     }
 }
