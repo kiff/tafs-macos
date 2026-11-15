@@ -99,9 +99,11 @@ struct NeedsYouView: View {
                     if model.unproven.isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
-                    // A knock at a taf's door waits for the owner too, as on the iPad.
-                    ForEach(knocked) { knockRow($0) }
                 }
+                // A knock at a taf's door waits for the owner too, after the held calls, as on the
+                // iPad (NeedsYouView.swift:21, 33): its count is Home's, so the rows show whether
+                // KIFF's list has been read or not.
+                ForEach(knocked) { knockRow($0) }
             }
             .padding(28)
             .frame(maxWidth: 720, alignment: .leading)

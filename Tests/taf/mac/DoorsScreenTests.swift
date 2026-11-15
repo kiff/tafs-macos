@@ -47,6 +47,26 @@ let tafDoorsMacTests: [Test] = [
         try expectEqual(model.doors.count, 1)
         try expectEqual(model.error, "Start from Connected apps on this Mac first. Slack's subscription must be stopped before removing its door.")
     }),
+    Test("a taf's knocks show on Needs you whether KIFF's held list was read or not, as the iPad's", awaiting: { @MainActor in
+        let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(#"{"tafs":[{"kiff_agent":"agent_refunds","id":"taf-1","name":"Refunds","color":1,"state":"working","doors":[{"app":"email","open":true,"knocks":2}]}]}"#.utf8))
+        let transport = CannedTransport([(503, ""), (503, ""), (503, "")])
+        let needsYou = NeedsYouModel(account: AccountClient(transport: transport, session: session), route: .phoneOrPasskey)
+        await needsYou.load()
+        guard case .unread = needsYou.state else { throw Failure(description: "the held list read") }
+        let view = NeedsYouView(model: needsYou, tafs: page.tafs, now: Date(timeIntervalSince1970: 1_794_679_800))
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)) else { throw Failure(description: "no bitmap") }
+        // The knocked row's avatar, in the taf's colour, is drawn under the unread line.
+        let wanted = Palette.tafColor(1)
+        var found = false
+        for y in stride(from: 0, to: 600, by: 2) where !found {
+            for x in stride(from: 0, to: 980, by: 2) {
+                guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
+                if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { found = true; break }
+            }
+        }
+        try expect(found, "the knocked taf's row is drawn")
+    }),
     Test("the screenshot: a door's own screen, with who may give it work and a knock waiting", awaiting: { @MainActor in
         let (model, _) = doors([(200, doorPage), (200, doorPage)])
         await model.load()
