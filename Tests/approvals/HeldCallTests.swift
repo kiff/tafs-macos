@@ -27,7 +27,7 @@ private func refusal(_ body: @autoclosure () async throws -> Void, is code: Stri
     }
 }
 
-let approvalsTests: [Test] = [
+let approvalsHeldTests: [Test] = [
     Test("a held call says which tool even under a vendor's label, as the iPad's KIFFMapping.says") {
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Write Stripe API data"), "Write Stripe API data · refund payment")
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Refund a payment"), "Refund a payment")

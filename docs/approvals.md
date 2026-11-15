@@ -103,6 +103,52 @@ first on Needs you, oldest first.
 - An answered or ended step leaves the list at once, and stays off while Home still lists it;
   the lists are then read again.
 
+## Passkeys on macOS 12
+
+This app is for Macs without Touch ID, so it never holds an approval key. An approval on such a
+Mac is the person's passkey: a USB security key registered at pairing, signing the exact request,
+sent as `KIFF-Passkey-Assertion` (KIFF's desktop client spec §2.6 and §5; KIFF checks it with
+`VerifyAssertion`, kiff-cloud#1638). Anything else is approved on the phone ("Approve on your
+phone"). macOS 12 has no system cross-device passkey (it came in macOS 13), and its platform
+authenticator needs Touch ID, so neither is used.
+
+**In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
+`PasskeyRegistration`:
+- **The message:** a request's `kiff.request.v1` (the body's hash, a `signed_at` from
+  `SigningTime.next()`, never the same twice), or two requests' `kiff.requests.v1` with the two
+  hashes sorted.
+- **`clientDataJSON`**, which this app writes, as Windows does over raw CTAP2:
+  `{"type":"webauthn.get","challenge":base64url(sha256(message)),"origin":"https://kiff.dev","crossOrigin":false}`.
+  The security key is given its SHA-256 (`clientDataHash`), never the JSON.
+- **Checked here before sending, whatever the key says:** rpIdHash is `sha256("kiff.dev")`; UP and
+  UV are set (the key's PIN was checked); the credential is the one asked for; and the key can't
+  leave this Mac (BE and BS are 0). Each is its own refusal (`PasskeyRefusal`).
+- **The header:** `t=<signed_at>,a=<base64url of {credential_id, client_data_json,
+  authenticator_data, signature}>`; for the pair, each request's header adds
+  `with=sha256:<the other request's hash>`.
+- **A new credential** (`PasskeyRegistration.read`): its id and its ES256 COSE key as SPKI DER.
+  Another algorithm or curve, a point off P-256, another RP, BE or BS, or no verification is
+  refused. Its creation's challenge is the pairing's
+  `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`.
+- **`ApprovalRoute.passkey`:** the route of a Mac with a registered key.
+- **Hashing is passed in** (`sha256`, and `isOnCurve` for a new key): Core builds on Linux. The app
+  gives CryptoKit's (`PasskeyCrypto`).
+
+**Next, each its own change:**
+1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on these conditions:
+   - libfido2 and its CBOR and crypto libraries pinned, built from source in CI with their source
+     checksums checked, never a prebuilt binary; their licence notices shipped;
+   - only `make_cred` and `get_assert`, given the `clientDataHash` this app computes; never
+     credential management, reset or enrolment;
+   - the PIN asked in the app's own prompt for each approval, handed over once, its buffer zeroed;
+     never kept, logged or sent; the tries left said, and a blocked key said to be blocked;
+   - confirmed on a real Mac: an unsigned app reads a FIDO HID device on macOS 12 without an
+     Input Monitoring prompt.
+2. **Registering the key through pairing** (KIFF's spec §5.1): the Mac makes the credential, shows
+   the `kind: "passkey"` pairing QR naming it, the phone approves the pairing, and the claim proves
+   it with `credential_proof`. The key goes with the Mac; unpairing removes it.
+3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`.
+
 ## Tests
 
 `scripts/test.sh approvals`: the hold as KIFF sends it, the answer's message line by line,
