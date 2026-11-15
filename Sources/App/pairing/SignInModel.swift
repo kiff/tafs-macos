@@ -36,6 +36,10 @@ final class SignInModel: ObservableObject {
     private let open: (URL) -> Void
     private let now: () -> Date
     private var attempt = 0
+    /// Where Export my chats writes its files: removed at every session change, as the iPad's
+    /// `removeOpenedFiles` in `useSession` and `forgetSession`, so a person's chats never stay
+    /// on the Mac after them.
+    var exportFolder = ChatsExport.folder
     /// Ends a session at KIFF, signed in with its own key: for the view-only session a
     /// pairing replaces.
     private let endSession: (Session, SigningKey) async -> Void
@@ -116,6 +120,7 @@ final class SignInModel: ObservableObject {
                 let oldKey = key
                 try DeviceKey.promoteNext(in: store)
                 try sessions.save(got)
+                ChatsExport.removeFiles(in: exportFolder)
                 key = pairingKey
                 session = got
                 step = .welcome
@@ -152,6 +157,7 @@ final class SignInModel: ObservableObject {
 
     /// Forgets the session on this Mac. Ending it at KIFF is the caller's, with the session.
     func signedOut() {
+        ChatsExport.removeFiles(in: exportFolder)
         sessions.forget()
         session = nil
         step = .welcome
@@ -160,6 +166,7 @@ final class SignInModel: ObservableObject {
     private func finish(_ got: Session, _ mine: Int) throws {
         guard mine == attempt else { return }
         try sessions.save(got)
+        ChatsExport.removeFiles(in: exportFolder)
         session = got
         step = .welcome
     }

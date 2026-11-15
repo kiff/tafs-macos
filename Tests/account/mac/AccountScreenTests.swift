@@ -19,6 +19,23 @@ private func scratchDefaults() -> UserDefaults {
 }
 
 let accountPageTests: [Test] = [
+    Test("Export my chats offers its two files, says why when it couldn't, and shares the last files again", awaiting: { @MainActor in
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("export-mac-\(UUID().uuidString)", isDirectory: true)
+        let transport = CannedTransport([(503, #"{"error":"down"}"#), (200, #"{"readable":"hi","chats":[]}"#)])
+        let model = ExportChatsModel(cloud: CloudClient(transport: transport, session: session), folder: folder)
+        await model.export(words: words)
+        try expectEqual(model.why, "Your chats weren't exported. Check your connection and try again.")
+        try expectEqual(model.sharing, nil)
+        await model.export(words: words)
+        try expectEqual(model.why, nil)
+        try expectEqual(model.made?.map(\.lastPathComponent), ["tafs-chats.json", "tafs-chats.txt"])
+        try expectEqual(model.sharing, model.made)
+        model.sharing = nil
+        model.shareAgain()
+        try expectEqual(model.sharing, model.made)
+        ChatsExport.removeFiles(in: folder)
+    }),
     Test("the page reads who is signed in and the plan's line, each on its own", awaiting: { @MainActor in
         let both = make([(200, meView)], [(200, balanceLine)], defaults: scratchDefaults())
         await both.load()

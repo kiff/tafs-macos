@@ -125,3 +125,21 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
 
 Not on the Mac yet: Coach's suggestions, Alerts, AI use, Time zone, and Export my chats.
 Their rows come with their screens: a row that opens nothing isn't drawn.
+
+## Export my chats
+
+As the iPad's `ExportChatsSection`, `exportChats` and `splitExport` (`ExportChatsView.swift:7-63`,
+`AppModel.swift:4662-4674, 5594-5618`, `TafsCloud.swift:1517-1530`): the person's own chats,
+trials and notes, for their rights of access and portability.
+
+- **Export my chats** (Try again after a failure) reads `GET /v1/me/chats/export` and writes
+  two files: `tafs-chats.json` (tafs cloud's export, its `readable` text taken out, pretty and
+  sorted) and `tafs-chats.txt` (that text).
+- They're offered at once in macOS's share menu, the Mac's share and save sheet. The row then
+  names them, to share them again.
+- A read that fails says to check the connection; files that couldn't be written say so.
+- The files are written to a temporary folder, replaced at each export, and removed at every
+  session change: a sign-out, a sign-in, and a pairing that replaces this Mac's session
+  (`SignInModel`), as the iPad's `removeOpenedFiles` in `useSession` and `forgetSession`
+  (`AppModel.swift:879`, `:1334`). So a person's chats never stay on the Mac after them.
+
