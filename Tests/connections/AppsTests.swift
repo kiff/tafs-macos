@@ -50,4 +50,13 @@ let connectionsTests: [Test] = [
             do { _ = try await cloud([(200, body)]).0.apps(); throw Failure(description: "\(body) was read") } catch let error as KIFFError { try expectEqual(error, .unreadable) }
         }
     }),
+    Test("how an app connects is a shared line in every shipped language, and nothing for a way not known") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        for language in try Words.shipped(folder: folder) {
+            let words = try Words(language: language, folder: folder)
+            for key in ["connect.how.sign_in", "connect.how.key"] { try expect(words(key) != key, "\(key) in \(language)") }
+        }
+        let json = #"{"entry":"e","name":"N","state":"available","method":"carrier_pigeon"}"#
+        try expectEqual(try JSONDecoder().decode(Apps.App.self, from: Data(json.utf8)).howKey, nil)
+    },
 ]

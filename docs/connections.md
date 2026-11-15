@@ -14,6 +14,7 @@ with Coach.
 | What this entry of the app is | `subtitle` |
 | The second line: how it connects, its status, which tafs use it | `line`, as sent; for an app an operator sets up first, its `words` |
 | "Company" or "Yours" | `whose`, as sent |
+| How it connects | `method`, through the shared lines `connect.how.*` |
 | Which list it is in | `state`: `connected` and `needs_reconnect` are **Yours**, the rest **Discover** |
 
 - A connection to sign in again has its line in amber.
@@ -23,6 +24,15 @@ with Coach.
   since an app that isn't listed isn't absent.
 
 ## The screen (`ConnectAppsView`, `ConnectAppsModel`)
+
+Laid out as the iPad's: the large title with the search box at its top right, then two
+panels.
+
+- **Yours** is a table with the iPad's columns: **App** (its initial's square, its name and
+  what this entry is), **How it connects** (`method`: `sign_in` is "Sign in", `key` is "With a
+  key", any other way is left blank), **Whose** (`whose`, as sent), and **Status**
+  ("Connected" in green, or "Sign in again" in amber).
+- **Discover** lists the other apps, with the same columns and no headings.
 
 - Search by name; Return searches. What is typed is escaped and cut at 100 characters.
 - **Show more apps** reads the next page of the same search. An app already listed isn't
