@@ -87,4 +87,21 @@ let tafTests: [Test] = [
         try expectEqual(roomOnly.summary(words), "€2,300 in total a day, then it asks you")
         try expectEqual(try rule(#"{"label":"x","outside":"hold"}"#).summary(words), "")
     },
+    Test("a taf's state chip is the iPad's: its shared word and tone, none for a word unknown or a working taf needing you") {
+        try expectEqual(TafState.chip(state: "working", attention: false)?.key, "taf.state.working")
+        try expectEqual(TafState.chip(state: "working", attention: false)?.tone, .ok)
+        try expect(TafState.chip(state: "working", attention: true) == nil, "a working taf that needs you shows no chip")
+        try expectEqual(TafState.chip(state: "waiting", attention: true)?.tone, .amber)
+        try expectEqual(TafState.chip(state: "idle", attention: false)?.key, "taf.state.ready")
+        try expectEqual(TafState.chip(state: "paused", attention: false)?.tone, .soft)
+        try expectEqual(TafState.chip(state: "stopped", attention: false)?.tone, .no)
+        try expectEqual(TafState.chip(state: "halted", attention: false)?.key, "taf.state.halted")
+        try expect(TafState.chip(state: "sleeping", attention: false) == nil, "an unknown word shows no chip")
+        // Every chip's word is a shared line.
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        for state in ["working", "waiting", "idle", "paused", "stopped", "revoked", "halted"] {
+            guard let key = TafState.chip(state: state, attention: false)?.key else { throw Failure(description: state) }
+            try expect(words(key) != key, key)
+        }
+    },
 ]
