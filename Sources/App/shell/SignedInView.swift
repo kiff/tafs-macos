@@ -45,7 +45,7 @@ struct SignedInView: View {
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }))
-            case .record: return AnyView(RecordView(model: record))
+            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
             case .connectApps: return AnyView(ConnectAppsView(model: connect))

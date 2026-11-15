@@ -113,6 +113,16 @@ enum Record {
         }
     }
 
+    /// The groups with only one taf's calls, by its id at tafs cloud; nil keeps every taf's. A
+    /// group left with none is left out.
+    static func only(taf: String?, in groups: [Group]) -> [Group] {
+        guard let taf else { return groups }
+        return groups.compactMap { group in
+            let kept = group.entries.filter { $0.taf.id == taf }
+            return kept.isEmpty ? nil : Group(id: group.id, title: group.title, entries: kept)
+        }
+    }
+
     /// The Record's filters, the iPad's: each keeps the calls of some kinds.
     enum Filter: String, CaseIterable, Identifiable {
         case all, moneyMoved, stopped, waiting
