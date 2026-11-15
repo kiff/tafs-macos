@@ -92,8 +92,11 @@ let contractsTests: [Test] = [
         try expectEqual(rae.name, "Rae")
         try expectEqual(rae.state, "working")
         try expectEqual(rae.attention, true)
-        // tafs cloud's line for its work is "now", ahead of its next run.
-        try expectEqual(rae.now, "Its last 2 checks found work too big for one run, so nothing ran")
+        // "Now" by its state, as the iPad's mapping: working, so its next run in tafs cloud's words.
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(rae.now(words, time: { _ in "–" }), "Next run Fri 12:30")
+        // What went wrong last is its work line, flagged by tafs cloud: the sidebar shows it.
+        try expectEqual(rae.healthNow, "Its last 2 checks found work too big for one run, so nothing ran")
         try expectEqual(rae.nextRunWords, "Next run Fri 12:30")
         try expect(rae.trouble?.hasPrefix("Its last 2 checks") == true, "its failing health's first line")
         try expectEqual(rae.cards.map(\.title), ["Create refund"])
@@ -106,7 +109,8 @@ let contractsTests: [Test] = [
         let paused = try AccountClient.decoder.decode(Home.Page.self, from: answer("home-paused.json")).tafs[0]
         try expectEqual(paused.state, "paused")
         try expectEqual(paused.attention, false)
-        try expectEqual(paused.now, "Paused")
+        try expectEqual(paused.now(words, time: { _ in "–" }), "Paused")
+        try expectEqual(paused.healthNow, nil)
         try expectEqual(TafState.chip(state: paused.state, attention: paused.attention)?.key, "taf.state.paused")
     },
     Test("a taf's runs and a run's report read as tafs cloud answers, and give the Overview's Last result") {

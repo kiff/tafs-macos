@@ -12,7 +12,7 @@ Top to bottom, as on the iPad:
 | The mascot and "tafs" | Opens the Overview. |
 | Needs you, Record, Calendar, Plan & usage, Connect apps | One row each: its symbol and its name, in semibold. Needs you ends with the number waiting, as a plain grey number, never a badge. The open screen's row has the iPad's rounded grey ground (`Palette.chosen`). |
 | NEEDS YOU | Only when calls are held: each one with an amber dot, its taf's name and what it asks ("Deploys: Run migration 0042"), then KIFF's reason and the time to answer by. A call whose taf isn't listed shows what it asks alone. A row opens Needs you. |
-| YOUR TAFS | Each taf as the iPad's row: its 34-point avatar (`TafAvatar`: its colour, corners at 0.3 of its size, its initial in rounded bold at half its size), its name in 15 semibold, and tafs cloud's line for where its work stands in 13. With none, tafs cloud's own line for that ("Pick a job for your first taf."), and nothing when it sends none. |
+| YOUR TAFS | Each taf as the iPad's row: its 34-point avatar (`TafAvatar`: its colour, corners at 0.3 of its size, its initial in rounded bold at half its size), its name in 15 semibold, and in 13, as the iPad's `tafRow`: what went wrong last (`healthNow`), red when failing and amber otherwise; a setup stopped partway, amber; else Now by its state (docs/overview.md). With none, tafs cloud's own line for that ("Pick a job for your first taf."), and nothing when it sends none. |
 | Start a new taf | The brand's gradient button. It opens Coach, where a taf is made. |
 | Coach | The dark button under it. |
 | Account | With who is signed in under it. Its symbol is the iPad's: an outlined person in the soft colour, filled and amber (`amberText`) while Account is open. |

@@ -17,6 +17,8 @@ enum Home {
                 lines = ((try? c.decodeIfPresent([String].self, forKey: .lines)) ?? nil) ?? []
             }
             var healthy: Bool { level == "healthy" }
+            /// Not healthy, with tafs cloud's lines for why, as the iPad's `needsAttention`.
+            var needsAttention: Bool { !healthy && !lines.isEmpty }
         }
 
         /// The KIFF agent it acts as: what tells one row from another.
@@ -38,17 +40,25 @@ enum Home {
         let workLine: String?
         /// Something went wrong last: the line is drawn as a warning.
         let attention: Bool
-        /// Its next run, in tafs cloud's words ("Next run Mon 08:00").
+        /// Its next run, in tafs cloud's words ("Next run Mon 08:00"), and as a time.
         let nextRunWords: String?
+        let nextRun: Date?
         let health: Health?
+        /// A taf with no schedule: it works from its chat.
+        let unscheduled: Bool
+        /// tafs cloud's status for its work: `working`, `idle`, `paused`.
+        let workStatus: String?
+        /// Its setup stopped partway: tafs cloud's words for it, in place of what it's doing.
+        let finishWords: String?
 
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, waiting, jobSummary = "job_summary"
-            case work, nextRunWords = "next_run_words", health
+            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish
         }
-        enum WorkKeys: String, CodingKey { case line, attention }
+        enum WorkKeys: String, CodingKey { case line, attention, status }
+        enum FinishKeys: String, CodingKey { case taf, session, words }
         enum CardKeys: String, CodingKey { case cards }
 
         init(from decoder: Decoder) throws {
@@ -73,11 +83,39 @@ enum Home {
             workLine = text(work.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .line)) ?? nil })
             attention = work.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .attention)) ?? nil } ?? false
             health = (try? c.decodeIfPresent(Health.self, forKey: .health)) ?? nil
+            nextRun = (try? c.decodeIfPresent(Date.self, forKey: .nextRun)) ?? nil
+            unscheduled = ((try? c.decodeIfPresent(Bool.self, forKey: .unscheduled)) ?? nil) ?? false
+            workStatus = text(work.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .status)) ?? nil })
+            // One the app can show: its chat and its words, as the iPad's `Finish.usable`.
+            let finish = try? c.nestedContainer(keyedBy: FinishKeys.self, forKey: .finish)
+            func part(_ key: FinishKeys) -> String? { text(finish.flatMap { (try? $0.decodeIfPresent(String.self, forKey: key)) ?? nil })?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            finishWords = part(.taf) != nil && part(.session) != nil ? part(.words) : nil
         }
 
-        /// What "now" says: tafs cloud's line for its work, else its next run. Nil when it
-        /// sent neither: the app writes no line of its own.
-        var now: String? { workLine ?? nextRunWords }
+        /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the
+        /// person, paused, halted, working from its chat, its next run (tafs cloud's words, else
+        /// the time), running, acting under KIFF, or its Card not active. A setup stopped
+        /// partway says tafs cloud's words for that instead.
+        func now(_ words: Words, time: (Date) -> String) -> String {
+            if let finishWords { return finishWords }
+            switch state {
+            case "waiting": return words("taf.now.waiting_on_you")
+            case "paused": return words("taf.state.paused")
+            case "halted": return words("taf.now.halted")
+            case "working" where unscheduled: return words("taf.now.works_from_chat")
+            case "working": return nextRunWords ?? nextRun.map { words("taf.now.next_run", ["time": time($0)]) } ?? words("taf.now.running")
+            case "idle": return words("taf.now.acting_under_kiff")
+            default: return words("taf.now.card_not_active")
+            }
+        }
+
+        /// What went wrong last, before its next run, in tafs cloud's work line: when it flags
+        /// it (`attention`), or when an idle taf isn't healthy, as the iPad's `healthNow`. The
+        /// sidebar's row shows it in place of "now".
+        var healthNow: String? {
+            guard let workLine, attention || (workStatus == "idle" && health?.needsAttention == true) else { return nil }
+            return workLine
+        }
         /// The first thing wrong with it, in tafs cloud's words.
         var trouble: String? { health.flatMap { $0.healthy ? nil : $0.lines.first } }
     }

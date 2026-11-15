@@ -13,7 +13,8 @@ name, at the top of the sidebar.
 | What waits for the person ("2 need you.") | `needs_you.words`, shown when `needs_you.count` is above 0 |
 | A taf's name and colour | `name`, `color` |
 | What it does | `job_summary` |
-| **Now** | `work.line`; if tafs cloud sent none, `next_run_words`; if neither, a dash. The app never writes a line of its own. |
+| **Now** | By its `state`, as the iPad's `KIFFMapping.taf` (`Home.Taf.now`): waiting, "Waiting for you"; paused, "Paused"; halted, "Halted · resume it from Halt"; working and `unscheduled`, "Works from its chat"; working, `next_run_words`, else "Next run {time}" from `next_run`, else "Running"; idle, "Acting under KIFF"; any other, "Card not active". A setup stopped partway (`finish`, with its chat and words) says tafs cloud's words instead. |
+| **What went wrong** | `Home.Taf.healthNow`: `work.line`, only when tafs cloud flags it (`work.attention`) or an idle taf's health needs attention. The sidebar's row shows it in place of Now. |
 | A warning colour on Now | `work.attention` |
 | What is wrong with it | the first of `health.lines`, when `health.level` isn't `healthy` |
 | How many of its calls wait | `waiting` |
@@ -30,7 +31,7 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   asks" and "answer by {time}", on the raised ground. When tafs cloud counts more than the held
   calls (Coach's chats, steps), a last row has its `needs_you.words` and a chevron. Every row
   opens Needs you.
-- **A taf's row:** its coloured square and name; **Now**, tafs cloud's line alone; **Card**,
+- **A taf's row:** its coloured square and name; **Now**, by its state (above); **Card**,
   the first Card's one line ("€1,960 left today of €2,000", `TafCard.line`, from KIFF's numbers
   as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
   taf's page**, and "Each line opens the taf." says so under the table.

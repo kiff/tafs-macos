@@ -160,7 +160,15 @@ struct ShellView: View {
             TafAvatar(name: taf.name, color: taf.color, size: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
-                if let now = taf.now { Text(verbatim: now).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(1) }
+                // As the iPad's `tafRow`: what went wrong last, red when failing and amber
+                // otherwise; a setup stopped partway in amber; else "now".
+                if let trouble = taf.healthNow {
+                    Text(verbatim: trouble).font(.system(size: 13)).foregroundColor(taf.health?.level == "failing" ? Theme.no : Theme.amberText).lineLimit(1)
+                } else if let finish = taf.finishWords {
+                    Text(verbatim: finish).font(.system(size: 13)).foregroundColor(Theme.amberText).lineLimit(1)
+                } else {
+                    Text(verbatim: taf.now(words, time: { Self.clock.string(from: $0) })).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(1)
+                }
             }
         }
         .accessibilityElement(children: .combine)

@@ -29,17 +29,38 @@ let overviewTests: [Test] = [
         try expectEqual(page.needsYouCount, 2)
         try expectEqual(page.needsYouWords, "2 need you.")
         try expectEqual(page.tafs.map(\.name), ["Refunds", "Invoices", "Bare"])
-        try expectEqual(page.tafs[0].now, "Working on 3 refunds")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(page.tafs[0].now(words, time: { _ in "08:00" }), "Next run Mon 08:00")
+        try expectEqual(page.tafs[0].healthNow, nil)
         try expectEqual(page.tafs[0].waiting, 2)
         try expectEqual(page.tafs[0].trouble, nil)
     }),
-    Test("now is the work's line, else the next run, and never a line the app wrote", awaiting: {
+    Test("now follows the state as the iPad's mapping; what went wrong is the work line, only when flagged", awaiting: {
         let page = try await cloud([(200, homePage)]).0.home()
-        // A blank work line is no line: the next run's words stand in.
-        try expectEqual(page.tafs[1].now, "Next run Mon 08:00")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let at: (Date) -> String = { _ in "12:30" }
+        // Idle: acting under KIFF. A blank work line is no line, flagged or not.
+        try expectEqual(page.tafs[1].now(words, time: at), "Acting under KIFF")
         try expectEqual(page.tafs[1].attention, true)
+        try expectEqual(page.tafs[1].healthNow, nil)
         try expectEqual(page.tafs[1].trouble, "Its bank connection needs signing in again.")
-        try expectEqual(page.tafs[2].now, nil)
+        // Any state it doesn't know: its Card isn't active.
+        try expectEqual(page.tafs[2].now(words, time: at), "Card not active")
+        func taf(_ json: String) throws -> Home.Taf { try AccountClient.decoder.decode(Home.Taf.self, from: Data(json.utf8)) }
+        let base = #""kiff_agent":"a","name":"A""#
+        try expectEqual(try taf("{\(base),\"state\":\"waiting\"}").now(words, time: at), "Waiting for you")
+        try expectEqual(try taf("{\(base),\"state\":\"halted\"}").now(words, time: at), "Halted · resume it from Halt")
+        try expectEqual(try taf("{\(base),\"state\":\"working\",\"unscheduled\":true}").now(words, time: at), "Works from its chat")
+        try expectEqual(try taf("{\(base),\"state\":\"working\",\"next_run\":\"2026-11-16T12:30:00Z\"}").now(words, time: at), "Next run 12:30")
+        try expectEqual(try taf("{\(base),\"state\":\"working\"}").now(words, time: at), "Running")
+        // A setup stopped partway says tafs cloud's words, with its chat; without the chat it's none.
+        try expectEqual(try taf("{\(base),\"state\":\"idle\",\"finish\":{\"taf\":\"t\",\"session\":\"s\",\"words\":\"Finish setting it up\"}}").now(words, time: at), "Finish setting it up")
+        try expectEqual(try taf("{\(base),\"state\":\"idle\",\"finish\":{\"words\":\"Finish\"}}").finishWords, nil)
+        // An idle taf that isn't healthy says what went wrong, flagged or not.
+        let idle = try taf("{\(base),\"state\":\"idle\",\"work\":{\"status\":\"idle\",\"line\":\"Its bank needs signing in again\"},\"health\":{\"level\":\"degraded\",\"lines\":[\"x\"]}}")
+        try expectEqual(idle.healthNow, "Its bank needs signing in again")
+        let fine = try taf("{\(base),\"state\":\"idle\",\"work\":{\"status\":\"idle\",\"line\":\"Checked 3 cases\"},\"health\":{\"level\":\"healthy\",\"lines\":[]}}")
+        try expectEqual(fine.healthNow, nil)
         try expectEqual(page.tafs[2].color, 0)
         try expectEqual(page.tafs[2].health, nil)
     }),
