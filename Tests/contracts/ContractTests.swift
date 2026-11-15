@@ -5,12 +5,10 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json"]
+private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json"]
 private let notYet = [
-    "home.json": "the tafs list read from Home, in its own pull request after this pin",
-    "home-paused.json": "the tafs list read from Home, in its own pull request after this pin",
-    "tafs.json": "the tafs list read from GET /v1/tafs, in its own pull request after this pin",
-    "tafs-paused.json": "the tafs list read from GET /v1/tafs, in its own pull request after this pin",
+    "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
+    "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
@@ -81,6 +79,32 @@ let contractsTests: [Test] = [
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":{"shown":false,"words":"Pick a job."}}"#.utf8)).line, nil)
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":7}"#.utf8)).line, nil)
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data("{}".utf8)).line, nil)
+    },
+    Test("Home's tafs read as tafs cloud answers them, live and paused, with what the sidebar and Overview draw") {
+        let live = try AccountClient.decoder.decode(Home.Page.self, from: answer("home.json"))
+        try expectEqual(live.headline, "0 tafs working.")
+        try expectEqual(live.needsYouCount, 0)
+        try expectEqual(live.needsYouWords, "Nothing needs you.")
+        try expectEqual(live.tafs.count, 1)
+        let rae = live.tafs[0]
+        try expectEqual(rae.id, "rae")
+        try expectEqual(rae.tafID, "taf-aaaa0000000000000000")
+        try expectEqual(rae.name, "Rae")
+        try expectEqual(rae.state, "working")
+        try expectEqual(rae.attention, true)
+        // tafs cloud's line for its work is "now", ahead of its next run.
+        try expectEqual(rae.now, "Its last 2 checks found work too big for one run, so nothing ran")
+        try expectEqual(rae.nextRunWords, "Next run Fri 12:30")
+        try expect(rae.trouble?.hasPrefix("Its last 2 checks") == true, "its failing health's first line")
+        try expectEqual(rae.cards.map(\.title), ["Create refund"])
+        try expectEqual(rae.cards.first?.rules.count, 1)
+        // A working taf that needs the person shows no state chip: its Activity says why.
+        try expect(TafState.chip(state: rae.state, attention: rae.attention) == nil, "no chip")
+        let paused = try AccountClient.decoder.decode(Home.Page.self, from: answer("home-paused.json")).tafs[0]
+        try expectEqual(paused.state, "paused")
+        try expectEqual(paused.attention, false)
+        try expectEqual(paused.now, "Paused")
+        try expectEqual(TafState.chip(state: paused.state, attention: paused.attention)?.key, "taf.state.paused")
     },
     Test("a taf's runs and a run's report read as tafs cloud answers, and give the Overview's Last result") {
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
