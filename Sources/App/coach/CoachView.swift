@@ -405,14 +405,22 @@ final class CoachModel: ObservableObject {
 
     enum ReportOutcome: Equatable { case sent, already, failed(String) }
 
+    /// Moves on when the person signs out, as the iPad's `accountGeneration`: an answer that
+    /// comes after is the session before's.
+    private(set) var accountGeneration = 0
+    func signedOut() { accountGeneration += 1 }
+
     /// Reports an answer in this chat to tafs cloud, with its chat's session, as the iPad's
     /// `reportAnswer`: tafs cloud's words when it refuses with some; a gone answer says so; any
     /// other failure is the app's own line, since tafs cloud's codes are for developers.
     func report(_ message: Thread.Message, reason: AnswerReport.Reason, note: String) async -> ReportOutcome {
         let note = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard case .loaded(let coach, _) = state, let id = message.id else { return .failed(Words.app("report.cant_from_here")) }
+        let gen = accountGeneration
         do {
             let kept = try await cloud.report(id, of: coach.id, reason: reason, note: note.isEmpty ? nil : note, session: message.session)
+            // Signed out while it went: what tafs cloud answered is the session before's.
+            guard gen == accountGeneration else { return .failed(Words.app("common.you_signed_out")) }
             return kept.new ? .sent : .already
         } catch let refusal as CloudRefusal where refusal.words != nil {
             return .failed(refusal.words!)
@@ -836,7 +844,9 @@ struct CoachView: View {
                     // Report this answer, on an answer that can be reported, as the iPad's `reportable`.
                     .contextMenu {
                         if AnswerReport.can(message) {
-                            Button(words("report.menu")) { reporting = ReportedAnswer(message: message) }
+                            Button { reporting = ReportedAnswer(message: message) } label: {
+                                Label(words("report.menu"), systemImage: "flag")
+                            }
                         }
                     }
                 }
