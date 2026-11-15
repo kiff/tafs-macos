@@ -55,6 +55,30 @@ private func refused(_ expected: PasskeyRefusal, _ run: () async throws -> Any) 
 }
 
 let approvalsPasskeyTests: [Test] = [
+    Test("a point is on P-256 only by the curve's equation, with both coordinates below p") {
+        func bytes(_ hex: String) -> Data {
+            var out = Data()
+            var i = hex.startIndex
+            while i < hex.endIndex { let n = hex.index(i, offsetBy: 2); out.append(UInt8(hex[i..<n], radix: 16)!); i = n }
+            return out
+        }
+        // NIST's generator, and RFC 6979 A.2.5's public key: both on the curve.
+        let gx = bytes("6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296")
+        let gy = bytes("4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5")
+        try expect(P256Curve.contains(gx, gy), "the generator")
+        try expect(P256Curve.contains(bytes("60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6"),
+                                      bytes("7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299")), "RFC 6979's key")
+        // The generator's y with its low bit flipped: off the curve.
+        var flipped = gy
+        flipped[31] ^= 1
+        try expect(!P256Curve.contains(gx, flipped), "a flipped bit")
+        // A coordinate of p or more, the point at zero, and a short coordinate: refused.
+        let p = bytes("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff")
+        try expect(!P256Curve.contains(p, gy), "x = p")
+        try expect(!P256Curve.contains(gx, p), "y = p")
+        try expect(!P256Curve.contains(Data(count: 32), Data(count: 32)), "zero")
+        try expect(!P256Curve.contains(gx.dropLast(), gy), "short")
+    },
     Test("the tests' SHA-256 is FIPS 180-4's") {
         try expectEqual(Encoding.hex(testSHA256(Data("abc".utf8))), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
         try expectEqual(Encoding.hex(testSHA256(Data())), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")

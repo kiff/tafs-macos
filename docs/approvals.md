@@ -144,8 +144,11 @@ before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
   refused. Its creation's challenge is the pairing's
   `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`.
 - **`ApprovalRoute.passkey`:** the route of a Mac with a registered key.
-- **Hashing is passed in** (`sha256`, and `isOnCurve` for a new key): Core builds on Linux. The app
-  gives CryptoKit's (`PasskeyCrypto`).
+- **Hashing is passed in** (`sha256`): Core builds on Linux, and the app gives CryptoKit's
+  (`PasskeyCrypto`).
+- **A new key's point is checked on P-256 by the curve's equation** (`P256Curve.contains`:
+  `y² ≡ x³ − 3x + b (mod p)`, both coordinates below `p`), in Core, so Linux tests it too.
+  CryptoKit's key init isn't used as the check: on macOS it takes a point off the curve.
 
 **Next, each its own change:**
 1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on the review's conditions:
