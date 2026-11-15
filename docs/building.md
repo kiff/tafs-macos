@@ -33,7 +33,8 @@ The build is not signed. Signing and notarization are a release step, not part o
 | `Tests/Runner/` | The small test runner. XCTest isn't in the Command Line Tools. |
 
 A **part** is a folder of `Tests/`. `ls Tests` lists them; `Runner` is the test runner, not a
-part. Today: `shell`, `strings`, `contracts`, `pairing`, `account`, `approvals` and `record`.
+part. Today: `shell`, `strings`, `contracts`, `pairing`, `account`, `approvals`, `record`,
+`overview`, `calendar`, `usage`, `connections`, `coach` and `taf`.
 
 ## Test
 

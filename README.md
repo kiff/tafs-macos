@@ -13,7 +13,13 @@ happens in pull requests to `main`.
 - [The signed-in window](docs/window.md)
 - [Needs you: held calls and answers](docs/approvals.md)
 - [The signed-in Mac: the session and devices](docs/account.md)
+- [The Overview](docs/overview.md)
 - [The Record](docs/record.md)
+- [The Calendar](docs/calendar.md)
+- [Plan & usage](docs/usage.md)
+- [Connect apps](docs/connections.md)
+- [Coach](docs/coach.md)
+- [A taf's page](docs/taf.md)
 
 ## Notes
 
