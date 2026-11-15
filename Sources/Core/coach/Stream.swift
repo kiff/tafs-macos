@@ -66,8 +66,23 @@ struct LiveAnswer: Equatable {
     private(set) var line: String?
     /// The latest step that failed, in tafs cloud's one line.
     private(set) var trouble: String?
+    /// The steps so far, in tafs cloud's words: the list under the live line.
+    private(set) var steps: [Step] = []
+
+    struct Step: Equatable {
+        let words: String
+        var done = false
+        var failed = false
+    }
     /// The longest answer kept while it is written; the thread has it whole.
     static let longest = 200_000
+
+    /// A live step's words as the finished list has them: without the trailing "…".
+    static func plain(_ words: String) -> String {
+        var out = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        while out.hasSuffix("…") || out.hasSuffix(".") && out.hasSuffix("...") { out = String(out.dropLast(out.hasSuffix("…") ? 1 : 3)) }
+        return out.trimmingCharacters(in: .whitespaces)
+    }
 
     /// Takes one event. Answers whether the thread must be read again now.
     mutating func take(_ event: StreamEvent) -> Bool {
@@ -78,8 +93,14 @@ struct LiveAnswer: Equatable {
             if let words { line = words }
         case .activity(let words):
             line = words
+            // A step with no words has no line.
+            if let words, steps.count < 200 { steps.append(Step(words: Self.plain(words))) }
         case .step(let failed, let why):
             if failed { trouble = why }
+            if let open = steps.lastIndex(where: { !$0.done }) {
+                steps[open].done = true
+                steps[open].failed = failed
+            }
         case .threadChanged:
             return true
         case .session, .end, .broke:

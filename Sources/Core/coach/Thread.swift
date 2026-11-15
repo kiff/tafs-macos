@@ -13,9 +13,33 @@ enum Thread {
         /// `kickoff` (a job's instruction, shown as a small note) or `message`.
         let kind: String
         let text: String
+        /// What the run did before these words: how long it worked, and its steps.
+        var work: Work?
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
+    }
+
+    /// A run's work, on its first message: the time from its start to its last words, and the
+    /// steps it took, in tafs cloud's words. A step with no words isn't shown; its tool's name
+    /// never is.
+    struct Work: Equatable {
+        struct Step: Equatable {
+            let words: String
+            let failed: Bool
+            /// tafs cloud's one line of why it failed.
+            let why: String?
+            /// Refused back unmade: nothing reached KIFF or the app, so it isn't a failure.
+            let notMade: Bool
+        }
+        let ms: Int
+        let steps: [Step]
+
+        /// "32 s", "4 min": how long it worked, to the second under two minutes.
+        var took: String {
+            let seconds = max(1, Int((Double(ms) / 1000).rounded()))
+            return seconds < 120 ? "\(seconds) s" : "\(seconds / 60) min"
+        }
     }
 
     /// A card Coach or a taf showed. The run pauses on one that waits, and its answer goes
@@ -40,6 +64,27 @@ enum Thread {
         let waits: String?
         /// What was answered, in tafs cloud's words, once it was.
         let answered: String?
+        /// A plan's steps (`steps`): each with its label and whether it is done.
+        var plan: [PlanStep] = []
+        /// `info`, `success`, `warning` or `error`, for a notice.
+        var tone: String?
+        /// The taf a hand-over (`result`) made: its name, and its id at tafs cloud.
+        var tafName: String?
+        var tafID: String?
+        /// The tools a hand-over lists, in KIFF's words for them.
+        var tools: [String] = []
+        /// On an approval whose connection is already made: tafs cloud's line for it.
+        var connectionWords: String?
+
+        struct PlanStep: Equatable {
+            let label: String
+            /// pending, active, done, failed or skipped.
+            let status: String
+        }
+
+        var isPlan: Bool { type == "steps" && !plan.isEmpty }
+        var isHandOver: Bool { type == "result" && tafName != nil }
+        var planDone: Int { plan.filter { $0.status == "done" }.count }
 
         var waitsForPerson: Bool { waits == "owner" && answered == nil }
         /// A choice between a few answers, which grants nothing: the only kind answered here.
@@ -71,8 +116,13 @@ enum Thread {
 
         enum Keys: String, CodingKey { case items, working }
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text }
-        enum CardKeys: String, CodingKey { case key, id, type, session, title, text, options, waits, answer }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
+        enum CardKeys: String, CodingKey { case key, id, type, session, title, text, options, waits, answer, steps, tone, taf, tools, connection, tafID = "taf_id" }
+        enum PlanKeys: String, CodingKey { case label, status }
+        enum TafKeys: String, CodingKey { case name }
+        enum ConnectionKeys: String, CodingKey { case done, words }
+        enum WorkKeys: String, CodingKey { case ms, steps }
+        enum WorkStepKeys: String, CodingKey { case words, failed, error, why, notMade = "not_made" }
         enum OptionKeys: String, CodingKey { case label, value }
         enum AnswerKeys: String, CodingKey { case words, state }
         enum HeldKeys: String, CodingKey { case exception }
@@ -93,8 +143,24 @@ enum Thread {
                           let from = try? m.decode(String.self, forKey: .from),
                           let text = try? m.decode(String.self, forKey: .text) else { continue }
                     let at = ((try? m.decodeIfPresent(String.self, forKey: .at)) ?? nil).flatMap(Thread.time)
+                    var work: Work?
+                    if let w = try? m.nestedContainer(keyedBy: WorkKeys.self, forKey: .work), let ms = try? w.decode(Int.self, forKey: .ms), ms >= 0 {
+                        var steps: [Work.Step] = []
+                        if var list = try? w.nestedUnkeyedContainer(forKey: .steps) {
+                            while !list.isAtEnd {
+                                guard let step = try? list.nestedContainer(keyedBy: WorkStepKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                                // A step is shown by tafs cloud's words for it, never by its tool's name.
+                                guard let words = (try? step.decodeIfPresent(String.self, forKey: .words)) ?? nil,
+                                      !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                                let failed = ((try? step.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) ?? ((try? step.decodeIfPresent(Bool.self, forKey: .error)) ?? nil) ?? false
+                                steps.append(Work.Step(words: words, failed: failed, why: (try? step.decodeIfPresent(String.self, forKey: .why)) ?? nil,
+                                                       notMade: ((try? step.decodeIfPresent(Bool.self, forKey: .notMade)) ?? nil) ?? false))
+                            }
+                        }
+                        work = Work(ms: ms, steps: steps)
+                    }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
-                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text), position: position))
+                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work), position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card) else { continue }
                     func text(_ key: CardKeys) -> String? {
@@ -115,8 +181,26 @@ enum Thread {
                     }
                     let answer = try? card.nestedContainer(keyedBy: AnswerKeys.self, forKey: .answer)
                     let answered = answer.flatMap { ((try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ((try? $0.decodeIfPresent(String.self, forKey: .state)) ?? nil) }
-                    items.append(.card(Card(key: text(.key) ?? id, id: id, type: text(.type) ?? "", session: text(.session), title: text(.title),
-                                            text: text(.text), options: options, waits: text(.waits), answered: answered), position: position))
+                    var made = Card(key: text(.key) ?? id, id: id, type: text(.type) ?? "", session: text(.session), title: text(.title),
+                                    text: text(.text), options: options, waits: text(.waits), answered: answered)
+                    if var list = try? card.nestedUnkeyedContainer(forKey: .steps) {
+                        while !list.isAtEnd {
+                            guard let step = try? list.nestedContainer(keyedBy: PlanKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                            guard let label = try? step.decode(String.self, forKey: .label), !label.isEmpty else { continue }
+                            made.plan.append(Card.PlanStep(label: label, status: ((try? step.decodeIfPresent(String.self, forKey: .status)) ?? nil) ?? "pending"))
+                        }
+                    }
+                    made.tone = text(.tone)
+                    made.tafID = text(.tafID)
+                    if let taf = try? card.nestedContainer(keyedBy: TafKeys.self, forKey: .taf) {
+                        made.tafName = ((try? taf.decodeIfPresent(String.self, forKey: .name)) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+                    }
+                    made.tools = (((try? card.decodeIfPresent([String].self, forKey: .tools)) ?? nil) ?? []).filter { !$0.isEmpty }
+                    if let connection = try? card.nestedContainer(keyedBy: ConnectionKeys.self, forKey: .connection),
+                       ((try? connection.decodeIfPresent(Bool.self, forKey: .done)) ?? nil) == true {
+                        made.connectionWords = ((try? connection.decodeIfPresent(String.self, forKey: .words)) ?? nil).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+                    }
+                    items.append(.card(made, position: position))
                 case "held":
                     guard let held = try? item.nestedContainer(keyedBy: HeldKeys.self, forKey: .held),
                           let exception = try? held.decode(String.self, forKey: .exception) else { continue }
@@ -216,6 +300,21 @@ extension CloudClient {
             throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
         }
         var fields = ["answer": option.value]
+        if let session = card.session { fields["session"] = session }
+        _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
+    }
+
+    /// Says no to a card whose answer would be a signature: `declined` for an approval, `not now`
+    /// for a sign-in. Saying no grants nothing, so it needs no signature. These two words are
+    /// the only answers this app ever sends such a card.
+    func decline(_ card: Thread.Card, in taf: String) async throws {
+        let word: String
+        switch card.type {
+        case "approval": word = "declined"
+        case "sign_in": word = "not now"
+        default: throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
+        }
+        var fields = ["answer": word]
         if let session = card.session { fields["session"] = session }
         _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
     }
