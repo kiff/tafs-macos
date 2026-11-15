@@ -133,6 +133,23 @@ As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
   while a message is on its way (`setupSending`).
 - New conversation on an improvement with nothing sent starts a plain one.
 
+## Reporting an answer (`AnswerReport`, `ReportAnswerSheet`)
+
+As the iPad's `reportable`, `ReportAnswerSheet`, `canReport` and `reportAnswer`
+(`ReportAnswerSheet.swift:1-137`, `AppModel.swift:5429-5465`, `TafsCloud.swift:1483-1512`):
+
+- **Report this answer**, with the flag mark, is in the context menu of an answer Coach or a taf wrote: never the
+  person's own, a run's kickoff, an empty one, or one tafs cloud has no id for yet.
+- Its sheet: what's wrong with it (Offensive, Harmful, Wrong, Other), a note of at most 1,000
+  characters (optional), and that a person at KIFF reads the report with the answer as it
+  was written. Send needs a reason.
+- `POST /v1/tafs/{id}/messages/{message}/report` with the reason, the note when there is one,
+  and the chat it's in (`session`, as the thread names each message).
+- Sent, it thanks the person, or says they had reported it already. Not sent, it stays open
+  with why: tafs cloud's words when it sent some, "This answer isn't on tafs cloud any more"
+  for a 404, else the app's own line. An answer that comes after the person signed out says
+  "You signed out." (`common.you_signed_out`), as the iPad's account guard.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever

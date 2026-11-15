@@ -9,6 +9,19 @@ private let answered = #"{"working":false,"items":[{"type":"message","message":{
 /// 2026-11-14T18:00:00Z, when the tests' person sends.
 private let sendTime = Date(timeIntervalSince1970: 1_794_679_200)
 
+/// Answers as canned, and does something first when a report is sent: the person signing out
+/// while it goes.
+private final class SigningOutTransport: Transport, @unchecked Sendable {
+    let canned: CannedTransport
+    var whileReporting: () async -> Void = {}
+    init(_ answers: [(Int, String)]) { canned = CannedTransport(answers) }
+
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        if request.path.hasSuffix("/report") { await whileReporting() }
+        return try await canned.send(request)
+    }
+}
+
 @MainActor
 private func make(_ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, () -> [TimeInterval]) {
     let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
@@ -220,5 +233,35 @@ let coachSendMacTests: [Test] = [
         await model.send(example: "How is it going?")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "How is it going?"])
         try expectEqual(model.draft, "kept")
+    }),
+    Test("a report says sent or already, tafs cloud's words, a gone answer, or the app's own line", awaiting: { @MainActor in
+        let kept = { (new: Bool) in #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":\#(new)}}"# }
+        let (model, transport, _) = await make([(200, kept(true)), (200, kept(false)), (429, #"{"error":"too_many","words":"Too many reports just now."}"#),
+                                                (404, #"{"error":"not_found"}"#), (500, #"{"error":"internal"}"#)])
+        let answer = Thread.Message(id: "m10", at: nil, from: "taf", kind: "message", text: "Done.", session: "s1")
+        let r1 = await model.report(answer, reason: .wrong, note: "  ")
+        try expectEqual(r1, .sent)
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["reason": "wrong", "session": "s1"])
+        let r2 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r2, .already)
+        let r3 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r3, .failed("Too many reports just now."))
+        let r4 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r4, .failed("This answer isn't on tafs cloud any more."))
+        let r5 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r5, .failed("It didn't reach KIFF. Try again."))
+        let unsent = Thread.Message(id: nil, at: nil, from: "taf", kind: "message", text: "Done.")
+        let r6 = await model.report(unsent, reason: .wrong, note: "")
+        try expectEqual(r6, .failed("This answer can't be reported from here."))
+    }),
+    Test("a report answered after the person signed out says so, as the iPad's accountGeneration guard", awaiting: { @MainActor in
+        let transport = SigningOutTransport([(200, setupAnswer), (200, noChats), (200, before),
+                                             (200, #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":true}}"#)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, now: { sendTime })
+        await model.load()
+        transport.whileReporting = { await MainActor.run { model.signedOut() } }
+        let answer = Thread.Message(id: "m1", at: nil, from: "taf", kind: "message", text: "What should your taf do?")
+        let outcome = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(outcome, .failed("You signed out."))
     }),
 ]
