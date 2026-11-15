@@ -173,11 +173,11 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.isEmpty, true)
         try expectEqual(model.chatIsEmpty, false)
         await model.send()
-        try expectEqual(transport.sent[3].path, "/v1/tafs/taf%2D1/improve")
+        try expectEqual(transport.sent[3].path, "/v1/tafs/taf-1/improve")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "Why was the refund held?"])
         try expectEqual(model.improving, nil)
         try expectEqual(model.chat, "s1")
-        try expectEqual(transport.sent[4].path, "/v1/tafs/taf%2Dcoach/conversation/s1")
+        try expectEqual(transport.sent[4].path, "/v1/tafs/taf-coach/conversation/s1")
         try expectEqual(model.pending, nil)
         try expectEqual(model.working, false)
         model.draft = "And now?"

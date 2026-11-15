@@ -86,7 +86,7 @@ let coachSendTests: [Test] = [
         let (client, transport) = cloud([(200, sentAnswer)])
         let sent = try await client.improve("taf-1", text: " Why was it held? ")
         try expectEqual(sent.session, "s1")
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf%2D1/improve")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-1/improve")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["text": "Why was it held?"])
         let none = try? await client.improve("taf-1", text: "   ")
         try expect(none == nil, "a blank message isn't sent")

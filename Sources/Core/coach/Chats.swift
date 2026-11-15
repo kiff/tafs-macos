@@ -42,7 +42,7 @@ extension CloudClient {
     /// the taf's job, Card and latest calls in front of the person's words.
     func improve(_ taf: String, text: String) async throws -> Outgoing.Sent {
         guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
-        let body = try await post("/v1/tafs/\(Self.query(taf))/improve", ["text": text])
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/improve", ["text": text])
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
     }
