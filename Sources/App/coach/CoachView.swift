@@ -79,8 +79,8 @@ final class CoachModel: ObservableObject {
         self.now = now
     }
 
-    /// Coach's own chat, not a taf's: only it has conversations.
-    private var isCoach: Bool { fixed == nil }
+    /// Coach's own chat, not a taf's: only it has conversations, and only its cards are answered.
+    var isCoach: Bool { fixed == nil }
 
     /// Where the next message goes, as the iPad's `setupTarget`: a new chat, the one shown, else
     /// the live one. Coach's all say they follow a new chat after a hand-over. A taf's chat
@@ -290,6 +290,55 @@ final class CoachModel: ObservableObject {
             await reload(coach)
         } catch {
             notAnswered[card.key] = Self.why(error)
+        }
+    }
+
+    /// The card an answer for `id` is for, as the iPad's `cardRef` (AppModel.swift:6708-6711): the
+    /// one waiting under that id, since Coach can use an id again, else the latest.
+    func cardRef(_ id: String) -> Thread.Card? {
+        guard case .loaded(_, let page) = state else { return nil }
+        let cards = page.items.compactMap { item -> Thread.Card? in if case .card(let card, _) = item { return card } else { return nil } }
+        return cards.last { $0.id == id && $0.answerState == nil } ?? cards.last { $0.id == id }
+    }
+
+    /// The key a card's answer goes by, its `cardRef`'s: what's on its way and why it didn't go.
+    func refKey(_ card: Thread.Card) -> String { cardRef(card.id)?.key ?? card.key }
+
+    /// Answers a questions card with every one of its questions answered, as the iPad's
+    /// `answer(_:_:)` (AppModel.swift:8355-8385): only in Coach's chat (`setupTaf`), for someone
+    /// who may use Coach (`mayUseCoach`, Keyboard.swift:70), to the card its id names now
+    /// (`cardRef`), in that card's chat. Whatever `waits` says, a card with no answer is answered,
+    /// as the iPad's `QuestionsCard`. The run that waited goes on in the chat tafs cloud names
+    /// (`settleSetupChat`), and it's followed. A card that no longer waits is read again as it is;
+    /// one refused for want of the AI-data consent stays quiet; anything else, a refusal too, says
+    /// the answer didn't reach Setup. An answer that comes back after sign-out is the session
+    /// before's: it's dropped.
+    func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer], mayUseCoach: Bool) async {
+        guard isCoach, mayUseCoach, case .loaded(let coach, _) = state, answering == nil else { return }
+        guard let ref = cardRef(card.id), ref.answerState != "answered", ref.isQuestions,
+              answers.count == ref.questions.count else { return }
+        answering = ref.key
+        defer { answering = nil }
+        let gen = accountGeneration
+        do {
+            let answered = try await cloud.answer(ref, questions: answers, in: coach.id)
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+            settle(answered.session)
+            await follow(coach)
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+            await reload(coach)
+        } catch let refusal as CloudRefusal where refusal.code == TafsCloud.aiConsentRequired {
+            // Refused for want of the AI-data consent: the card stays as it was, its answers as
+            // chosen, with nothing said, as the iPad's (AppModel.swift:8372-8376).
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+        } catch {
+            // Anything else, a refusal too, as the iPad's `answerDidNotReachSetup` (:8377-8381).
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = Words.app("coach.answer_did_not_reach_setup")
         }
     }
 
@@ -535,6 +584,9 @@ struct CoachView: View {
     var listed: Set<String> = []
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
+    /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
+    /// answered here.
+    var mayUseCoach = false
     /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back; nil
     /// draws no Back.
     var close: (() -> Void)? = nil
@@ -989,6 +1041,8 @@ struct CoachView: View {
             approval(card)
         } else if card.type == "notice" {
             notice(card)
+        } else if card.type == "questions" {
+            questions(card)
         } else if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
             choice(card)
         }
@@ -1183,6 +1237,19 @@ struct CoachView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
+        }
+    }
+
+    /// Several questions at once, as the iPad's `QuestionsCard` (QuestionsCard.swift:17-24):
+    /// answered, one folded line, "Your answers · {tafs cloud's words}"; with no answer, whatever
+    /// `waits` says, the card, in Coach's own chat for someone who may use Coach; else what it asks.
+    @ViewBuilder private func questions(_ card: Thread.Card) -> some View {
+        if card.answerState == "answered" {
+            outcomeLine("checkmark.circle.fill", Theme.ok, words("coach.questions.your_answers") + (card.answered ?? ""))
+        } else if model.isCoach, mayUseCoach, card.isQuestions {
+            QuestionsCard(model: model, card: card, mayUseCoach: mayUseCoach)
+        } else {
+            asking(card)
         }
     }
 
