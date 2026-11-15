@@ -17,10 +17,12 @@ enum Signing {
 
     /// The `KIFF-Device-Signature` header for a request, signed over the exact bytes sent.
     /// `path` is the request's path and query as sent. With `window`, the signature is the
-    /// kind KIFF takes inside that approval window.
+    /// kind KIFF takes inside that approval window. Signed now, its time is `SigningTime.next()`,
+    /// as the iPad's `send` (KIFFClient.swift:1625): milliseconds, never the same twice in this
+    /// app, since KIFF refuses a signature it has seen. `at` signs at a given second (tests).
     static func header(key: SigningKey, tenant: String, method: String, path: String, body: Data,
-                       at date: Date = Date(), window: String? = nil) throws -> String {
-        let signedAt = KIFFMessage.time(date)
+                       at date: Date? = nil, window: String? = nil) throws -> String {
+        let signedAt = date.map(KIFFMessage.time) ?? SigningTime.next()
         let message = KIFFMessage.request(tenant: tenant, method: method, path: path, bodyHash: sha256Hex(body),
                                           signedAt: signedAt, window: window)
         let signature = try key.sign(Data(message.utf8)).base64EncodedString()

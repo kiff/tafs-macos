@@ -54,6 +54,54 @@ panels.
   listed twice.
 - A slower answer to an older search is dropped.
 
+## Setting planque up (`PlanqueEnrolment`, `PlanqueClient.enrol`)
+
+The first part of connecting an app through Coach, ported from the iPad's `enrolPlanque`
+(`AppModel.swift:6267-6310`), `PlanqueClient.enrol(deviceKey:connectorKey:)`
+(`PlanqueClient.swift:107-111`) and `KIFFClient.mintConnectorKey` (`KIFFClient.swift:1406-1411`).
+planque keeps a taf's vendor sign-ins, so they never reach this Mac, tafs cloud, the agent or
+KIFF. It gets this device's key, and a KIFF key that connects tools and does nothing else.
+
+- **Asked first with no key.** `POST /v1/accounts/{tenant}/enrolment` with `{device_key}`. An
+  answer with `kept: true` is done, and nothing is minted.
+- **A key is minted and handed over only on `409 needs_key`.** A 2xx without `kept` mints
+  nothing and says connecting apps isn't set up, as Windows and Android: planque answered
+  oddly, and a key minted then could be left live in KIFF, where no device can revoke it. The
+  mint is `POST /v1/keys` with `{"label": "planque", "roles": ["connector"]}`, a signed setup
+  call. Its plaintext goes straight to planque in `{device_key, connector_key}`, and is never
+  kept on this Mac. **Once minted, it is handed over even if the session ends then**: dropping
+  it would leave it orphaned. The end is checked after.
+- **Anything else stops with why and mints nothing:** planque not reached, a 400, a 5xx, a
+  replayed signature, a changed enrolment. A second enrolment would likely fail too, and leave a
+  key live in KIFF that no device can revoke; the next try asks again.
+- **KIFF's 403 on the mint:** only an admin can connect apps (`coach.connect_admin_only`).
+- **planque's code-less 409, on either enrolment:** another device connects this account's
+  apps (`coach.connect_other_device`). A 409 with a code says why.
+- **Anything else:** "Connecting apps isn't set up. {why}" (`coach.connecting_not_set_up`),
+  with planque's own words, else the app's plain line for the status; never a code.
+- **A session that ends while it runs** does nothing more and says nothing, as the iPad's
+  `gen != accountGeneration`: the caller passes the account check (`ended`), read where the
+  iPad reads it (`AppModel.swift:6275`, `:6290`, `:6307`) and first in each refusal. A request
+  the system cancelled is the same. A sign-out doesn't cancel the task, so a key minted just
+  before is still handed over.
+- **Keys:** the enrolments are signed by this Mac's device key, which asks no one, as the
+  iPad's `signConfirmed`; so is the mint, at `SigningTime.next()` (milliseconds, never the same
+  twice, as `KIFFClient.swift:1625`). Neither uses the approval key.
+- **Who may run it (the gate)**, as the iPad's `setUpPlanque` and `startSetup`
+  (`AppModel.swift:6230-6249`, `:7556-7575`):
+  - only after the person confirmed the step, with Touch ID or the Mac's password over
+    `tafs.planque.v1|{tenant}`, or inside Start's own Touch ID (`:7567`);
+  - never in a view-only session, or one without a device key (`:6231`);
+  - the account is checked after the prompt (`:6241`, `:7569`);
+  - planque's `signer` is set only after the prompt, and cleared when the step ends (`defer`,
+    `:6246-6247`, `:7574-7575`).
+  Nothing calls it before that gate: Start brings the first caller (#106).
+- **Where this Mac differs from the iPad:**
+  - a 2xx without `kept` mints nothing (the iPad's `AppModel.swift:6276-6279` falls through to
+    the mint), as its own comment (`:6270-6271`), Windows and Android;
+  - a key minted just before the session ended is handed over, then it ends (the iPad returns
+    at `:6293` and drops the key, which stays live in KIFF).
+
 ## Not yet
 
 Connecting and signing in again from this screen, removing access, and a connection's
@@ -65,4 +113,9 @@ Each of the first three changes what a taf may do, so each comes with its approv
 `scripts/test.sh connections`: the catalog as tafs cloud sends it, rows that don't read, the
 two lists, a search's escaping and limit, paging without repeats, an unreadable catalog, the
 logo paths kept and dropped, each row's end, `by_key`, and **that nothing but `GET` is ever
-sent**. It writes `build/screenshots/connect-apps-*.png`.
+sent**. It writes `build/screenshots/connect-apps-*.png`. Setting planque up: kept, `needs_key`
+then one key minted and handed over, a 2xx without `kept` minting nothing, a key handed over
+when the session ends right after its mint, every stop that mints nothing, the code-less 409,
+KIFF's 403, no device or signer, a session that ends during the first enrolment (no mint), the
+system's cancellation of the hand-over (ended, never "not set up"), each stop's words, and (on a
+Mac) the three signatures checked as planque and KIFF check them, at three different times.

@@ -18,7 +18,7 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
     return (CloudClient(transport: transport, session: session), transport)
 }
 
-let connectionsTests: [Test] = [
+let connectionsAppsTests: [Test] = [
     Test("the catalog is read as tafs cloud sends it, and a row that doesn't read is left out", awaiting: {
         let (client, transport) = cloud([(200, appsPage)])
         let page = try await client.apps()

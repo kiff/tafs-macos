@@ -29,6 +29,7 @@ Every signature is ECDSA over P-256 and SHA-256, written as ASN.1 DER in standar
 | `kiff.request.v1` | `Signing.header` | A signed request: the tenant, the method, the path and query, the body's hash, the time. |
 | `kiff.request.v2` | `Signing.header(… window:)` | The same inside an approval window, with the window's id. |
 | `kiff.pair.claim.v1` | `Signing.claimProof` | Claiming a pairing: proof that this Mac holds the device key the phone approved. |
+| `planque.request.v1` | `PlanqueClient.enrol`'s `send` | This device's enrolment at planque (`POST /v1/accounts/{tenant}/enrolment`), over the exact body sent, as `Planque-Device-Signature: t={time},v1={signature},d={dev_…}`: the device key, as the iPad's `planque.signer` (`signConfirmed`). See [connections.md](connections.md), "Setting planque up". |
 | `planque.request.v1` | `PlanqueClient.grantsReadProof` | planque's proof that this device reads its own account's grants (`GET /v1/accounts/{tenant}/grants`, an empty body), sent with a taf's Setup read as `Planque-Device-Signature: t={time},v1={signature},d={dev_…}`. It reads; it grants nothing, so it asks no one, as the iPad's `signConfirmed`. |
 
 - **The exact bytes sent are the bytes signed.** The body is hashed as it goes on the wire.
