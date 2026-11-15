@@ -20,6 +20,13 @@ final class OverviewModel: ObservableObject {
         return []
     }
 
+    /// The list was read and has no taf. Not so while it loads, or when it couldn't be read:
+    /// then nobody is told to pick a job for a first taf they may already have.
+    var hasNoTafs: Bool {
+        if case .loaded(let page) = state { return page.tafs.isEmpty }
+        return false
+    }
+
     func load() async {
         do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
         // The line is only an invitation: if it can't be read, the sidebar just doesn't show one.
@@ -64,7 +71,6 @@ struct OverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
-        .task { await model.load() }
     }
 
     private func table(_ tafs: [Home.Taf]) -> some View {

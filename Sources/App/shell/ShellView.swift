@@ -111,7 +111,7 @@ struct ShellView: View {
     private var foot: some View {
         VStack(alignment: .leading, spacing: 8) {
             footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { selection = .coach }
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill) { selection = .coach }
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach) { selection = .coach }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     Image(systemName: Screen.account.symbol).font(.system(size: 20)).foregroundColor(Theme.ink)
@@ -130,7 +130,7 @@ struct ShellView: View {
         .padding(.horizontal, -12)
     }
 
-    private func footButton(_ title: String, symbol: String, fill: AnyShapeStyle, text: Color = .white, _ action: @escaping () -> Void) -> some View {
+    private func footButton(_ title: String, symbol: String, fill: AnyShapeStyle, text: Color = .white, selected: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
@@ -142,6 +142,7 @@ struct ShellView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.
