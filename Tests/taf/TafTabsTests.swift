@@ -107,7 +107,7 @@ let tafTabsTests: [Test] = [
         let json = #"{"versions":[{"n":1,"note":"First","created":"2026-11-01T09:00:00Z","live":false,"trials":[{"started":"2026-11-02T09:00:00Z","ended":"2026-11-03T09:00:00Z","why":"back","calls":3,"held":1,"refused":0}]},{"n":2,"note":"Reads invoices too","by_words":"By Coach mode","created":"2026-11-10T09:00:00Z","live":true,"draft":"d1"}],"switching":null}"#
         let transport = CannedTransport([(200, json)])
         let state = try await CloudClient(transport: transport, session: session).versions(of: "taf-1")
-        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/tafs/taf%2D1/versions"])
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/tafs/taf-1/versions"])
         try expectEqual(state.versions.map(\.n), [1, 2])
         try expectEqual(state.switching, nil)
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
@@ -134,7 +134,7 @@ let tafTabsTests: [Test] = [
         let client = CloudClient(transport: transport, session: session)
         let cancelled = try await client.cancelSwitch(of: "taf-1")
         try expectEqual(cancelled, true)
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "DELETE /v1/tafs/taf%2D1/switching")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "DELETE /v1/tafs/taf-1/switching")
         try expectEqual(transport.sent[0].headers["Authorization"], "Bearer tok")
         do { _ = try await client.cancelSwitch(of: "taf-1"); throw Failure(description: "cancelled") } catch let refusal as CloudRefusal {
             try expectEqual(refusal.words, "Nothing to cancel.")

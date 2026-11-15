@@ -64,7 +64,7 @@ let tafScreenTests: [Test] = [
         try expectEqual(model.versionList?.map(\.n), [1, 2])
         try expectEqual(model.versionError, "Its versions couldn't be loaded. down")
         await model.cancelSwitch()
-        try expectEqual(transport.sent[2].method + " " + transport.sent[2].path, "DELETE /v1/tafs/taf%2D1/switching")
+        try expectEqual(transport.sent[2].method + " " + transport.sent[2].path, "DELETE /v1/tafs/taf-1/switching")
         try expectEqual(model.versionList, [])
         try expectEqual(model.switching, nil)
         try expectEqual(model.versionError, nil)

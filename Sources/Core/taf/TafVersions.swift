@@ -87,7 +87,7 @@ enum TafVersions {
 extension CloudClient {
     /// A taf's versions, oldest first, the live one marked, and a switch under way.
     func versions(of taf: String) async throws -> TafVersions.State {
-        try await get("/v1/tafs/\(Self.query(taf))/versions")
+        try await get("/v1/tafs/\(Self.escaped(taf))/versions")
     }
 
     /// Drops a switch under way, as the iPad's `cancelSwitch`: the live version runs again. It
@@ -95,7 +95,7 @@ extension CloudClient {
     @discardableResult
     func cancelSwitch(of taf: String) async throws -> Bool {
         struct Answer: Decodable { let cancelled: Bool }
-        let request = HTTPRequest(method: "DELETE", path: "/v1/tafs/\(Self.query(taf))/switching", headers: [
+        let request = HTTPRequest(method: "DELETE", path: "/v1/tafs/\(Self.escaped(taf))/switching", headers: [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
         ])
