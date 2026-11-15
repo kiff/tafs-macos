@@ -11,6 +11,20 @@ private func model(_ answers: [(Int, String)], canRemoveOthers: Bool = true) -> 
     return (DevicesModel(account: AccountClient(transport: transport, session: session), canRemoveOthers: canRemoveOthers), transport)
 }
 
+/// Whether a device's sheet draws a colour: Sign out's red.
+@MainActor
+private func sheetDraws<V: View>(_ wanted: UInt32, _ view: V, words: Words) -> Bool {
+    let size = CGSize(width: 380, height: 240)
+    guard let bitmap = Snapshot.bitmap(of: view.environment(\.words, words), size: size) else { return false }
+    for y in stride(from: 0, to: Int(size.height), by: 2) {
+        for x in stride(from: 0, to: Int(size.width), by: 1) {
+            guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
+            if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
+        }
+    }
+    return false
+}
+
 /// The colours drawn in a view, to tell whether Sign out's red is among them.
 @MainActor
 private func draws(_ wanted: UInt32, in view: DevicesView, words: Words) -> Bool {
@@ -54,10 +68,13 @@ let accountScreenTests: [Test] = [
         await without.remove(devices[1])
         try expectEqual(transport.sent.map(\.method), ["GET"])
         try expectEqual(without.state, .loaded(devices))
-        // The same list on a Mac that may: the button is there, so the check above can fail.
+        // Each row opens its device's sheet. This Mac's has Sign out, in red, so the check can
+        // find it; another device's says it takes a device that can approve, with no red.
+        try expect(sheetDraws(Palette.no.light, DevicesView(model: without).deviceSheet(devices[0]), words: words), "this Mac's Sign out is drawn")
+        try expect(!sheetDraws(Palette.no.light, DevicesView(model: without).deviceSheet(devices[1]), words: words), "no Sign out for another device")
         let (with, _) = model([(200, two)])
         await with.load()
-        try expect(draws(Palette.no.light, in: DevicesView(model: with), words: words), "Sign out is drawn when it may")
+        try expect(sheetDraws(Palette.no.light, DevicesView(model: with).deviceSheet(devices[1]), words: words), "Sign out for another device when it may")
     }),
     Test("the default is that a Mac may not sign another device out", awaiting: { @MainActor in
         let transport = CannedTransport([])

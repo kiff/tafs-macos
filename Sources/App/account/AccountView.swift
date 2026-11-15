@@ -109,7 +109,7 @@ struct AccountView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, Look.inset).padding(.top, 18)
-                DevicesView(model: devices)
+                DevicesView(model: devices, signOutThisMac: signOut)
             }
             .background(Theme.background)
         } else {
