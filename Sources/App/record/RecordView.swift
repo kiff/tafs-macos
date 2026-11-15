@@ -185,6 +185,8 @@ struct RecordView: View {
     @ObservedObject var model: RecordModel
     /// The person's tafs: a chip each, and each call's taf colour.
     var tafs: [Home.Taf] = []
+    /// The account's time zone, as KIFF says it: the days are the account's, as the iPad's.
+    var timeZone: String? = nil
 
     var body: some View {
         ScrollView {
@@ -231,13 +233,13 @@ struct RecordView: View {
             if model.shown.isEmpty {
                 Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
             }
-            ForEach(model.shown) { group in
-                // The day, as the iPad's: 11 medium monospaced, in capitals.
-                if !group.title.isEmpty {
-                    Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
-                }
+            // By day in the account's calendar, newest first, each titled as the iPad's
+            // `dayTitle`: "TODAY · NOV 15", in 11 medium monospaced capitals.
+            let time = AccountTime(timeZone)
+            ForEach(Record.days(model.shown, calendar: time.calendar)) { day in
+                Text(verbatim: time.dayTitle(day.start, words: words).uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
                 VStack(spacing: 8) {
-                    ForEach(group.entries) { entry in
+                    ForEach(day.entries) { entry in
                         row(entry)
                             .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))

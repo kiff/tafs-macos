@@ -39,7 +39,7 @@ answer as sent.
 - **Filters** (`Record.Filter`), the iPad's: All, Money moved (done or approved, with an
   amount), Stopped (refused, not done, revoked) and Waiting (held, sending, unknown). They
   choose among the calls already read; a group left with none is left out.
-- Each group has tafs cloud's title; each row has a dot for how it went, in the iPad's kind
+- The list is by day (below); each row has a dot for how it went, in the iPad's kind
   colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf and what it is about, its amount and its time.
 - The list (not a search) reads its next page when its end comes into view, and joins its group.
 - A cursor tafs cloud no longer takes (a call was made since) starts the search again.
@@ -65,7 +65,12 @@ It writes `build/screenshots/record-*.png`. There is no fixture for the Record i
 
 - **Taf chips** above the filters: "All tafs", then one pill a taf with its colour's dot. A
   taf's pill keeps that taf's calls (`Record.only(taf:in:)`), with the filter.
-- **A day** is tafs cloud's title, in capitals, 11 medium monospaced, `dim`. The iPad adds the
+- **A day** is the iPad's (`RecordView.days` and `dayTitle`, RecordView.swift:134-151): the
+  calls shown, whichever group tafs cloud sent them in, by the day they were made in the
+  account's time zone (KIFF's `time_zone`), newest first (`Record.days`). Its title is "Today ·
+  Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13" (`AccountTime.dayTitle`,
+  `calendar.today_date`, `calendar.yesterday_date`), in capitals, 11 medium monospaced, `dim`.
+  A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. The iPad adds the
   day's spend ("€640 spent"); the Record sends each call's amount as text only, so the Mac
   doesn't add them up.
 - **A call** is a panel (radius 14, padding 14): its status dot (9), then its taf's dot and
