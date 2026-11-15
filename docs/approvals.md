@@ -39,7 +39,9 @@ makes an answer count only for the hold as the person saw it.
   Mac has), prompted "Answer {summary}" (`needs_you.prompt.answer`). A prompt the person
   closed keeps the call and says nothing was approved
   (`approval.cancelled_nothing_approved_request_kept`); any other failure says it wasn't sent
-  (`common.not_sent_unconfirmed`). Neither signs nor sends.
+  (`common.not_sent_unconfirmed`). Neither signs nor sends. Those words show as they are:
+  only KIFF's own refusal reads "KIFF didn't take the answer: …" (`needs_you.refused.other`), as
+  the iPad's `lastError` (`AppModel.swift:2972-2979` against `:2994`).
   - **Mac difference:** the summary is the call's title, else its action, as its card shows
     it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
     for a call without arguments) isn't ported yet.

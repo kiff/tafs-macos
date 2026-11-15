@@ -41,7 +41,7 @@ let approvalsScreenTests: [Test] = [
         await model.load()
         guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
         await model.refuse(calls[0])
-        try expectEqual(model.notTaken["exc_1"], "approver_only")
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": "approver_only"]))
         try expectEqual(model.count, 1)
     }),
     Test("Refuse asks for Touch ID or the Mac's password first, as the iPad's sign(_:reason:): closed, or failed, nothing is sent", awaiting: { @MainActor in
@@ -57,14 +57,15 @@ let approvalsScreenTests: [Test] = [
         await cancelled.load()
         await cancelled.refuse(calls[0])
         try expectEqual(cancelledTransport.sent.map(\.method), ["GET"])
-        try expectEqual(cancelled.notTaken["exc_1"], Words.app("approval.cancelled_nothing_approved_request_kept"))
+        // The line the card shows is the prompt's own words, never "KIFF didn't take the answer".
+        try expectEqual(NeedsYouView.notTakenLine(cancelled, calls[0]), Words.app("approval.cancelled_nothing_approved_request_kept"))
         try expectEqual(cancelled.count, 1)
         // Any other failure: not sent, for want of a confirmation.
         let (failed, failedTransport) = model([(200, one)], confirm: { _ in throw LAError(.authenticationFailed) })
         await failed.load()
         await failed.refuse(calls[0])
         try expectEqual(failedTransport.sent.map(\.method), ["GET"])
-        try expectEqual(failed.notTaken["exc_1"], Words.app("common.not_sent_unconfirmed"))
+        try expectEqual(NeedsYouView.notTakenLine(failed, calls[0]), Words.app("common.not_sent_unconfirmed"))
         try expectEqual(failed.answering, nil)
     }),
     Test("a list that can't be read says so, and is never shown as empty", awaiting: { @MainActor in
