@@ -15,6 +15,8 @@ enum Thread {
         let text: String
         /// What the run did before these words: how long it worked, and its steps.
         var work: Work?
+        /// The chat it's in, as tafs cloud names it: a report of it names the chat too.
+        var session: String? = nil
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
@@ -151,8 +153,12 @@ enum Thread {
         let working: Bool
 
         enum Keys: String, CodingKey { case items, working }
+
+        init(items: [Item], working: Bool) { self.items = items; self.working = working }
+        /// A new conversation, before its first message: nothing to read yet.
+        static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
@@ -200,7 +206,8 @@ enum Thread {
                         work = Work(ms: ms, steps: steps)
                     }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
-                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work), position: position))
+                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work,
+                                                  session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil), position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
                           let shown = try? card.nestedContainer(keyedBy: ComponentKeys.self, forKey: .component) else { continue }
@@ -289,6 +296,15 @@ enum Thread {
 
         /// Whether the person's latest message in the thread is this text, sent at or after
         /// `since` (give or take a minute of clock difference): a first try that did arrive.
+        /// Whether the person's words are in the thread, written at or after `since`: how a sent
+        /// message tafs cloud gave no id for is found, as the iPad's `SentMessages.merge`.
+        func hasPersons(_ text: String, since: Date) -> Bool {
+            items.contains { item in
+                guard case .message(let message, _) = item, message.fromPerson, let at = message.at else { return false }
+                return message.text == text && at >= since
+            }
+        }
+
         func hasPersonsLast(_ text: String, since: Date) -> Bool {
             for item in items.reversed() {
                 guard case .message(let message, _) = item, message.fromPerson else { continue }
@@ -345,7 +361,10 @@ enum Outgoing {
     struct Sent: Decodable, Equatable {
         struct Message: Decodable, Equatable { let id: String }
         let session: String
+        /// tafs cloud started a new chat for it (the chat named had handed a taf over).
+        let newSession: Bool
         let message: Message?
+        enum CodingKeys: String, CodingKey { case session, message, newSession = "new_session" }
     }
 }
 
@@ -357,11 +376,11 @@ extension CloudClient {
         return answer.setup
     }
 
-    /// Sends the person's message to a taf's live chat, or to Coach's. It starts a run: only
-    /// ever called for what the person typed and sent.
-    func send(_ text: String, to taf: String) async throws -> Outgoing.Sent {
+    /// Sends the person's message to a taf's chat: its live one unless `target` names one or
+    /// asks for a new one. It starts a run: only ever called for what the person typed and sent.
+    func send(_ text: String, to taf: String, target: ChatTarget = .live) async throws -> Outgoing.Sent {
         guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
-        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", ["text": text])
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", body: ChatTarget.Message(text, target))
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
     }
@@ -397,8 +416,8 @@ extension CloudClient {
         _ = try await post("/v1/me/ai-consent", ["version": version])
     }
 
-    /// The thread of the person's chats with a taf, or with Coach.
-    func thread(of taf: String) async throws -> Thread.Page {
-        try await get("/v1/tafs/\(Self.escaped(taf))/conversation")
+    /// The thread of the person's chats with a taf, or with Coach; with `session`, that chat's alone.
+    func thread(of taf: String, session: String? = nil) async throws -> Thread.Page {
+        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""))
     }
 }
