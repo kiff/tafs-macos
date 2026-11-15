@@ -49,10 +49,10 @@ let usageRequestScreenTests: [Test] = [
     }),
     Test("a decline asks for Touch ID or the Mac's password, then is signed; closed, nothing is sent or said", awaiting: { @MainActor in
         var asked: [String] = []
-        let (model, transport) = model([(200, teamUsage), (200, packRequestAnswer), (200, teamUsage)], confirm: { asked.append($0) })
-        await model.load()
-        guard let request = model.usage?.requests?.first else { throw Failure(description: "no request") }
-        let got3 = await model.declineRequest(request, note: " Not now ")
+        let (admin, transport) = model([(200, teamUsage), (200, packRequestAnswer), (200, teamUsage)], confirm: { asked.append($0) })
+        await admin.load()
+        guard let request = admin.usage?.requests?.first else { throw Failure(description: "no request") }
+        let got3 = await admin.declineRequest(request, note: " Not now ")
         try expectEqual(got3, true)
         try expectEqual(asked, [Words.app("billing.request.decline_prompt")])
         try expectEqual(transport.sent[1].path, "/v1/me/pack-requests/req_5/decline")
