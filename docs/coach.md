@@ -346,6 +346,42 @@ chat and a taf's alike:
   The open panel's files are read inside their security scope, as on the iPad, though the app
   isn't sandboxed.
 
+## Dictating (`Dictation`, `MicButton`, `DictationBar`)
+
+As the iPad's `MicButton.swift` and `Services/Dictation.swift`: the mic in the message bar,
+in Coach and in a taf's chat, turns speech into text **into the box**. Nothing is sent by voice:
+the words wait until the person sends them, and sending, or leaving the chat, stops dictating.
+
+- **On this Mac only:** recognition must run on the device (`requiresOnDeviceRecognition`),
+  so no audio leaves the Mac. The system asks for speech recognition, then the microphone,
+  with the iPad's line (`NSSpeechRecognitionUsageDescription`, `NSMicrophoneUsageDescription`
+  in `App/Info.plist`, the shared `voice.tafs_turns_your_voice_into`).
+- **Into the box:** after what was there, one space between; after a pause the next words go
+  after the earlier ones, never over them; a revision of what's being heard replaces it.
+  Cancel (the listening bar's ×) puts the box back as it was.
+- **When the recognizer ends by itself** it listens again, after what was heard; after three
+  ends with nothing heard it stops, quietly after silence, saying why after an error. A restart
+  that fails says why.
+- **Languages:** the device's on-device languages, the person's preferred first, one form each;
+  the chip switches among them and the choice is kept. It starts in the app's language.
+- **Hints:** the app's names and the account's tafs, so dictation spells them right.
+- **One for the app:** the signed-in window keeps one `Dictation`, as the iPad's
+  `AppModel.dictation`. Coach's chat and each taf's chat share it, so only one listens.
+- **Refused or unavailable:** the alert says why in the shared words. Where the words name
+  Settings, a button opens System Preferences on the right list: Keyboard › Dictation,
+  Security & Privacy › Speech Recognition, or its Microphone list.
+- **Minimised, or another app in front,** dictation keeps listening, as the iPad's does until
+  its chat goes. Leaving the chat stops it.
+
+Mac differences: macOS's permission prompt doesn't hold the window, as the iPad's does, so a
+start stopped or left while the system asks starts nothing once it answers. A Mac with no
+microphone (no input channels) says dictation couldn't start, where the iPad never needs to.
+The Mac has no list of the person's keyboards, so their preferred languages
+lead; the box has no insertion point to read, so dictation goes at the end; there is no audio
+session to set up, and the microphone is asked through `AVCaptureDevice`; punctuation is added
+from macOS 13 (`addsPunctuation`). The shared words name the iPhone's and iPad's Settings paths
+("Settings › tafs › Microphone"); Mac words for them come from kiff/tafs.
+
 ## The layout
 
 To the iPad's: the screen's name small and centred at the top; the chat on Coach's own wash;

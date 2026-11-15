@@ -157,7 +157,7 @@ struct ShellView: View {
                 Circle().fill(Theme.amber).frame(width: 8, height: 8).padding(.top, 5).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: row.title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
-                    if let line = row.line(words, time: { Self.clock.string(from: $0) }) {
+                    if let line = row.line(words, time: { clock.string(from: $0) }) {
                         Text(verbatim: line).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1)
                     }
                 }
@@ -169,13 +169,8 @@ struct ShellView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The time to answer by, as this Mac shows a time.
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    /// The time to answer by, as the app shows a time, in its language.
+    private var clock: DateFormatter { AppDates.formatter(words, time: .short) }
 
     private func item(_ screen: Screen) -> some View {
         // A taf's page open in place of the screen: no screen row is the chosen one.
@@ -219,7 +214,7 @@ struct ShellView: View {
                 } else if let finish = taf.finishWords {
                     Text(verbatim: finish).font(.system(size: 13)).foregroundColor(Theme.amberText).lineLimit(1)
                 } else {
-                    Text(verbatim: taf.now(words, time: { Self.clock.string(from: $0) })).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(1)
+                    Text(verbatim: taf.now(words, time: { clock.string(from: $0) })).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(1)
                 }
             }
         }

@@ -19,10 +19,7 @@ struct AccountTime {
 
     /// The time of day, as 14:05, in the account's zone (the iPad's `shortTime`).
     func shortTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.timeZone = zone
-        return f.string(from: date)
+        AppDates.fixed("HH:mm", zone: zone).string(from: date)
     }
 
     /// `shortTime`, with the zone's short name when it isn't this Mac's (`zonedShortTime`).
@@ -39,9 +36,13 @@ struct AccountTime {
     }
 
     /// A day's title in the Record, as the iPad's `RecordView.dayTitle` (RecordView.swift:146-151):
-    /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone.
-    func dayTitle(_ day: Date, words: Words, now: Date = Date()) -> String {
-        var short = Date.FormatStyle.dateTime.day().month(.abbreviated)
+    /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone and
+    /// the app's language.
+    func dayTitle(_ day: Date, words: Words, now: Date = Date(), region: String? = Locale.current.regionCode) -> String {
+        // In the app's language, the words' own, with this Mac's region: a Spanish Mac showing the app
+        // in English reads "Today · Nov 15", as the iPad's formatter in its app language.
+        let locale = AppDates.locale(words, region: region)
+        var short = Date.FormatStyle(locale: locale).day().month(.abbreviated)
         short.timeZone = zone
         let date = day.formatted(short)
         let calendar = self.calendar
@@ -49,7 +50,7 @@ struct AccountTime {
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(day, inSameDayAs: yesterday) {
             return words("calendar.yesterday_date", ["date": date])
         }
-        var weekday = Date.FormatStyle.dateTime.weekday(.wide)
+        var weekday = Date.FormatStyle(locale: locale).weekday(.wide)
         weekday.timeZone = zone
         return day.formatted(weekday) + " · " + date
     }
@@ -57,8 +58,8 @@ struct AccountTime {
     /// A date in a style, in the account's zone, with its short name when it isn't this
     /// Mac's (`zonedShown(date:time:)`).
     func zonedShown(_ date: Date, date dateStyle: Date.FormatStyle.DateStyle, time timeStyle: Date.FormatStyle.TimeStyle,
-                    here: TimeZone = .current) -> String {
-        var style = Date.FormatStyle(date: dateStyle, time: timeStyle)
+                    words: Words, here: TimeZone = .current, region: String? = Locale.current.regionCode) -> String {
+        var style = Date.FormatStyle(date: dateStyle, time: timeStyle, locale: AppDates.locale(words, region: region))
         style.timeZone = zone
         return date.formatted(style) + label(at: date, here: here)
     }

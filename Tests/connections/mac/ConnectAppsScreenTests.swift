@@ -10,7 +10,7 @@ private func make(_ answers: [(Int, String)]) -> (ConnectAppsModel, CannedTransp
     return (ConnectAppsModel(cloud: CloudClient(transport: transport, session: session)), transport)
 }
 
-let connectionsMacTests: [Test] = [
+let connectAppsMacTests: [Test] = [
     Test("yours come first and apart from the catalog, and the next page lists no app twice", awaiting: { @MainActor in
         let (model, transport) = make([(200, appsPage), (200, second)])
         await model.load()
