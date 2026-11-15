@@ -325,10 +325,18 @@ the words wait until the person sends them, and sending, or leaving the chat, st
 - **Languages:** the device's on-device languages, the person's preferred first, one form each;
   the chip switches among them and the choice is kept. It starts in the app's language.
 - **Hints:** the app's names and the account's tafs, so dictation spells them right.
-- **Refused or unavailable:** the alert says why in the shared words, with a way to System
-  Preferences' Security & Privacy › Privacy where the words name Settings.
+- **One for the app:** the signed-in window keeps one `Dictation`, as the iPad's
+  `AppModel.dictation`. Coach's chat and each taf's chat share it, so only one listens.
+- **Refused or unavailable:** the alert says why in the shared words. Where the words name
+  Settings, a button opens System Preferences on the right list: Keyboard › Dictation,
+  Security & Privacy › Speech Recognition, or its Microphone list.
+- **Minimised, or another app in front,** dictation keeps listening, as the iPad's does until
+  its chat goes. Leaving the chat stops it.
 
-Mac differences: the Mac has no list of the person's keyboards, so their preferred languages
+Mac differences: macOS's permission prompt doesn't hold the window, as the iPad's does, so a
+start stopped or left while the system asks starts nothing once it answers. A Mac with no
+microphone (no input channels) says dictation couldn't start, where the iPad never needs to.
+The Mac has no list of the person's keyboards, so their preferred languages
 lead; the box has no insertion point to read, so dictation goes at the end; there is no audio
 session to set up, and the microphone is asked through `AVCaptureDevice`; punctuation is added
 from macOS 13 (`addsPunctuation`). The shared words name the iPhone's and iPad's Settings paths

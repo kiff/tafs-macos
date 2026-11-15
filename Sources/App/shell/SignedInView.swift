@@ -5,6 +5,9 @@ struct SignedInView: View {
     /// Whether the app is in front: back in front, the lists are read again.
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.words) private var words
+    /// The one dictation for the signed-in app, as the iPad's `AppModel.dictation`
+    /// (AppModel.swift:260): Coach's and each taf's chat share it, so only one listens.
+    @StateObject private var dictation = Dictation()
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
     @StateObject private var people: PeopleModel
@@ -110,7 +113,7 @@ struct SignedInView: View {
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach,
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach, dictation: dictation,
                                                   hints: Dictating.hints(tafs: overview.tafs.map(\.name))))
             case .account: return AnyView(accountScreen)
             }
@@ -276,7 +279,8 @@ struct SignedInView: View {
                                openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }, me: accountModel.me,
                                doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
                                myEmail: accountModel.me?.email,
-                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email), tab: tafTab).id(taf.id))
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
+                               dictation: dictation, tab: tafTab).id(taf.id))
     }
 
     private var accountScreen: some View {

@@ -47,7 +47,7 @@ struct MicButton: View {
         .alert(words("voice.title"), isPresented: Binding(get: { blocked != nil }, set: { if !$0 { dictation.dismiss() } })) {
             // As the iPad's: a way to the settings when the words name them; on a Mac, its
             // Security & Privacy pane, where the microphone and speech recognition are allowed.
-            if blocked?.contains("Settings") == true, let url = Self.privacy {
+            if let blocked, blocked.contains("Settings"), let url = Self.privacy(for: blocked) {
                 Button(words("voice.open_settings")) {
                     dictation.dismiss()
                     NSWorkspace.shared.open(url)
@@ -65,8 +65,16 @@ struct MicButton: View {
         return nil
     }
 
-    /// System Preferences' Security & Privacy › Privacy, the Mac's place for these permissions.
-    static let privacy = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy")
+    /// Where System Preferences turns on what the words are about: Keyboard › Dictation when
+    /// dictation isn't on this Mac; Security & Privacy's Speech Recognition list when speech
+    /// recognition is off; else its Microphone list.
+    static func privacy(for why: String) -> URL? {
+        if why == Words.app("voice.dictation_not_add_keyboard_dictation", ["device": "Mac"]) {
+            return URL(string: "x-apple.systempreferences:com.apple.preference.keyboard?Dictation")
+        }
+        let speech = why == Words.app("voice.speech_recognition_off_tafs_turn")
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?" + (speech ? "Privacy_SpeechRecognition" : "Privacy_Microphone"))
+    }
 }
 
 /// Under the message bar while dictating, as the iPad's `DictationBar` (Views/MicButton.swift:63-96):

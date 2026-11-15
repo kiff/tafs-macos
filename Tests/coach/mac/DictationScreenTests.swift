@@ -13,11 +13,18 @@ private final class StandInSpeech: SpeechEngine {
     var starts = 0
     /// From this start on, starting throws: the microphone was taken.
     var failFrom: Int?
+    /// While set, `authorize` waits until the test lets it go, as the system's prompt would.
+    var holding = false
+    private(set) var asking: CheckedContinuation<Void, Never>?
     private var onText: (@Sendable (String, Bool) -> Void)?
     private var onLevel: (@Sendable (Float) -> Void)?
     private var onEnd: (@Sendable (String?) -> Void)?
 
-    func authorize() async -> String? { refused }
+    func authorize() async -> String? {
+        if holding { await withCheckedContinuation { asking = $0 } }
+        return refused
+    }
+    func answer() { asking?.resume(); asking = nil }
     func languages() -> [Dictation.Language] { have }
     var noLanguage: String { "no language" }
     func unavailable(_ language: Dictation.Language) -> String? { notHere }
@@ -189,6 +196,37 @@ let coachDictationMacTests: [Test] = [
         try expectEqual(dictation.levels.count, Dictation.levelCount)
         dictation.stop()
         try expectEqual(dictation.levels, [])
+    }),
+    Test("stopped while the system asks for permission, nothing starts once it answers", awaiting: { @MainActor in
+        let speech = StandInSpeech()
+        speech.holding = true
+        let dictation = Dictation(engine: speech, language: .english)
+        // Nothing captured is changed from the task: its write is never called once stopped.
+        let starting = Task { await dictation.start(text: "Refund", hints: []) { _ in } }
+        for _ in 0..<1_000 where speech.asking == nil { await Task.yield() }
+        try expectEqual(dictation.state, .starting)
+        dictation.stop()
+        speech.answer()
+        await starting.value
+        try expectEqual(speech.starts, 0)
+        try expectEqual(dictation.state, .idle)
+    }),
+    Test("sending stops dictating, and so does leaving the chat, as the iPad's", awaiting: { @MainActor in
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
+        let model = CoachModel(cloud: CloudClient(transport: CannedTransport([]), session: session), sleep: { _ in })
+        let speech = StandInSpeech()
+        let dictation = Dictation(engine: speech, language: .english)
+        await dictation.start(text: "", hints: []) { _ in }
+        try expectEqual(dictation.state, .listening)
+        CoachView(model: model, dictation: dictation).send()
+        try expectEqual(dictation.state, .idle)
+        try expectEqual(speech.stops, 1)
+        await dictation.start(text: "", hints: []) { _ in }
+        try expectEqual(dictation.state, .listening)
+        CoachView(model: model, dictation: dictation).leave()
+        try expectEqual(dictation.state, .idle)
+        // Without the app's dictation, a chat draws no mic and has nothing to stop.
+        CoachView(model: model).leave()
     }),
     Test("the screenshot: the mic, the language switch and the listening bar in Coach's message bar", awaiting: { @MainActor in
         let speech = StandInSpeech()

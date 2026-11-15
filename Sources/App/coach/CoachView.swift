@@ -599,7 +599,8 @@ struct CoachView: View {
     /// Previous conversations is open.
     @State private var showingChats = false
     /// Speaking a message instead of typing it, into this chat's box (`MicButton`).
-    @StateObject private var dictation = Dictation()
+    /// The signed-in app's one dictation, as the iPad's `model.dictation`; nil draws no mic.
+    var dictation: Dictation? = nil
     /// The words the person is likely to say, so dictation spells them right (`Dictating.hints`).
     var hints: [String] = []
     @State private var planOpen = false
@@ -754,7 +755,9 @@ struct CoachView: View {
                 HStack {
                     Spacer()
                     // Speak instead of typing, as the iPad's: the words wait in the box, unsent.
-                    MicButton(dictation: dictation, text: $model.draft, hints: hints.isEmpty ? Dictating.hints(tafs: []) : hints)
+                    if let dictation {
+                        MicButton(dictation: dictation, text: $model.draft, hints: hints.isEmpty ? Dictating.hints(tafs: []) : hints)
+                    }
                     Button { send() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundColor(Theme.onFill)
                             .frame(width: 40, height: 40)
@@ -772,15 +775,19 @@ struct CoachView: View {
             // The iPad's bar: the background with a faint shadow upward, apart from the wash.
             .background(Theme.background.shadow(color: Theme.ink.opacity(0.06), radius: 6, x: 0, y: -2))
             // Leaving the chat stops dictating, so its words never land in another chat's box.
-            .onDisappear { dictation.stop() }
-            DictationBar(dictation: dictation)
+            .onDisappear { leave() }
+            if let dictation { DictationBar(dictation: dictation) }
         }
     }
 
+    /// Leaving the chat stops dictating, so its words never land in another chat's box, as the
+    /// iPad's `.onDisappear { model.dictation.stop() }` (SetupChatView.swift:759).
+    func leave() { dictation?.stop() }
+
     /// Sending stops dictating, as the iPad's `send()`: what was heard goes with it, as it
     /// stands in the box.
-    private func send() {
-        dictation.stop()
+    func send() {
+        dictation?.stop()
         Task { await model.send() }
     }
 

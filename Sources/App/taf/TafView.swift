@@ -113,6 +113,8 @@ struct TafView: View {
     var myEmail: String? = nil
     /// Who uses the taf, under its head for whoever manages it; nil where nothing reads it.
     var shareLine: ShareLine? = nil
+    /// The signed-in app's one dictation, for the taf's chat.
+    var dictation: Dictation? = nil
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
@@ -177,7 +179,7 @@ struct TafView: View {
     /// The chat, with the Card beside it as on the iPad.
     private var chatTab: some View {
         HStack(alignment: .top, spacing: 20) {
-            CoachView(model: chat, embedded: true)
+            CoachView(model: chat, embedded: true, dictation: dictation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if !taf.cards.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {

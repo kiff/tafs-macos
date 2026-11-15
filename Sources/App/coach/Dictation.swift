@@ -76,7 +76,12 @@ final class Dictation: ObservableObject {
     func start(text: String, hints: [String], write: @escaping (String) -> Void) async {
         guard !listening else { return }
         state = .starting
-        if let why = await engine.authorize() {
+        let refused = await engine.authorize()
+        // Stopped, or left, while the system asked: macOS's prompt doesn't hold the window, as
+        // the iPad's does, so nothing starts once the person has moved on. This covers the
+        // restart in `switchLanguage` too, which comes through here.
+        guard state == .starting else { return }
+        if let why = refused {
             state = .blocked(why)
             return
         }
@@ -268,7 +273,14 @@ final class DeviceSpeech: SpeechEngine {
         self.request = request
 
         let input = audio.inputNode
-        input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0), block: Self.feeding(request, onLevel: onLevel))
+        // A Mac with no microphone (a Mac mini or Mac Pro without one plugged in) has an input
+        // with no channels: tapping it would stop the app, so it's said instead.
+        let format = input.outputFormat(forBus: 0)
+        guard format.channelCount > 0, format.sampleRate > 0 else {
+            self.request = nil
+            throw DictationError.noMicrophone
+        }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.feeding(request, onLevel: onLevel))
         audio.prepare()
         try audio.start()
         task = recognizer.recognitionTask(with: request, resultHandler: Self.results(onText: onText, onEnd: onEnd))
@@ -338,5 +350,13 @@ extension Dictation {
 
 enum DictationError: LocalizedError {
     case unavailable
-    var errorDescription: String? { Words.app("voice.speech_recognition_not_available_language") }
+    /// This Mac has no microphone to listen with.
+    case noMicrophone
+    var errorDescription: String? {
+        switch self {
+        case .unavailable: return Words.app("voice.speech_recognition_not_available_language")
+        // The system's own words for a missing device: there is no shared line for it.
+        case .noMicrophone: return CocoaError(.featureUnsupported).localizedDescription
+        }
+    }
 }
