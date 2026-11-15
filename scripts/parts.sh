@@ -5,8 +5,8 @@
 #   scripts/parts.sh all            every part, as the nightly run
 #   scripts/parts.sh approvals      one part, as workflow_dispatch's input
 # A part is a folder of Tests/, with its code in Sources/Core/<part> and Sources/App/<part>.
-# Code outside a part, the scripts and the workflow run every part. Strings and contracts
-# always run.
+# Code outside a part, the scripts, the workflow and the shared pin run every part, on the
+# Mac too. Strings and contracts always run.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -38,7 +38,9 @@ while IFS= read -r path; do
     esac
 done
 
-[ "$EVERY" = true ] && PARTS="$ALL"
+# Every part runs on the Mac too: shared code, the runner and the pin reach the app's views
+# and every part's Mac tests, so a run on Linux alone would let a broken Mac test through.
+[ "$EVERY" = true ] && { PARTS="$ALL"; MAC=true; }
 for always in strings contracts; do
     is_part "$always" && PARTS="$PARTS $always"
 done

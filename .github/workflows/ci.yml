@@ -34,6 +34,17 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: The rule runs every part on the Mac for a pin move, shared code or a script
+        run: |
+          for path in shared.pin Sources/Core/base/Palette.swift Tests/Runner/Runner.swift scripts/test.sh; do
+            out=$(printf '%s\n' "$path" | scripts/parts.sh)
+            echo "$out" | grep -qx 'mac=true' || { echo "$path doesn't run the Mac"; exit 1; }
+            echo "$out" | grep -q '^parts=.*shell' || { echo "$path doesn't run every part"; exit 1; }
+          done
+          # A change in one part alone still runs that part only, and on Linux only.
+          out=$(printf 'Sources/Core/usage/Usage.swift\n' | scripts/parts.sh)
+          echo "$out" | grep -qx 'mac=false' || { echo "a core-only change ran the Mac"; exit 1; }
+          echo "$out" | grep -qx 'parts=contracts strings usage' || { echo "a core-only change ran: $out"; exit 1; }
       - name: The parts this change touches
         id: parts
         env:

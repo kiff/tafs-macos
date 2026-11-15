@@ -57,11 +57,13 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
 `.github/workflows/ci.yml` runs on every pull request, on `main`, and each night.
 
 - **Only the parts a change touches run** (`scripts/parts.sh` reads the changed paths). A
-  change to shared code, a script or the workflow runs every part. `strings` and `contracts`
+  change to shared code, the test runner, a script, the workflow or the shared pin runs every
+  part, **on the Mac too**: the pin brings new words and contracts every screen reads. `strings` and `contracts`
   always run.
 - **The tests that need no Mac run on Linux** with Swift 5.7.
 - **A Mac job** builds the app for both architectures and runs the parts' Mac tests. It runs
-  only when `Sources/App/`, `App/`, a `mac/` test folder, a script or the workflow changed.
+  when `Sources/App/`, `App/`, a `mac/` test folder, shared code, the runner, a script, the
+  workflow or the shared pin changed.
 - **The screenshots** the Mac job's tests write (`build/screenshots/*.png`) are kept with the
   run for 14 days, as the artifact `screenshots`, even when a test fails. A pull request that
   changes a screen links them for its before and after.
