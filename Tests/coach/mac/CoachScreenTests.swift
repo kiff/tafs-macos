@@ -69,5 +69,9 @@ let coachScreenTests: [Test] = [
         let improving = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let shot = Snapshot.bitmap(of: improving, size: CGSize(width: 980, height: 600)), let improvePNG = Snapshot.png(shot) else { throw Failure(description: "no PNG") }
         try improvePNG.write(to: folder.appendingPathComponent("coach-improve-en.png"))
+        // Coach's title row: Back, New conversation and the conversations' menu.
+        let bar = CoachView(model: empty, close: {}).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let barShot = Snapshot.bitmap(of: bar, size: CGSize(width: 980, height: 600)), let barPNG = Snapshot.png(barShot) else { throw Failure(description: "no PNG") }
+        try barPNG.write(to: folder.appendingPathComponent("coach-bar-en.png"))
     }),
 ]

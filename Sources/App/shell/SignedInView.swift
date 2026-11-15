@@ -19,6 +19,9 @@ struct SignedInView: View {
     @StateObject private var coach: CoachModel
     @StateObject private var alerts: AlertsModel
     @State private var selection: Screen = .overview
+    /// The screen shown last, and the one Coach opened over: Coach's Back returns there.
+    @State private var shown: Screen = .overview
+    @State private var beforeCoach: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
@@ -92,23 +95,23 @@ struct SignedInView: View {
         ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account,
-                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: startNewTaf) { screen in
+                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, openKnocks: { open($0, on: .activity) },
                                                         answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
-                                                        mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
+                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, close: closeCoach))
             case .account: return AnyView(accountScreen)
             }
-        }
+        }, startNewTaf: startNewTaf, openCoach: openCoach)
         .sheet(item: $openRecipe) { recipe in
             RecipeSheet(recipe: recipe, recipes: overview.sheetRecipes(for: recipe), canHand: mayUseCoach,
                         sampleLabel: overview.gallery?.sampleLabel, close: { openRecipe = nil }) {
@@ -129,8 +132,13 @@ struct SignedInView: View {
             notifier.account = account.session.tenant
             LaunchClock.mark("first window")
         }
-        // A screen chosen from elsewhere (a notification) closes it too.
-        .onChange(of: selection) { _ in openTaf = nil }
+        // A screen chosen from elsewhere (a notification) closes it too. Coach remembers the
+        // screen it opened over, for its Back.
+        .onChange(of: selection) { screen in
+            openTaf = nil
+            if screen == .coach, shown != .coach { beforeCoach = shown }
+            shown = screen
+        }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         .task {
@@ -189,16 +197,39 @@ struct SignedInView: View {
         openTaf = taf.id
     }
 
+    /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back.
+    private func closeCoach() {
+        openTaf = nil
+        selection = beforeCoach == .coach ? .overview : beforeCoach
+    }
+
+    /// The sidebar's Coach, as the iPad's `openCoach` (AppModel.swift:6767-6778): it only opens
+    /// Coach. Coach closes from its own Back (Esc too).
+    private func openCoach() {
+        openTaf = nil
+        selection = .coach
+    }
+
+    /// Start a new taf, as the iPad's `startNewTaf` (AppModel.swift:6801-6804): a new
+    /// conversation in Coach, so Coach mode's start shows, whether Coach was open or not. Own
+    /// words and the gallery's own words come here, and the sidebar's + without a gallery.
+    private func startNewTaf() {
+        coach.startNewTaf()
+        openTaf = nil
+        selection = .coach
+    }
+
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: KIFF's answer for Setup,
     /// else an account admin.
     private var mayUseCoach: Bool {
         Access.mayUseCoach(setup: access["setup"], capabilities: accountModel.me?.capabilities)
     }
 
-    /// Start a new taf, as the iPad's + New (HomeSplitView.swift:426-431): every ready-made job
-    /// where tafs cloud sends the gallery; without it, Coach as before.
-    private func startNewTaf() {
-        if overview.gallery != nil { showingGallery = .create } else { selection = .coach }
+    /// Start a new taf, as the iPad's + New (`HomeSplitView.startNewTaf`, HomeSplitView.swift:434-438):
+    /// every ready-made job where tafs cloud sends the gallery; without it, a new conversation in
+    /// Coach (`startNewTaf`).
+    private func newTaf() {
+        if overview.gallery != nil { showingGallery = .create } else { startNewTaf() }
     }
 
     /// What was chosen in the gallery, once it has closed, as the iPad's `actOnGalleryChoice`
@@ -208,7 +239,7 @@ struct SignedInView: View {
         galleryChoice = nil
         switch choice {
         case .recipe(let recipe): handToCoach(recipe)
-        case .ownWords: selection = .coach
+        case .ownWords: startNewTaf()
         }
     }
 

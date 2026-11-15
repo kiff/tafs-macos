@@ -70,6 +70,8 @@ Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `Recip
   who may use Coach, `home.empty.coach` or `home.empty.shared`), then Own words.
 - **Who may use Coach** (`mayUseCoach`): KIFF's `use` for the Setup agent, else
   `members.manage`. Without it, no Own words and no Hand it to Coach.
+- **Own words** starts a new taf, as the iPad's `startNewTaf` (`HomeView.swift:272`): a new
+  conversation in Coach, so Coach mode's start shows, whatever Coach was showing.
 
 ## Every job: the gallery (`Gallery`, `RecipeGallerySheet`)
 
@@ -99,9 +101,8 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 
 ## Not yet
 
-- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`), and Own
-  words opening one (`startNewTaf`): Coach on the Mac has one conversation, so the words go in
-  its box and Own words opens it as it is.
+- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`): its words
+  go in the box of the conversation Coach shows.
 - The apps' logos beside their names.
 - A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
 - Who uses a taf, under its name, for someone who manages it.
