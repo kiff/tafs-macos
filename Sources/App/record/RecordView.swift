@@ -84,7 +84,7 @@ struct RecordView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                ScreenTitle(title: words("record.title"), lead: words("record.lead")).padding(.top, 56)
+                ScreenTitle(title: words("record.title"), lead: words("record.lead"), size: 34).padding(.top, 56)
                 // The search box, across the screen, with tafs cloud's own hint in it.
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 15)).foregroundColor(Theme.soft)

@@ -109,7 +109,7 @@ struct AccountView: View {
     private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                ScreenTitle(title: words("settings.title")).padding(.top, 40)
+                ScreenTitle(title: words("settings.title"), size: 34, rounded: false).padding(.top, 40)
                 group(words("settings.your_account")) {
                     row(words("settings.mode"), value: words("settings.mode_kiff"))
                     divider
