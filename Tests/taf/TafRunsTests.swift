@@ -66,7 +66,7 @@ let tafRunsTests: [Test] = [
         let transport = TaggedTransport([(200, runsPageAnswer, "\"v1\""), (304, "", nil), (200, runsPageAnswer, nil), (409, #"{"error":"x","words":"Not now."}"#, nil)])
         let cloud = CloudClient(transport: transport, session: session)
         let (first, tag) = try await cloud.runsPage(of: "taf-1", cursor: nil, etag: nil, limit: 3)
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf%2D1/work/runs?limit=3")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf-1/work/runs?limit=3")
         try expectEqual(transport.sent[0].headers["If-None-Match"], nil)
         try expectEqual(first?.requests.count, 2)
         try expectEqual(tag, "\"v1\"")
@@ -75,7 +75,7 @@ let tafRunsTests: [Test] = [
         try expectEqual(same, nil)
         try expectEqual(kept, "\"v1\"")
         _ = try await cloud.runsPage(of: "taf-1", cursor: "c 2", etag: nil, limit: 20)
-        try expectEqual(transport.sent[2].path, "/v1/tafs/taf%2D1/work/runs?limit=20&cursor=c%202")
+        try expectEqual(transport.sent[2].path, "/v1/tafs/taf-1/work/runs?limit=20&cursor=c%202")
         do { _ = try await cloud.runsPage(of: "taf-1", cursor: nil, etag: nil, limit: 3); throw Failure(description: "read") } catch let refusal as CloudRefusal {
             try expectEqual(refusal.words, "Not now.")
         }
@@ -85,7 +85,7 @@ let tafRunsTests: [Test] = [
         let cloud = CloudClient(transport: transport, session: session)
         let started = try await cloud.runNow("taf-1")
         try expectEqual(started, TafRuns.RunNow(session: "s9", words: nil))
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf%2D1/run")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-1/run")
         try expectEqual(String(decoding: transport.sent[0].body, as: UTF8.self), "{}")
         let none = try await cloud.runNow("taf-1")
         try expectEqual(none, TafRuns.RunNow(session: nil, words: "It ran 2 minutes ago."))

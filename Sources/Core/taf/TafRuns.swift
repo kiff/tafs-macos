@@ -151,7 +151,7 @@ extension CloudClient {
     /// A page of the runs a taf kept. Read again with the last `etag`, a 304 answers no page:
     /// nothing changed. A refusal throws tafs cloud's, for its words.
     func runsPage(of taf: String, cursor: String?, etag: String?, limit: Int) async throws -> (TafRuns.Page?, String?) {
-        let path = "/v1/tafs/\(Self.query(taf))/work/runs?limit=\(limit)" + (cursor.map { "&cursor=\(Self.query($0))" } ?? "")
+        let path = "/v1/tafs/\(Self.escaped(taf))/work/runs?limit=\(limit)" + (cursor.map { "&cursor=\(Self.query($0))" } ?? "")
         var headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
                        "Accept-Language": language, "User-Agent": "tafs-macos"]
         if let etag { headers["If-None-Match"] = etag }
@@ -167,7 +167,7 @@ extension CloudClient {
     /// Card. tafs cloud's words come only when it started no run.
     func runNow(_ taf: String) async throws -> TafRuns.RunNow {
         struct Answer: Decodable { let session: String?; let words: String? }
-        let body = try await post("/v1/tafs/\(Self.query(taf))/run", [:])
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/run", [:])
         guard let answer = try? JSONDecoder().decode(Answer.self, from: body) else { throw KIFFError.unreadable }
         let words = answer.session == nil ? answer.words.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } : nil
         return TafRuns.RunNow(session: answer.session, words: words)
