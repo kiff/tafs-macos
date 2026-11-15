@@ -53,7 +53,7 @@ let tafDoorsTests: [Test] = [
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, [
             "POST /v1/tafs/taf-1/doors", "PATCH /v1/tafs/taf-1/doors/d1", "DELETE /v1/tafs/taf-1/doors/d1",
             "POST /v1/tafs/taf-1/doors/d1/keys", "POST /v1/tafs/taf-1/doors/d1/keys",
-            "DELETE /v1/tafs/taf-1/doors/d1/keys/ana%40acme%2Eexample",
+            "DELETE /v1/tafs/taf-1/doors/d1/keys/ana@acme.example",
             "POST /v1/tafs/taf-1/doors/knocks/k1", "POST /v1/tafs/taf-1/doors/knocks/k1",
         ])
         try expectEqual(try json(transport.sent[0].body), ["app": "email"])
