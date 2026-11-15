@@ -28,12 +28,26 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     /// a unit for (`parameter_units`), as the iPad reads it. Nil when KIFF names none: the
     /// app never guesses an amount's unit.
     let amount: TafCard.Amount?
+    /// What the call is on, as KIFF files it (`entity_id`).
+    let entityID: String?
+    /// Whether KIFF keeps the call's arguments: a gateway call, filed under its tool call's id.
+    let hasArguments: Bool
+
+    /// The call's name for people, as the iPad's `proposed.summary` (`KIFFMapping.held`,
+    /// KIFFMapping.swift:283-285): `CallNames.says`, then what it's on for a call without
+    /// arguments. A gateway call is filed under its tool call's id, which says nothing.
+    var summary: String {
+        let name = CallNames.says(action, title: title)
+        guard !hasArguments, let entityID, !entityID.isEmpty else { return name }
+        return "\(name) \(entityID)"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, subject, action, title, reasonText = "reason_text", tafAbout = "taf_about", tafReason = "taf_reason"
         case nextSteps = "next_steps", canApproveOnce = "can_approve_once", createdAt = "created_at"
         case expiresAt = "expires_at", accountingVersion = "accounting_version"
         case parameters, parameterUnits = "parameter_units"
+        case entityID = "entity_id", arguments
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +69,8 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         tafReason = text(.tafReason)
         nextSteps = ((try? c.decodeIfPresent([String].self, forKey: .nextSteps)) ?? nil) ?? []
         canApproveOnce = ((try? c.decodeIfPresent(Bool.self, forKey: .canApproveOnce)) ?? nil) ?? true
+        entityID = (try? c.decodeIfPresent(String.self, forKey: .entityID)) ?? nil
+        hasArguments = c.contains(.arguments) && !((try? c.decodeNil(forKey: .arguments)) ?? true)
         struct Unit: Decodable { let unit: String; let scale: Int }
         let parameters = ((try? c.decodeIfPresent([String: Int64].self, forKey: .parameters)) ?? nil) ?? [:]
         let units = ((try? c.decodeIfPresent([String: Unit].self, forKey: .parameterUnits)) ?? nil) ?? [:]
