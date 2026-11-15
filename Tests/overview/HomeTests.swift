@@ -181,4 +181,20 @@ let overviewTests: [Test] = [
         RememberedHome.remember(Data(#"{"coach_waiting":{"chat":"c1"}}"#.utf8), tenant: "t1", in: defaults)
         try expectEqual(defaults.data(forKey: RememberedHome.key), nil)
     }),
+    Test("a taf's health keeps tafs cloud's fixes for its lines, only of the kinds the app acts on", awaiting: {
+        let json = #"{"tafs":[{"kiff_agent":"a","name":"A","state":"idle","health":{"level":"at_risk","lines":["Its bank needs signing in again.","  ","Credits are low."],"fixes":[{"line":0,"kind":"coach","words":"Fix it with Coach","say":"Sign my bank in again"},{"line":0,"kind":"coach","words":"No say"},{"line":1,"kind":"credits","words":"Add credits"},{"line":0,"kind":"teleport","words":"Beam it"},{"kind":7}]}}]}"#
+        let taf = try await cloud([(200, json)]).0.home().tafs[0]
+        guard let health = taf.health else { throw Failure(description: "no health") }
+        try expectEqual(health.lines, ["Its bank needs signing in again.", "Credits are low."])
+        try expectEqual(health.needsAttention, true)
+        try expectEqual(health.failing, false)
+        try expectEqual(health.fixes(for: 0).map(\.words), ["Fix it with Coach"])
+        try expectEqual(health.fixes(for: 1).map(\.kind), ["credits"])
+        try expectEqual(health.fixes(for: 0).first?.say, "Sign my bank in again")
+    }),
+    Test("a health line that isn't words is left out, never the others, as the iPad's LenientItem", {
+        let health = try JSONDecoder().decode(Home.Taf.Health.self, from: Data(#"{"level":"failing","lines":["A",null,"B",7]}"#.utf8))
+        try expectEqual(health.lines, ["A", "B"])
+        try expectEqual(health.failing, true)
+    }),
 ]

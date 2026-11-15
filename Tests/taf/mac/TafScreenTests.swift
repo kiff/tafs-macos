@@ -39,6 +39,36 @@ private func pages(setup: String = "taf-setup.json") async throws -> (TafPagesMo
 }
 
 let tafScreenTests: [Test] = [
+    Test("the credits fix opens Plan & usage in place of the taf's page; Coach's fix is no button", awaiting: { @MainActor in
+        let health = try JSONDecoder().decode(Home.Taf.Health.self, from: Data(#"{"level":"at_risk","lines":["Credits are low."],"fixes":[{"line":0,"kind":"credits","words":"Add credits"},{"line":0,"kind":"coach","words":"Ask Coach","say":"Why?"}]}"#.utf8))
+        let fixes = health.fixes(for: 0)
+        var openTaf: String? = "taf-1"
+        var selection = Screen.overview
+        guard let act = TafActivityTab.action(fixes[0], openUsage: { SignedInView.showUsage(openTaf: &openTaf, selection: &selection) }) else {
+            throw Failure(description: "no credits button")
+        }
+        act()
+        try expectEqual(openTaf, nil)
+        try expectEqual(selection, .usage)
+        try expect(TafActivityTab.action(fixes[1], openUsage: {}) == nil, "Coach's fix comes with Coach mode")
+    }),
+    Test("versions that read stay when a later read fails, with tafs cloud's why under them; Cancel drops a switch and reads again", awaiting: { @MainActor in
+        let state = #"{"versions":[{"n":1,"created":"2026-11-01T09:00:00Z","live":false},{"n":2,"created":"2026-11-10T09:00:00Z","live":true}],"switching":{"n":1,"draft":"d1","at":"2026-11-12T09:00:00Z"}}"#
+        let transport = CannedTransport([(200, state), (503, #"{"error":"down"}"#), (200, #"{"cancelled":true}"#), (200, #"{"versions":[]}"#)])
+        let model = TafPagesModel(cloud: CloudClient(transport: transport, session: session), taf: "taf-1")
+        try expectEqual(model.versionList, nil)
+        await model.loadVersions()
+        try expectEqual(model.versionList?.map(\.n), [1, 2])
+        try expectEqual(model.switching?.n, 1)
+        await model.loadVersions()
+        try expectEqual(model.versionList?.map(\.n), [1, 2])
+        try expectEqual(model.versionError, "Its versions couldn't be loaded. down")
+        await model.cancelSwitch()
+        try expectEqual(transport.sent[2].method + " " + transport.sent[2].path, "DELETE /v1/tafs/taf-1/switching")
+        try expectEqual(model.versionList, [])
+        try expectEqual(model.switching, nil)
+        try expectEqual(model.versionError, nil)
+    }),
     Test("Activity and Setup only read, and a filter is tafs cloud's own, asked for again", awaiting: { @MainActor in
         let (model, transport) = try await pages()
         guard case .loaded(let activity) = model.activity, case .loaded(let setup) = model.setup else { throw Failure(description: "not read") }
@@ -75,6 +105,17 @@ let tafScreenTests: [Test] = [
         try expectEqual(model.query, nil)
         try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-1/activity?filter=held")
     }),
+    Test("the Cards stack as the iPad's wallet: the chosen one in front, the furthest back on top, each a shade darker") {
+        let cards = try JSONDecoder().decode([TafCard].self, from: Data(#"[{"id":"c1","title":"Live","active":true,"rules":[]},{"id":"c2","title":"Test","active":true,"rules":[]},{"id":"c3","title":"Old","active":false,"rules":[]}]"#.utf8))
+        try expectEqual(CardStack.front(of: cards, nil)?.id, "c1")
+        try expectEqual(CardStack.front(of: cards, "c2")?.id, "c2")
+        try expectEqual(CardStack.front(of: cards, "gone")?.id, "c1")
+        try expectEqual(CardStack.ordered(cards, front: nil).map(\.id), ["c3", "c2", "c1"])
+        try expectEqual(CardStack.ordered(cards, front: "c2").map(\.id), ["c3", "c1", "c2"])
+        try expectEqual(CardStack.shade(depth: 0), 0)
+        try expectEqual(CardStack.shade(depth: 1), 0.12)
+        try expectEqual(CardStack.shade(depth: 9), 0.32)
+    },
     Test("every tab's name is a shared line, in the iPad's order") {
         try expectEqual(TafView.Tab.allCases, [.chat, .activity, .card, .setup])
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
@@ -117,5 +158,23 @@ let tafScreenTests: [Test] = [
                 try png.write(to: folder.appendingPathComponent("taf-\(tab.rawValue)-\(language).png"))
             }
         }
+    }),
+    Test("who the taf is shared with shows under its head only for whoever manages it", awaiting: { @MainActor in
+        let groups = #"{"groups":[{"id":"g1","name":"Support","members":[],"agents":["a"]}]}"#
+        let members = #"{"members":[{"subject":"u2","role":"member","status":"active","email":"ana@acme.com"}]}"#
+        let account = AccountClient(transport: CannedTransport([(200, groups), (200, members)]), session: session)
+        let people = PeopleModel(account: account)
+        await people.load()
+        let (taf, chat, _) = try await make([(200, tafThread)])
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let line = ShareLine(agent: taf.kiffAgent, account: account, people: people, email: "zoe@example.com",
+                             shares: [Shares.Share(group: "g1"), Shares.Share(subject: "u2")])
+        let size = CGSize(width: 980, height: 300)
+        guard let managed = Snapshot.bitmap(of: TafView(taf: taf, chat: chat, manages: true, shareLine: line).environment(\.words, words), size: size),
+              let notManaged = Snapshot.bitmap(of: TafView(taf: taf, chat: chat, manages: false, shareLine: line).environment(\.words, words), size: size),
+              let png = Snapshot.png(managed) else { throw Failure(description: "no bitmap") }
+        try expect(Snapshot.png(notManaged) != png, "the line shows only when managed")
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/taf-shared-en.png"))
     }),
 ]

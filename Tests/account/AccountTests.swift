@@ -210,4 +210,30 @@ let accountTests: [Test] = [
         ChatsExport.removeFiles(in: folder)
         try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
     },
+    Test("a taf's grants are KIFF's, read by its agent as written in the path, each one strictly", awaiting: {
+        let grants = #"{"grants":[{"group":"g1"},{"subject":"u2"},{}]}"#
+        let (account, transport) = client([(200, grants), (200, #"{"grants":[{"group":7}]}"#), (200, "{}")])
+        let read = try await account.shares(agent: "refunds-bot_1.a")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/agents/refunds-bot_1.a/grants")
+        try expectEqual(read, [Shares.Share(group: "g1"), Shares.Share(subject: "u2"), Shares.Share()])
+        let mistyped = try? await account.shares(agent: "a/b")
+        try expect(mistyped == nil, "a group that isn't words doesn't read")
+        try expectEqual(transport.sent[1].path, "/v1/agents/a%2Fb/grants")
+        let none = try? await account.shares(agent: "a")
+        try expect(none == nil, "an answer without grants doesn't read")
+    }),
+    Test("who a taf is shared with, as the iPad's ShareLine: everyone alone, groups and people by name, never the reader") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let groups = try JSONDecoder().decode([People.Group].self, from: Data(#"[{"id":"g0","name":"Everyone","everyone":true,"members":[],"agents":[]},{"id":"g1","name":"Support","members":[],"agents":[]}]"#.utf8))
+        let people = try JSONDecoder().decode([People.Person].self, from: Data(#"[{"subject":"u1","role":"admin","status":"active","email":"Zoe@Example.com"},{"subject":"u2","role":"member","status":"active","email":"ana@acme.com"},{"subject":"u3","role":"member","status":"active","email":"","you":true}]"#.utf8))
+        let line = { (shares: [Shares.Share]?) in Shares.sharedWith(shares, groups: groups, people: people, email: "zoe@example.com", words: words) }
+        try expectEqual(line(nil), "Sharing…")
+        try expectEqual(line([Shares.Share(group: "g0")]), "Shared with everyone")
+        try expectEqual(line([Shares.Share(group: "g1"), Shares.Share(subject: "u2"), Shares.Share(subject: "u9")]), "Shared with " + words.list(["Support", "ana@acme.com", "u9"]))
+        // The reader, by KIFF's mark, by their email, or by a subject that is their email.
+        try expectEqual(line([Shares.Share(subject: "u1"), Shares.Share(subject: "u3"), Shares.Share(subject: "ZOE@example.com")]), "Not shared")
+        try expectEqual(line([]), "Not shared")
+        // Everyone among others is named as a group, not as its own sentence.
+        try expectEqual(line([Shares.Share(group: "g0"), Shares.Share(group: "g1")]), "Shared with " + words.list(["Everyone", "Support"]))
+    },
 ]

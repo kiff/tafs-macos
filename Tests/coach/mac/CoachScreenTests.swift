@@ -11,9 +11,9 @@ private func make(_ answers: [(Int, String)]) -> (CoachModel, CannedTransport) {
 
 let coachScreenTests: [Test] = [
     Test("Coach's chat is read from its own taf, and an account with no Coach reads no thread", awaiting: { @MainActor in
-        let (model, transport) = make([(200, setupAnswer), (200, threadAnswer)])
+        let (model, transport) = make([(200, setupAnswer), (200, noChats), (200, threadAnswer)])
         await model.load()
-        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf-coach/conversation"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation"])
         guard case .loaded(let coach, let page) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(coach.id, "taf-coach")
         try expectEqual(page.items.count, 6)
@@ -23,10 +23,10 @@ let coachScreenTests: [Test] = [
         try expectEqual(sent.sent.count, 1)
     }),
     Test("opening the chat only reads, and a chat that can't be read says so", awaiting: { @MainActor in
-        let (model, transport) = make([(200, setupAnswer), (200, threadAnswer)])
+        let (model, transport) = make([(200, setupAnswer), (200, noChats), (200, threadAnswer)])
         await model.load()
         try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
-        let (unread, _) = make([(200, setupAnswer), (500, "")])
+        let (unread, _) = make([(200, setupAnswer), (200, noChats), (500, "")])
         await unread.load()
         try expectEqual(unread.state, .unread(why: "500"))
     }),
@@ -34,16 +34,16 @@ let coachScreenTests: [Test] = [
         let (none, _) = make([(200, #"{"setup":null}"#)])
         await none.load()
         try expectEqual(none.isEmpty, true)
-        let (empty, _) = make([(200, setupAnswer), (200, #"{"items":[]}"#)])
+        let (empty, _) = make([(200, setupAnswer), (200, noChats), (200, #"{"items":[]}"#)])
         await empty.load()
         try expectEqual(empty.isEmpty, true)
         try expectEqual(empty.working, false)
         // A run going on with nothing in the thread yet is not the start: Coach is at work.
-        let (busy, _) = make([(200, setupAnswer), (200, #"{"items":[],"working":true}"#)])
+        let (busy, _) = make([(200, setupAnswer), (200, noChats), (200, #"{"items":[],"working":true}"#)])
         await busy.load()
         try expectEqual(busy.isEmpty, false)
         try expectEqual(busy.working, true)
-        let (full, _) = make([(200, setupAnswer), (200, threadAnswer)])
+        let (full, _) = make([(200, setupAnswer), (200, noChats), (200, threadAnswer)])
         await full.load()
         try expectEqual(full.isEmpty, false)
         let (loading, _) = make([])
@@ -54,16 +54,20 @@ let coachScreenTests: [Test] = [
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for language in ["en", "fr", "pt"] {
-            let (model, _) = make([(200, setupAnswer), (200, threadAnswer)])
+            let (model, _) = make([(200, setupAnswer), (200, noChats), (200, threadAnswer)])
             await model.load()
             let view = CoachView(model: model).environment(\.words, Words.load(folder: strings, preferred: [language]))
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("coach-\(language).png"))
         }
-        let (empty, _) = make([(200, setupAnswer), (200, #"{"items":[]}"#)])
+        let (empty, _) = make([(200, setupAnswer), (200, noChats), (200, #"{"items":[]}"#)])
         await empty.load()
         let start = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let bitmap = Snapshot.bitmap(of: start, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try png.write(to: folder.appendingPathComponent("coach-start-en.png"))
+        empty.ask(about: CoachModel.Improving(id: "taf-1", name: "Refunds"), words: "", mayUseCoach: true, manages: true)
+        let improving = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let shot = Snapshot.bitmap(of: improving, size: CGSize(width: 980, height: 600)), let improvePNG = Snapshot.png(shot) else { throw Failure(description: "no PNG") }
+        try improvePNG.write(to: folder.appendingPathComponent("coach-improve-en.png"))
     }),
 ]
