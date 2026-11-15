@@ -29,9 +29,13 @@ final class TafPagesModel: ObservableObject {
     let halt: HaltModel
     private var asked = 0
 
-    init(cloud: CloudClient, taf: String) {
+    /// This device's planque proof for the Setup read; nil reads without it.
+    private let proof: () async -> String?
+
+    init(cloud: CloudClient, taf: String, proof: @escaping () async -> String? = { nil }) {
         self.cloud = cloud
         self.taf = taf
+        self.proof = proof
         halt = HaltModel(cloud: cloud, taf: taf)
     }
 
@@ -97,8 +101,14 @@ final class TafPagesModel: ObservableObject {
         await loadVersions()
     }
 
+    /// Reads the Setup, as the iPad's `loadTafSetup` (`AppModel.swift:138-149`): with this
+    /// device's planque proof when one can be made, else without it, and tafs cloud then says
+    /// where the connected apps would be.
     func loadSetup() async {
-        do { setup = .loaded(try await cloud.setup(of: taf)) } catch { setup = .unread(why: NeedsYouModel.why(error)) }
+        do {
+            let proof = await proof()
+            setup = .loaded(try await cloud.setup(of: taf, proof: proof))
+        } catch { setup = .unread(why: NeedsYouModel.why(error)) }
     }
 }
 

@@ -282,8 +282,9 @@ extension CloudClient {
         return query
     }
 
-    /// A taf's Setup.
-    func setup(of taf: String) async throws -> TafSetup {
-        try await get("/v1/tafs/\(Self.escaped(taf))/setup")
+    /// A taf's Setup, as the iPad's `setupView(_:proof:)`: with this device's planque proof
+    /// (`Planque-Device-Signature`) when there is one, so it can list the taf's connected apps.
+    func setup(of taf: String, proof: String? = nil) async throws -> TafSetup {
+        try await get("/v1/tafs/\(Self.escaped(taf))/setup", headers: proof.map { ["Planque-Device-Signature": $0] } ?? [:])
     }
 }
