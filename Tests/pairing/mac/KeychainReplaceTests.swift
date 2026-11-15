@@ -38,6 +38,14 @@ let pairingKeychainTests: [Test] = [
         try expectEqual(SecItemAdd(earlier as CFDictionary, nil), errSecSuccess)
         try store.save(Data([2]), for: account)
         try expectEqual(store.load(account), Data([2]))
+        // Where this Keychain reports how an item may be read, the replaced one is at full strength.
+        let asked: [CFString: Any] = [kSecClass: kSecClassGenericPassword, kSecAttrService: store.service, kSecAttrAccount: account,
+                                      kSecReturnAttributes: true, kSecMatchLimit: kSecMatchLimitOne]
+        var found: CFTypeRef?
+        try expectEqual(SecItemCopyMatching(asked as CFDictionary, &found), errSecSuccess)
+        if let accessible = (found as? [String: Any])?[kSecAttrAccessible as String] as? String {
+            try expectEqual(accessible, kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
+        }
     },
     Test("a pair, then a re-pair at the next launch, keep their sessions and keys in the Keychain", awaiting: { @MainActor in
         let store = KeychainStore(service: "bot.tafs.macos.tests.\(UUID().uuidString)")
