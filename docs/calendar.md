@@ -24,9 +24,16 @@ To the iPad's layout:
   shown shaded. Its arrows turn its page without changing the days shown; a click on a day
   goes to it. Under it, the **agenda**: each day's events with tafs cloud's words, or tafs
   cloud's own line when there are none.
-- **On the right**: Today, the arrows, the range's title, and today's date; then **Day** and
-  **Week**; then the days' columns over an **hour grid**, 08:00 to 18:00, wider when an event
-  falls outside. Each event sits at its time in its taf's colour.
+- **On the right**: Today, the arrows, the range's title, and the day shown as a date picker
+  in the app's language (choosing a date goes there); under them, tafs cloud's line when it
+  **halted** (in red) or **cut the read at its most** (`more`); then **Day** and **Week**;
+  then the days' columns over an **hour grid**, 08:00 to 18:00, wider when an event falls
+  outside.
+- **Each hour is a row**, and each day's events in that hour are **stacked** in its cell, as
+  on the iPad: two at the same minute both stay readable, and a busy hour grows its row. An
+  event is the iPad's chip: its taf's dot and name on its colour, lightly; "09:00 · Name" in
+  Day; "×n" for a repeat.
+- With no event in the range, the app's line is centred under the grid.
 - **Today** is the date in the **account's** zone, as tafs cloud names it. The first read
   names that zone: if its today is another day than the Mac's, the screen goes there.
 - The arrows move by a week in Week and by a day in Day. A slower answer for days left behind

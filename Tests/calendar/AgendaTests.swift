@@ -60,6 +60,17 @@ let calendarTests: [Test] = [
         try expectEqual(Days.hours(covering: [390, 1380]), 6...23)
         try expectEqual(Days.hours(covering: [0, 1439]), 0...23)
     },
+    Test("events in the same hour, even at the same minute, are all in that hour's cell") {
+        let json = #"{"time_zone":"UTC","events":[{"taf":"a","name":"Refunds","color":1,"kind":"schedule","at":"x","day":"2026-11-16","time":"09:00","minute":540,"words":""},{"taf":"b","name":"Invoices","color":2,"kind":"schedule","at":"y","day":"2026-11-16","time":"09:00","minute":540,"words":""},{"taf":"c","name":"Bills","color":3,"kind":"schedule","at":"z","day":"2026-11-16","time":"09:20","minute":560,"words":""},{"taf":"d","name":"Later","color":3,"kind":"schedule","at":"w","day":"2026-11-16","time":"10:00","minute":600,"words":""}],"more":true,"halted":false,"words":"Some work was left out."}"#
+        let page = try JSONDecoder().decode(Agenda.Page.self, from: Data(json.utf8))
+        try expectEqual(page.events(on: "2026-11-16", hour: 9).map(\.name), ["Invoices", "Refunds", "Bills"])
+        try expectEqual(page.events(on: "2026-11-16", hour: 10).map(\.name), ["Later"])
+        try expectEqual(page.events(on: "2026-11-16", hour: 8), [])
+        // tafs cloud cut the read: its line is shown; with neither a halt nor a cut, it isn't.
+        try expect(page.saysWhy, "more")
+        let calm = try JSONDecoder().decode(Agenda.Page.self, from: Data(json.replacingOccurrences(of: #""more":true"#, with: #""more":false"#).utf8))
+        try expect(!calm.saysWhy, "no halt, no cut")
+    },
     Test("a date that isn't one is refused, never rolled over") {
         for bad in ["2026-02-30", "2026-13-01", "20261114", "2026-1-4", "today", ""] {
             try expect(Days.date(bad) == nil, bad)

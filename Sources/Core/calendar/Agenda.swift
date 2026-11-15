@@ -69,6 +69,16 @@ enum Agenda {
         func events(on day: String) -> [Event] {
             events.filter { $0.day == day }.sorted { ($0.minute, $0.name) < ($1.minute, $1.name) }
         }
+
+        /// A day's events in one hour of its grid, stacked in that hour's cell as the iPad
+        /// does, so two at the same time both stay readable.
+        func events(on day: String, hour: Int) -> [Event] {
+            events(on: day).filter { $0.minute / 60 == hour }
+        }
+
+        /// Whether tafs cloud's line goes under the top line: when it halted, or when it cut
+        /// the read at its most (`more`), as on the iPad.
+        var saysWhy: Bool { (halted || more) && !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 }
 

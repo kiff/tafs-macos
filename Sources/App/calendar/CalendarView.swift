@@ -119,6 +119,7 @@ struct CalendarView: View {
                     .frame(width: 268)
                     VStack(alignment: .leading, spacing: 12) {
                         header
+                        why
                         modes
                         grid
                     }
@@ -136,19 +137,37 @@ struct CalendarView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
+            // Today, as the iPad's pill: quiet while today is shown, inked when it would move.
             Button(words("calendar.today")) { Task { await model.goToToday() } }
-                .buttonStyle(.plain).font(.system(size: 14)).foregroundColor(Theme.soft)
-                .padding(.horizontal, 14).padding(.vertical, 7)
-                .overlay(Capsule().stroke(Theme.line))
+                .buttonStyle(.plain).font(.system(size: 15, weight: .medium))
+                .foregroundColor(model.showsToday ? Theme.soft : Theme.ink)
+                .padding(.horizontal, 16).frame(minHeight: 40)
+                .overlay(Capsule().stroke(Theme.ink.opacity(model.showsToday ? 0.2 : 0.4)))
             arrow("chevron.left", model.mode == .week ? "calendar.previous_week" : "calendar.previous_day") { await model.move(-1) }
             arrow("chevron.right", model.mode == .week ? "calendar.next_week" : "calendar.next_day") { await model.move(1) }
             Text(title).font(.system(size: 20, weight: .bold)).foregroundColor(Theme.ink).lineLimit(1).minimumScaleFactor(0.7)
             Spacer(minLength: 8)
-            if let p = Days.parts(model.today) {
-                Text(verbatim: "\(p.day) \(words("calendar.month_name.\(p.monthKey)").prefix(3)) \(p.year)")
-                    .font(.system(size: 14)).foregroundColor(Theme.ink)
-                    .padding(.horizontal, 12).padding(.vertical, 6).background(Capsule().fill(Theme.raised))
-            }
+            // The day shown, as the iPad's date picker: in the app's language, and choosing a
+            // date goes there. Days are dates with no zone, so the picker reads them in UTC.
+            DatePicker(words("calendar.heading"), selection: chosenDay, displayedComponents: .date)
+                .datePickerStyle(.field)
+                .labelsHidden()
+                .environment(\.locale, Locale(identifier: words.language))
+                .environment(\.timeZone, TimeZone(identifier: "UTC") ?? .current)
+                .fixedSize()
+        }
+    }
+
+    private var chosenDay: Binding<Date> {
+        Binding(get: { Days.date(model.day) ?? Date() },
+                set: { date in Task { await model.go(to: Days.string(date)) } })
+    }
+
+    /// tafs cloud's line when it halted, or cut the read at its most: under the top line, as
+    /// on the iPad; red for a halt.
+    @ViewBuilder private var why: some View {
+        if case .loaded(let page) = model.state, page.saysWhy {
+            Text(verbatim: page.words).font(.system(size: 13, weight: .semibold)).foregroundColor(page.halted ? Theme.no : Theme.soft)
         }
     }
 
@@ -215,39 +234,31 @@ struct CalendarView: View {
                     ForEach(model.days, id: \.self) { day in dayHeading(day).frame(maxWidth: .infinity) }
                 }
                 .padding(.bottom, 8)
-                ZStack(alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(hours), id: \.self) { hour in
-                            HStack(alignment: .top, spacing: 0) {
-                                Text(verbatim: String(format: "%02d:00", hour)).font(Theme.mono(11)).foregroundColor(Theme.soft)
-                                    .frame(width: Self.hoursWidth, alignment: .leading).padding(.top, 3)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(height: Self.hourHeight, alignment: .top)
-                            .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .top)
-                        }
-                    }
-                    HStack(alignment: .top, spacing: 0) {
-                        Color.clear.frame(width: Self.hoursWidth, height: 1)
-                        ForEach(model.days, id: \.self) { day in
-                            ZStack(alignment: .topLeading) {
-                                Color.clear
-                                ForEach(page.events(on: day)) { event in
-                                    block(event).offset(y: CGFloat(event.minute - hours.lowerBound * 60) / 60 * Self.hourHeight)
+                // One row an hour: its label, then each day's events in that hour, stacked so
+                // that two at the same time both stay readable. A busy hour grows its row.
+                VStack(spacing: 0) {
+                    ForEach(Array(hours), id: \.self) { hour in
+                        HStack(alignment: .top, spacing: 0) {
+                            Text(verbatim: String(format: "%02d:00", hour)).font(Theme.mono(11)).foregroundColor(Theme.soft)
+                                .frame(width: Self.hoursWidth, alignment: .leading).padding(.top, 3)
+                            ForEach(model.days, id: \.self) { day in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    ForEach(page.events(on: day, hour: hour)) { block($0) }
                                 }
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
                             }
-                            .frame(maxWidth: .infinity)
                         }
+                        .frame(minHeight: Self.hourHeight, alignment: .top)
+                        .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .top)
                     }
                 }
-                .frame(height: CGFloat(hours.count) * Self.hourHeight, alignment: .top)
                 .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .bottom)
-                // tafs cloud's line for a halt; else the app's line for an empty range.
-                if page.halted, !page.words.isEmpty {
-                    Text(verbatim: page.words).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no).padding(.top, 12)
-                } else if page.events.isEmpty {
+                // The app's line for an empty range, centred under the grid as on the iPad.
+                if page.events.isEmpty, !page.halted {
                     Text(words(model.mode == .week ? "calendar.nothing_this_week" : "calendar.nothing_on_day"))
-                        .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.top, 12)
+                        .font(.system(size: 13)).foregroundColor(Theme.dim).padding(.top, 12)
+                        .frame(maxWidth: .infinity)
                 }
             }
         }
@@ -265,18 +276,18 @@ struct CalendarView: View {
         .accessibilityAddTraits(isToday ? .isSelected : [])
     }
 
-    /// One event in its day's column, at its time: its taf's colour, its time and its name.
+    /// One event in its hour's cell, as the iPad's chip: its taf's dot and name on its colour,
+    /// lightly; in Day, "09:00 · Name".
     private func block(_ event: Agenda.Event) -> some View {
-        HStack(spacing: 4) {
-            // In a week's narrow column the hour lines say the time; a day's column has room for it.
-            if model.mode == .day { Text(verbatim: event.time).font(Theme.mono(10, weight: .semibold)) }
-            Text(verbatim: event.name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
-            if event.count > 1 { Text(words.count("calendar.times", event.count)).font(.system(size: 10)) }
+        HStack(spacing: 5) {
+            Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7)
+            Text(verbatim: model.mode == .day ? "\(event.time) · \(event.name)" : event.name)
+                .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+            if event.count > 1 { Text(words.count("calendar.times", event.count)).font(.system(size: 11)).foregroundColor(Theme.soft) }
         }
-        .foregroundColor(.white)
-        .padding(.horizontal, 5).frame(height: 20)
+        .padding(.horizontal, 6).padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 5).fill(Theme.tafColor(event.color)))
+        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.tafColor(event.color).opacity(0.16)))
         .padding(.horizontal, 2)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(event.count > 1 ? words.count("calendar.slot_times", event.count, ["name": event.name, "first": event.time])
