@@ -165,14 +165,14 @@ enum Record {
 extension CloudClient {
     /// The Record searched by `q` (an order, an invoice, an amount or an action); `cursor`
     /// continues the same search.
-    func record(_ q: String = "", cursor: String? = nil) async throws -> Record.Page {
+    func record(_ q: String = "", cursor: String? = nil, saying: Bool = false) async throws -> Record.Page {
         var query = ["q=\(Self.query(String(q.prefix(Record.longestSearch))))"]
         if let cursor { query.append("cursor=\(Self.query(cursor))") }
-        return try await get("/v1/record?" + query.joined(separator: "&"))
+        return try await get("/v1/record?" + query.joined(separator: "&"), saying: saying)
     }
 
     /// One case: every call about `about`. A 404 says no call of the person's is about it.
     func recordCase(_ about: String) async throws -> Record.Case {
-        try await get("/v1/record/cases/\(Self.query(about))")
+        try await get("/v1/record/cases/\(Self.query(about))", saying: true)
     }
 }

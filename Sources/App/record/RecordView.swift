@@ -24,8 +24,22 @@ final class RecordModel: ObservableObject {
 
     var shown: [Record.Group] { Record.only(taf: taf, in: filter.keeping(groups)) }
 
-    /// The words the shown calls were searched by; empty for the whole Record.
-    @Published private(set) var searched = ""
+    /// A search across the Record, kept apart from the list as the iPad's `RecordSearch`: its
+    /// words, its pages as tafs cloud sent them, and where it stands.
+    struct Found: Equatable {
+        let q: String
+        var groups: [Record.Group] = []
+        var loading = true
+        var error: String?
+        var nextCursor: String?
+        var endWords: String?
+        var noneWords: String?
+    }
+
+    /// The search shown in the list's place; nil shows the list.
+    @Published private(set) var found: Found?
+    /// The words of the search shown; empty for the list.
+    var searched: String { found?.q ?? "" }
     /// One case, open from a search: what it's about, and its calls once read.
     @Published private(set) var caseAbout: String?
     @Published private(set) var openCase: Record.Case?
@@ -42,15 +56,13 @@ final class RecordModel: ObservableObject {
 
     init(cloud: CloudClient) { self.cloud = cloud }
 
-    /// Searches again from the first page. A slower answer to an older search is dropped.
+    /// Reads the Record's list again from the first page. A slower answer is dropped.
     func load() async {
         asked += 1
         let mine = asked
-        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            let page = try await cloud.record(q)
+            let page = try await cloud.record()
             guard mine == asked else { return }
-            searched = q
             groups = page.shown
             show(page)
         } catch {
@@ -64,7 +76,7 @@ final class RecordModel: ObservableObject {
         guard let cursor else { return }
         let mine = asked
         do {
-            let page = try await cloud.record(searched, cursor: cursor)
+            let page = try await cloud.record(cursor: cursor)
             guard mine == asked else { return }
             for group in page.shown {
                 if let at = groups.firstIndex(where: { $0.id == group.id }) {
@@ -85,22 +97,69 @@ final class RecordModel: ObservableObject {
 
     /// The box as the person types, as the iPad's `recordQueryTyped`: what's typed is searched
     /// once they pause, so a word typed letter by letter is one search, not one a letter. Words
-    /// already shown aren't searched again.
+    /// already searched, or being searched, aren't searched again. An emptied box shows the
+    /// list again at once, with nothing read.
     func typed() {
         typing?.cancel()
+        typing = nil
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { found = nil; return }
         let pause = typingPause
         typing = Task { [weak self] in
             do { try await Task.sleep(nanoseconds: pause) } catch { return }
-            guard let self, !Task.isCancelled,
-                  self.search.trimmingCharacters(in: .whitespacesAndNewlines) != self.searched else { return }
-            await self.load()
+            guard let self, !Task.isCancelled, self.found?.q != q else { return }
+            self.typing = nil
+            await self.find(q)
         }
     }
 
     /// Return: what's typed, at once, with no wait left to search it again.
     func submitted() async {
         typing?.cancel()
-        await load()
+        typing = nil
+        await find(search)
+    }
+
+    /// Searches the Record across the person's tafs, as the iPad's `searchRecord`: the words
+    /// are the search's as soon as it starts. `more` reads its next page; a cursor tafs cloud
+    /// refuses (409, a call made since) searches again from the top.
+    func find(_ words: String, more: Bool = false) async {
+        let q = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { found = nil; return }
+        let current = found?.q == q ? found : nil
+        if more, current == nil || current?.loading == true || current?.nextCursor == nil { return }
+        var started = more ? (current ?? Found(q: q)) : Found(q: q)
+        started.loading = true
+        started.error = nil
+        found = started
+        do {
+            let page = try await cloud.record(q, cursor: more ? current?.nextCursor : nil, saying: true)
+            guard var now = found, now.q == q else { return }
+            if more {
+                for group in page.shown {
+                    if let at = now.groups.firstIndex(where: { $0.id == group.id }) {
+                        now.groups[at] = Record.Group(id: group.id, title: group.title, entries: now.groups[at].entries + group.entries)
+                    } else {
+                        now.groups.append(group)
+                    }
+                }
+            } else {
+                now.groups = page.shown
+            }
+            now.loading = false
+            now.nextCursor = page.nextCursor
+            now.endWords = page.nextCursor == nil ? page.endWords : nil
+            now.noneWords = now.groups.isEmpty ? page.noneWords : nil
+            found = now
+            if !page.hint.isEmpty { hint = page.hint }
+        } catch let refusal as CloudRefusal where more && refusal.status == 409 {
+            await find(q)
+        } catch {
+            guard var now = found, now.q == q else { return }
+            now.loading = false
+            now.error = NeedsYouModel.why(error)
+            found = now
+        }
     }
 
     /// Opens one case from a search: every call about the same thing, oldest first, and the
@@ -154,39 +213,12 @@ struct RecordView: View {
                 .padding(.horizontal, 14).frame(height: 40)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
-                // While a search is shown it stands in for the list, as on the iPad: the chips
-                // are the list's.
-                if model.searched.isEmpty { chips }
-                switch model.state {
-                case .loading:
-                    ProgressView().controlSize(.small)
-                case .unread(let why):
-                    Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    Button(words("common.try_again")) { Task { await model.load() } }
-                case .loaded:
-                    if model.shown.isEmpty {
-                        Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
-                    }
-                    ForEach(model.shown) { group in
-                        // The day, as the iPad's: 11 medium monospaced, in capitals.
-                        if !group.title.isEmpty {
-                            Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
-                        }
-                        VStack(spacing: 8) {
-                            ForEach(group.entries) { entry in
-                                row(entry)
-                                    .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                            }
-                        }
-                    }
-                    if model.canContinue {
-                        ProgressView().controlSize(.small).task { await model.more() }
-                    } else if let end = model.endWords, !model.shown.isEmpty {
-                        Text(end).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    }
+                // While a search is shown it stands in for the list, as on the iPad: its calls as
+                // tafs cloud found them, never narrowed by the list's chips.
+                if let found = model.found {
+                    results(found)
+                } else {
+                    list
                 }
             }
             .padding(.horizontal, Look.inset)
@@ -198,22 +230,85 @@ struct RecordView: View {
         .sheet(isPresented: Binding(get: { model.caseAbout != nil }, set: { if !$0 { model.closeCase() } })) { caseSheet }
     }
 
+    /// Every call by day, as before a search: the chips, then the calls they keep.
+    @ViewBuilder private var list: some View {
+        chips
+        switch model.state {
+        case .loading:
+            ProgressView().controlSize(.small)
+        case .unread(let why):
+            Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
+            Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
+            Button(words("common.try_again")) { Task { await model.load() } }
+        case .loaded:
+            if model.shown.isEmpty {
+                Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
+            }
+            ForEach(model.shown) { group in
+                // The day, as the iPad's: 11 medium monospaced, in capitals.
+                if !group.title.isEmpty {
+                    Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+                }
+                VStack(spacing: 8) {
+                    ForEach(group.entries) { entry in
+                        row(entry)
+                            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+            }
+            if model.canContinue {
+                ProgressView().controlSize(.small).task { await model.more() }
+            } else if let end = model.endWords, !model.shown.isEmpty {
+                Text(end).font(.system(size: 13)).foregroundColor(Theme.soft)
+            }
+        }
+    }
+
+    /// What a search found, as the iPad's `RecordResults`: tafs cloud's groups as sent, each call
+    /// with what it's about as the link to its case; nothing found in tafs cloud's words; why it
+    /// couldn't be read; its next page as the end shows.
+    @ViewBuilder private func results(_ found: RecordModel.Found) -> some View {
+        ForEach(found.groups) { group in
+            if !group.title.isEmpty {
+                Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+            }
+            VStack(spacing: 8) {
+                ForEach(group.entries) { entry in
+                    row(entry)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
+        }
+        if let none = found.noneWords, !found.loading { Text(verbatim: none).font(.system(size: 14)).foregroundColor(Theme.soft) }
+        if let why = found.error { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no) }
+        if found.loading {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+        } else if found.nextCursor != nil {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity).task { await model.find(found.q, more: true) }
+        } else if let end = found.endWords, !found.groups.isEmpty {
+            Text(verbatim: end).font(.system(size: 13)).foregroundColor(Theme.soft)
+        }
+    }
+
     /// "All tafs", then a chip for each taf with its colour, then the filters, as on the iPad.
     @ViewBuilder private var chips: some View {
-                ScrollView(.horizontal, showsIndicators: false) {
-
-                    HStack(spacing: 6) {
-                        Chip(title: words("record.all_tafs"), chosen: model.taf == nil) { model.taf = nil }
-                        ForEach(tafs.filter { $0.tafID != nil }) { taf in
-                            Chip(title: taf.name, chosen: model.taf == taf.tafID, dot: Theme.tafColor(taf.color)) { model.taf = taf.tafID }
-                        }
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Chip(title: words("record.all_tafs"), chosen: model.taf == nil) { model.taf = nil }
+                ForEach(tafs.filter { $0.tafID != nil }) { taf in
+                    Chip(title: taf.name, chosen: model.taf == taf.tafID, dot: Theme.tafColor(taf.color)) { model.taf = taf.tafID }
                 }
-                HStack(spacing: 8) {
-                    ForEach(Record.Filter.allCases) { filter in
-                        Chip(title: words(filter.titleKey), chosen: model.filter == filter) { model.filter = filter }
-                    }
-                }
+            }
+        }
+        HStack(spacing: 8) {
+            ForEach(Record.Filter.allCases) { filter in
+                Chip(title: words(filter.titleKey), chosen: model.filter == filter) { model.filter = filter }
+            }
+        }
     }
 
     /// One call, as the iPad's `RecordRow`: its status dot; then its taf's dot and "Taf · what it
@@ -233,7 +328,7 @@ struct RecordView: View {
                 Text(verbatim: [entry.about, entry.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.system(size: 13)).foregroundColor(Theme.soft)
                 // In a search, what it's about opens the case, as the iPad's `RecordHitRow`.
-                if opensCase, !model.searched.isEmpty, let about = entry.about, !about.trimmingCharacters(in: .whitespaces).isEmpty {
+                if opensCase, model.found != nil, let about = entry.about, !about.trimmingCharacters(in: .whitespaces).isEmpty {
                     Button { Task { await model.open(case: about) } } label: {
                         Text(verbatim: "\(about) ›").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                             .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())

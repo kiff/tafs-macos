@@ -22,9 +22,13 @@ answer as sent.
   filters as pills.
 - The search box shows tafs cloud's hint. **What's typed is searched once the person
   pauses** (400 ms after the last key, the iPad's `recordQueryTyped`), so a word typed letter
-  by letter is one search; words already shown aren't searched again. Return searches at once.
-- **While a search is shown it stands in for the list**, as on the iPad: the taf chips and
-  the filters are the list's, and each call found has what it's about as a link,
+  by letter is one search; words already searched, or being searched, aren't searched again.
+  Return searches at once. **An emptied box shows the list again at once**, with nothing read.
+- **A search is kept apart from the list** (`RecordModel.Found`, the iPad's `RecordSearch`)
+  and stands in for it: its calls as tafs cloud found them, never narrowed by the list's taf
+  chips or filters; tafs cloud's "nothing matched"; why it couldn't be read, its words first;
+  its next page as the end shows (a refused cursor searches again). Each call found has what
+  it's about as a link,
   "Order 4471 ›", that **opens its case** (the iPad's `RecordHitRow` and `RecordCaseSheet`):
   every call about the same thing, oldest first (`GET /v1/record/cases/{about}`), the step
   that didn't go through named first in red, in tafs cloud's words. The Record never sends
@@ -40,7 +44,10 @@ answer as sent.
 
 ## Not yet
 
-A taf's detail, exporting receipts (for someone who sees every taf's Record), and folding a
+A case's steps drawn as their taf's Activity draws them, with each step's own next step (the
+iPad's `SourceActivityRow`), the only retry: the Mac draws the Record's row, with no next step
+yet. A case read with no steps shows an empty sheet, where the iPad keeps its spinner. A taf's
+detail, exporting receipts (for someone who sees every taf's Record), and folding a
 day's reads into one line, as the iPad's list does.
 
 ## Tests
