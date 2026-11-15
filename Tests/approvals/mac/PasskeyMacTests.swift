@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 /// A security key's stand-in with a real P-256 key: it signs authData ‖ clientDataHash as an
-/// authenticator does, so KIFF's own check (VerifyAssertion's signature step) can be run here.
+/// authenticator does, so KIFF's signature check, as the public spec describes it, can be run here.
 private final class P256Key: PasskeyAuthenticator {
     let key = P256.Signing.PrivateKey()
 
@@ -20,7 +20,7 @@ let approvalsPasskeyMacTests: [Test] = [
     Test("an approval's signature verifies as KIFF verifies it: over authData ‖ sha256(clientDataJSON), with the registered key", awaiting: {
         let device = P256Key()
         let credential = Data("this-computer-credential".utf8)
-        let approver = PasskeyApprover(authenticator: device, credentialID: credential, sha256: PasskeyCrypto.sha256)
+        let approver = PasskeyApprover(authenticator: device, credentialID: credential, sha256: PasskeyCrypto.sha256, enabled: true)
         let header = try await approver.approve(tenant: "t1", method: "POST", path: "/v1/cards", body: Data(#"{"card":"c1"}"#.utf8))
         guard let comma = header.range(of: ",a="), let a = Encoding.fromBase64URL(String(header[comma.upperBound...])),
               let fields = try JSONSerialization.jsonObject(with: a) as? [String: String],

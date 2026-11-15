@@ -1,7 +1,7 @@
 import Foundation
 
-/// The passkey approval, checked the way KIFF checks it (`VerifyAssertion`, kiff-cloud#1638), with
-/// Windows' values (tafs-windows `PasskeyApprovalTests`, `PasskeyPairContractTests`,
+/// The passkey approval, checked the way the public spec (`docs/secure-connection.md`) says KIFF
+/// checks it, with Windows' values (tafs-windows `PasskeyApprovalTests`, `PasskeyPairContractTests`,
 /// `PasskeyRegistrationTests`). An authenticator stand-in returns what a security key would.
 
 private let up: UInt8 = 0x01, uv: UInt8 = 0x04, be: UInt8 = 0x08, bs: UInt8 = 0x10, at: UInt8 = 0x40
@@ -32,8 +32,9 @@ private final class FakeKey: PasskeyAuthenticator {
     }
 }
 
-private func approver(_ key: FakeKey) -> PasskeyApprover {
-    PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256)
+/// An approver switched on for the test: approvals are off by default (`Features.macPasskeyApprovals`).
+private func approver(_ key: FakeKey, enabled: Bool = true) -> PasskeyApprover {
+    PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256, enabled: enabled)
 }
 
 /// What a new credential's authenticator data holds: the head, an empty AAGUID, the id, then an
@@ -64,6 +65,8 @@ let approvalsPasskeyTests: [Test] = [
         let header = try await approver(key).approve(tenant: "t1", method: "POST", path: "/v1/cards", body: body, signedAt: "2026-11-14T20:00:00Z")
         let message = "kiff.request.v1\nt1\nPOST\n/v1/cards\n\(Encoding.hex(testSHA256(body)))\n2026-11-14T20:00:00Z"
         let challenge = Encoding.base64URL(testSHA256(Data(message.utf8)))
+        // The literal, so this can't drift with its own construction.
+        try expectEqual(challenge, "mF0bsTI8LEyXFt2V4qAUPBNkqSoAFmqqWdFy5VdjMcA")
         let client = #"{"type":"webauthn.get","challenge":"\#(challenge)","origin":"https://kiff.dev","crossOrigin":false}"#
         try expectEqual(PasskeyApprover.clientDataJSON(Data(message.utf8), sha256: testSHA256), Data(client.utf8))
         // CTAP2 takes the hash of the JSON this app built, never the JSON.
@@ -110,7 +113,8 @@ let approvalsPasskeyTests: [Test] = [
     }),
     Test("the pair is KIFF's kiff.requests.v1, sorted, under one assertion, each header with the other's hash (Windows' contract)", awaiting: {
         let tenant = "01exampletenant0000000000", signedAt = "2026-11-12T18:00:00.250Z"
-        let connect = RequestsTogether.Request(method: "POST", path: "/v1/me/mcp/tools/batch", body: Data(#"{"tools":[{"name":"tafs_state"}]}"#.utf8))
+        // The tools batch goes to the gateway's path, as Start sends it.
+        let connect = RequestsTogether.Request(method: "POST", path: "/v1/connections/batch", body: Data(#"{"tools":[{"name":"tafs_state"}]}"#.utf8))
         let draft = RequestsTogether.Request(method: "POST", path: "/v1/me/agent-drafts", body: Data(#"{"agent_id":"coach","label":"Coach"}"#.utf8))
         let key = FakeKey()
         let (batch, cards) = try await RequestsTogether.approve(approver(key), tenant: tenant, connect, draft, signedAt: signedAt)
@@ -135,6 +139,23 @@ let approvalsPasskeyTests: [Test] = [
             try expectEqual(clientFields["challenge"] as? String, Encoding.base64URL(testSHA256(Data(message.utf8))))
         }
         try expectEqual(batch.split(separator: ",")[1], cards.split(separator: ",")[1])
+        // The literals: each header names the other's request hash, and the one challenge.
+        try expect(batch.hasSuffix(",with=sha256:3cc16020d315b4eb9a8afac14484dd7047044a4c5385e74c065e6dde0d23deff"), "the draft's hash")
+        try expect(cards.hasSuffix(",with=sha256:644f3b501cf306af2c63c032848fd13d2056bdd8ef04cafe891f9c718041efad"), "the batch's hash")
+        try expectEqual(key.asked, [testSHA256(PasskeyApprover.clientDataJSON(RequestsTogether.message(tenant: tenant, signedAt: signedAt,
+            "644f3b501cf306af2c63c032848fd13d2056bdd8ef04cafe891f9c718041efad", "3cc16020d315b4eb9a8afac14484dd7047044a4c5385e74c065e6dde0d23deff"), sha256: testSHA256))])
+        try expectEqual(PasskeyApprover.challenge(RequestsTogether.message(tenant: tenant, signedAt: signedAt,
+            "644f3b501cf306af2c63c032848fd13d2056bdd8ef04cafe891f9c718041efad", "3cc16020d315b4eb9a8afac14484dd7047044a4c5385e74c065e6dde0d23deff"), sha256: testSHA256),
+            "7UWb8NtnHMqAVlenob3dXQXSWSVUwZC3NoYVsDtim2A")
+    }),
+    Test("switched off, as by default, nothing is asked of the security key: one request or the pair", awaiting: {
+        try expectEqual(Features.macPasskeyApprovals, false)
+        let key = FakeKey()
+        let off = PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256)
+        try await refused(.off) { try await off.approve(tenant: "t1", method: "POST", path: "/v1/cards", body: Data(), signedAt: "t") }
+        let pair = RequestsTogether.Request(method: "POST", path: "/v1/x", body: Data())
+        try await refused(.off) { try await RequestsTogether.approve(off, tenant: "t1", pair, pair, signedAt: "t") }
+        try expectEqual(key.asked, [])
     }),
     Test("the pair's message is KIFF's, sorted however the hashes come") {
         let lo = String(repeating: "a", count: 64), hi = String(repeating: "b", count: 64)
@@ -160,13 +181,20 @@ let approvalsPasskeyTests: [Test] = [
         try await refused(.notVerified) { try read(made(flags: up | at), true) }
         try await refused(.unreadable) { try read(made(flags: up | uv), true) }   // no credential data
         try await refused(.unreadable) { try read(made(id: Data()), true) }
+        // A COSE key that names a label twice is refused, never the last one taken.
+        var twice = made()
+        twice.append(contentsOf: [0x01, 0x02])
+        let headAt = twice.count - 2 - (7 + 35 + 35)
+        twice[headAt] = 0xa6
+        try await refused(.notES256) { try read(twice, true) }
     }),
     Test("a pairing's passkey is made over KIFF's kiff.passkey.pair.v1 challenge, as Windows' PasskeyChallenge") {
         let pub = Data([0x30, 0x59, 0x01, 0x02])
         let expected = Encoding.base64URL(testSHA256(Data("kiff.passkey.pair.v1\nn0nce\n\(Encoding.base64URL(pub))".utf8)))
         try expectEqual(PasskeyRegistration.pairingChallenge(nonce: "n0nce", deviceKeyDER: pub, sha256: testSHA256), expected)
     },
-    Test("macOS 12 approves by its own passkey: a route of its own, never Touch ID's") {
+    Test("the passkey route is its own, and nothing gives it yet: a passkey Mac still approves on the phone") {
         try expect(ApprovalRoute.passkey != .touchID && ApprovalRoute.passkey != .phoneOrPasskey, "its own route")
+        try expectEqual(ApprovalRoute.of(.passkey), .phoneOrPasskey)
     },
 ]

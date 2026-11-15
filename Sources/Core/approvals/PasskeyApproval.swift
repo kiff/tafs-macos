@@ -1,12 +1,22 @@
 import Foundation
 
-/// Approving on a Mac with no approval key of its own: the person's passkey, a USB security key
-/// registered at pairing, signs the exact request, sent as `KIFF-Passkey-Assertion` (KIFF's
-/// desktop client spec §2.6 and §5; KIFF checks it with `VerifyAssertion`, kiff-cloud#1638). This
-/// is the message, the `clientDataJSON` this app builds, the checks made before sending, and the
-/// header, as Windows' `PasskeyApprover`. The authenticator itself is behind `PasskeyAuthenticator`.
+/// Approving on a Mac with no approval key of its own: the person's passkey, a USB security key,
+/// signs the exact request, sent as `KIFF-Passkey-Assertion` (the public spec's
+/// `docs/secure-connection.md`: the request's message, its digest as the challenge, and one
+/// approval for a pair). This is the message, the `clientDataJSON` this app builds, the checks
+/// made before sending, and the header, as Windows' `PasskeyApprover`. The authenticator itself is
+/// behind `PasskeyAuthenticator`.
+///
+/// **Off** (`Features.macPasskeyApprovals`) until the public spec names the macOS 12 security-key
+/// route: switched off, nothing is asked of the authenticator.
 ///
 /// Core builds on Linux, so hashing is passed in (`sha256`): the app gives CryptoKit's.
+enum Features {
+    /// Passkey approvals on macOS 12. Off: `PasskeyApprover` refuses before the security key is
+    /// asked, as Windows' `Features.WindowsPasskeyApprovals` was until KIFF took its passkey.
+    static let macPasskeyApprovals = false
+}
+
 enum Passkeys {
     /// The relying party: KIFF.
     static let rpID = "kiff.dev"
@@ -44,8 +54,12 @@ enum PasskeyRefusal: Error, Equatable {
     case notKIFF
     /// No user presence, or no user verification (the key's PIN wasn't checked).
     case notVerified
-    /// A passkey that can leave this Mac (backup eligible, or backed up): not this Mac's own.
+    /// A synced passkey (backup eligible, or backed up), which the public spec doesn't take for a
+    /// computer's approval. A USB security key reports neither: it belongs to the person's account,
+    /// can be used from another computer with its PIN, and is listed and removed in Devices.
     case canLeave
+    /// Passkey approvals are switched off (`Features.macPasskeyApprovals`): nothing was asked.
+    case off
     /// The authenticator answered with another credential than the one asked for.
     case otherCredential
     /// The authenticator data, or a new credential, couldn't be read.
@@ -84,9 +98,11 @@ protocol PasskeyAuthenticator {
 /// what KIFF would refuse anyway, whatever the authenticator says.
 struct PasskeyApprover {
     let authenticator: PasskeyAuthenticator
-    /// This Mac's own credential, registered at pairing (KIFF's spec §5.1).
+    /// The account's security key this Mac approves with, registered through its pairing.
     let credentialID: Data
     let sha256: (Data) -> Data
+    /// Whether passkey approvals are on; off, nothing is asked of the authenticator.
+    var enabled = Features.macPasskeyApprovals
 
     /// The challenge: base64url of the message's SHA-256.
     static func challenge(_ message: Data, sha256: (Data) -> Data) -> String { Encoding.base64URL(sha256(message)) }
@@ -99,7 +115,7 @@ struct PasskeyApprover {
     }
 
     /// Why KIFF would refuse an assertion with this authenticator data, or nil: another relying
-    /// party, no presence or no verification, or a passkey that can leave this Mac.
+    /// party, no presence or no verification, or a synced passkey (backup eligible or backed up).
     static func refusal(_ data: AuthenticatorData, sha256: (Data) -> Data) -> PasskeyRefusal? {
         if data.rpIDHash != sha256(Data(Passkeys.rpID.utf8)) { return .notKIFF }
         if !data.userPresent || !data.userVerified { return .notVerified }
@@ -107,10 +123,11 @@ struct PasskeyApprover {
         return nil
     }
 
-    /// One fresh assertion over `message`, as the header's `t=…,a=…`: a request's
-    /// `kiff.request.v1`, or two requests' `kiff.requests.v1`, whose headers each add
-    /// `with=sha256:…` (`RequestsTogether`).
-    func assert(_ message: Data, signedAt: String, pin: [UInt8]? = nil) async throws -> String {
+    /// One fresh assertion over `message`, as the header's `t=…,a=…`. Only this file's two shapes
+    /// reach it: one request (`approve`) and the pair (`RequestsTogether.approve`), each with the
+    /// `signedAt` that went into its message. Switched off, it refuses before the key is asked.
+    fileprivate func sign(_ message: Data, signedAt: String, pin: [UInt8]?) async throws -> String {
+        guard enabled else { throw PasskeyRefusal.off }
         let clientData = Self.clientDataJSON(message, sha256: sha256)
         let assertion = try await authenticator.getAssertion(clientDataHash: sha256(clientData), credentialID: credentialID, pin: pin)
         if let used = assertion.credentialID, used != credentialID { throw PasskeyRefusal.otherCredential }
@@ -129,7 +146,7 @@ struct PasskeyApprover {
                  pin: [UInt8]? = nil) async throws -> String {
         let message = KIFFMessage.request(tenant: tenant, method: method, path: path,
                                           bodyHash: Encoding.hex(sha256(body)), signedAt: signedAt)
-        return try await assert(Data(message.utf8), signedAt: signedAt, pin: pin)
+        return try await sign(Data(message.utf8), signedAt: signedAt, pin: pin)
     }
 }
 
@@ -167,12 +184,12 @@ enum RequestsTogether {
             return hash(Data(message.utf8), sha256: approver.sha256)
         }
         let (a, b) = (own(first), own(second))
-        let assertion = try await approver.assert(message(tenant: tenant, signedAt: signedAt, a, b), signedAt: signedAt, pin: pin)
+        let assertion = try await approver.sign(message(tenant: tenant, signedAt: signedAt, a, b), signedAt: signedAt, pin: pin)
         return ("\(assertion),with=sha256:\(b)", "\(assertion),with=sha256:\(a)")
     }
 }
 
-/// A new credential, as KIFF registers it at pairing: its id and its P-256 public key, SPKI DER.
+/// A new credential, as KIFF registers it through pairing: its id and its P-256 public key, SPKI DER.
 struct NewPasskey: Equatable {
     let credentialID: Data
     let publicKeyDER: Data
@@ -180,8 +197,7 @@ struct NewPasskey: Equatable {
 
 /// Reads a newly made credential's authenticator data (attested credential data, then the COSE
 /// key), as Windows' `PasskeyRegistration`, and refuses what could never approve for this Mac:
-/// another relying party, no verification, a key that can leave this Mac, or anything but ES256
-/// on P-256. `isOnCurve` checks the point (CryptoKit in the app): a point off the curve is refused.
+/// another relying party, no verification, a synced passkey, or anything but ES256 on P-256. `isOnCurve` checks the point (CryptoKit in the app): a point off the curve is refused.
 enum PasskeyRegistration {
     static func read(_ authenticatorData: Data, sha256: (Data) -> Data,
                      isOnCurve: (_ x: Data, _ y: Data) -> Bool) throws -> NewPasskey {
@@ -201,7 +217,7 @@ enum PasskeyRegistration {
         return NewPasskey(credentialID: id, publicKeyDER: spki(x: x, y: y))
     }
 
-    /// The challenge a pairing's passkey is made with (KIFF's spec §5.1), as Windows'
+    /// The challenge a pairing's passkey is made with (the public spec's pairing), as Windows'
     /// `PairingClaim.PasskeyChallenge`: base64url(sha256 of `kiff.passkey.pair.v1`, the nonce and
     /// the device key's base64url, a line each), the nonce and key as the QR writes them.
     static func pairingChallenge(nonce: String, deviceKeyDER: Data, sha256: (Data) -> Data) -> String {
@@ -218,15 +234,18 @@ enum PasskeyRegistration {
     }
 
     /// An ES256 COSE_Key: kty 2 (EC2), alg -7, crv 1 (P-256), x and y of 32 bytes. Anything else
-    /// is refused: KIFF takes ES256 only. Just enough CBOR for that: a map, small integers and
-    /// byte strings.
+    /// is refused: KIFF takes ES256 only, and a key named twice is refused. Just enough CBOR for
+    /// that: a map, small integers and byte strings.
     static func coseKey(_ cbor: [UInt8]) throws -> (Data, Data) {
         var reader = CBORReader(cbor)
         let entries = try reader.head(major: 5)
         var kty: Int64?, alg: Int64?, crv: Int64?
         var x: Data?, y: Data?
+        var seen: Set<Int64> = []
         for _ in 0..<entries {
-            switch try reader.integer() {
+            let label = try reader.integer()
+            guard seen.insert(label).inserted else { throw PasskeyRefusal.notES256 }
+            switch label {
             case 1: kty = try reader.integer()
             case 3: alg = try reader.integer()
             case -1: crv = try reader.integer()

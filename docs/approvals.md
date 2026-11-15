@@ -106,11 +106,19 @@ first on Needs you, oldest first.
 ## Passkeys on macOS 12
 
 This app is for Macs without Touch ID, so it never holds an approval key. An approval on such a
-Mac is the person's passkey: a USB security key registered at pairing, signing the exact request,
-sent as `KIFF-Passkey-Assertion` (KIFF's desktop client spec §2.6 and §5; KIFF checks it with
-`VerifyAssertion`, kiff-cloud#1638). Anything else is approved on the phone ("Approve on your
-phone"). macOS 12 has no system cross-device passkey (it came in macOS 13), and its platform
-authenticator needs Touch ID, so neither is used.
+Mac can be the person's passkey: a USB security key signing the exact request, sent as
+`KIFF-Passkey-Assertion`. The route is the public spec's "A Mac without Touch ID, and Linux", in
+[How a computer approves with a passkey](https://github.com/kiff/tafs/blob/main/docs/computer-passkeys.md)
+(in review); KIFF's checks are as `docs/secure-connection.md` describes them. Anything else is
+approved on the phone ("Approve on your phone"). macOS 12 has no system cross-device passkey (it
+came in macOS 13), and its platform authenticator needs Touch ID, so neither is used.
+
+**A security key belongs to the person's account,** is registered through pairing, and is listed
+and removable in Devices → Passkeys. It isn't bound to one computer, so its PIN is asked for each
+approval.
+
+**Off for now** (`Features.macPasskeyApprovals = false`): a switched-off `PasskeyApprover` refuses
+before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
 
 **In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
 `PasskeyRegistration`:
@@ -121,8 +129,12 @@ authenticator needs Touch ID, so neither is used.
   `{"type":"webauthn.get","challenge":base64url(sha256(message)),"origin":"https://kiff.dev","crossOrigin":false}`.
   The security key is given its SHA-256 (`clientDataHash`), never the JSON.
 - **Checked here before sending, whatever the key says:** rpIdHash is `sha256("kiff.dev")`; UP and
-  UV are set (the key's PIN was checked); the credential is the one asked for; and the key can't
-  leave this Mac (BE and BS are 0). Each is its own refusal (`PasskeyRefusal`).
+  UV are set (the key's PIN was checked); the credential is the one asked for; and the passkey
+  isn't a synced one (BE and BS are 0, as Windows refuses). A USB key reports neither, and can
+  still be used from another computer with its PIN: the check refuses a synced passkey, nothing
+  more. Each is its own refusal (`PasskeyRefusal`).
+- **Only two ways in:** `approve` for one request and `RequestsTogether.approve` for the pair,
+  each with the `signed_at` that went into its message. The signing itself is private.
 - **The header:** `t=<signed_at>,a=<base64url of {credential_id, client_data_json,
   authenticator_data, signature}>`; for the pair, each request's header adds
   `with=sha256:<the other request's hash>`.
@@ -135,7 +147,7 @@ authenticator needs Touch ID, so neither is used.
   gives CryptoKit's (`PasskeyCrypto`).
 
 **Next, each its own change:**
-1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on these conditions:
+1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on the review's conditions:
    - libfido2 and its CBOR and crypto libraries pinned, built from source in CI with their source
      checksums checked, never a prebuilt binary; their licence notices shipped;
    - only `make_cred` and `get_assert`, given the `clientDataHash` this app computes; never
@@ -144,10 +156,12 @@ authenticator needs Touch ID, so neither is used.
      never kept, logged or sent; the tries left said, and a blocked key said to be blocked;
    - confirmed on a real Mac: an unsigned app reads a FIDO HID device on macOS 12 without an
      Input Monitoring prompt.
-2. **Registering the key through pairing** (KIFF's spec §5.1): the Mac makes the credential, shows
-   the `kind: "passkey"` pairing QR naming it, the phone approves the pairing, and the claim proves
-   it with `credential_proof`. The key goes with the Mac; unpairing removes it.
-3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`.
+2. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
+   credential, shows the `kind: "passkey"` pairing QR naming it, the phone approves the pairing,
+   and the claim proves it with `credential_proof`. The key then belongs to the person's account,
+   listed and removable in Devices → Passkeys.
+3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on
+   once the public spec's route has merged.
 
 ## Tests
 
