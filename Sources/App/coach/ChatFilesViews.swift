@@ -41,9 +41,10 @@ struct AttachButton: View {
         panel.allowedContentTypes = photos ? [.image] : FilePrep.pickable
         panel.begin { response in
             guard response == .OK else { return }
-            let urls = Array(panel.urls.prefix(room))
-            Task { @MainActor in
-                for url in urls { await add(url) }
+            // One task a file, as the iPad's: each goes up on its own, not after the one before.
+            // The fifth-file check in `attach` runs before its first wait, so the limit holds.
+            for url in panel.urls.prefix(room) {
+                Task { @MainActor in await add(url) }
             }
         }
     }

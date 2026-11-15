@@ -334,10 +334,12 @@ enum Thread {
             }
         }
 
-        func hasPersonsLast(_ text: String, since: Date) -> Bool {
+        func hasPersonsLast(_ text: String, since: Date, files: [String] = []) -> Bool {
             for item in items.reversed() {
                 guard case .message(let message, _) = item, message.fromPerson else { continue }
-                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines) == text, let at = message.at else { return false }
+                // Its files too: a message of files alone isn't taken for an earlier one.
+                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines) == text, message.attachments.map(\.id) == files,
+                      let at = message.at else { return false }
                 return at >= since.addingTimeInterval(-60)
             }
             return false

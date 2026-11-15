@@ -103,6 +103,15 @@ let coachFileTests: [Test] = [
         let messages = read.items.compactMap { item -> Thread.Message? in if case .message(let m, _) = item { return m } else { return nil } }
         try expectEqual(messages.map(\.attachments), [[attachedRef], [], []])
     },
+    Test("a message of files alone is the one sent only with the same files: an earlier one with others isn't taken for it") {
+        let page = #"""
+        {"items":[{"type":"message","message":{"id":"m1","from":"owner","text":"","at":"2026-11-14T18:00:10Z","attachments":[{"id":"att_0","kind":"pdf","media_type":"application/pdf","name":"Old.pdf","size":10}]}}]}
+        """#
+        let read = try JSONDecoder().decode(Thread.Page.self, from: Data(page.utf8))
+        let sentAt = Date(timeIntervalSince1970: 1_794_679_200)
+        try expectEqual(read.hasPersonsLast("", since: sentAt, files: ["att_1"]), false)
+        try expectEqual(read.hasPersonsLast("", since: sentAt, files: ["att_0"]), true)
+    },
     Test("the files for the next message: only ready ones go, failed ones stay, and a message that didn't go puts them back first") {
         var files = ChatFiles()
         let a = PendingFile(id: UUID(), name: "a.pdf", mediaType: "application/pdf", thumbnail: nil, state: .ready(attachedRef))

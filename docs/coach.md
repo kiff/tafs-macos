@@ -323,20 +323,28 @@ chat and a taf's alike:
   why above the box, in the shared words.
 - **Then it goes up at once:** declared to tafs cloud (`POST /v1/tafs/{id}/attachments` with
   its type, name, size and SHA-256), which checks it and answers where to put it; its bytes go
-  straight to storage, with no session (`FileStore`). Its chip says Uploading, Ready, or why it
-  didn't upload, with Remove. One that comes back after sign-out is dropped.
+  straight to storage, with no session (`FileStore`). Each file picked goes up on its own, at
+  once. Its chip says Uploading, Ready, or why it didn't upload, with Remove. A session that
+  ends while a file is declared puts no bytes up, and one that comes back after sign-out is
+  dropped. A photo is read with its orientation applied, and never decoded larger than its
+  long edge.
 - **Send takes the ready files** with the words, as a message of its own: by id
   (`attachments`), words optional. Send waits while a file is still going up, and while files
-  are ready but the chat is at work. A message with files that doesn't go goes back to the
-  composer, words and files, with why above the box; one refused for want of the AI-data
-  consent goes back too, to send once allowed.
+  are ready but the chat is at work, or while a new conversation improves a taf: its first
+  message carries none, and they wait in the tray. A message with files that doesn't go goes
+  back to the composer, words and files, with why above the box; one refused for want of the
+  AI-data consent goes back too: Allow then only allows, and they wait to send again.
 - **A sent message's files** show under it, and each opens: tafs cloud says where it is
   (`GET /v1/tafs/{id}/attachments/{file}`), it's copied under its own name to a temporary
   folder, and opened in the app this Mac opens its kind with. Sign-out removes the copies and
-  the files picked.
+  the files picked; one read after sign-out is neither written nor opened.
 - **Mac differences:** no Take photo (the iPad's camera); photos come from files, so each keeps
   its own name where the iPad's picker gives "Photo {n}"; a file opens in its app, not in
-  Quick Look in place; nothing is dropped onto the box, as on the iPad.
+  Quick Look in place, so a file read after sign-out is never opened (the iPad shows one in
+  its own window, which sign-out closes); nothing is dropped onto the box, as on the iPad; a
+  file that can't be read says `chat.file.unreadable`, where the iPad shows the system's words.
+  The open panel's files are read inside their security scope, as on the iPad, though the app
+  isn't sandboxed.
 
 ## The layout
 

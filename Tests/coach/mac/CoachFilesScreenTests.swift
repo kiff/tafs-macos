@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
+import ImageIO
 import SwiftUI
+import UniformTypeIdentifiers
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 private let before = #"{"working":false,"items":[{"type":"message","message":{"id":"m1","from":"taf","text":"What should your taf do?"}}]}"#
@@ -18,12 +20,41 @@ private final class Storage: FileStore, @unchecked Sendable {
     func get(_ url: URL) async throws -> Data { Data("%PDF".utf8) }
 }
 
+/// tafs cloud, as canned, which does something once a request's answer is in: the person
+/// signing out while it was on its way.
+private final class Hooked: Transport, @unchecked Sendable {
+    let canned: CannedTransport
+    var after: (String) async -> Void = { _ in }
+    init(_ canned: CannedTransport) { self.canned = canned }
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        let answer = try await canned.send(request)
+        await after(request.path)
+        return answer
+    }
+}
+
 @MainActor
-private func coach(_ answers: [(Int, String)], storage: Storage = Storage()) async -> (CoachModel, CannedTransport, Storage) {
+private func coach(_ answers: [(Int, String)], storage: Storage = Storage(), hooked: Hooked? = nil) async -> (CoachModel, CannedTransport, Storage) {
     let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
-    let chat = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, store: storage)
+    let sending: Transport = hooked.map { _ in Hooked(transport) } ?? transport
+    let chat = CoachModel(cloud: CloudClient(transport: sending, session: session), sleep: { _ in }, store: storage)
+    if let hooked, let made = sending as? Hooked { made.after = { path in await hooked.after(path) } }
     await chat.load()
     return (chat, transport, storage)
+}
+
+/// A JPEG `width` × `height` as stored, with its EXIF orientation: 6 is turned a quarter right.
+private func orientedJPEG(width: Int, height: Int, orientation: Int) -> Data {
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let data = NSMutableData()
+    let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil)!
+    CGImageDestinationAddImage(destination, context.makeImage()!, [kCGImagePropertyOrientation: orientation] as CFDictionary)
+    CGImageDestinationFinalize(destination)
+    return data as Data
 }
 
 private let pdf = PreparedFile(name: "Invoice.pdf", mediaType: "application/pdf", data: Data("%PDF-1.4".utf8), thumbnail: nil)
@@ -102,6 +133,61 @@ let coachFilesMacTests: [Test] = [
         await chat.attach(pdf)
         try expectEqual(transport.sent.count, sent)
         try expectEqual(chat.files.isEmpty, true)
+    }),
+    Test("a photo turned by its EXIF orientation goes up turned, as the iPad's UIImage draws it, and no larger than its long edge") {
+        let say = Words.app
+        let stored = orientedJPEG(width: 400, height: 200, orientation: 6)
+        let prepared = try FilePrep.photo(stored, name: "Portrait.jpg", say: say)
+        guard let source = CGImageSourceCreateWithData(prepared.data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw Failure(description: "no JPEG") }
+        try expectEqual([image.width, image.height], [200, 400])
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        try expectEqual((properties?[kCGImagePropertyOrientation] as? Int) ?? 1, 1)
+        let huge = try FilePrep.photo(orientedJPEG(width: 3000, height: 1000, orientation: 1), name: "Wide.jpg", say: say)
+        let read = CGImageSourceCreateWithData(huge.data as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
+        try expectEqual(read.map { max($0.width, $0.height) }, FilePrep.longEdge)
+    },
+    Test("files ready never go into an improvement's first message: Send does nothing and they wait in the tray", awaiting: { @MainActor in
+        let (chat, transport, _) = await coach([(201, declared)])
+        await chat.attach(pdf)
+        chat.improve(CoachModel.Improving(id: "taf-9", name: "Refunds"))
+        chat.draft = "Make it faster"
+        try expectEqual(chat.canSend, false)
+        let sent = transport.sent.count
+        await chat.send()
+        try expectEqual(transport.sent.count, sent)
+        try expectEqual(chat.files.files.map(\.ref?.id), ["att_1"])
+        try expectEqual(chat.draft, "Make it faster")
+    }),
+    Test("Allow after a refusal for the consent, with files: it allows, closes, and the words and files wait to send again", awaiting: { @MainActor in
+        let (chat, transport, _) = await coach([(201, declared), (403, consentRefusal), (204, "")])
+        await chat.attach(pdf)
+        chat.draft = "Here it is"
+        await chat.send()
+        try expectEqual(chat.consent?.version, "3")
+        await chat.allowAI()
+        try expectEqual(transport.sent.last?.path, "/v1/me/ai-consent")
+        try expectEqual(chat.consent, nil)
+        try expectEqual(chat.draft, "Here it is")
+        try expectEqual(chat.files.files.map(\.ref?.id), ["att_1"])
+        try expectEqual(chat.canSend, true)
+    }),
+    Test("a session that ends while a file is declared puts no bytes up, and one that ends while a file is read opens nothing", awaiting: { @MainActor in
+        let hooked = Hooked(CannedTransport([]))
+        let storage = Storage()
+        let (chat, _, _) = await coach([(201, declared)], storage: storage, hooked: hooked)
+        hooked.after = { path in if path.hasSuffix("/attachments") { await chat.signedOut() } }
+        await chat.attach(pdf)
+        try expectEqual(storage.kept.count, 0)
+        try expectEqual(chat.files.isEmpty, true)
+        let reading = Hooked(CannedTransport([]))
+        let (opener, _, _) = await coach([(200, #"{"url":"https://storage.example/get/att_1"}"#)], hooked: reading)
+        reading.after = { path in if path.contains("/attachments/") { await opener.signedOut() } }
+        let ref = AttachmentRef(id: "att_1", kind: "pdf", mediaType: "application/pdf", name: "Invoice.pdf", size: 4)
+        let url = await opener.openFile(ref)
+        try expectEqual(url, nil)
+        try expectEqual(FileManager.default.fileExists(atPath: CoachModel.openedFiles.appendingPathComponent("att_1").path), false)
+        try expectEqual(opener.fileNotice, nil)
     }),
     Test("the screenshot: the paperclip, and a tray with a file ready and one that didn't upload", awaiting: { @MainActor in
         let storage = Storage()

@@ -51,6 +51,10 @@ extension FilePrep {
     /// A file from disk, as the iPad's `AttachButton.read`: one over every limit that isn't a
     /// photo is refused before it's read into memory.
     static func read(_ url: URL, say: Words) throws -> PreparedFile {
+        // Read while its security scope is open, as the iPad's: free while the app isn't
+        // sandboxed, and right if it ever is.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let values = try? url.resourceValues(forKeys: [.contentTypeKey, .fileSizeKey])
         let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension) ?? .data
         let size = values?.fileSize ?? 0
@@ -66,8 +70,15 @@ extension FilePrep {
     /// A photo, any format this Mac reads: as a JPEG, its long edge at most 2576 px, with a small
     /// thumbnail for the tray.
     static func photo(_ data: Data, name: String, say: Words) throws -> PreparedFile {
+        // Read with its orientation applied, as the iPad's `UIImage(data:)` draws it, and at most
+        // the long edge's size, so a huge photo is never decoded whole.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: longEdge,
+        ]
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         else { throw FileProblem(message: say("chat.attach.not_a_photo", ["name": name])) }
         guard let jpeg = Self.jpeg(scaled(image, to: longEdge), quality: 0.85) else {
             throw FileProblem(message: say("chat.attach.not_a_photo", ["name": name]))

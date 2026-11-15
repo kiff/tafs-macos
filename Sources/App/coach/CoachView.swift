@@ -270,6 +270,9 @@ final class CoachModel: ObservableObject {
         guard !files.holdsSend(working: working) else { return false }
         let ready = files.files.compactMap(\.ref)
         guard !ready.isEmpty else { return canSend(draft) }
+        // An improvement's first message carries no files, as the iPad's `deliverSetupOnce`
+        // (AppModel.swift:7710-7711): the files wait in the tray.
+        guard improving == nil else { return false }
         guard case .loaded = state else { return false }
         return Outgoing.text(draft, files: ready) != nil && (pending == nil || pending?.failed != nil)
     }
@@ -289,6 +292,8 @@ final class CoachModel: ObservableObject {
     /// if it doesn't go, it stays with why, to send again.
     func send() async {
         guard case .loaded(let coach, _) = state, canSend else { return }
+        // Files never go into an improvement's first message: they stay in the tray.
+        if improving != nil, files.hasReady { return }
         // A message with files goes as a message of its own, with the ready ones, as the iPad's
         // `submitSetup` (AppModel.swift:7825-7826); ones that failed stay in the tray.
         let taken = files.take()
@@ -339,6 +344,9 @@ final class CoachModel: ObservableObject {
         do {
             let (ref, upload) = try await cloud.attach(target, mediaType: file.mediaType, name: file.name, size: file.data.count,
                                                        sha256: FilePrep.sha256(file.data))
+            // A session that ended while it was declared puts no bytes up, as the iPad's check
+            // after each wait (AppModel.swift:4766).
+            guard gen == accountGeneration else { return }
             try await store.put(file.data, to: upload)
             state = .ready(ref)
         } catch {
@@ -362,15 +370,20 @@ final class CoachModel: ObservableObject {
     /// notice says why.
     func openFile(_ ref: AttachmentRef) async -> URL? {
         guard case .loaded(let coach, _) = state else { return nil }
+        // A file read after sign-out is the session before's: nothing is written or opened.
+        let gen = accountGeneration
         do {
             let url = try await cloud.attachmentURL(coach.id, file: ref.id)
+            guard gen == accountGeneration else { return nil }
             let data = try await store.get(url)
+            guard gen == accountGeneration else { return nil }
             let dir = Self.openedFiles.appendingPathComponent(ref.id, isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let local = dir.appendingPathComponent((ref.name as NSString).lastPathComponent)
             try data.write(to: local, options: .atomic)
             return local
         } catch {
+            guard gen == accountGeneration else { return nil }
             fileNotice = Words.app("chat.file.not_opened", ["file": ref.name, "why": Self.fileWhy(error)])
             return nil
         }
@@ -490,7 +503,15 @@ final class CoachModel: ObservableObject {
 
     /// The person read the consent's words and allows AI use: then their message goes.
     func allowAI() async {
-        guard let asked = consent, case .loaded(let coach, _) = state, let text = pending?.text else { return }
+        guard let asked = consent, case .loaded(let coach, _) = state else { return }
+        // A message with files refused for the consent went back to the composer: Allow then
+        // only allows, and the words and files wait there to send again, as the iPad's consent
+        // screen (AppModel.swift:6791-6800, 7767-7773).
+        guard let text = pending?.text else {
+            consent = nil
+            do { try await cloud.allowAI(version: asked.version) } catch { fileNotice = Self.why(error) }
+            return
+        }
         consent = nil
         do {
             try await cloud.allowAI(version: asked.version)
@@ -537,7 +558,8 @@ final class CoachModel: ObservableObject {
                 } catch {
                     // The stream couldn't open. If tafs cloud has the message all the same, the
                     // thread is followed; only if it doesn't is the message sent plainly, below.
-                    if let page = try? await read(coach), mine == conversation, let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
+                    if let page = try? await read(coach), mine == conversation, let tried = pending,
+                       page.hasPersonsLast(tried.text, since: tried.at, files: tried.files.map(\.id)) {
                         state = .loaded(coach, page)
                         pending = nil
                         await follow(coach)
