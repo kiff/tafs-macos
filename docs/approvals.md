@@ -46,10 +46,10 @@ read that fails keeps the list.
 
 - Each is drawn above the held calls, edged in amber: "Did this happen?", KIFF's sentence for
   the call (else its title, and its amount), and KIFF's words for why it asks.
-- **The answer is signed like an approval**, behind Face ID or Touch ID, which this Mac doesn't
-  have. So for someone who answers held calls, the card says to answer on the phone
-  (`approval.has_no_face_id_touch`), as the iPad says on a device that can't approve, and has
-  no Yes or No.
+- **The answer is signed like an approval**, which this Mac can't do yet. So for someone who
+  answers held calls, the card says to approve on another device
+  (`approval.device_can_not_approve_approve`, the iPad's `Biometry.short` where an approval
+  can't be made), as the held calls do, and has no Yes or No.
 - "Nothing waiting" shows only when there's nothing to say about either.
 
 ## Tests

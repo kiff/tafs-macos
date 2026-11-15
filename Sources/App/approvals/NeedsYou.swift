@@ -121,8 +121,8 @@ struct NeedsYouView: View {
 
     /// "Did this happen?", as the iPad's `DidThisHappenCard`: KIFF's words for the call (else its
     /// title and amount) and for why it asks. The answer is signed like an approval, which this
-    /// Mac can't do: for someone who answers held calls, it says to answer on the phone, as the
-    /// iPad says on a device that can't approve.
+    /// Mac can't do yet: for someone who answers held calls, it says to approve on another
+    /// device, the iPad's line where an approval can't be made (`Biometry.short`).
     private func happened(_ call: Unproven) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(words("record.did_this_happen.title")).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
@@ -136,7 +136,7 @@ struct NeedsYouView: View {
                 Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             if answersHolds {
-                Text(words("approval.has_no_face_id_touch", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
