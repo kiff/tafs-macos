@@ -33,7 +33,7 @@ let overviewMacTests: [Test] = [
         await none.load()
         try expectEqual(none.hasNoTafs, true)
     }),
-    Test("the screenshots: the Overview with tafs, and with none, in three languages", awaiting: { @MainActor in
+    Test("the screenshots: the Overview with tafs, and with none, in three languages, and tafs cloud's own Home", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -50,5 +50,14 @@ let overviewMacTests: [Test] = [
                 try png.write(to: folder.appendingPathComponent("overview-\(name)-\(language).png"))
             }
         }
+        // tafs cloud's own Home (the home.json contract): a taf with its Card, so the Card column
+        // shows its line, and its work line as tafs cloud words it.
+        let contract = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/home.json"))) as? [String: Any]
+        guard let answer = contract?["answer"], let body = String(data: try JSONSerialization.data(withJSONObject: answer), encoding: .utf8) else { throw Failure(description: "no answer in home.json") }
+        let model = model([(200, body)])
+        await model.load()
+        let view = OverviewView(model: model, held: []).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("overview-contract-en.png"))
     }),
 ]

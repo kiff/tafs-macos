@@ -169,7 +169,8 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Group {
-                Text(verbatim: taf.now ?? "–").foregroundColor(Theme.ink)
+                // "Now" by its state, as the iPad's; the sidebar shows what went wrong instead.
+                Text(verbatim: taf.now(words, time: { Self.clock.string(from: $0) })).foregroundColor(Theme.ink)
                 Text(verbatim: taf.cards.first?.line(words) ?? "–").foregroundColor(Theme.ink)
                 Text(verbatim: taf.tafID.flatMap { model.lastResults[$0] } ?? "–").foregroundColor(Theme.soft).lineLimit(2)
             }
