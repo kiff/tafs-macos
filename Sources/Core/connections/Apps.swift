@@ -17,12 +17,23 @@ enum Apps {
         let line: String?
         /// For `needs_setup`: the line shown in place of Connect.
         let words: String?
+        /// How it connects: `sign_in` or `key`.
+        let method: String?
+        /// An older tafs cloud's word for how it connects, read only when `method` is absent.
+        let how: String?
         /// For the account's own connections: "Company" or "Yours", as sent.
         let whose: String?
+        /// The tafs that use one of the account's own connections, by name, as sent.
+        let usedBy: [String]
 
         var id: String { entry }
 
-        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose }
+        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, usedBy = "used_by" }
+        private struct User: Decodable { let name: String? }
+        private struct LenientUser: Decodable {
+            let name: String?
+            init(from decoder: Decoder) throws { name = (try? User(from: decoder))?.name }
+        }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             entry = try c.decode(String.self, forKey: .entry)
@@ -41,7 +52,16 @@ enum Apps {
             line = text(.line)
             words = text(.words)
             whose = text(.whose)
+            method = text(.method)
+            how = text(.how)
+            // A user that doesn't read is left out, never the row.
+            let users = ((try? c.decodeIfPresent([LenientUser].self, forKey: .usedBy)) ?? nil) ?? []
+            usedBy = users.compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         }
+
+        /// The shared key for how it connects, by the iPad's rule: a key when tafs cloud says
+        /// `key` (an older one, in `how`), else Sign in.
+        var howKey: String { (method ?? how) == "key" ? "connect.how.key" : "connect.how.sign_in" }
 
         /// One of the account's own connections: connected, or to sign in again.
         var isYours: Bool { state == "connected" || state == "needs_reconnect" }
