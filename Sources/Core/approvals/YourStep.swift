@@ -83,8 +83,9 @@ struct Handoff: Decodable, Equatable {
     }
 }
 
-/// The time an answer is signed at, as the iPad's `SigningTime`: RFC 3339 with milliseconds,
-/// never the same twice in this app.
+/// The time an answer or a planque proof is signed at, as the iPad's `SigningTime`: RFC 3339
+/// with milliseconds, never the same twice in this app. planque and KIFF each refuse a signed
+/// request they have already seen, and the time is part of what's signed.
 enum SigningTime {
     private static let lock = NSLock()
     private static var last = Date.distantPast
