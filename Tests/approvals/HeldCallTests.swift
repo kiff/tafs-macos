@@ -119,4 +119,29 @@ let approvalsTests: [Test] = [
             try expectEqual(error, .refused(status: 409, code: "already_answered"))
         }
     }),
+    Test("Did this happen? is KIFF's list as the iPad reads it: a call needs its proposal, the rest defaults", awaiting: {
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","status":"unknown","amount":4000,"unit":"EUR","words":"Refund a payment: 40.00 EUR.","status_words":"Its answer was lost."},{"proposal":"p2","amount":725}]}"#
+        let (account, transport) = client([(200, list), (200, "{}"), (200, #"{"calls":[{"title":"no proposal"}]}"#), (200, #"{"calls":[{"proposal":"p3","amount":"40"}]}"#)])
+        let calls = try await account.didThisHappen()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/me/did-this-happen")
+        try expectEqual(calls.map(\.proposal), ["p1", "p2"])
+        try expectEqual(calls[0].statusWords, "Its answer was lost.")
+        try expectEqual(calls[1].title, "")
+        try expectEqual(calls[1].status, "unknown")
+        // No unit is no places, as the iPad's `Money.init`; a unit without a scale is two.
+        try expectEqual(calls[1].money, TafCard.Amount(minor: 725, unit: nil, scale: 0))
+        try expectEqual(calls[0].money, TafCard.Amount(minor: 4000, unit: "EUR", scale: 2))
+        let empty = try await account.didThisHappen()
+        try expectEqual(empty, [])
+        let noProposal = try? await account.didThisHappen()
+        try expect(noProposal == nil, "a call without its proposal doesn't read")
+        let wrongType = try? await account.didThisHappen()
+        try expect(wrongType == nil, "an amount that isn't a number doesn't read")
+    }),
+    Test("who answers held calls is KIFF's holds.answer; a KIFF that doesn't say leaves it to KIFF") {
+        let me = { (json: String) in try AccountClient.decoder.decode(Me.self, from: Data(json.utf8)) }
+        try expectEqual(try me(#"{"capabilities":["holds.answer"]}"#).answersHolds, true)
+        try expectEqual(try me(#"{"capabilities":["taf.use"]}"#).answersHolds, false)
+        try expectEqual(try me("{}").answersHolds, true)
+    },
 ]
