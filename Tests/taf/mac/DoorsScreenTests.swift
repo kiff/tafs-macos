@@ -74,7 +74,13 @@ let tafDoorsMacTests: [Test] = [
             try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
             try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-knocks-en.png"))
         }
-        try expect(drawn.map(shows) == true, "the knocked taf's row is drawn")
+        // When it isn't seen, what was read at the avatar, and the bitmap's own shape, say why.
+        let read = drawn.map { bitmap in
+            [(48, 140), (60, 146), (52, 156)].map { Snapshot.hex(bitmap, x: $0.0, y: $0.1).map { String(format: "%06X", $0) } ?? "nil" }.joined(separator: " ")
+                + " | \(bitmap.pixelsWide)x\(bitmap.pixelsHigh) of \(Int(bitmap.size.width))x\(Int(bitmap.size.height)), \(bitmap.bitsPerSample) bits, "
+                + "format \(bitmap.bitmapFormat.rawValue), \(bitmap.colorSpace.localizedName ?? "?")"
+        } ?? "nothing drawn"
+        try expect(drawn.map(shows) == true, "the knocked taf's row is drawn (read \(read), wanted \(String(format: "%06X", wanted)))")
     }),
     Test("the screenshot: a door's own screen, with who may give it work and a knock waiting", awaiting: { @MainActor in
         let (model, _) = doors([(200, doorPage), (200, doorPage)])
