@@ -107,6 +107,7 @@ final class CalendarModel: ObservableObject {
 struct CalendarView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CalendarModel
+    @State private var choosingDate = false
 
     private static let hourHeight: CGFloat = 44
     private static let hoursWidth: CGFloat = 52
@@ -148,15 +149,34 @@ struct CalendarView: View {
             arrow("chevron.right", "calendar.next_\(step)") { await model.move(1) }
             Text(title).font(.system(size: 20, weight: .bold)).foregroundColor(Theme.ink).lineLimit(1).minimumScaleFactor(0.7)
             Spacer(minLength: 8)
-            // The day shown, as the iPad's compact date pill: in the app's language, and choosing
-            // a date goes there. Days are dates with no zone, so the picker reads them in UTC.
+            datePill
+        }
+    }
+
+    /// The day shown, as the iPad's compact date pill ("Nov 15, 2026", a medium date in the
+    /// app's language, on a raised capsule). macOS 12's compact picker is a numeric field, so
+    /// the pill is a button that opens the month's calendar; choosing a day goes there. Days are
+    /// dates with no zone, so the calendar reads them in UTC.
+    private var datePill: some View {
+        Button { choosingDate = true } label: {
+            Text(verbatim: Days.medium(model.day, language: words.language)).font(.system(size: 15)).foregroundColor(Theme.ink)
+                .lineLimit(1).fixedSize()
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Capsule().fill(Theme.raised))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(words("calendar.date_picker"))
+        .accessibilityValue(Days.medium(model.day, language: words.language))
+        .accessibilityHint(words("calendar.choose_date"))
+        .popover(isPresented: $choosingDate, arrowEdge: .bottom) {
             DatePicker(words("calendar.date_picker"), selection: chosenDay, displayedComponents: .date)
-                .datePickerStyle(.compact)
+                .datePickerStyle(.graphical)
                 .labelsHidden()
-                .accessibilityLabel(words("calendar.choose_date"))
                 .environment(\.locale, Locale(identifier: words.language))
                 .environment(\.timeZone, TimeZone(identifier: "UTC") ?? .current)
-                .fixedSize()
+                .padding(12)
         }
     }
 
@@ -170,7 +190,9 @@ struct CalendarView: View {
             Text(words("calendar.today")).font(.system(size: 15, weight: .medium)).lineLimit(1).fixedSize()
                 .foregroundColor(model.showsToday ? Theme.soft : Theme.ink)
                 .padding(.horizontal, 16).frame(minHeight: 40)
-                .overlay(Capsule().stroke(Theme.ink.opacity(model.showsToday ? 0.2 : 0.4), lineWidth: 1))
+                // Inside the label's bounds: a stroke on the edge is half outside them, and clipped
+                // there it leaves a flat sliver at each round end.
+                .overlay(Capsule().strokeBorder(Theme.ink.opacity(model.showsToday ? 0.2 : 0.4), lineWidth: 1))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -180,7 +202,10 @@ struct CalendarView: View {
 
     private var chosenDay: Binding<Date> {
         Binding(get: { Days.date(model.day) ?? Date() },
-                set: { date in Task { await model.go(to: Days.string(date)) } })
+                set: { date in
+                    choosingDate = false
+                    Task { await model.go(to: Days.string(date)) }
+                })
     }
 
     /// tafs cloud's line when it halted, or cut the read at its most: under the top line, as

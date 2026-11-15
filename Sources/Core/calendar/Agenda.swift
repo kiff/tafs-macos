@@ -157,6 +157,18 @@ enum Days {
         return String(format: "%04d-%02d-01", index / 12, index % 12 + 1)
     }
 
+    /// A day as a medium date in a language ("Nov 15, 2026"), for the date pill: read in UTC,
+    /// since a day has no zone.
+    static func medium(_ day: String, language: String) -> String {
+        guard let date = date(day) else { return day }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language)
+        formatter.timeZone = calendar.timeZone
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+
     /// The same day a month or more before or after, the last of its month when that month is
     /// shorter (31 January and one month is 28 February), as the iPad's month arrows go.
     static func adding(months: Int, to day: String) -> String? {

@@ -156,7 +156,7 @@ struct NeedsYouView: View {
                 }
                 .foregroundColor(Theme.no)
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.no.opacity(0.4), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.no.opacity(0.4), lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

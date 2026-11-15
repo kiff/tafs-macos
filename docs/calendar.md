@@ -31,12 +31,15 @@ To the iPad's layout:
   semibold, amber for today), each event on a panel (radius 10, padding 10): its time 13 mono
   in 46 points, a 9-pt dot, its name 14 semibold and tafs cloud's words 12 dim. tafs cloud's
   own line when there are none.
-- **On the right**: the Today pill, the arrows, the range's title, and the day shown as a
-  compact date pill in the app's language (choosing a date goes there); under them, tafs
+- **On the right**: the Today pill, the arrows, the range's title, and the day shown as the
+  iPad's date pill: a medium date in the app's language ("Nov 15, 2026", `Days.medium`) on a
+  raised capsule. macOS 12's compact picker is a numeric field, so the pill is a button that
+  opens the month's calendar in a popover; choosing a day goes there and closes it; under them, tafs
   cloud's line when it **halted** (in red) or **cut the read at its most** (`more`); then
   **Day / Week / Month**, segmented, at most 320 wide; then the days.
 - **The Today pill** has its padding and stroke on its word, and both are fixed, so no width
-  cuts its round ends in any language. It is quiet while today is shown.
+  cuts its round ends in any language. The stroke is drawn inside the label's bounds
+  (`strokeBorder`): on the edge, half of it falls outside and is clipped to a sliver. It is quiet while today is shown.
 - **Day and Week** draw the days' columns over an **hour grid**, 08:00 to 18:00, wider when
   an event on a day shown falls outside.
 - **Month** draws the month card larger: cells at least 64 high, 15-pt numbers, the dots, and

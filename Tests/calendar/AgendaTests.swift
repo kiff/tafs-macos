@@ -115,6 +115,12 @@ let calendarTests: [Test] = [
         let four = try await CloudClient(transport: CannedTransport([(200, busy)]), session: session).calendar(from: "a", to: "b")
         try expectEqual(four.marks(on: "2026-11-20").count, 3)
     }),
+    Test("the date pill is a medium date in the app's language, the same day in every zone") {
+        try expectEqual(Days.medium("2026-11-15", language: "en"), "Nov 15, 2026")
+        let french = Days.medium("2026-11-15", language: "fr")
+        try expect(french.hasPrefix("15 nov") && french.hasSuffix("2026"), french)
+        try expectEqual(Days.medium("2026-02-30", language: "en"), "2026-02-30")
+    },
     Test("today is the date in the account's zone, not the Mac's") {
         let lateInParis = Date(timeIntervalSince1970: 1_794_697_200) // 2026-11-14T23:00:00Z
         try expectEqual(Days.today(in: "Europe/Paris", now: lateInParis), "2026-11-15")
