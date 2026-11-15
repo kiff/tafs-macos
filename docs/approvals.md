@@ -55,9 +55,39 @@ read that fails keeps the list.
 - An amount with no unit is drawn whole, "725 (no currency)", as the iPad's `Money` keeps it.
 - "Nothing waiting" shows only when there's nothing to say about either.
 
+## Your step
+
+As the iPad's `YourStepCard`, `answerYourStep`, `showSteps` and `drop`
+(`YourStepCard.swift:6-46`, `AppModel.swift:6816-6820, 6832-6834, 6843-6896, 6898-6903` at
+`d14217f1`, `TafsCloud+YourStep.swift`, `KIFFClient.swift:895-967`): the steps the tafs handed their owner, from Home's `your_steps`
+(each read strictly: one that doesn't read makes Home unreadable, as on the iPad), drawn
+first on Needs you, oldest first.
+
+- Each card: tafs cloud's title, the taf, what to do (16 semibold) and why; the vendor's page
+  as an outlined button only as tafs cloud vouched for it (https, its host apart and the
+  link's own, and the button's words), with the host under it; then Done and Skip, in tafs
+  cloud's words, only for someone who answers the account's held calls (KIFF's `holds.answer`)
+  with a device key; else answering says to answer in KIFF, or to sign in again.
+- **Answering** reads the hand-off from KIFF first (`GET /v1/me/handoffs/{id}`); one KIFF no
+  longer waits on isn't sent ("This step was already answered or has ended."). The answer,
+  `done` or `skipped`, is signed with the device key over `kiff.handoff.v1` (tenant, hand-off,
+  answer, version, the time to the millisecond, never the same twice) **after the person
+  confirms with Touch ID or the Mac's password**, as the iPad's `sign(_:reason:)` asks for
+  Face ID or the passcode; the prompt is tafs cloud's words, "Done · {what}". It's never the
+  approval key. A closed prompt sends nothing and keeps the step ("Cancelled, so nothing was
+  approved"); any other failure says it wasn't confirmed. A 409 says it ended. A refusal says
+  KIFF's `error`, else its `reason`, in the iPad's words, else "KIFF didn't take the answer"
+  with the app's own line for the status (a 401 is "Signed out of KIFF", as the iPad's
+  `KIFFError.unauthorized`): never KIFF's code.
+- An answer on its way stops at sign-out: nothing is signed or posted for a session that
+  ended.
+- An answered or ended step leaves the list at once, and stays off while Home still lists it;
+  the lists are then read again.
+
 ## Tests
 
 `scripts/test.sh approvals`: the hold as KIFF sends it, the answer's message line by line,
+a step's message against KIFF's pinned vector (its signature checked on a Mac),
 the refusal's exact body, each case where a refusal is not sent, and that a refusal's
 signature verifies with the device key and is not an approval's.
 

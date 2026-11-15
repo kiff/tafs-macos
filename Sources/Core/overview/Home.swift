@@ -168,8 +168,10 @@ enum Home {
         /// What waits for the person, counted once by tafs cloud so every screen agrees.
         let needsYouCount: Int?
         let needsYouWords: String?
+        /// The steps the tafs handed their owner (`your_steps`), each read strictly, as the iPad's `Home`.
+        let yourSteps: [YourStep]
 
-        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you" }
+        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", yourSteps = "your_steps" }
         enum WordsKeys: String, CodingKey { case words, count }
 
         init(from decoder: Decoder) throws {
@@ -182,6 +184,7 @@ enum Home {
             let needs = try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .needsYou)
             needsYouCount = needs.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .count)) ?? nil }
             needsYouWords = needs.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+            yourSteps = try c.decodeIfPresent([YourStep].self, forKey: .yourSteps) ?? []
         }
     }
 }
