@@ -386,7 +386,7 @@ struct NeedsYouView: View {
             if let amount = call.amount {
                 Text(verbatim: amount.written(language: words.language)).font(.system(size: 44, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
             }
-            Text(verbatim: call.title ?? call.action).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(verbatim: call.summary).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             // Why KIFF held it, on the amber pill.
             if let reason = call.reasonText {
