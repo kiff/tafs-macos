@@ -40,7 +40,10 @@ final class OverviewModel: ObservableObject {
         // with each list read that has no taf, and a read that fails keeps what was read.
         if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
         noTafsLine = recipes?.home?.shown == true ? recipes?.homeWords : nil
-        // The gallery, with each list read, as the iPad's `refresh` (AppModel.swift:1864-1866).
+        // The gallery, with each list read that worked, as the iPad's `refresh`: reached only
+        // after `try await home` (AppModel.swift:1823-1824, 1867), so a failed read asks nothing
+        // and keeps the gallery read before.
+        guard case .loaded = state else { return }
         await loadGallery()
     }
 

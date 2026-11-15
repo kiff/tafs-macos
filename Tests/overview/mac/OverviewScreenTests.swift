@@ -37,6 +37,15 @@ let overviewMacTests: [Test] = [
         try expectEqual(overview.gallery, nil)
         try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery", "/v1/home", "/v1/recipes/gallery", "/v1/home", "/v1/recipes/gallery"])
     }),
+    Test("a list read that fails asks no gallery and keeps the one read, as the iPad's refresh", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, homePage), (200, galleryAnswer), (503, "")])
+        let overview = OverviewModel(cloud: CloudClient(transport: transport, session: session))
+        await overview.load()
+        await overview.load()
+        try expectEqual(overview.state, .unread(why: "503"))
+        try expectEqual(overview.gallery?.recipes.map(\.id), ["r1", "r9", "r2"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery", "/v1/home"])
+    }),
     Test("a job's sheet draws from Home's list when the job is on it, else the gallery's, with Home's sheet words", awaiting: { @MainActor in
         let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes), (200, galleryAnswer)])
         await none.load()
