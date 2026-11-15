@@ -7,34 +7,39 @@ import UserNotifications
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Called on the main thread when a notification is clicked.
     var opened: () -> Void = {}
-    private var asked = false
 
     private var center: UNUserNotificationCenter? {
         // The notification centre needs an app bundle: a bare binary has none.
         Bundle.main.bundleIdentifier == nil ? nil : UNUserNotificationCenter.current()
     }
 
-    /// Where the person's Alerts choices are kept (Account › Alerts).
+    /// Where the person's Alerts choices are kept (Account › Alerts), and whose they are.
     var defaults = UserDefaults.standard
+    var account = ""
 
+    /// Announces calls only once the person turned alerts on for this account, as the iPad
+    /// alerts only after they agreed; macOS's own permission was asked then. With Sound off an
+    /// alert still arrives, quietly: no sound and no banner, only Notification Center, as tafs
+    /// cloud sends the iPad's (`interruption-level: passive`).
     func announce(_ announcements: [Announcement]) {
-        // Alerts off on this Mac: nothing is announced.
-        let prefs = AlertPrefs(defaults: defaults)
+        let prefs = AlertPrefs(defaults: defaults, account: account)
         guard prefs.on, !announcements.isEmpty, let center else { return }
         center.delegate = self
-        let post = {
-            for announcement in announcements {
-                let content = UNMutableNotificationContent()
-                content.title = announcement.title
-                content.body = announcement.body
-                content.sound = prefs.plays ? .default : nil
-                center.add(UNNotificationRequest(identifier: announcement.id, content: content, trigger: nil))
-            }
+        for announcement in announcements {
+            let content = UNMutableNotificationContent()
+            content.title = announcement.title
+            content.body = announcement.body
+            content.sound = prefs.plays ? .default : nil
+            content.interruptionLevel = Self.interruption(plays: prefs.plays)
+            center.add(UNNotificationRequest(identifier: announcement.id, content: content, trigger: nil))
         }
-        guard !asked else { return post() }
-        asked = true
-        center.requestAuthorization(options: [.alert, .sound]) { _, _ in post() }
     }
+
+    /// How an alert interrupts: as usual with Sound on, quietly with it off.
+    static func interruption(plays: Bool) -> UNNotificationInterruptionLevel { plays ? .active : .passive }
+
+    /// How an alert shows with the window in front: a banner with sound, or only in the list.
+    static func presentation(plays: Bool) -> UNNotificationPresentationOptions { plays ? [.banner, .sound] : [.list] }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler done: @escaping () -> Void) {
@@ -48,6 +53,6 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Shown even with the window in front: the call may be on another screen.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
-        done(AlertPrefs(defaults: defaults).plays ? [.banner, .sound] : [.banner])
+        done(Self.presentation(plays: AlertPrefs(defaults: defaults, account: account).plays))
     }
 }

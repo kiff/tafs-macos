@@ -83,6 +83,8 @@ struct AccountView: View {
     var people: PeopleModel? = nil
     /// Export my chats; nil leaves it out.
     var exportChats: ExportChatsModel? = nil
+    /// Alerts on this Mac, for this account; nil leaves its row out.
+    var alerts: AlertsModel? = nil
     /// A taf's name by its KIFF agent, for what each group uses.
     var tafName: (String) -> String? = { _ in nil }
     /// Opens another screen of the sidebar from its row.
@@ -98,7 +100,7 @@ struct AccountView: View {
         if showingAlerts {
             VStack(alignment: .leading, spacing: 0) {
                 back { showingAlerts = false }
-                AlertsView()
+                if let alerts { AlertsView(model: alerts) }
             }
             .background(Theme.background)
         } else if showingPeople, let people {
@@ -181,8 +183,8 @@ struct AccountView: View {
                     .buttonStyle(.plain)
                 }
                 // Alerts, a row on its own, as the iPad's list has it.
-                group(nil) {
-                    link(words("settings.alerts")) { showingAlerts = true }
+                if alerts != nil {
+                    group(nil) { link(words("settings.alerts")) { showingAlerts = true } }
                 }
                 group(words("settings.theme_title")) {
                     HStack(spacing: 0) {

@@ -144,13 +144,15 @@ let approvalsTests: [Test] = [
         try expectEqual(try me(#"{"capabilities":["taf.use"]}"#).answersHolds, false)
         try expectEqual(try me("{}").answersHolds, true)
     },
-    Test("alerts on this Mac are on with sound until turned off, kept for the next launch; no alerts, no sound") {
+    Test("alerts on this Mac are off until the person turns them on, kept per account; sound is on until turned off; no alerts, no sound") {
         let name = "tafs.tests.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
         defer { defaults.removePersistentDomain(forName: name) }
-        try expectEqual(AlertPrefs(defaults: defaults), AlertPrefs(on: true, sound: true))
-        AlertPrefs(on: true, sound: false).save(to: defaults)
-        try expectEqual(AlertPrefs(defaults: defaults), AlertPrefs(on: true, sound: false))
+        try expectEqual(AlertPrefs(defaults: defaults, account: "t-a"), AlertPrefs(on: false, sound: true))
+        AlertPrefs(on: true, sound: false).save(to: defaults, account: "t-a")
+        try expectEqual(AlertPrefs(defaults: defaults, account: "t-a"), AlertPrefs(on: true, sound: false))
+        // Another account on this Mac doesn't inherit the first one's choice; Sound is the Mac's.
+        try expectEqual(AlertPrefs(defaults: defaults, account: "t-b"), AlertPrefs(on: false, sound: false))
         try expectEqual(AlertPrefs(on: false, sound: true).plays, false)
         try expectEqual(AlertPrefs(on: true, sound: true).plays, true)
     },
