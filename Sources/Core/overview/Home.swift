@@ -21,6 +21,10 @@ enum Home {
 
         /// The KIFF agent it acts as: what tells one row from another.
         let kiffAgent: String
+        /// Its id at tafs cloud; nil for an agent tafs doesn't run.
+        let tafID: String?
+        /// Its Cards, the live ones first.
+        let cards: [TafCard]
         let name: String
         /// Its colour, by its index in the palette.
         let color: Int
@@ -41,14 +45,20 @@ enum Home {
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
-            case kiffAgent = "kiff_agent", name, color, state, waiting, jobSummary = "job_summary"
+            case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, waiting, jobSummary = "job_summary"
             case work, nextRunWords = "next_run_words", health
         }
         enum WorkKeys: String, CodingKey { case line, attention }
+        enum CardKeys: String, CodingKey { case cards }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             kiffAgent = try c.decode(String.self, forKey: .kiffAgent)
+            tafID = (try? c.decodeIfPresent(String.self, forKey: .tafID)) ?? nil
+            // A Card that doesn't read is left out, never the taf.
+            struct Lenient: Decodable { let card: TafCard?; init(from decoder: Decoder) throws { card = try? TafCard(from: decoder) } }
+            let summary = try? c.nestedContainer(keyedBy: CardKeys.self, forKey: .card)
+            cards = (summary.flatMap { (try? $0.decodeIfPresent([Lenient].self, forKey: .cards)) ?? nil } ?? []).compactMap(\.card)
             name = try c.decode(String.self, forKey: .name)
             state = try c.decode(String.self, forKey: .state)
             color = ((try? c.decodeIfPresent(Int.self, forKey: .color)) ?? nil) ?? 0

@@ -13,6 +13,11 @@ struct ShellView: View {
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
+    /// The open taf's page, drawn in place of the screen.
+    var tafPage: AnyView?
+    /// The taf whose page is open, by its agent; and what opens one.
+    var openTaf: String?
+    var open: (Home.Taf) -> Void = { _ in }
     /// Who is signed in, under Account: their email, as KIFF says it.
     var accountLine: String?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
@@ -59,7 +64,17 @@ struct ShellView: View {
                         Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    ForEach(tafs) { taf in tafRow(taf) }
+                    ForEach(tafs) { taf in
+                        // The open taf sits on a pill, as on the iPad.
+                        Button { open(taf) } label: {
+                            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
+                                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.ink.opacity(0.08) : Color.clear))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, -10)
+                        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 6)
@@ -147,7 +162,7 @@ struct ShellView: View {
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.
     @ViewBuilder private var detail: some View {
-        if let built = screen(selection) { built } else { placeholder }
+        if let page = tafPage { page } else if let built = screen(selection) { built } else { placeholder }
     }
 
     private var placeholder: some View {
