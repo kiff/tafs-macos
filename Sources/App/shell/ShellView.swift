@@ -13,6 +13,8 @@ struct ShellView: View {
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
+    /// The calls held for the person, listed under NEEDS YOU above the tafs.
+    var held: [HeldRow] = []
     /// Who is signed in, under Account: their email, as KIFF says it.
     var accountLine: String?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
@@ -50,11 +52,15 @@ struct ShellView: View {
 
             ForEach(Screen.list) { item($0) }
 
-            Text(words("home.your_tafs").uppercased())
-                .font(Theme.mono(11)).tracking(2).foregroundColor(Theme.soft)
-                .padding(.top, 26).padding(.bottom, 10)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    if !held.isEmpty {
+                        // Amber as text, as the palette has it for small words on the sidebar.
+                        eyebrow(words("needs_you.title"), color: Theme.amberText)
+                        ForEach(held) { heldRow($0) }
+                        Spacer().frame(height: 10)
+                    }
+                    eyebrow(words("home.your_tafs"), color: Theme.soft)
                     if tafs.isEmpty, let line = noTafsLine {
                         Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
                             .fixedSize(horizontal: false, vertical: true)
@@ -62,7 +68,7 @@ struct ShellView: View {
                     ForEach(tafs) { taf in tafRow(taf) }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 6)
+                .padding(.top, 26)
             }
 
             foot
@@ -71,6 +77,39 @@ struct ShellView: View {
         .padding(.bottom, 16)
     }
 
+    private func eyebrow(_ text: String, color: Color) -> some View {
+        Text(text.uppercased()).font(Theme.mono(11)).tracking(2).foregroundColor(color)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A held call, as the iPad lists it: an amber dot, the taf and what it asks, then why and
+    /// the time to answer by. It opens Needs you.
+    private func heldRow(_ row: HeldRow) -> some View {
+        Button { selection = .needsYou } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Circle().fill(Theme.amber).frame(width: 8, height: 8).padding(.top, 5).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: row.title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                    if let line = row.line(words, time: { Self.clock.string(from: $0) }) {
+                        Text(verbatim: line).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The time to answer by, as this Mac shows a time.
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     private func item(_ screen: Screen) -> some View {
         let selected = selection == screen
         return Button { selection = screen } label: {
@@ -78,7 +117,7 @@ struct ShellView: View {
                 Image(systemName: screen.symbol)
                     .font(.system(size: 17)).foregroundColor(Theme.ink)
                     .frame(width: 24, alignment: .leading)
-                Text(words(screen.titleKey)).font(.system(size: 15, weight: selected ? .semibold : .regular)).foregroundColor(Theme.ink)
+                Text(words(screen.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 Spacer(minLength: 0)
                 if screen == .needsYou, needsYou > 0 {
                     // The count as the iPad shows it: a plain number at the row's end.
@@ -87,6 +126,10 @@ struct ShellView: View {
                 }
             }
             .frame(height: 46)
+            // The chosen row's grey ground, as the iPad's sidebar list draws it.
+            .padding(.horizontal, 12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(selected ? Theme.chosen : Color.clear))
+            .padding(.horizontal, -12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

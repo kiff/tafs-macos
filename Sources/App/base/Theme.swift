@@ -10,6 +10,7 @@ enum Theme {
     static let soft = Color(Palette.soft)
     static let dim = Color(Palette.dim)
     static let line = Color(Palette.line)
+    static let chosen = Color(Palette.chosen)
     static let amber = Color(Palette.amber)
     static let amberText = Color(Palette.amberText)
     /// A count's fill, dark enough for white numbers.

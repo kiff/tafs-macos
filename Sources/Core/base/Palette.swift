@@ -29,6 +29,8 @@ enum Palette {
     /// Secondary text: 4.5:1 on the background and on panels, in both appearances.
     static let dim = Shade(light: 0x736D7F, dark: 0x96918A)
     static let line = Shade(light: 0x1B1726, dark: 0xF2EFE9, lightOpacity: 0.10, darkOpacity: 0.12)
+    /// The ground of the sidebar's chosen row: the iPad's grey, as ink over the sidebar.
+    static let chosen = Shade(light: 0x1B1726, dark: 0xF2EFE9, lightOpacity: 0.08, darkOpacity: 0.10)
     static let amber = Shade(0xFF8A1F)
     /// Amber as text: 4.5:1 on the background, which the amber itself is not.
     static let amberText = Shade(light: 0xB35500, dark: 0xF0A45A)

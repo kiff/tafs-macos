@@ -38,7 +38,8 @@ struct SignedInView: View {
     }
 
     var body: some View {
-        ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil) { screen in
+        ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  held: heldRows) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
             case .overview: return AnyView(OverviewView(model: overview))
@@ -65,6 +66,12 @@ struct SignedInView: View {
                 try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
             }
         }
+    }
+
+    /// The calls held for the person, for the sidebar, each with its taf's name.
+    private var heldRows: [HeldRow] {
+        guard case .loaded(let calls) = needsYou.state else { return [] }
+        return calls.map { HeldRow($0, tafs: overview.tafs) }
     }
 
     private var accountScreen: some View {

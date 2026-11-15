@@ -14,9 +14,21 @@ private let sidebarTafs: [Home.Taf] = {
     return (try? JSONDecoder().decode(Home.Page.self, from: Data(json.utf8)))?.tafs ?? []
 }()
 
-private func shell(_ language: String, selection: Screen = .overview, needsYou: Int = 0, tafs: [Home.Taf] = []) -> some View {
+private let sidebarHeld: [HeldRow] = {
+    let json = #"{"exceptions":[{"id":"exc_1","subject":"a1","action":"refund","title":"Refund order #4471","reason_text":"Over its €500 limit","created_at":"2026-11-15T00:17:00Z","expires_at":"2026-11-15T00:27:00Z"}]}"#
+    struct Held: Decodable { let exceptions: [HeldCall] }
+    let calls = (try? AccountClient.decoder.decode(Held.self, from: Data(json.utf8)))?.exceptions ?? []
+    return calls.map { HeldRow($0, tafs: sidebarTafs) }
+}()
+
+private func shell(_ language: String, selection: Screen = .overview, needsYou: Int = 0, tafs: [Home.Taf] = [], held: [HeldRow] = []) -> some View {
     Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
-    return ShellView(selection: .constant(selection), needsYou: needsYou, tafs: tafs, noTafsLine: "Pick a job for your first taf.", accountLine: "you@example.com").environment(\.words, Words.load(folder: strings, preferred: [language]))
+    return ShellView(selection: .constant(selection), needsYou: needsYou, tafs: tafs, noTafsLine: "Pick a job for your first taf.", held: held, accountLine: "you@example.com").environment(\.words, Words.load(folder: strings, preferred: [language]))
+}
+
+/// Whether any point down the sidebar's left edge, between two heights, isn't its ground.
+private func filled(_ bitmap: NSBitmapImageRep, from top: Int, to bottom: Int, dark: Bool) -> Bool {
+    (top...bottom).contains { !near(Snapshot.hex(bitmap, x: 20, y: $0), dark ? Palette.raised.dark : Palette.raised.light) }
 }
 
 let shellMacTests: [Test] = [
@@ -30,6 +42,18 @@ let shellMacTests: [Test] = [
             try expect(near(detail, dark ? Palette.background.dark : Palette.background.light), "the background, dark: \(dark)")
         }
     },
+    Test("the chosen screen's row has a grey ground, and the others none") {
+        // The mark ends near 86 points down; the rows that follow are 46 each: Needs you, then Record.
+        for dark in [false, true] {
+            let size = ShellView.minimumSize
+            guard let record = Snapshot.bitmap(of: shell("en", selection: .record), size: size, dark: dark),
+                  let overview = Snapshot.bitmap(of: shell("en", selection: .overview), size: size, dark: dark)
+            else { throw Failure(description: "no bitmap") }
+            try expect(filled(record, from: 140, to: 170, dark: dark), "Record's row is filled, dark: \(dark)")
+            try expect(!filled(record, from: 92, to: 126, dark: dark), "Needs you's row is not, dark: \(dark)")
+            try expect(!filled(overview, from: 92, to: 170, dark: dark), "no screen row is filled on the Overview, dark: \(dark)")
+        }
+    },
     Test("the words are the preferred language's, and English when it isn't shipped") {
         try expectEqual(Words.load(folder: strings, preferred: ["fr-FR"]).language, "fr")
         try expectEqual(Words.load(folder: strings, preferred: ["ja-JP"]).language, "en")
@@ -41,7 +65,7 @@ let shellMacTests: [Test] = [
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for language in ["en", "fr", "pt"] {
             for dark in [false, true] {
-                guard let bitmap = Snapshot.bitmap(of: shell(language, selection: .needsYou, needsYou: 3, tafs: dark ? sidebarTafs : []), size: size, dark: dark),
+                guard let bitmap = Snapshot.bitmap(of: shell(language, selection: .needsYou, needsYou: 1, tafs: dark ? sidebarTafs : [], held: dark ? sidebarHeld : []), size: size, dark: dark),
                       let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for \(language)") }
                 try expect(png.starts(with: [0x89, 0x50, 0x4E, 0x47]), "the PNG signature")
                 try png.write(to: folder.appendingPathComponent("sidebar-\(language)\(dark ? "-dark" : "").png"))
