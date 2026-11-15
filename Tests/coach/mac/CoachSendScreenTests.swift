@@ -9,9 +9,22 @@ private let answered = #"{"working":false,"items":[{"type":"message","message":{
 /// 2026-11-14T18:00:00Z, when the tests' person sends.
 private let sendTime = Date(timeIntervalSince1970: 1_794_679_200)
 
+/// Answers as canned, and does something first when a report is sent: the person signing out
+/// while it goes.
+private final class SigningOutTransport: Transport, @unchecked Sendable {
+    let canned: CannedTransport
+    var whileReporting: () async -> Void = {}
+    init(_ answers: [(Int, String)]) { canned = CannedTransport(answers) }
+
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        if request.path.hasSuffix("/report") { await whileReporting() }
+        return try await canned.send(request)
+    }
+}
+
 @MainActor
 private func make(_ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, () -> [TimeInterval]) {
-    let transport = CannedTransport([(200, setupAnswer), (200, before)] + answers)
+    let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
     var slept: [TimeInterval] = []
     let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { slept.append($0) }, now: { sendTime })
     await model.load()
@@ -26,7 +39,7 @@ let coachSendMacTests: [Test] = [
         await model.send()
         try expectEqual(model.draft, "")
         try expectEqual(model.pending, nil)
-        try expectEqual(transport.sent.map(\.method), ["GET", "GET", "POST", "GET", "GET"])
+        try expectEqual(transport.sent.map(\.method), ["GET", "GET", "GET", "POST", "GET", "GET"])
         try expectEqual(slept(), [4])
         guard case .loaded(_, let page) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(page.items.count, 3)
@@ -69,7 +82,7 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.consent, nil)
         try expectEqual(transport.sent.filter { $0.method == "POST" }.map(\.path),
                         ["/v1/tafs/taf-coach/messages", "/v1/me/ai-consent", "/v1/tafs/taf-coach/messages"])
-        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["version": "3"])
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[4].body), ["version": "3"])
         try expectEqual(model.pending, nil)
     }),
     Test("no key gives the AI consent: Return answers nothing, and Esc is Not now") {
@@ -123,5 +136,132 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.pending?.failed, "")
         try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 1)
         try expect(!transport.sent.contains { $0.path == "/v1/me/ai-consent" }, "no consent was sent")
+    }),
+    Test("Coach opens on its newest chat, as the iPad's loadSetupThread", awaiting: { @MainActor in
+        let chats = #"{"chats":[{"session":"s1","started":"2026-11-13T09:00:00Z","updated":"2026-11-13T10:00:00Z","title":"Old"},{"session":"s2","started":"2026-11-14T09:00:00Z","updated":"2026-11-14T10:00:00Z","title":"New"}]}"#
+        let transport = CannedTransport([(200, setupAnswer), (200, chats), (200, before)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in })
+        await model.load()
+        try expectEqual(model.chat, "s2")
+        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s2"])
+    }),
+    Test("a new conversation reads nothing, keeps what's typed, and its first message asks for a new chat it then goes on in", awaiting: { @MainActor in
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        model.draft = "Connect Qonto"
+        model.newChat()
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.isEmpty, true)
+        try expectEqual(model.draft, "Connect Qonto")
+        try expectEqual(transport.sent.count, 3)
+        await model.send()
+        let body = try JSONSerialization.jsonObject(with: transport.sent[3].body) as? NSDictionary
+        try expectEqual(body, ["text": "Connect Qonto", "new_chat": true, "new_chat_after_handover": true])
+        try expectEqual(model.chat, "s1")
+        try expectEqual(model.fresh, false)
+        try expectEqual(transport.sent[4].path, "/v1/tafs/taf-coach/conversation/s1")
+        try expectEqual(model.target, ChatTarget(session: "s1", newChatAfterHandover: true))
+    }),
+    Test("a message to a chat that handed a taf over goes on in the new chat tafs cloud started", awaiting: { @MainActor in
+        let moved = #"{"session":"s7","new_session":true,"message":{"id":"m9"}}"#
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered), (200, moved), (200, answered)])
+        model.newChat()
+        model.draft = "Connect Qonto"
+        await model.send()
+        try expectEqual(model.chat, "s1")
+        model.draft = "And Gmail"
+        await model.send()
+        try expectEqual(model.chat, "s7")
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-coach/conversation/s7")
+    }),
+    Test("Coach on a taf: a new conversation that improves it, its words in the box, its first message to improve", awaiting: { @MainActor in
+        // tafs cloud's improve route answers no message id: the sent message is found by its words.
+        let improved = #"{"setup":"taf-coach","session":"s1","new_session":true}"#
+        let arrived = #"{"working":false,"items":[{"type":"message","message":{"id":"s1.in","at":"2026-11-14T18:00:02Z","from":"owner","text":"Why was the refund held?"}},{"type":"message","message":{"id":"s1.2","at":"2026-11-14T18:00:20Z","from":"taf","text":"It went over its limit."}}]}"#
+        let (model, transport, _) = await make([(200, improved), (200, arrived)])
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why was the refund held?", mayUseCoach: true, manages: true)
+        try expectEqual(model.improving, refunds)
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.draft, "Why was the refund held?")
+        try expectEqual(model.isEmpty, true)
+        try expectEqual(model.chatIsEmpty, false)
+        await model.send()
+        try expectEqual(transport.sent[3].path, "/v1/tafs/taf-1/improve")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "Why was the refund held?"])
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.chat, "s1")
+        try expectEqual(transport.sent[4].path, "/v1/tafs/taf-coach/conversation/s1")
+        try expectEqual(model.pending, nil)
+        try expectEqual(model.working, false)
+        model.draft = "And now?"
+        try expectEqual(model.canSend, true)
+    }),
+    Test("asking Coach about a taf is only for someone who may use Coach and manages the taf, as the iPad's askCoachAbout", awaiting: { @MainActor in
+        let (model, _, _) = await make([])
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why?", mayUseCoach: false, manages: true)
+        model.ask(about: refunds, words: "Why?", mayUseCoach: true, manages: false)
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.draft, "")
+    }),
+    Test("asked before Coach is read, the improvement and its words wait, and start once Coach is read", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, now: { sendTime })
+        let refunds = CoachModel.Improving(id: "taf-1", name: "Refunds")
+        model.ask(about: refunds, words: "Why was the refund held?", mayUseCoach: true, manages: true)
+        try expectEqual(model.draft, "Why was the refund held?")
+        await model.load()
+        try expectEqual(model.improving, refunds)
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.draft, "Why was the refund held?")
+    }),
+    Test("a sent message with no id is found by its words, and goes after two minutes in any case, as the iPad's SentMessages", {
+        let page = try AccountClient.decoder.decode(Thread.Page.self, from: Data(#"{"items":[{"type":"message","message":{"id":"a","at":"2026-11-14T18:00:02Z","from":"owner","text":"Hi"}},{"type":"message","message":{"id":"b","at":"2026-11-14T18:00:03Z","from":"taf","text":"Hello"}}]}"#.utf8))
+        try expectEqual(page.hasPersons("Hi", since: sendTime.addingTimeInterval(-120)), true)
+        try expectEqual(page.hasPersons("Hello", since: sendTime.addingTimeInterval(-120)), false)
+        try expectEqual(page.hasPersons("Hi", since: sendTime.addingTimeInterval(10)), false)
+        try expectEqual(CoachModel.kept, 120)
+    }),
+    Test("an example on a taf's start sends as it is; New taf leaves the taf", awaiting: { @MainActor in
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        model.improve(CoachModel.Improving(id: "taf-1", name: "Refunds"))
+        model.newChat()
+        try expectEqual(model.improving, nil)
+        try expectEqual(model.chatIsEmpty, true)
+        model.improve(CoachModel.Improving(id: "taf-1", name: "Refunds"))
+        model.draft = "kept"
+        await model.send(example: "How is it going?")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "How is it going?"])
+        try expectEqual(model.draft, "kept")
+    }),
+    Test("a report says sent or already, tafs cloud's words, a gone answer, or the app's own line", awaiting: { @MainActor in
+        let kept = { (new: Bool) in #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":\#(new)}}"# }
+        let (model, transport, _) = await make([(200, kept(true)), (200, kept(false)), (429, #"{"error":"too_many","words":"Too many reports just now."}"#),
+                                                (404, #"{"error":"not_found"}"#), (500, #"{"error":"internal"}"#)])
+        let answer = Thread.Message(id: "m10", at: nil, from: "taf", kind: "message", text: "Done.", session: "s1")
+        let r1 = await model.report(answer, reason: .wrong, note: "  ")
+        try expectEqual(r1, .sent)
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["reason": "wrong", "session": "s1"])
+        let r2 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r2, .already)
+        let r3 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r3, .failed("Too many reports just now."))
+        let r4 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r4, .failed("This answer isn't on tafs cloud any more."))
+        let r5 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r5, .failed("It didn't reach KIFF. Try again."))
+        let unsent = Thread.Message(id: nil, at: nil, from: "taf", kind: "message", text: "Done.")
+        let r6 = await model.report(unsent, reason: .wrong, note: "")
+        try expectEqual(r6, .failed("This answer can't be reported from here."))
+    }),
+    Test("a report answered after the person signed out says so, as the iPad's accountGeneration guard", awaiting: { @MainActor in
+        let transport = SigningOutTransport([(200, setupAnswer), (200, noChats), (200, before),
+                                             (200, #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":true}}"#)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, now: { sendTime })
+        await model.load()
+        transport.whileReporting = { await MainActor.run { model.signedOut() } }
+        let answer = Thread.Message(id: "m1", at: nil, from: "taf", kind: "message", text: "What should your taf do?")
+        let outcome = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(outcome, .failed("You signed out."))
     }),
 ]

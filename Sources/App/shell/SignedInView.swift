@@ -159,7 +159,8 @@ struct SignedInView: View {
                                // Plan & usage in place of the taf's page.
                                openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) },
                                doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
-                               myEmail: accountModel.me?.email, tab: tafTab).id(taf.id))
+                               myEmail: accountModel.me?.email,
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email), tab: tafTab).id(taf.id))
     }
 
     private var accountScreen: some View {
@@ -169,6 +170,9 @@ struct SignedInView: View {
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()
+                // What's still on its way in a chat is the session before's.
+                coach.signedOut()
+                tafChat?.signedOut()
                 signedOut()
             }
         })

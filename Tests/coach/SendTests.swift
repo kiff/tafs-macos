@@ -59,6 +59,67 @@ let coachSendTests: [Test] = [
         try expectEqual(why(409, #"{"code":"held_full"}"#), "tafs cloud answered 409")
         try expectEqual(why(502, "<html>"), "tafs cloud answered 502")
     }),
+    Test("a message names its chat as the iPad's ChatTarget: the live one says nothing, a new one or a chat says so", awaiting: {
+        let (client, transport) = cloud([(200, sentAnswer), (200, sentAnswer), (200, sentAnswer)])
+        var handedOver = ChatTarget.new
+        handedOver.newChatAfterHandover = true
+        _ = try await client.send("hello", to: "taf-coach")
+        _ = try await client.send("hello", to: "taf-coach", target: handedOver)
+        _ = try await client.send("hello", to: "taf-coach", target: ChatTarget(session: "s2"))
+        let bodies = try transport.sent.map { try JSONSerialization.jsonObject(with: $0.body) as? NSDictionary }
+        try expectEqual(bodies, [["text": "hello"], ["text": "hello", "new_chat": true, "new_chat_after_handover": true], ["text": "hello", "session": "s2"]])
+        let request = client.streamRequest("hello", to: "taf-coach", target: ChatTarget(session: "s2"))
+        try expectEqual(request.flatMap { try? JSONSerialization.jsonObject(with: $0.body) as? NSDictionary }, ["text": "hello", "session": "s2"])
+    }),
+    Test("a taf's chats are read by its id, each one strictly; a chat's thread by its session", awaiting: {
+        let chats = #"{"chats":[{"session":"s1","started":"2026-11-14T18:00:00Z","updated":"2026-11-14T19:00:00Z","title":"Refunds"}]}"#
+        let (client, transport) = cloud([(200, chats), (200, #"{"chats":[{"session":"s1","title":"No times"}]}"#), (200, #"{"items":[]}"#)])
+        let read = try await client.chats(of: "taf-coach")
+        try expectEqual(read.map(\.session), ["s1"])
+        try expectEqual(read[0].title, "Refunds")
+        let timeless = try? await client.chats(of: "taf-coach")
+        try expect(timeless == nil, "a chat without its times doesn't read")
+        _ = try await client.thread(of: "taf-coach", session: "s 1")
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s%201"])
+    }),
+    Test("improving a taf posts the person's words to its improve route, and nothing that isn't a message", awaiting: {
+        let (client, transport) = cloud([(200, sentAnswer)])
+        let sent = try await client.improve("taf-1", text: " Why was it held? ")
+        try expectEqual(sent.session, "s1")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-1/improve")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["text": "Why was it held?"])
+        let none = try? await client.improve("taf-1", text: "   ")
+        try expect(none == nil, "a blank message isn't sent")
+        try expectEqual(transport.sent.count, 1)
+    }),
+    Test("reporting an answer posts its reason, the note only when there is one, and its chat", awaiting: {
+        let kept = #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":true}}"#
+        let (client, transport) = cloud([(200, kept), (200, kept)])
+        let first = try await client.report("m 9", of: "taf-coach", reason: .wrong, note: "It made up a number.", session: "s1")
+        try expectEqual(first, AnswerReport.Kept(id: "r1", at: "2026-11-15T10:00:00Z", new: true))
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-coach/messages/m%209/report")
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["reason": "wrong", "note": "It made up a number.", "session": "s1"])
+        _ = try await client.report("m9", of: "taf-coach", reason: .other, note: nil, session: nil)
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[1].body), ["reason": "other"])
+    }),
+    Test("an answer can be reported when it is a taf's message with words that tafs cloud has an id for") {
+        let answer = Thread.Message(id: "m9", at: nil, from: "taf", kind: "message", text: "Done.")
+        try expectEqual(AnswerReport.can(answer), true)
+        try expectEqual(AnswerReport.can(Thread.Message(id: "m9", at: nil, from: "owner", kind: "message", text: "Hi")), false)
+        try expectEqual(AnswerReport.can(Thread.Message(id: "m9", at: nil, from: "taf", kind: "kickoff", text: "Run")), false)
+        try expectEqual(AnswerReport.can(Thread.Message(id: "m9", at: nil, from: "taf", kind: "message", text: "")), false)
+        try expectEqual(AnswerReport.can(Thread.Message(id: nil, at: nil, from: "taf", kind: "message", text: "Done.")), false)
+        let page = try AccountClient.decoder.decode(Thread.Page.self, from: Data(#"{"items":[{"type":"message","message":{"id":"m9","from":"taf","text":"Done.","session":"s1"}}]}"#.utf8))
+        guard case .message(let read, _)? = page.items.first else { throw Failure(description: "no message") }
+        try expectEqual(read.session, "s1")
+        try expectEqual(AnswerReport.Reason.allCases.map(\.key), ["report.reason.offensive", "report.reason.harmful", "report.reason.wrong", "report.reason.other"])
+    },
+    Test("what tafs cloud answers a message says whether it started a new chat", {
+        let sent = try JSONDecoder().decode(Outgoing.Sent.self, from: Data(#"{"session":"s7","new_session":true,"message":{"id":"m9"}}"#.utf8))
+        try expectEqual(sent.session, "s7")
+        try expectEqual(sent.newSession, true)
+        try expect((try? JSONDecoder().decode(Outgoing.Sent.self, from: Data(#"{"session":"s7"}"#.utf8))) == nil, "no new_session doesn't read")
+    }),
     Test("allowing AI use sends the version of the words that were read", awaiting: {
         let (client, transport) = cloud([(200, "{}")])
         try await client.allowAI(version: "3")
