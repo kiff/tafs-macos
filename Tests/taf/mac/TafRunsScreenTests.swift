@@ -66,8 +66,10 @@ let tafRunsMacTests: [Test] = [
     Test("the screenshot: a taf's runs and the runs it kept", awaiting: { @MainActor in
         let (pages, _) = model([(200, runsPageAnswer, nil)])
         await pages.loadRunPage()
+        // Read before the builder: a SwiftUI builder can't throw.
+        let idle = try taf(#""state":"idle","next_run_words":"Next run Mon 09:00""#)
         let view = VStack(spacing: 14) {
-            RunsPanel(model: pages, taf: try taf(#""state":"idle","next_run_words":"Next run Mon 09:00""#))
+            RunsPanel(model: pages, taf: idle)
             RetainedRuns(model: pages)
         }
         .padding(20).frame(width: 520).background(Theme.background)
