@@ -8,7 +8,13 @@ import Foundation
 /// `PasskeyRegistration`). Only `fido_dev_make_cred` and `fido_dev_get_assert` are asked of the
 /// key, and its retry count read: it's never reset, and its PIN is never set or changed here.
 final class FidoKey: PasskeyAuthenticator {
-    private static let started: Void = fido_init(0)
+    /// libfido2 started once: its debug output off, even if `FIDO_DEBUG` is set in the
+    /// environment (it would print the frames sent to the key), and no U2F fallback, since a U2F
+    /// key can't verify the person.
+    private static let started: Void = {
+        unsetenv("FIDO_DEBUG")
+        fido_init(FIDO_DISABLE_U2F_FALLBACK)
+    }()
     private let queue = DispatchQueue(label: "tafs.security-key")
 
     init() { _ = Self.started }
