@@ -38,6 +38,21 @@ final class TafPagesModel: ObservableObject {
         }
     }
 
+    /// The next page of the same filter, once the list's end is shown, as the iPad does. A
+    /// page asked for before the filter changed is dropped.
+    func loadMore() async {
+        guard case .loaded(var page) = activity, let cursor = page.nextCursor else { return }
+        let mine = asked
+        do {
+            let next = try await cloud.activity(of: taf, filter: filter, cursor: cursor)
+            guard mine == asked, case .loaded(let shown) = activity, shown.nextCursor == cursor else { return }
+            page.append(next)
+            activity = .loaded(page)
+        } catch {
+            // The calls shown stay; the end is tried again when it shows again.
+        }
+    }
+
     func loadSetup() async {
         do { setup = .loaded(try await cloud.setup(of: taf)) } catch { setup = .unread(why: NeedsYouModel.why(error)) }
     }
@@ -54,7 +69,9 @@ struct TafActivityTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            // Lazy, so the list's end shows only when it's scrolled to, and the next page is
+            // asked for then.
+            LazyVStack(alignment: .leading, spacing: 14) {
                 if let card = taf.cards.first { cardLine(card) }
                 switch model.activity {
                 case .loading:
@@ -77,6 +94,10 @@ struct TafActivityTab: View {
                             Text(verbatim: group.title.uppercased()).font(Theme.mono(11)).tracking(1.5).foregroundColor(Theme.soft).padding(.top, 6)
                         }
                         ForEach(group.entries) { row($0) }
+                    }
+                    if let cursor = page.nextCursor {
+                        ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+                            .task(id: cursor) { await model.loadMore() }
                     }
                     if let end = page.endWords {
                         Text(verbatim: end).font(.system(size: 13)).foregroundColor(Theme.dim).frame(maxWidth: .infinity).padding(.top, 6)
@@ -112,13 +133,17 @@ struct TafActivityTab: View {
     /// One call: its kind's dot, tafs cloud's title and detail, and its time.
     private func row(_ entry: TafActivity.Entry) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Circle().fill(color(entry.kind)).frame(width: 9, height: 9).accessibilityHidden(true)
+            Circle().fill(color(entry.tone)).frame(width: 9, height: 9).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(verbatim: entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 if let detail = entry.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
             }
             Spacer()
-            if let time = entry.time { Text(verbatim: time).font(Theme.mono(12)).foregroundColor(Theme.soft) }
+            // Its time, and under it its amount in tafs cloud's words, as the iPad's row.
+            VStack(alignment: .trailing, spacing: 3) {
+                if let time = entry.time { Text(verbatim: time).font(Theme.mono(12)).foregroundColor(Theme.soft) }
+                if let amount = entry.amountText { Text(verbatim: amount).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink) }
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -126,13 +151,12 @@ struct TafActivityTab: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// Done is green, held amber, refused red; a kind this app doesn't know has no colour of its own.
-    private func color(_ kind: String) -> Color {
-        switch kind {
-        case "done": return Theme.ok
-        case "held": return Theme.amber
-        case "refused": return Theme.no
-        default: return Theme.soft
+    /// The iPad's kind colours (`TafActivity.Entry.tone`).
+    private func color(_ tone: TafActivity.Entry.Tone) -> Color {
+        switch tone {
+        case .ok: return Theme.ok
+        case .amber: return Theme.amber
+        case .no: return Theme.no
         }
     }
 }
@@ -157,10 +181,19 @@ struct TafSetupTab: View {
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let workflow = setup.workflow { part(workflow) }
                     if let error = setup.connectionsError {
-                        Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.soft).padding(.horizontal, 4)
+                        // In red with Try again, as the iPad says it.
+                        HStack(spacing: 10) {
+                            Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
+                            Button(words("common.try_again")) { Task { await model.loadSetup() } }
+                                .buttonStyle(.plain).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
+                        }
+                        .padding(.horizontal, 4)
                     }
                     if let versions = setup.versions { part(versions) }
-                    if let memory = setup.memory { part(memory) }
+                    if let memory = setup.memory {
+                        Eyebrow(text: words("taf.memory.title")).padding(.top, 6)
+                        part(memory)
+                    }
                 }
             }
             .padding(.bottom, Look.inset)

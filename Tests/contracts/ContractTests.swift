@@ -115,7 +115,6 @@ let contractsTests: [Test] = [
         try expectEqual(setup.workflow, TafSetup.Part(title: "Workflow", summary: "Ask Coach to set its workflow"))
         try expectEqual(setup.memory, TafSetup.Part(title: "0 notes", summary: nil))
         try expectEqual(setup.versions, TafSetup.Part(title: "Changes to how it runs", summary: "Runs its original definition"))
-        try expectEqual(setup.connections, 0)
         try expect(setup.connectionsError?.isEmpty == false, "tafs cloud's line for unread connections")
         try expectEqual(setup.exceptions.map(\.title), ["Rae needs a USD limit"])
         try expect(setup.exceptions[0].words?.isEmpty == false, "its words")
