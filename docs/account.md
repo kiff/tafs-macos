@@ -46,21 +46,24 @@ network.
 - as the iPad's row: KIFF's name for it (15 semibold) and when it was last used (13 dim).
   No key fingerprint, as on the iPad: keys are compared at pairing, through the 6-character
   check code both screens show ([pairing.md](pairing.md));
-- "This device" on this Mac's own row, with no button.
+- "This device" on this Mac's own row.
+- **Every row opens its device**, in a sheet with its name and when it was last used, so a
+  click is never a dead end.
 
 **Signing another device out is an approval**, since it can take away the account's power
 to approve. So:
 
-- **A Mac that can't sign an approval draws no Sign out for another device**, and its model
-  sends no removal even if asked. It says "This device can't approve. Approve on another
-  device signed in to your account." That is every Mac today: the approval key behind Touch
-  ID arrives in its own pull request, and turns the button on for the Macs that have it.
-- Where the button is drawn, it asks first, naming the device. After a removal the list is
-  read again from KIFF. KIFF's refusal for want of an approval shows the same line; any other
-  refusal says why and leaves the list as it was.
+- **On a Mac that can't sign an approval** (every Mac today, approving on the phone or with a
+  passkey), another device's sheet has no Sign out. It says the shared line "To sign another
+  device out, use a device that can approve." (`settings.devices.signout_needs_approver`),
+  and the model sends no removal even if asked. KIFF refuses it with `view_only` anyway.
+- **Where this Mac may**, the sheet has Sign out, which asks first, naming the device (the
+  iPad's `confirmationDialog`). After a removal the list is read again from KIFF. KIFF's
+  refusal for want of an approval shows "This device can't approve…"; any other refusal says
+  why and leaves the list as it was.
 
-This Mac is never removed from its own row: it signs out with Sign out, which also forgets
-its session.
+**This Mac's own sheet has Sign out**, as Account's: it asks first ("Sign out of KIFF?"),
+then KIFF ends the session and the Mac forgets it. A view-only device can always leave.
 
 `scripts/test.sh account` writes `build/screenshots/devices-*.png`.
 

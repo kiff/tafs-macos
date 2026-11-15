@@ -57,7 +57,13 @@ struct DevicesView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: DevicesModel
     var now = Date()
+    /// Signs this Mac out of KIFF, as Account's Sign out does: KIFF ends the session, and the
+    /// Mac forgets it. A view-only device can always leave.
+    var signOutThisMac: () -> Void = {}
     @State private var removing: Device?
+    /// The device whose sheet is open.
+    @State private var chosen: Device?
+    @State private var confirmingSignOut = false
 
     var body: some View {
         ScrollView {
@@ -71,7 +77,9 @@ struct DevicesView: View {
                 case .loaded(let devices):
                     VStack(spacing: 0) {
                         ForEach(devices) { device in
-                            row(device)
+                            // Every row opens its device: its Sign out, or why this Mac can't.
+                            Button { chosen = device } label: { row(device).contentShape(Rectangle()) }
+                                .buttonStyle(.plain)
                             if device.id != devices.last?.id { Rectangle().fill(Theme.line).frame(height: 1) }
                         }
                     }
@@ -99,14 +107,7 @@ struct DevicesView: View {
         }
         .background(Theme.background)
         .task { await model.load() }
-        .alert(removing.map { words("settings.devices.sign_out_named", ["device": $0.name ?? words("settings.devices.unnamed")]) } ?? "",
-               isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
-            Button(words("settings.devices.sign_out"), role: .destructive) {
-                if let device = removing { Task { await model.remove(device) } }
-                removing = nil
-            }
-            Button(words("common.cancel"), role: .cancel) { removing = nil }
-        }
+        .sheet(item: $chosen) { device in deviceSheet(device) }
     }
 
     /// A device, as the iPad's row: its name (15 semibold) and when it was last used (13 dim).
@@ -119,13 +120,57 @@ struct DevicesView: View {
             Spacer()
             if device.thisDevice {
                 Text(words("settings.devices.this_device_title")).font(.system(size: 13)).foregroundColor(Theme.dim)
-            } else if model.canRemoveOthers {
-                Button(words("settings.devices.sign_out")) { removing = device }
-                    .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                    .accessibilityLabel(words("settings.devices.sign_out_prompt", ["device": device.name ?? words("settings.devices.unnamed")]))
+            } else {
+                // Its Sign out is in its sheet, which the whole row opens.
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    /// One device: its name and when it was last used. This Mac signs out of KIFF here, as
+    /// Account's Sign out does. Another device has Sign out when this Mac may sign it out;
+    /// else the shared line that it takes a device that can approve.
+    func deviceSheet(_ device: Device) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(device.name ?? words("settings.devices.unnamed")).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(lastUsed(device.lastUsed)).font(.system(size: 13)).foregroundColor(Theme.dim)
+            if device.thisDevice {
+                Text(words("settings.devices.this_device_title")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                Button(words("settings.sign_out")) { confirmingSignOut = true }
+                    .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.no)
+            } else if model.canRemoveOthers {
+                Button(words("settings.devices.sign_out")) { removing = device }
+                    .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.no)
+            } else {
+                Text(words("settings.devices.signout_needs_approver")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button(words("common.done")) { chosen = nil }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 380, alignment: .leading)
+        .background(Theme.background)
+        .alert(removing.map { words("settings.devices.sign_out_named", ["device": $0.name ?? words("settings.devices.unnamed")]) } ?? "",
+               isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button(words("settings.devices.sign_out"), role: .destructive) {
+                if let device = removing { Task { await model.remove(device) } }
+                removing = nil
+                chosen = nil
+            }
+            Button(words("common.cancel"), role: .cancel) { removing = nil }
+        }
+        // Confirmed on the sheet itself, so a stray click never ends the session.
+        .alert(words("settings.sign_out_of_kiff.title"), isPresented: $confirmingSignOut) {
+            Button(words("settings.sign_out"), role: .destructive) { chosen = nil; signOutThisMac() }
+            Button(words("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(words("settings.sign_out_of_kiff.body_device", ["device": words("device.mac")]))
+        }
     }
 
     /// "Last used 3 hours ago", or "Not used yet".
