@@ -18,11 +18,14 @@ final class TafPagesModel: ObservableObject {
 
     private let cloud: CloudClient
     let taf: String
+    /// The taf's halt, from its Setup.
+    let halt: HaltModel
     private var asked = 0
 
     init(cloud: CloudClient, taf: String) {
         self.cloud = cloud
         self.taf = taf
+        halt = HaltModel(cloud: cloud, taf: taf)
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
@@ -182,6 +185,8 @@ struct TafSetupTab: View {
     var openActivity: (String) -> Void = { _ in }
     /// The app whose sheet is open.
     @State private var chosen: TafSetup.Node?
+    /// The taf's name, for its halt.
+    var tafName: String? = nil
 
     var body: some View {
         ScrollView {
@@ -194,6 +199,9 @@ struct TafSetupTab: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
                 case .loaded(let setup):
+                    // Halting is a job of its own: its row opens its screen, for whoever manages
+                    // the taf, which a Setup tafs cloud answered says.
+                    HaltRow(model: model.halt, name: tafName)
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }

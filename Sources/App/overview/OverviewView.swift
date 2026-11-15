@@ -62,6 +62,8 @@ struct OverviewView: View {
     var openNeedsYou: () -> Void = {}
     /// Opens a taf's page from its line.
     var openTaf: ((Home.Taf) -> Void)?
+    /// Every taf's halt: offered while a taf runs, and whenever the account is halted.
+    var halt: HaltModel?
 
     var body: some View {
         ScrollView {
@@ -82,6 +84,9 @@ struct OverviewView: View {
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
+                    // Every taf at once, from its own screen, as the iPad's Home: also with no
+                    // taf, while the account is halted.
+                    if let halt { HaltRow(model: halt, name: nil, whileRunning: !page.tafs.isEmpty) }
                 }
             }
             .padding(.horizontal, Look.inset)

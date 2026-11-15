@@ -6,6 +6,7 @@ struct SignedInView: View {
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
     @StateObject private var people: PeopleModel
+    @StateObject private var accountHalt: HaltModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -40,6 +41,7 @@ struct SignedInView: View {
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
+        _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
@@ -57,7 +59,7 @@ struct SignedInView: View {
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: accountHalt))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))

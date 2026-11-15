@@ -125,10 +125,10 @@ struct TafView: View {
             case .setup:
                 if let pages {
                     // An app's week opens the taf's Activity of its calls, as on the iPad.
-                    TafSetupTab(model: pages) { query in
+                    TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }
+                    }, tafName: taf.name)
                 }
             }
         }

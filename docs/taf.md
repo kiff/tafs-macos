@@ -65,6 +65,27 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
   (`stats.activity_query`), the Card-unit exception's "Add a limit" (it goes through Coach, with its approval),
   Forget a note, Pause, and asking again with the `revision` as `If-None-Match`.
 
+## Halt (`Halt`, `HaltModel`, `HaltRow`, `HaltView`)
+
+Ported from the iPad's `HaltScreen.swift` (`HaltScreen`, `HoldRow`, `HaltRow`) and
+`TafsCloud.Halt`. There is no fixture for it in kiff/tafs's `contracts/` yet: the shape is the
+iPad's reader.
+
+- **Where:** a taf's own halt is the first row of its Setup, which tafs cloud answers only
+  to whoever manages the taf; every taf's is a row on the Overview while a taf runs, and also
+  with no taf while the account is halted, where it is resumed from.
+- **Read:** `GET /v1/tafs/{id}/halt`, or `GET /v1/halt` for every taf, when the row shows.
+- **Halt now** (Halt all now): `POST`, one click with no key, since it only takes authority
+  away. Then it is read again every 2 seconds while halting, for up to 2 minutes. Halt again
+  asks a part that didn't take it the first time.
+- **The screen:** the taf's name (or "All your tafs") over Running, Halting… or Halted, and
+  what halting does, or since when it holds; once halting, who holds it: no run starts
+  (kiff/agents), KIFF refuses its calls, the connection sends nothing (planque), each Done or
+  Waiting. A taf halted with the whole account says so.
+- **Resuming gives authority back**, so it is signed with the device's key: on this Mac it
+  says to approve on a device that can, until the approval key (#16).
+- A halt tafs cloud refuses says why, in the shared words, and stays as it was.
+
 ## Tests
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card
