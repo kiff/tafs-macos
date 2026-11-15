@@ -51,6 +51,14 @@ let coachSendTests: [Test] = [
         try expectEqual(got[3].words, nil)
         try expectEqual(got[3].status, 502)
     }),
+    Test("a refusal's why is tafs cloud's words, else its error, else the status, never its code, as the iPad's CloudError", {
+        let say = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let why = { (status: Int, body: String) in CloudRefusal(status: status, body: Data(body.utf8)).why(say) }
+        try expectEqual(why(409, #"{"error":"halted","code":"held_full","words":"Halted: nothing runs until it's resumed."}"#), "Halted: nothing runs until it's resumed.")
+        try expectEqual(why(409, #"{"error":"halted","code":"held_full"}"#), "halted")
+        try expectEqual(why(409, #"{"code":"held_full"}"#), "tafs cloud answered 409")
+        try expectEqual(why(502, "<html>"), "tafs cloud answered 502")
+    }),
     Test("allowing AI use sends the version of the words that were read", awaiting: {
         let (client, transport) = cloud([(200, "{}")])
         try await client.allowAI(version: "3")

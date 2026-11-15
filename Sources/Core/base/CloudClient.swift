@@ -44,11 +44,14 @@ struct CloudClient {
     }
 }
 
-/// tafs cloud didn't do what was asked: its status, its code, and its words for the person.
+/// tafs cloud didn't do what was asked, as the iPad's `CloudError` (TafsCloud.swift:9-49): its
+/// status, its `error`, its code, and its words for the person.
 struct CloudRefusal: Error, Equatable {
     let status: Int
+    /// tafs cloud's `error`, as sent; nil when it sent none.
+    let error: String?
     let code: String?
-    /// tafs cloud's line in the person's language, drawn as sent; nil when it sent none.
+    /// tafs cloud's line in the person's language, as sent; nil when it sent none.
     let words: String?
     /// The AI-data consent's words, when the refusal is for want of it.
     let consent: TafsCloud.AIConsent?
@@ -58,10 +61,16 @@ struct CloudRefusal: Error, Equatable {
         let refusal = TafsCloud.Refusal(status: status, body: body)
         let read = try? JSONDecoder().decode(Body.self, from: body)
         self.status = status
+        error = read?.error
         code = refusal.code ?? read?.error
-        let line = read?.words?.trimmingCharacters(in: .whitespacesAndNewlines)
-        words = line.flatMap { $0.isEmpty ? nil : $0 }
+        words = read?.words
         consent = refusal.consent
+    }
+
+    /// What the person is told, as the iPad's `errorDescription`: tafs cloud's words, else its
+    /// `error`, else the app's line for the status. Never the code on its own.
+    func why(_ say: Words) -> String {
+        words ?? error ?? say("error.cloud_answered", ["status": String(status)])
     }
 
     /// The person must allow AI use first, and the screen for it can be drawn.

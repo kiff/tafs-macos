@@ -31,6 +31,15 @@ words.count("needs_you.count", 3)                     // the plural form of 3 in
 - **A key the code names must exist.** A test reads every `words("…")` and `words.count("…")`
   in `Sources/` and fails for a key English lacks, or a count used as a plain line.
 
+## A refusal's why
+
+When tafs cloud refuses, the person reads what the iPad's `CloudError` says
+(`ios/Tafs/KIFF/TafsCloud.swift:9-49`): tafs cloud's `words`, else its `error`, else
+`error.cloud_answered` ("tafs cloud answered 409"). Its `code` is never shown on its own: it
+only decides what the app does (the AI-data consent, a halt). `CloudRefusal.why` says it, and
+every screen's line for a refusal goes through `NeedsYouModel.why`. A model has no view to
+hand it the words, so it reads `Words.app`, set once at launch.
+
 ## Contracts
 
 kiff/tafs keeps what tafs cloud answers the apps as fixtures in `contracts/`, written by tafs
