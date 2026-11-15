@@ -130,8 +130,6 @@ struct SignedInView: View {
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()
-                // The last export's files too: a person's chats never stay on the Mac after them.
-                ChatsExport.removeFiles()
                 signedOut()
             }
         })

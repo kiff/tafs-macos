@@ -14,6 +14,18 @@ private func model(_ answers: [(Int, String)], store: MemoryStore = MemoryStore(
 }
 
 let pairingModelTests: [Test] = [
+    Test("a new session and a sign-out each leave no exported chats on this Mac", awaiting: { @MainActor in
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("export-signin-\(UUID().uuidString)", isDirectory: true)
+        let (model, _) = try model([(200, startAnswer), (200, sessionAnswer)])
+        model.exportFolder = folder
+        _ = try ChatsExport.write((json: Data("{}".utf8), text: "chats"), in: folder)
+        await model.signIn()
+        try expectEqual(model.session?.tenant, "t1")
+        try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
+        _ = try ChatsExport.write((json: Data("{}".utf8), text: "chats"), in: folder)
+        model.signedOut()
+        try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
+    }),
     Test("signing in opens KIFF's page, waits, and keeps the session", awaiting: { @MainActor in
         var opened: [URL] = []
         let store = MemoryStore()

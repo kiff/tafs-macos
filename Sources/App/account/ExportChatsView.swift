@@ -87,8 +87,10 @@ struct SharePicker: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { NSView() }
 
     func updateNSView(_ view: NSView, context: Context) {
-        guard let urls = files else { return }
+        guard files != nil else { return }
         DispatchQueue.main.async {
+            // Read again here: two updates before this runs show the menu once.
+            guard let urls = files else { return }
             files = nil
             NSSharingServicePicker(items: urls).show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
         }

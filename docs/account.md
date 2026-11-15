@@ -135,6 +135,8 @@ trials and notes, for their rights of access and portability.
 - They're offered at once in macOS's share menu, the Mac's share and save sheet. The row then
   names them, to share them again.
 - A read that fails says to check the connection; files that couldn't be written say so.
-- The files are written to a temporary folder, replaced at each export and removed at
-  sign-out, so a person's chats never stay on the Mac after them.
+- The files are written to a temporary folder, replaced at each export, and removed at every
+  session change: a sign-out, a sign-in, and a pairing that replaces this Mac's session
+  (`SignInModel`), as the iPad's `removeOpenedFiles` in `useSession` and `forgetSession`
+  (`AppModel.swift:879`, `:1334`). So a person's chats never stay on the Mac after them.
 
