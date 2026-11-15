@@ -36,10 +36,10 @@ Overview.
 
 | Part | What |
 |---|---|
-| The head | The taf's coloured square with its initial, and its name. |
+| The head | As the iPad's: the taf's 34-point avatar (`TafAvatar`), its name in 20 rounded bold, and at the right **tafs cloud's state as the iPad's chip** (`TafState.chip`): Working (green), Waiting (amber), Ready for `idle`, Paused (soft), Stopped or Halted (red), each the shared `taf.state.*` line on its tone at 15%. No chip for a word this app doesn't know, nor for a working taf that needs the person: its Activity says what went wrong. |
 | The tabs | **Chat** and **Card**, as the iPad's two-part switch. Activity and Setup are still to come. |
-| Chat | The taf's own conversation (`GET /v1/tafs/{id}/conversation`), drawn as Coach's is, with no title of its own. Its box says "Message {taf}", and "Write the next message" while the taf works. Its first Card is beside it, with a button to all its Cards. tafs cloud is never asked which taf is Coach. |
-| Card | Each Card's face in the taf's colour: its title, the figure, the first limit for each call ("up to €150 each; more asks you first"), how many tools past one ("no actions yet" with none), and "Until {date}", "Ends · No end date", or "Ended" for a Card no longer active, which is faded. Then a panel of what it lets the taf do: KIFF's label, what happens outside it, and **its limits as the iPad's `CardRule.summary`** (`TafCard.Rule.summary`): each call's, the Card's own total for its window (`base_limit`), the extra room apart, and its calls. The room is apart only beside `base_limit`: without it, `per_window` already holds the room and is said once. **A Card with no rules has no panel**, never an empty one. With no Card, nothing is said: tafs cloud sends no field that says one was revoked. |
+| Chat | The taf's own conversation (`GET /v1/tafs/{id}/conversation`), drawn as Coach's is, with no title of its own. Its box says "Message {taf}", and "Write the next message" while the taf works. Its first Card is beside it in the iPad's 360-wide column, under "Card" or "Cards" (`card.heading`, by how many), with a button to all its Cards. tafs cloud is never asked which taf is Coach. |
+| Card | Each Card's face in the taf's colour, a payment card's shape (85.6 by 54) at most 300 wide, as the iPad's: its title, the figure, the first limit for each call ("up to €150 each; more asks you first"), how many tools past one ("no actions yet" with none), and "Until {date}", "Ends · No end date", or "Ended" for a Card no longer active, which is faded. Then a panel of what it lets the taf do: KIFF's label, what happens outside it, and **its limits as the iPad's `CardRule.summary`** (`TafCard.Rule.summary`): each call's, the Card's own total for its window (`base_limit`), the extra room apart, and its calls. The room is apart only beside `base_limit`: without it, `per_window` already holds the room and is said once. **A Card with no rules has no panel**, never an empty one. With no Card, nothing is said: tafs cloud sends no field that says one was revoked. |
 
 - Every word from KIFF or tafs cloud (a name, a title, a label, a window) is drawn as sent,
   with `Text(verbatim:)`.
@@ -48,6 +48,6 @@ Overview.
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card
 with no rules, the figure from money and from calls, no figure when used is unknown or the
-units differ, a used over the limit, and money in its language. On a Mac: a taf's chat reads
+units differ, a used over the limit, money in its language, and each state's chip. On a Mac: a taf's chat reads
 that taf's conversation without asking which taf is Coach, a Card with no rules has no panel
 under it, and the screenshots `build/screenshots/taf-<tab>-<language>.png`.

@@ -48,19 +48,26 @@ struct CardFace: View {
         }
         .foregroundColor(.white)
         .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 180)
-        .background(
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 18).fill(color)
-                Circle().stroke(Color.white.opacity(0.25), lineWidth: 1).frame(width: 150, height: 150).offset(x: 50, y: -70)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        // A payment card's shape, 85.6 by 54, at most 300 wide, as the iPad's.
+        .aspectRatio(Self.ratio, contentMode: .fit)
+        .background(color)
+        .overlay(
+            Circle().stroke(Color.white.opacity(0.18)).frame(width: 130, height: 130).offset(x: 35, y: -45)
+                .accessibilityHidden(true),
+            alignment: .topTrailing
         )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(maxWidth: Self.width)
         // A Card that isn't active any more, faded as on the iPad.
         .opacity(card.active ? 1 : 0.4)
         .accessibilityElement(children: .combine)
     }
+
+    /// At most this wide, as on the iPad.
+    static let width: CGFloat = 300
+    /// A payment card's proportions, 85.6 by 54 mm.
+    static let ratio: CGFloat = 85.6 / 54
 
     private static let day: DateFormatter = {
         let formatter = DateFormatter()
@@ -84,12 +91,13 @@ struct TafView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 9).fill(Theme.tafColor(taf.color)).frame(width: 36, height: 36)
-                    .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 16, weight: .bold)).foregroundColor(.white))
-                    .accessibilityHidden(true)
-                Text(verbatim: taf.name).font(.system(size: 22, weight: .bold)).foregroundColor(Theme.ink)
+            // As the iPad's head: its avatar, its name, and tafs cloud's state at the right.
+            HStack(spacing: 10) {
+                TafAvatar(name: taf.name, color: taf.color, size: 34)
+                Text(verbatim: taf.name).font(Theme.display(20)).foregroundColor(Theme.ink).lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
             }
             .padding(.top, 40)
             HStack(spacing: 0) {
@@ -123,7 +131,7 @@ struct TafView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             if let card = taf.cards.first {
                 VStack(alignment: .leading, spacing: 12) {
-                    Eyebrow(text: words("taf.section.card"))
+                    Eyebrow(text: words.count("card.heading", taf.cards.count))
                     CardFace(card: card, color: Theme.tafColor(taf.color))
                     Button { tab = .card } label: {
                         Text(words.count("card.all_of", taf.cards.count)).font(.system(size: 14)).foregroundColor(Theme.ink)
@@ -132,10 +140,25 @@ struct TafView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .frame(width: 260)
+                .frame(width: 360)
                 .padding(.top, 8)
             }
         }
+    }
+
+    /// The iPad's `StateChip`: the word on its tone at 15%, in a capsule.
+    private func stateChip(_ key: String, _ tone: TafState.Tone) -> some View {
+        let color: Color
+        switch tone {
+        case .ok: color = Theme.ok
+        case .amber: color = Theme.amber
+        case .no: color = Theme.no
+        case .soft: color = Theme.soft
+        }
+        return Text(words(key)).font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .foregroundColor(color)
+            .background(Capsule().fill(color.opacity(0.15)))
     }
 
     /// The Card itself, then each thing it lets the taf do and what happens outside it.
@@ -144,7 +167,7 @@ struct TafView: View {
             VStack(spacing: 16) {
                 // No Card listed says nothing: tafs cloud sends no field that says one was revoked.
                 ForEach(taf.cards) { card in
-                    CardFace(card: card, color: Theme.tafColor(taf.color)).frame(maxWidth: 300)
+                    CardFace(card: card, color: Theme.tafColor(taf.color))
                     // A Card with no rules has no panel under it, never an empty one.
                     if !card.rules.isEmpty { rules(card) }
                 }
