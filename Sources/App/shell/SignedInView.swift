@@ -65,7 +65,8 @@ struct SignedInView: View {
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
-            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true))
+            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+                                                        answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
                                                         mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
@@ -106,6 +107,8 @@ struct SignedInView: View {
     /// with the list, once the list has read. A read that fails keeps what was read.
     private func readTafs() async {
         await overview.load()
+        // Home's steps for Needs you, as the iPad's `show` takes them with each read.
+        if case .loaded(let page) = overview.state { needsYou.showSteps(page.yourSteps) }
         guard case .loaded = overview.state, let read = try? await account.myAccess() else { return }
         access = read
     }
@@ -157,6 +160,8 @@ struct SignedInView: View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+            // No answer outlives the session it was started in.
+            needsYou.cancelAnswers()
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()
