@@ -7,8 +7,18 @@ written in Swift with SwiftUI and AppKit.
 
 - A Mac on macOS 12 or later with Apple's Command Line Tools (`xcode-select --install`).
   No Xcode, and no package manager: the scripts call the Swift compiler directly.
-- **The code stays within Swift 5.7**, the newest Swift a Mac on macOS 12 can install. CI
-  compiles it with Swift 5.7 on every pull request, so newer syntax fails there.
+- **The code stays within Swift 5.7 and the macOS 12 SDK**, the newest a Mac on macOS 12
+  can install. CI's Mac job builds with a newer Xcode, which accepts things this one refuses,
+  so two rules are checked on their own (`scripts/swift57.sh`, the `swift57` job, on every
+  change):
+  - **every file parses with Swift 5.7**, so newer syntax fails;
+  - **no SwiftUI builder holds more than 10 views** (`scripts/viewbuilders.py`). The macOS 12
+    and 13 SDKs' `ViewBuilder` takes at most 10 in one block; a newer SDK takes any number,
+    so a newer build never says. Put the views past 10 in a `Group { … }` or a view of their
+    own.
+
+  A full Swift 5.7 build needs Xcode 14 or the Command Line Tools of macOS 12. The Mac job
+  lists the Xcodes its runner has; the build on a Mac with macOS 12 stays the final check.
 
 ## Build
 
@@ -61,6 +71,7 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
   part, **on the Mac too**: the pin brings new words and contracts every screen reads. `strings` and `contracts`
   always run.
 - **The tests that need no Mac run on Linux** with Swift 5.7.
+- **The Swift 5.7 checks** (`swift57`) run on every change, on Linux.
 - **A Mac job** builds the app for both architectures and runs the parts' Mac tests. It runs
   when `Sources/App/`, `App/`, a `mac/` test folder, shared code, the runner, a script, the
   workflow or the shared pin changed.
