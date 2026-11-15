@@ -22,6 +22,10 @@ struct SignedInView: View {
     @State private var tafPages: TafPagesModel?
     /// What this person may do with each taf, as KIFF says, by KIFF agent.
     @State private var access: [String: Access] = [:]
+    /// Each taf's doors, one model per taf, as the iPad's `doors(for:)`.
+    @StateObject private var doorModels = DoorModels()
+    /// The tab a taf's page opens on.
+    @State private var tafTab: TafView.Tab = .chat
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -62,7 +66,8 @@ struct SignedInView: View {
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
-            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true))
+            // A taf's knocks are answered on its Activity, so its row opens there.
+            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, openKnocks: { open($0, on: .activity) }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
                                                         mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
@@ -111,8 +116,11 @@ struct SignedInView: View {
     }
 
     /// Opens a taf's page, with its own chat. An agent tafs doesn't run has no page.
-    private func open(_ taf: Home.Taf) {
+    private func open(_ taf: Home.Taf) { open(taf, on: .chat) }
+
+    private func open(_ taf: Home.Taf, on tab: TafView.Tab) {
         guard let id = taf.tafID else { return }
+        tafTab = tab
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
         tafPages = TafPagesModel(cloud: cloud, taf: id)
         openTaf = taf.id
@@ -143,7 +151,9 @@ struct SignedInView: View {
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
                                halted: { await readTafs() },
                                // Plan & usage in place of the taf's page.
-                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }).id(taf.id))
+                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) },
+                               doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
+                               myEmail: accountModel.me?.email, tab: tafTab).id(taf.id))
     }
 
     private var accountScreen: some View {

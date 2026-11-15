@@ -84,12 +84,14 @@ enum Home {
         let workStatus: String?
         /// Its setup stopped partway: tafs cloud's words for it, in place of what it's doing.
         let finishWords: String?
+        /// Its doors, for Needs you's knocks; absent when it has none.
+        let doors: [TafDoors.Light]?
 
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, waiting, jobSummary = "job_summary"
-            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish
+            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, doors
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
         enum FinishKeys: String, CodingKey { case taf, session, words }
@@ -124,6 +126,8 @@ enum Home {
             let finish = try? c.nestedContainer(keyedBy: FinishKeys.self, forKey: .finish)
             func part(_ key: FinishKeys) -> String? { text(finish.flatMap { (try? $0.decodeIfPresent(String.self, forKey: key)) ?? nil })?.trimmingCharacters(in: .whitespacesAndNewlines) }
             finishWords = part(.taf) != nil && part(.session) != nil ? part(.words) : nil
+            // As the iPad's `HomeTaf.doors`: a list, or none; each door reads what it can.
+            doors = try c.decodeIfPresent([TafDoors.Light].self, forKey: .doors)
         }
 
         /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the
@@ -161,8 +165,11 @@ enum Home {
         /// What waits for the person, counted once by tafs cloud so every screen agrees.
         let needsYouCount: Int?
         let needsYouWords: String?
+        /// The doors tafs cloud offers here (docs/doors.md); absent when none, and the app shows
+        /// no knocks.
+        let doorsOffered: [String]?
 
-        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you" }
+        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered" }
         enum WordsKeys: String, CodingKey { case words, count }
 
         init(from decoder: Decoder) throws {
@@ -175,6 +182,7 @@ enum Home {
             let needs = try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .needsYou)
             needsYouCount = needs.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .count)) ?? nil }
             needsYouWords = needs.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+            doorsOffered = try c.decodeIfPresent([String].self, forKey: .doorsOffered)
         }
     }
 }

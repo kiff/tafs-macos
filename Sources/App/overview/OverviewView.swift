@@ -15,6 +15,8 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var recipes: Recipes?
     /// Each taf's Last result, by its id at tafs cloud, once read.
     @Published private(set) var lastResults: [String: String] = [:]
+    /// The doors tafs cloud offers here, as Home last said; a read that fails keeps them.
+    @Published private(set) var doorsOffered: [String] = []
     private let cloud: CloudClient
 
     init(cloud: CloudClient) { self.cloud = cloud }
@@ -32,7 +34,11 @@ final class OverviewModel: ObservableObject {
     }
 
     func load() async {
-        do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
+        do {
+            let page = try await cloud.home()
+            state = .loaded(page)
+            doorsOffered = page.doorsOffered ?? []
+        } catch { state = .unread(why: NeedsYouModel.why(error)) }
         // As the iPad's `refresh` and `loadRecipes` (AppModel.swift:1852-1857, 7210-7215): read
         // with each list read that has no taf, and a read that fails keeps what was read.
         if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
