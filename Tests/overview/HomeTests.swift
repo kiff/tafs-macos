@@ -84,4 +84,40 @@ let overviewTests: [Test] = [
         _ = try await CloudClient(transport: transport, session: Session(accessToken: "t", expiresIn: 60, tenant: "t1", subject: "u", deviceID: nil)).runs(of: "taf-1")
         try expectEqual(transport.sent.map { "\($0.method) \($0.path)" }, ["GET /v1/tafs/taf-1/runs"])
     }),
+    Test("the recipes read as the iPad reads them: by category, each led by the problem it ends, its Card in zones") {
+        let json = #"""
+        {"categories":[{"id":"money","title":"Money","color":{"light":"#1F7A4D","dark":"#4CC38A"}},{"id":"support","title":"Support","color":{"light":"green","dark":"#000000"}},{"id":"empty","title":"Empty"}],
+         "recipes":[{"id":"r1","title":"Refunds","category":"money","headline":"Refunds wait days","line":"Refunds within its limit","say":"Refund orders under €150","today":"About 2 hours a week","card":{"allows":["Refund up to €150"],"holds":["Refunds over €150"],"never":[]},"apps":[{"name":"Stripe"},{"logo":"x"}],"proved":" Proved on a test shop. "},
+                    {"id":"r2","title":"Replies","category":"support","say":"Answer tickets"},{"title":"no id"}],
+         "home":{"shown":true,"words":"Pick a job for your first taf.","own_words":{"title":"Say it in your own words","line":"Coach builds the taf with you."}},
+         "labels":{"allows":"Does on its own","holds":"Asks you first","never":"Never does","hand":"Hand it to Coach"}}
+        """#
+        let recipes = try JSONDecoder().decode(Recipes.self, from: Data(json.utf8))
+        try expectEqual(recipes.byCategory.map(\.category.id), ["money", "support"])
+        try expectEqual(recipes.categories[0].color, Shade(light: 0x1F7A4D, dark: 0x4CC38A))
+        try expectEqual(recipes.categories[1].color, nil)
+        try expectEqual(recipes.listed, true)
+        try expectEqual(recipes.groups(picked: "support").map(\.category.id), ["support"])
+        try expectEqual(recipes.groups(picked: "gone").count, 2)
+        let refunds = recipes.recipes[0]
+        try expectEqual(refunds.lead, "Refunds wait days")
+        try expectEqual(recipes.recipes[1].lead, "Replies")
+        try expectEqual(refunds.apps.map(\.name), ["Stripe"])
+        try expectEqual(refunds.proved, "Proved on a test shop.")
+        try expectEqual(recipes.zones(of: refunds).map(\.title), ["Does on its own", "Asks you first"])
+        try expectEqual(recipes.handWords, "Hand it to Coach")
+        try expectEqual(recipes.ownWords?.title, "Say it in your own words")
+        try expectEqual(recipes.homeWordsLine, "Pick a job for your first taf.")
+    },
+    Test("tafs cloud's recipes contract reads: Home's line, its own-words row and the sheet's words") {
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/recipes-home.json"))) as? [String: Any]
+        guard let answer = root?["answer"] else { throw Failure(description: "no answer") }
+        let recipes = try JSONDecoder().decode(Recipes.self, from: try JSONSerialization.data(withJSONObject: answer))
+        try expectEqual(recipes.homeShown, true)
+        try expect(recipes.homeWordsLine?.isEmpty == false, "Home's line")
+        try expect(recipes.ownWords?.title.isEmpty == false, "own words")
+        try expect(recipes.handWords?.isEmpty == false, "the sheet's button")
+        // The contract leaves the recipes out: nothing listed, never an empty list drawn.
+        try expectEqual(recipes.listed, false)
+    },
 ]

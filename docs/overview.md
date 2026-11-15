@@ -45,6 +45,27 @@ stopped, from the runs list (a report never says); else "Last ran at {time}"; el
 yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's contracts,
 `taf-runs.json` and `taf-run-report*.json`, read by `scripts/test.sh contracts`.
 
+## With no taf: the recipes (`Recipes`, `HomeRecipesView`, `RecipeSheet`)
+
+Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `RecipeRow`,
+`RecipeSheet`) and `TafsCloud.Recipes`. `GET /v1/recipes` is read with the list; while the
+account has no taf and tafs cloud lists them (`home.shown`, its sheet's words, a category with
+a recipe), they stand in the table's place:
+
+- tafs cloud's line ("Pick a job for your first taf."), which the sidebar shows too;
+- **Say it in your own words** (`home.own_words`): Coach with nothing in its box;
+- a chip per category, in its colour (`#RRGGBB` for light and dark, else none), to narrow
+  the list; picked again, every recipe shows;
+- each recipe led by the problem it ends (`headline`, else its title), its line and the apps it
+  uses, on an edge in its category's colour.
+
+A click opens its sheet: what it ends, what that costs today, its Card in plain zones (does on
+its own, asks first, never does, titled by tafs cloud's `labels`; an empty zone is left out),
+where its proof run passed and what it reported, and **Hand it to Coach**, which puts the
+recipe's `say` in Coach's box to edit and send, as the iPad's `handRecipeToCoach`. Nothing is
+sent until the person sends it. The contract (`recipes-home.json`) carries Home's part; the
+recipes themselves are read with the iPad's shape.
+
 ## Not yet
 
 - Who uses a taf, under its name, for someone who manages it.

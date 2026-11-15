@@ -8,7 +8,37 @@ private func model(_ answers: [(Int, String)]) -> OverviewModel {
     OverviewModel(cloud: CloudClient(transport: CannedTransport(answers), session: session))
 }
 
+private let listedRecipes = #"""
+{"categories":[{"id":"money","title":"Money","color":{"light":"#1F7A4D","dark":"#4CC38A"}},{"id":"support","title":"Support"}],
+ "recipes":[{"id":"r1","title":"Refunds","category":"money","headline":"Refunds wait days for someone to click","line":"Refunds orders within its limit","say":"Refund orders under €150","card":{"allows":["Refund up to €150"],"holds":["Refunds over €150"]},"apps":[{"name":"Stripe"}]},
+            {"id":"r2","title":"Replies","category":"support","headline":"Tickets wait overnight","line":"Answers the easy ones","say":"Answer tickets"}],
+ "home":{"shown":true,"words":"Pick a job for your first taf.","own_words":{"title":"Say it in your own words","line":"Coach builds the taf with you."}},
+ "labels":{"allows":"Does on its own","holds":"Asks you first","never":"Never does","hand":"Hand it to Coach"}}
+"""#
+
 let overviewMacTests: [Test] = [
+    Test("with no taf, tafs cloud's recipes are read for the Overview, and Home's line for the sidebar", awaiting: { @MainActor in
+        let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes)])
+        await none.load()
+        try expectEqual(none.recipes?.listed, true)
+        try expectEqual(none.recipes?.byCategory.count, 2)
+        try expectEqual(none.noTafsLine, "Pick a job for your first taf.")
+        // Recipes that can't be read: nothing shows, never an empty list.
+        let unread = model([(200, #"{"tafs":[]}"#), (500, "")])
+        await unread.load()
+        try expectEqual(unread.recipes, nil)
+        try expectEqual(unread.noTafsLine, nil)
+    }),
+    Test("the screenshots: the Overview with no taf, listing tafs cloud's recipes", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes)])
+        await none.load()
+        let view = OverviewView(model: none, handToCoach: { _ in }).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("overview-recipes-en.png"))
+    }),
     Test("the Overview loads tafs cloud's list, and says so when it can't", awaiting: { @MainActor in
         let loaded = model([(200, homePage)])
         await loaded.load()

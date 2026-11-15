@@ -11,6 +11,8 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var state: State = .loading
     /// tafs cloud's line for an account with no taf yet, for the sidebar.
     @Published private(set) var noTafsLine: String?
+    /// The ready-made jobs tafs cloud lists while the account has no live taf.
+    @Published private(set) var recipes: Recipes?
     /// Each taf's Last result, by its id at tafs cloud, once read.
     @Published private(set) var lastResults: [String: String] = [:]
     private let cloud: CloudClient
@@ -31,8 +33,9 @@ final class OverviewModel: ObservableObject {
 
     func load() async {
         do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
-        // The line is only an invitation: if it can't be read, the sidebar just doesn't show one.
-        noTafsLine = (try? await cloud.homeWords())?.line
+        // The line and the recipes are only an invitation: if they can't be read, nothing shows.
+        recipes = try? await cloud.recipes()
+        noTafsLine = recipes?.homeShown == true ? recipes?.homeWordsLine : nil
     }
 
     /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
@@ -67,6 +70,8 @@ struct OverviewView: View {
     var halt: HaltModel?
     /// Reads the list again after a halt tafs cloud answered; the Overview's own read without one.
     var halted: (() async -> Void)?
+    /// Hands a recipe's words to Coach's box, or with none opens Coach empty.
+    var handToCoach: ((String?) -> Void)?
 
     var body: some View {
         ScrollView {
@@ -83,7 +88,12 @@ struct OverviewView: View {
                 case .loaded(let page):
                     let count = page.needsYouCount ?? 0
                     if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
-                    table(page.tafs)
+                    // With no taf, tafs cloud's recipes in the table's place, as the iPad's Home.
+                    if page.tafs.isEmpty, let recipes = model.recipes, recipes.listed, let handToCoach {
+                        HomeRecipesView(recipes: recipes, ownWords: { handToCoach(nil) }, hand: { handToCoach($0.say) })
+                    } else {
+                        table(page.tafs)
+                    }
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
