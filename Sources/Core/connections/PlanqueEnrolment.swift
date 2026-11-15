@@ -75,17 +75,28 @@ enum PlanqueEnrolment {
     /// Enrols this device with planque, and hands it a fresh connector key only when planque says
     /// it needs one. Nil once done; else why it stopped.
     ///
+    /// **Who may run it**, as the iPad's `setUpPlanque` and `startSetup` (`AppModel.swift:6230-6249`,
+    /// `:7556-7575`): only after the person confirmed the step, with Touch ID or the Mac's password
+    /// over `tafs.planque.v1|{tenant}`, or inside Start's Touch ID (`:7567`); never in a view-only
+    /// session or one without a device key (`:6231`). The caller checks the account after the prompt
+    /// (`:6241`, `:7569`), sets planque's `signer` only after it and clears it when this returns
+    /// (`defer`, `:6246-6247`, `:7574-7575`). Nothing calls it before that gate.
+    ///
     /// planque's enrolled connector key, while KIFF still takes it, is kept: asked first with no
     /// key, it answers `kept`, and no key is minted that would only be left live in KIFF (a device
     /// can't revoke a connector key). A key is minted only on `409 needs_key`; a 2xx without
-    /// `kept` mints nothing either. Any other answer
-    /// (not reached, a 5xx, a refused signature, a 400 for a body it couldn't read) mints nothing:
-    /// a second enrolment would likely fail too and leave the key live. It says why, and the next
-    /// try asks again.
-    static func enrol(planque: PlanqueClient, account: AccountClient, deviceKey: Data) async -> Stop? {
+    /// `kept` mints nothing either. Any other answer (not reached, a 5xx, a refused signature, a
+    /// 400 for a body it couldn't read) mints nothing: a second enrolment would likely fail too and
+    /// leave the key live. It says why, and the next try asks again.
+    ///
+    /// `ended` says the session ended meanwhile, as the iPad's `gen != accountGeneration`, checked
+    /// where it checks (`:6275`, `:6290`, `:6307`) and first in each refusal: then nothing more is
+    /// done or said (`.ended`). A request the system cancelled is the same. Once minted, the key is
+    /// handed to planque before `ended` is checked (the iPad returns at `:6293`, dropping it).
+    static func enrol(planque: PlanqueClient, account: AccountClient, deviceKey: Data, ended: () -> Bool) async -> Stop? {
         do {
             let standing = try await planque.enrol(deviceKey: deviceKey, connectorKey: nil)
-            guard !Task.isCancelled else { return .ended }
+            guard !ended() else { return .ended }
             if standing.kept == true { return nil }
             // A 2xx that didn't keep mints nothing (Windows #63, Android): planque answered
             // oddly, and a key minted now could be left live in KIFF, where no device can
@@ -93,26 +104,39 @@ enum PlanqueEnrolment {
             return .notSetUp(why: .unreadable)
         } catch PlanqueClient.PlanqueError.needsKey {
         } catch PlanqueClient.PlanqueError.server(409, _, _) where planque.lastRefusalCode == nil {
+            if ended() { return .ended }
             // A code-less 409 is an older planque's other device; a coded one (a replayed signature,
             // a changed enrolment) says why below, never "another device".
             return .otherDevice
         } catch {
+            if ended() || cancelled(error) { return .ended }
             return .notSetUp(why: Why(error))
         }
-        guard !Task.isCancelled else { return .ended }
+        guard !ended() else { return .ended }
         do {
             let key = try await account.mintConnectorKey()
             // Once minted, the key is handed to planque whatever happens: KIFF already holds it
-            // live, and dropping it here would leave it orphaned. Cancellation is checked after.
+            // live, and dropping it here would leave it orphaned. A sign-out doesn't cancel this
+            // task (`ended` is the account check), so the hand-over is sent; `ended` is checked after.
             _ = try await planque.enrol(deviceKey: deviceKey, connectorKey: key)
         } catch KIFFError.refused(403, _) {
+            if ended() { return .ended }
             return .adminOnly
         } catch PlanqueClient.PlanqueError.server(409, _, _) where planque.lastRefusalCode == nil {
+            if ended() { return .ended }
             return .otherDevice
         } catch {
+            if ended() || cancelled(error) { return .ended }
             return .notSetUp(why: Why(error))
         }
-        guard !Task.isCancelled else { return .ended }
+        guard !ended() else { return .ended }
         return nil
+    }
+
+    /// A request the system cancelled (the task ended): nothing to say, as an ended session.
+    static func cancelled(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let url = error as? URLError, url.code == .cancelled { return true }
+        return false
     }
 }

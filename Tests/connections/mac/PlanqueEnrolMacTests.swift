@@ -15,7 +15,7 @@ let planqueEnrolMacTests: [Test] = [
         planque.transport = planqueSent
         planque.bodyHash = Signing.sha256Hex
         planque.signer = { try key.sign(Data($0.utf8)).base64EncodedString() }
-        let stop = await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key.publicKeyDER)
+        let stop = await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key.publicKeyDER, ended: { false })
         try expectEqual(stop, nil)
         for sent in planqueSent.sent {
             let fields = Dictionary(uniqueKeysWithValues: (sent.headers["Planque-Device-Signature"] ?? "").split(separator: ",").compactMap { part -> (String, String)? in
@@ -36,5 +36,13 @@ let planqueEnrolMacTests: [Test] = [
         })
         let request = KIFFMessage.request(tenant: "t_01", method: "POST", path: "/v1/keys", bodyHash: Signing.sha256Hex(mint.body), signedAt: parts["t"] ?? "")
         try expect(Signing.verifies(parts["v1"] ?? "", over: request, publicKeyDER: key.publicKeyDER), "the mint's signature verifies")
+        // Three signatures, three times, in milliseconds (`SigningTime.next()`): never the same twice.
+        let planqueTimes = planqueSent.sent.compactMap { sent in
+            (sent.headers["Planque-Device-Signature"] ?? "").split(separator: ",").first.map { String($0.dropFirst(2)) }
+        }
+        let times = planqueTimes + [parts["t"] ?? ""]
+        try expectEqual(times.count, 3)
+        try expectEqual(Set(times).count, 3)
+        try expect(times.allSatisfy { $0.contains(".") }, "milliseconds: \(times)")
     }),
 ]
