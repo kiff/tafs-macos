@@ -21,6 +21,10 @@ let shellPaletteTests: [Test] = [
             }
         }
     },
+    Test("dim is under 4.5:1 on the sidebar's ground in light: the reason its small lines are soft, not the iPad's dim") {
+        // If the palette moves dim over the line, the sidebar can take the iPad's dim (docs/shell.md).
+        try expect(Palette.contrast(Palette.dim.light, Palette.raised.light) < 4.5, "dim is readable on raised now")
+    },
     Test("amber as text is 4.5:1 on the background") {
         try expect(Palette.contrast(Palette.amberText.light, Palette.background.light) >= 4.5, "light")
         try expect(Palette.contrast(Palette.amberText.dark, Palette.background.dark) >= 4.5, "dark")
