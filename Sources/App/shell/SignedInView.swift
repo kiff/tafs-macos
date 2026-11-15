@@ -5,6 +5,7 @@ struct SignedInView: View {
     @Environment(\.words) private var words
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
+    @StateObject private var people: PeopleModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -38,6 +39,7 @@ struct SignedInView: View {
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
+        _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
@@ -106,7 +108,9 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+        AccountView(model: accountModel, devices: devices, people: people,
+                    tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
+                    open: { selection = $0 }, addThisMac: addThisMac, signOut: {
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()

@@ -94,5 +94,31 @@ Each line is read on its own: one that can't be read is left out, never the page
 The sidebar's Account button shows the same `GET /v1/me` under it: the email, else the
 account's name. With neither, it shows nothing under Account.
 
-Not on the Mac yet: People & groups, Coach's suggestions, Alerts, AI use, Time zone, and
-Export my chats. Their rows come with their screens: a row that opens nothing isn't drawn.
+## People & groups (`People`, `PeopleModel`, `PeopleView`)
+
+Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`'s `Group`,
+`GroupMember` and `Person`. The first row of People & apps opens it.
+
+| Read | From | Drawn |
+|---|---|---|
+| The groups | KIFF's `GET /v1/groups`: `id`, `name`, `everyone`, `members` (`subject`, `role`), `agents` | Each group's name, KIFF's default one ("Everyone") in the app's language; "Uses {tafs}", the tafs by name from the agents it is shared, or that it uses none; then its people, managers first, then by label. |
+| The people | KIFF's `GET /v1/tenant/members`: `subject`, `role`, `status`, `email`, `you` | A person as their email, else KIFF's id for them, with their initial on a raised circle, and "Manager" (amber) or "Member". |
+
+- **Who and in what order,** as the iPad's `refreshPeople`: only the people on the account now
+  (`status` active), by label; the default group first, then the others by name, case aside.
+- The line over the groups is the account's name and how many people, or the count alone
+  for an account named after its owner's email, as the iPad's `AccountLines.people`. The Mac
+  also gives the count alone when KIFF names no account, which the iPad's account always has.
+- Read when it opens and every 20 seconds while open (the two lists one after the other, where
+  the iPad reads them together). A read that fails after one that worked keeps what is shown,
+  with "People and groups couldn't be read" over it until a read works; a first one says why.
+- "No groups" shows only for lists that read with none and no read failed since, as the
+  iPad's `loaded && groups.isEmpty && peopleError == nil` (`PeopleViews.swift:42`).
+- Decoded as the iPad's: a group's members and agents, and a person's role and status, must
+  be there; one that doesn't read fails the read, which says why.
+- **It only reads.** Making, renaming or deleting a group and changing its people are each
+  the person's act behind their device's key on the iPad, so on the Mac they come with
+  approvals (#16).
+
+Not on the Mac yet: Coach's suggestions, Alerts, AI use, Time zone, and Export my chats.
+Their rows come with their screens: a row that opens nothing isn't drawn.
