@@ -124,7 +124,9 @@ rows are offered whenever the taf is tafs cloud's, while its Setup is read or co
   `cloud.paused`), never Home's `state`, which says `waiting` for a paused taf with a call held.
 - **Times** are the account's, as the iPad's `AccountTime` (`Components.swift:196-247`): the
   next run as 14:05, a follow-up's end as "16 Nov 2026, 08:00", each with the zone's short name
-  when the account's clock isn't this Mac's. A zone this Mac doesn't know is UTC.
+  when the account's clock isn't this Mac's. A zone this Mac doesn't know is UTC, and it is
+  named "UTC" after a time, as the iPad writes it, whatever macOS calls it (newer macOS says
+  "GMT"). Every other zone is named as macOS names it.
 - **Results go to:** tafs' own places (Reply to the sender, Alert our phones, Email me), set at
   once (`PUT …/results`), at least one always on; then each place in a connected app, turned
   through the dial's next version.
