@@ -168,8 +168,10 @@ enum Home {
         /// The doors tafs cloud offers here (docs/doors.md); absent when none, and the app shows
         /// no knocks.
         let doorsOffered: [String]?
+        /// The steps the tafs handed their owner (`your_steps`), each read strictly, as the iPad's `Home`.
+        let yourSteps: [YourStep]
 
-        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered" }
+        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps" }
         enum WordsKeys: String, CodingKey { case words, count }
 
         init(from decoder: Decoder) throws {
@@ -183,6 +185,7 @@ enum Home {
             needsYouCount = needs.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .count)) ?? nil }
             needsYouWords = needs.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
             doorsOffered = try c.decodeIfPresent([String].self, forKey: .doorsOffered)
+            yourSteps = try c.decodeIfPresent([YourStep].self, forKey: .yourSteps) ?? []
         }
     }
 }
