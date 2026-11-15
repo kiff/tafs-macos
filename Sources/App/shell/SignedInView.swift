@@ -2,6 +2,8 @@ import SwiftUI
 
 /// The window of a signed-in Mac: the sidebar, with each built screen in its place.
 struct SignedInView: View {
+    /// Whether the app is in front: back in front, the lists are read again.
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.words) private var words
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
@@ -144,19 +146,27 @@ struct SignedInView: View {
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
-                // The held calls and the tafs side by side, as the iPad's `refresh`
-                // (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the
-                // sidebar and the Overview, are read once here and again with each round, so a
-                // taf made in Coach shows without opening the Overview; what this person may do
-                // with each is read after the list, as there (`readTafs`).
-                async let held: Void = needsYou.load()
-                async let tafs: Void = readTafs()
-                _ = await (held, tafs)
-                if case .loaded(let calls) = needsYou.state {
-                    notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
-                }
+                await readRound()
                 try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
             }
+        }
+        // Back in front, the lists are read again at once, as the iPad's `refresh()` when its
+        // scene becomes active (TafsApp.swift:60-68), not only at the next round.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { Task { await readRound() } }
+        }
+    }
+
+    /// One round: the held calls and the tafs side by side, as the iPad's `refresh`
+    /// (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the sidebar and the
+    /// Overview, are read with each round, so a taf made in Coach shows without opening the
+    /// Overview; what this person may do with each is read after the list, as there (`readTafs`).
+    private func readRound() async {
+        async let held: Void = needsYou.load()
+        async let tafs: Void = readTafs()
+        _ = await (held, tafs)
+        if case .loaded(let calls) = needsYou.state {
+            notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
         }
     }
 

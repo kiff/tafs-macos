@@ -106,7 +106,8 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 - The apps' logos beside their names.
 - A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
 - Who uses a taf, under its name, for someone who manages it.
-- Reading the list again by itself. It is read when the screen opens, and with each round.
+- Reading the list again by itself, apart from the window's round. It is read when the screen
+  opens, with each 30-second round, and at once when the app comes back to the front.
 
 ## Tests
 
