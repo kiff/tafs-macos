@@ -10,6 +10,8 @@ private let notYet = [
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
+    "taf-activity.json": "a taf's Activity tab, with the taf page",
+    "taf-setup.json": "a taf's Setup tab, with the taf page",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
