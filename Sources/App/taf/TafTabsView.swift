@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// A taf's Activity and Setup, read from tafs cloud when their tab opens. Both only read.
@@ -22,6 +23,17 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var filter = "all"
     /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
     @Published private(set) var query: String?
+    /// The runs it kept: the panel's first few (`false`), and all of them (`true`).
+    @Published private(set) var runPages: [Bool: TafRuns.Pages] = [:]
+    /// Run now, kept by taf for the whole app (`RunNowModel`), so it outlives this page.
+    let runs: RunNowModel
+    /// Run now is on its way: a second click sends nothing.
+    var runInFlight: Bool { runs.inFlight.contains(taf) }
+    /// tafs cloud's words when Run now started no run.
+    var runNowWords: String? { runs.words[taf] }
+    /// Why Run now didn't start a run, where the iPad says it in its error line.
+    var runNotStarted: String? { runs.notStarted[taf] }
+    private var following: AnyCancellable?
 
     private let cloud: CloudClient
     let taf: String
@@ -34,12 +46,16 @@ final class TafPagesModel: ObservableObject {
     /// This device's planque proof for the Setup read; nil reads without it.
     private let proof: () async -> String?
 
-    init(cloud: CloudClient, taf: String, proof: @escaping () async -> String? = { nil }) {
+    init(cloud: CloudClient, taf: String, proof: @escaping () async -> String? = { nil },
+         runs: RunNowModel? = nil) {
         self.cloud = cloud
         self.taf = taf
         self.proof = proof
         halt = HaltModel(cloud: cloud, taf: taf)
         knob = TafKnobModel(cloud: cloud, taf: taf)
+        self.runs = runs ?? RunNowModel(cloud: cloud)
+        // The page draws Run now from the app's model: it changes when that does.
+        following = self.runs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
@@ -80,6 +96,36 @@ final class TafPagesModel: ObservableObject {
         query = activityQuery
         filter = "all"
         activity = .loading
+    }
+
+    /// Reads the runs it kept, as the iPad's `loadRunPage`: three for the panel, twenty a page
+    /// for all of them. Asked again with what was read, a 304 keeps it. `more` reads the next
+    /// page; asked while a read is on its way, it waits for that one.
+    func loadRunPage(all: Bool = false, more: Bool = false) async {
+        var cache = runPages[all] ?? TafRuns.Pages()
+        guard !cache.loading else {
+            if more { cache.moreWhenReady = true; runPages[all] = cache }
+            return
+        }
+        let cursor = more ? cache.pages.last?.nextCursor : nil
+        if more && cursor == nil { return }
+        cache.loading = true; cache.moreWhenReady = false; cache.error = nil; runPages[all] = cache
+        do {
+            let (page, tag) = try await cloud.runsPage(of: taf, cursor: cursor, etag: more ? nil : cache.etag, limit: TafRuns.limit(all: all))
+            if let page { cache.pages = more ? cache.pages + [page] : [page] }
+            if !more { cache.etag = tag }
+        } catch { cache.error = NeedsYouModel.why(error) }
+        let follow = cache.error == nil && runPages[all]?.moreWhenReady == true
+        cache.loading = false; cache.moreWhenReady = false; runPages[all] = cache
+        if follow { await loadRunPage(all: all, more: true) }
+    }
+
+    /// Runs the taf now, as the iPad's `runNow`: once at a time; tafs cloud's words when it
+    /// started no run; the runs read again when it did. Waiting for credits says tafs cloud's
+    /// words; any other refusal says the run didn't start, and why.
+    @discardableResult
+    func runNow(words: Words) async -> String? {
+        await runs.runNow(taf, words: words)
     }
 
     /// Reads the versions, as the iPad's `loadVersions` (AppModel.swift:3906-3922): what was read
@@ -136,6 +182,9 @@ struct TafActivityTab: View {
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
                 if let health = taf.health, health.needsAttention { workPanel(health) }
+                // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
+                RunsPanel(model: model, taf: taf)
+                RetainedRuns(model: model)
                 switch model.activity {
                 case .loading:
                     ProgressView().controlSize(.small)

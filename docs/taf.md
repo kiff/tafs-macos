@@ -54,7 +54,7 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
 
 | Tab | Route | Drawn |
 |---|---|---|
-| Activity | `GET /v1/tafs/{id}/activity?filter=` | The taf's first Card in one line (below), then what waits on the Card for want of a unit, then **its work**, as the iPad's `TafActivityList.parts`: under "Its work" (`WorkPanel`), **a taf that isn't healthy** as Home reads it (`health`, each line read on its own, the iPad's `HealthLines`): each line, amber when at risk and red when failing, with the fixes tafs cloud decided for it: the credits fix opens Plan & usage; Coach's fix, which on the iPad improves the taf in Coach mode, comes with Coach mode and is no button until then; any other kind is no button. The rest of `WorkPanel` (`GET /v1/tafs/{id}/work`: its summary line, the oldest waiting case, Answer within, skipped firings and requests) isn't here yet, so the panel shows only with a health to say. The Card's line: the taf's first Card in one line ("€1,960 left today of €2,000", its title), which opens the Card tab; then tafs cloud's `filters` as pills, each asked for again with its id; then its calls by day (`groups`, else `entries` as one list): each with its kind's dot as the iPad's (done and approved green; refused, not done and revoked red; held, sending and any other kind amber), its `title`, `detail`, `time`, and `amount_text` under the time; while `next_cursor` is sent, the next page when the list's end shows (`&cursor=`), an untitled first day carrying on the last; and `end_words` under the last page. |
+| Activity | `GET /v1/tafs/{id}/activity?filter=` | The taf's first Card in one line (below), then what waits on the Card for want of a unit, then **its work**, as the iPad's `TafActivityList.parts`: under "Its work" (`WorkPanel`), **a taf that isn't healthy** as Home reads it (`health`, each line read on its own, the iPad's `HealthLines`): each line, amber when at risk and red when failing, with the fixes tafs cloud decided for it: the credits fix opens Plan & usage; Coach's fix, which on the iPad improves the taf in Coach mode, comes with Coach mode and is no button until then; any other kind is no button. The rest of `WorkPanel` (`GET /v1/tafs/{id}/work`: its summary line, the oldest waiting case, Answer within, skipped firings and requests) isn't here yet, so the panel shows only with a health to say. Then **its runs** and **the runs it kept** (below). The Card's line: the taf's first Card in one line ("€1,960 left today of €2,000", its title), which opens the Card tab; then tafs cloud's `filters` as pills, each asked for again with its id; then its calls by day (`groups`, else `entries` as one list): each with its kind's dot as the iPad's (done and approved green; refused, not done and revoked red; held, sending and any other kind amber), its `title`, `detail`, `time`, and `amount_text` under the time; while `next_cursor` is sent, the next page when the list's end shows (`&cursor=`), an untitled first day carrying on the last; and `end_words` under the last page. |
 | Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber); tafs cloud's **Connect again** words when the taf's own sign-in expired (`connect_again`, edged in amber); the workflow; under "Connected apps", **one row per app**, as the iPad's `TafPresentationViews.swift` (`ConnectedToolsRing`'s nodes, as a list): connections to the same app are grouped, the one shown is the first with actions (`action_count`), else one to sign in again, else the first; each row its name, `action_words` (green while `running`, else soft) and `status_words` (amber when it must sign in again). A row opens the app's sheet (`ConnectedAppSheet`): its status, what it may do (each action's title, its `limits` and `step_words`), its week (`stats.words`), which opens the taf's Activity with tafs cloud's `stats.activity_query` (sent only as a query; disabled with no actions), and the other sign-ins to the same app. Sign in again and Disconnect wait for approvals; the line for connections that couldn't be read; then the versions, by tafs cloud's `title` and `summary`, and under "What it remembers" the notes' `title` and `latest` note. The connections' line is red, with Try again. Someone who neither uses nor oversees the taf is refused: the tab says it couldn't be read. **Read with this device's planque proof** (`Planque-Device-Signature`, the iPad's `loadTafSetup` and `grantsReadProof`): the account's tenant, this device's id from KIFF's Devices list (`this_device`, `dev_…`, read once per session), and the device key's signature over planque's `planque.request.v1` message, made with no prompt since it only reads. tafs cloud forwards it to planque, which lists the taf's connected apps. With no device or no key, Setup is read without it and tafs cloud says so where the apps would be. |
 
 - **Everything is drawn as sent**, with `Text(verbatim:)`. The app words no call, no part and
@@ -66,6 +66,35 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
   Connect again button (a sign-in, on the phone for now), opening an app's week in Activity
   (`stats.activity_query`), the Card-unit exception's "Add a limit" (it goes through Coach, with its approval),
   Forget a note, Pause, and asking again with the `revision` as `If-None-Match`.
+
+## Runs (`TafRuns`, `RunsPanel`, `RetainedRuns`)
+
+As the iPad's `RunsPanel` and `RetainedRuns` (`TafDetailView.swift:476-517`,
+`TafPresentationViews.swift:421-474`), drawn on the Activity after its health, in the iPad's
+order (`TafActivityList.parts`):
+
+- **Runs:** a taf that works from its chat says so (`taf.works_from_chat`). Any other says
+  Paused (tafs cloud's `status`, as the iPad's `cloud.paused`: never Home's `state`, which
+  says `waiting` for a paused taf with a call held), else tafs cloud's `next_run_words`, else
+  "Next run at 14:05", else On its schedule;
+  then **Run now** (`POST /v1/tafs/{id}/run`, unsigned: it acts within the taf's Card). One
+  click sends one request ("Starting a run…" until it answers). A run it started reads the
+  runs again; one it didn't start shows tafs cloud's words. A refusal for want of credits shows
+  tafs cloud's words; any other says the run didn't start, and why. On the iPad that line is
+  the app-wide error; here it sits under the button. Run now is kept by taf for the whole app
+  (`RunNowModel`, the iPad's `runsInFlight` and `runNowWords`), so a page opened again still
+  knows a run is on its way, and what tafs cloud said.
+- **The runs it kept** (`GET /v1/tafs/{id}/work/runs?limit=3`): tafs cloud's heading, each run's
+  line with what it used (`credits.words`) and where its result went (each delivery's line),
+  and on the first page the firings that started no run, dim, each in its place by time.
+  tafs cloud's "see all" line opens all of them in a sheet, twenty a page, each next page read
+  as the list's end shows, and `end_words` under the last. The panel is asked again with its
+  `ETag` (`If-None-Match`): a 304 keeps what was read. A read that fails says why, with Try again.
+  That read alone skips the network's cache (`NetworkTransport.exchange`), as the iPad's
+  `representation`; every other request keeps the session's own cache policy.
+- The page's `title` and `more_title` are needed, as are each run's `id` and `at`, and each
+  skipped firing's `due`, `why` and `words`: without one the page doesn't read. A run's other
+  fields that can't be read are none.
 
 ## Halt (`Halt`, `HaltModel`, `HaltRow`, `HaltView`)
 

@@ -14,6 +14,8 @@ struct SignedInView: View {
     @StateObject private var calendar: CalendarModel
     @StateObject private var usage: UsageModel
     @StateObject private var connect: ConnectAppsModel
+    /// Run now for every taf, kept while signed in, as the iPad's app model keeps it.
+    @StateObject private var runs: RunNowModel
     @StateObject private var coach: CoachModel
     @StateObject private var alerts: AlertsModel
     @State private var selection: Screen = .overview
@@ -65,6 +67,7 @@ struct SignedInView: View {
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
+        _runs = StateObject(wrappedValue: RunNowModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
         // Alerts are kept per account, as the iPad keys them by tenant.
         _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
@@ -144,7 +147,7 @@ struct SignedInView: View {
     private func open(_ taf: Home.Taf) {
         guard let id = taf.tafID else { return }
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() })
+        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
         openTaf = taf.id
     }
 

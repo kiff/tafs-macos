@@ -20,6 +20,15 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let overviewTests: [Test] = [
+    Test("a taf's status is tafs cloud's, active when it isn't sent, as the iPad's CloudTaf.status") {
+        func taf(_ fields: String) throws -> Home.Taf {
+            try AccountClient.decoder.decode(Home.Taf.self, from: Data((#"{"kiff_agent":"a1","name":"Refunds","#  + fields + "}").utf8))
+        }
+        try expectEqual(try taf(#""state":"waiting","status":"paused""#).paused, true)
+        try expectEqual(try taf(#""state":"paused""#).status, "active")
+        try expectEqual(try taf(#""state":"paused""#).paused, false)
+        try expect((try? taf(#""state":"idle","status":7"#)) == nil, "a status that isn't words doesn't read")
+    },
     Test("the list is read as tafs cloud sends it, with its own counts and words", awaiting: {
         let (client, transport) = cloud([(200, homePage)])
         let page = try await client.home()
