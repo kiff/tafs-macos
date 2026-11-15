@@ -27,6 +27,8 @@ final class TafPagesModel: ObservableObject {
     let taf: String
     /// The taf's halt, from its Setup.
     let halt: HaltModel
+    /// The taf's dial, for Setup's Starts when and Results go to.
+    let knob: TafKnobModel
     private var asked = 0
 
     /// This device's planque proof for the Setup read; nil reads without it.
@@ -37,6 +39,7 @@ final class TafPagesModel: ObservableObject {
         self.taf = taf
         self.proof = proof
         halt = HaltModel(cloud: cloud, taf: taf)
+        knob = TafKnobModel(cloud: cloud, taf: taf)
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
@@ -281,8 +284,18 @@ struct TafSetupTab: View {
     /// Whether its halt is offered: to whoever manages the taf, as KIFF says, and not for a
     /// taf whose Card is no longer active, as the iPad's `TafDetailView`.
     var halts = false
-    /// Reads the list again after a halt tafs cloud answered.
+    /// Reads the list again after a halt tafs cloud answered, or a pause or a change of where
+    /// its results go.
     var halted: () async -> Void = {}
+    /// The taf, for Starts when and Results go to; nil leaves them out.
+    var taf: Home.Taf? = nil
+    /// Whether this person manages the taf, as KIFF says: changing what starts it and where
+    /// its results go is theirs.
+    var manages = false
+    /// Who is signed in: the account's time zone, and their email for Email me.
+    var me: Me? = nil
+    @State private var startsOpen = false
+    @State private var resultsOpen = false
 
     var body: some View {
         ScrollView {
@@ -290,16 +303,22 @@ struct TafSetupTab: View {
                 switch model.setup {
                 case .loading:
                     ProgressView().controlSize(.small)
+                    // Starts when and Results go to don't wait on the Setup read, as the iPad's
+                    // (TafDetailView.swift:302-317): only on the taf being tafs cloud's.
+                    dialLinks
                 case .unread(let why):
                     Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
+                    dialLinks
                 case .loaded(let setup):
                     // Halting is a job of its own: its row opens its screen, for whoever manages the taf.
                     if halts { HaltRow(model: model.halt, name: tafName, halted: halted) }
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }
+                    // Starts when, then the apps, then Results go to, as the iPad's Setup.
+                    if taf != nil { link(words("setup.starts_when"), symbol: "clock") { startsOpen = true } }
                     let nodes = TafSetup.nodes(setup.connections)
                     if !nodes.isEmpty {
                         // One row per app, as the iPad's `ConnectedToolsRing` has one node per app.
@@ -315,6 +334,7 @@ struct TafSetupTab: View {
                         }
                         .padding(.horizontal, 4)
                     }
+                    if taf != nil { link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true } }
                     if let versions = setup.versions { part(versions) }
                     if let memory = setup.memory {
                         Eyebrow(text: words("taf.memory.title")).padding(.top, 6)
@@ -325,12 +345,53 @@ struct TafSetupTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadSetup() }
+        // A Home read after a change brings the taf's own record: it, not the change's answer, is
+        // the one drawn from then on, as the iPad's `cloudTafs` takes each newer read.
+        .onChange(of: taf?.status) { _ in model.knob.homeRead() }
+        .onChange(of: taf?.results) { _ in model.knob.homeRead() }
+        .sheet(isPresented: $startsOpen) {
+            if let taf {
+                StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted) { startsOpen = false }
+                    .environment(\.words, words)
+            }
+        }
+        .sheet(isPresented: $resultsOpen) {
+            if let taf {
+                ResultsGoToView(model: model.knob, taf: taf, manages: manages, email: me?.email, refreshed: halted) { resultsOpen = false }
+                    .environment(\.words, words)
+            }
+        }
         .sheet(item: $chosen) { node in
             ConnectedAppSheet(node: node, close: { chosen = nil }, openActivity: { query in
                 chosen = nil
                 openActivity(query)
             })
         }
+    }
+
+    /// A Setup screen's way in, as the iPad's `PanelLink`: its mark and name in amber, and the
+    /// caret that says it opens.
+    /// Starts when and Results go to, while the Setup is read or couldn't be.
+    @ViewBuilder private var dialLinks: some View {
+        if taf != nil {
+            link(words("setup.starts_when"), symbol: "clock") { startsOpen = true }
+            link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true }
+        }
+    }
+
+    private func link(_ title: String, symbol: String, _ open: @escaping () -> Void) -> some View {
+        Button(action: open) {
+            HStack {
+                Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// An app, as the iPad's node: its name, and its actions in words, green while the taf uses

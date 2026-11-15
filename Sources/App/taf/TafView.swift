@@ -103,6 +103,8 @@ struct TafView: View {
     var halted: () async -> Void = {}
     /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
+    /// Who is signed in: Setup's account time zone and email.
+    var me: Me? = nil
     /// Who uses the taf, under its head for whoever manages it; nil where nothing reads it.
     var shareLine: ShareLine? = nil
     /// The Card in front of the stack; nil for the first, the live one.
@@ -155,7 +157,8 @@ struct TafView: View {
                     TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted)
+                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted,
+                       taf: taf, manages: manages, me: me)
                 }
             }
         }
