@@ -20,6 +20,7 @@ The app draws the list as it comes. It places and folds nothing itself.
 | A job's instruction (`kickoff`) | A small note |
 | The plan (`steps`) | tafs cloud's `line` and the step in hand with its mark; opened, every step with its mark, the one in hand semibold, a skipped one struck through |
 | A choice (`confirm`) | What it asks, then a white pill for each answer. Answered: one folded line, "{question} · {chosen}" |
+| Questions (`questions`) | The iPad's `QuestionsCard`: Coach's words, its title as an eyebrow with "{n} of {total} answered", each question numbered with its options and **Something else…**, then **Send answers** and **Chat about this**. Answered: one folded line, "Your answers · {tafs cloud's words}" |
 | An approval that waits | Edged in amber: "Needs you · approve", what it asks, **Decline**, and where to approve |
 | A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, where to sign in, and **Not now** |
 | An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus |
@@ -232,7 +233,7 @@ data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the 
 | Card | On the Mac |
 |---|---|
 | A choice (`confirm`, with options) | Its title and text as Coach wrote them, and a button for each option. One tap answers it. |
-| Questions (`questions`) | "Needs you · a question". Not answered here yet. |
+| Questions (`questions`, with questions) | In Coach's own chat, for someone who may use Coach, while it has no answer: each question's options, or the person's own words, then **Send answers**, once every question has an answer. |
 | An approval or a sign-in (`approval`, `sign_in`) | "Needs you · approve". **Never answered here**: its answer is a signature, which arrives with approvals on the Mac. |
 | A card already answered | What was answered, in tafs cloud's words. |
 
@@ -243,6 +244,54 @@ data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the 
   card shows what the thread says was answered. The app keeps no answer of its own.
 - A card that no longer waits (409) is read again as it is. Any other refusal stays on the
   card with tafs cloud's reason, and the card still waits.
+
+### Questions (`Thread.Card.Question`, `QuestionSelection`, `QuestionsCard`)
+
+As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)`, `cardRef` and `answerCard`
+(`Views/QuestionsCard.swift`, `Model/QuestionAnswers.swift:62-99`, `AppModel.swift:6708-6711`,
+`8355-8385`, `KIFF/TafsCloud.swift:1355-1389`):
+
+- **Every word is Coach's:** each question's text, its options with their descriptions, and its
+  note. The app adds **Something else…**, for the person's own words, and **Chat about this**,
+  which puts the card away ("You're talking these questions through with Coach.", with Show
+  them again) so the person writes instead.
+- **One answer for each question:** a choice, several on a multi question (in Coach's order),
+  or the person's own words, never both. Opening Something else… clears the picks; picking a
+  choice closes the field; blank words are no answer. Send answers waits until every question
+  has one.
+- **Who and where:** only in Coach's own chat (the iPad's `setupTaf`), for someone who may use
+  Coach (`mayUseCoach`). A taf's own chat, or someone without it, shows what the card asks.
+- **Whenever it has no answer**, whatever `waits` says, as the iPad's `QuestionsCard`.
+- **Sent as data** (`{"answer": {"<question>": {"value"} | {"values"} | {"own"}}, "session"}`),
+  as the iPad's `CardAnswerValue.questions`, to the card its id names now (`cardRef`: the one
+  waiting under that id, else the latest), in that card's chat. It grants nothing, so it isn't
+  signed. Only the card's own questions, each answered, are ever sent.
+- **tafs cloud's answer is `CardAnswered`** (`session`, `run`, `status`, all text). Its chat is
+  the one shown from then on, for a new conversation (`settleSetupChat`). Then the thread is
+  followed. A card that no longer waits is read again; one refused for want of the AI-data
+  consent stays as it was, with nothing said; anything else, a refusal or an answer that
+  doesn't read, says "Your answer didn't reach Setup" (`coach.answer_did_not_reach_setup`). An answer that comes back after sign-out is the
+  session before's and is dropped (`gen == accountGeneration`).
+- **Read as the iPad reads it:** a card whose `questions`, or any one question, doesn't read
+  isn't read at all (`LenientShown`). A recorded answer is the iPad's `CardAnswer`: a `state`,
+  `words` or `by` that isn't text leaves it unread; a missing `state` is "answered". This holds
+  for every card's answer.
+- **Mac differences:**
+  - The iPad reads an answer sent the old way, as a message, back into words
+    (`QuestionAnswers.words`); the Mac shows tafs cloud's words for the recorded answer only.
+  - A refusal for want of the AI-data consent keeps the card quietly on both, but the iPad also
+    opens its consent screen; the Mac's opens only for a message it sends.
+  - The Mac shows each card's own recorded answer. The iPad reads every card under one id
+    through `setupThread.answer(to:)`, the last card with that id (`SetupComponent.swift:307-316`).
+  - The iPad follows the answered run's stream (`followAnswered`); the Mac reads the thread
+    until the run is done, as it does after every card's answer.
+  - A card's other fields stay as leniently read as every card's on the Mac: a title or text
+    that isn't text is left out, not the card.
+  - A questions card with an empty list is "0 of 0" and can be sent on the iPad; here it
+    shows what it asks.
+  - Sign-out moves the conversation on (`signedOut`), so nothing answered after it is kept;
+    the iPad also forgets Coach's thread. The window goes then, on the Mac.
+  - Haptics and the driven field are the iPad's own.
 
 ### The AI-data consent
 
@@ -268,7 +317,7 @@ A message still going is at 0.7.
 
 ## Not yet
 
-Answering questions, approving a connection or a Card,
+Approving a connection or a Card,
 archiving a conversation and the archived ones (Previous conversations' swipe and
 Archived), Coach mode over a taf's page, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.

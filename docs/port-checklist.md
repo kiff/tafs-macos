@@ -39,9 +39,10 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | The welcome and Sign in with KIFF (`pairing/SignInView.swift`) | Try it with sample data |
 | PeopleViews.swift | 291 | People and groups | The groups and the people, read every 20 seconds, in the iPad's order (`account/PeopleView.swift`, `Core/account/People.swift`) | Making, renaming or deleting a group and changing its people (each signed) |
 | PlanViews.swift | 268 | Asking an admin and declining a member's request; buying credits and Solo | `AskAdminView` (raise or pack, with a reason) and `DeclineRequestView` (with a note, confirmed and signed), as sheets (`usage/PlanRequestsView.swift`, `Core/usage/KIFFUsage.swift`) | Nothing to port: `BuyCreditsView` and `SoloView` are the App Store's, not for macOS 12 |
+| QuestionsCard.swift | 121 | Several questions at once | Every question with Coach's options and Something else…, the count answered, Send answers once each has one, Chat about this, and the answered line (`coach/QuestionsCard.swift`, `Core/coach/Questions.swift`, `CoachModel.answer(_:questions:)`) | An answer sent the old way, as a message, read back in words (`QuestionAnswers.words`); a refusal for want of the AI-data consent keeping the card quietly (it says tafs cloud's why here); following the answered run's stream (the Mac reads the thread) |
 | RecordSearchViews.swift | 192 | The Record's search | The search as the person pauses, its pages on More, `RecordHitRow`, `RecordCaseSheet` (`record/RecordView.swift`, `Core/record/Record.swift`) | A case's steps as `SourceActivityRow`, with each step's next step |
 | RecordView.swift | 689 | The Record, its rows, filters and receipts | The list, the taf chips, the filters, days and rows, paging (`record/RecordView.swift`, `Core/record/Record.swift`) | A day's spend; a day's reads folded into one line; `ReceiptView`: an entry's sheet with KIFF's receipt checked on this device; exporting receipts; a taf's detail |
-| SetupChatView.swift | 1957 | Coach's conversation | The thread, the answer as it's written, cards answered, Decline, the AI-data consent, New conversation, Improve a taf, Report this answer (`coach/CoachView.swift`, `Core/coach/Thread.swift`, `Stream.swift`, `Rich.swift`, `Chats.swift`) | Approving a connection or a Card; Previous conversations and archiving; attachments; dictation; `SetupShapePanel`, `CoachToolsStep`, `QuestionsCard`, `DriveCard` |
+| SetupChatView.swift | 1957 | Coach's conversation | The thread, the answer as it's written, cards answered, questions answered (`QuestionsCard`), Decline, the AI-data consent, New conversation, Improve a taf, Report this answer (`coach/CoachView.swift`, `Core/coach/Thread.swift`, `Stream.swift`, `Rich.swift`, `Chats.swift`) | Approving a connection or a Card; Previous conversations and archiving; attachments; dictation; `SetupShapePanel`, `CoachToolsStep`, `DriveCard` |
 | ShareViews.swift | 405 | Sharing a taf (`ShareLine`, `ShareTafSheet`), and the Overview (`OverviewView`) | `ShareLine` under a taf's head (`taf/TafShareLine.swift`, `Core/account/Shares.swift`); the Overview (`overview/OverviewView.swift`) | `ShareTafSheet`: sharing is signed with Face ID on the iPad, so it waits for this Mac to approve; the Overview reading its list again by itself |
 | SignInView.swift | 333 | `SignInView`, and Account (`SettingsView`, `PlanRow`, `AccountView`, `AccountLines`) | Sign in in the browser (`pairing/SignInView.swift`, `SignInModel.swift`); Account's groups and rows, `PlanRow`, `AccountLines.people`, Sign out confirmed first (`account/AccountView.swift`) | Coach's suggestions; AI use; Time zone; Delete account |
 | TafChatView.swift | 826 | A taf's chat | The taf's conversation drawn as Coach's, its box, its Cards beside it (`taf/TafView.swift`, `coach/CoachView.swift`) | What Coach's conversation also misses (attachments, dictation, questions); `SteadyMarkdown` |
@@ -63,7 +64,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
-| QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
@@ -99,5 +99,5 @@ merges.
 
 ## Counts
 
-Ported 4, partial 26, not started 16, not for macOS 12 4: the 50 view files at the pin
+Ported 4, partial 27, not started 15, not for macOS 12 4: the 50 view files at the pin
 (`da55768`).
