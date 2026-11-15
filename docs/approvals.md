@@ -77,7 +77,8 @@ first on Needs you, oldest first.
   approval key. A closed prompt sends nothing and keeps the step ("Cancelled, so nothing was
   approved"); any other failure says it wasn't confirmed. A 409 says it ended. A refusal says
   KIFF's `error`, else its `reason`, in the iPad's words, else "KIFF didn't take the answer"
-  with the app's own line for the status: never KIFF's code.
+  with the app's own line for the status (a 401 is "Signed out of KIFF", as the iPad's
+  `KIFFError.unauthorized`): never KIFF's code.
 - An answer on its way stops at sign-out: nothing is signed or posted for a session that
   ended.
 - An answered or ended step leaves the list at once, and stays off while Home still lists it;

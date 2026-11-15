@@ -167,6 +167,9 @@ final class NeedsYouModel: ObservableObject {
     static func answerRefusedWords(_ error: Error) -> String {
         if let refusal = error as? StepRefusal {
             if let key = refusal.error.flatMap({ refusalKeys[$0] }) ?? refusal.reason.flatMap({ refusalKeys[$0] }) { return Words.app(key) }
+            // A 401 from KIFF is the iPad's `KIFFError.unauthorized` (KIFFClient.swift:1586), whose
+            // words are `error.signed_out` (:34): it never reaches `PlainError`.
+            if refusal.status == 401 { return Words.app("needs_you.refused.other", ["why": Words.app("error.signed_out")]) }
             return Words.app("needs_you.refused.other", ["why": Words.app(StepRefusal.plainKey(status: refusal.status))])
         }
         if case KIFFError.refused(_, let code) = error, let key = refusalKeys[code] { return Words.app(key) }

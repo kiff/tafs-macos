@@ -157,13 +157,13 @@ let approvalsScreenTests: [Test] = [
         cancelled.showSteps([step])
         await cancelled.answer(step, done: true)
         try expectEqual(cancelledTransport.sent.map(\.method), ["GET"])
-        try expectEqual(cancelled.stepNotAnswered, "Cancelled, so nothing was approved. The request is kept.")
+        try expectEqual(cancelled.stepNotAnswered, Words.app("approval.cancelled_nothing_approved_request_kept"))
         try expectEqual(cancelled.steps.map(\.handoff), ["h1"])
         let (failed, failedTransport) = model([(200, #"{"id":"h1"}"#)], confirm: { _ in throw LAError(.authenticationFailed) })
         failed.showSteps([step])
         await failed.answer(step, done: false)
         try expectEqual(failedTransport.sent.map(\.method), ["GET"])
-        try expectEqual(failed.stepNotAnswered, "Not answered: it wasn't confirmed.")
+        try expectEqual(failed.stepNotAnswered, Words.app("needs_you.your_step.not_answered_unconfirmed"))
         try expectEqual(failed.steps.map(\.handoff), ["h1"])
     }),
     Test("someone who doesn't answer held calls has no Done or Skip, and an answer sends nothing", awaiting: { @MainActor in
@@ -204,6 +204,11 @@ let approvalsScreenTests: [Test] = [
         reasoned.showSteps([step])
         await reasoned.answer(step, done: true)
         try expectEqual(reasoned.stepNotAnswered, "Your answer didn't go through. Your role on this account doesn't answer held calls. Someone who approves on it does.")
+        // KIFF's 401 is "signed out of KIFF", as the iPad's `KIFFError.unauthorized`.
+        let (signedOut, _) = model([(200, #"{"id":"h1"}"#), (401, #"{"error":"unauthorized"}"#)])
+        signedOut.showSteps([step])
+        await signedOut.answer(step, done: true)
+        try expectEqual(signedOut.stepNotAnswered, "Your answer didn't go through. KIFF didn't take the answer: Signed out of KIFF. Sign in again.")
     }),
     Test("the answer's message is KIFF's vector byte for byte, and KIFF's signature over it verifies; never for skipped", {
         let message = KIFFMessage.handoff(tenant: "t_vector", handoffID: "ho_0123456789abcdef01234567", answer: "done", signedAt: "2026-11-11T17:00:00Z")
