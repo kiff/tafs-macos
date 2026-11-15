@@ -97,7 +97,12 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
   none yet, the thread reads as before.
 - **New conversation** (the pencil by Coach's title, `coach.new_conversation`) empties the
   chat and reads nothing until its first message; an empty chat is already one, so it does
-  nothing there. What's typed stays in the box.
+  nothing there. What's typed stays in the box. It cancels the answer streaming in the
+  conversation before, as the iPad's `newSetupChat`, and that answer touches nothing of the
+  new one after any wait: its end, a read of its thread, or its words.
+- **A Mac difference:** a message refused for want of the AI-data consent stays here as the
+  sent message (the iPad puts it back in the box), so New conversation also drops its consent
+  ask. Card states are left as they are, as on the iPad.
 - **Where a message goes:** a new chat (`new_chat: true`), else the chat shown (`session`),
   else the live one. Coach's say `new_chat_after_handover: true`: tafs cloud starts a new chat
   for a message to one that already handed a taf over.

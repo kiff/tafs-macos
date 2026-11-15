@@ -26,6 +26,17 @@ private final class CannedStream: LineStream, @unchecked Sendable {
     }
 }
 
+/// Streams that stay open until the test ends them, one per message, as a slow answer does.
+private final class HeldStream: LineStream, @unchecked Sendable {
+    private(set) var asked: [HTTPRequest] = []
+    private(set) var open: [AsyncThrowingStream<String, Error>.Continuation] = []
+
+    func lines(_ request: HTTPRequest) async throws -> AsyncThrowingStream<String, Error> {
+        asked.append(request)
+        return AsyncThrowingStream { self.open.append($0) }
+    }
+}
+
 @MainActor
 private func make(_ plan: CannedStream.Plan, _ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, CannedStream) {
     let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
@@ -105,5 +116,37 @@ let coachStreamMacTests: [Test] = [
         let (model, _, _) = await make(.lines(lines), [(200, after)])
         await model.send()
         try expectEqual(model.stopped, "The AI isn't answering just now. None of your credits were used.")
+    }),
+    Test("a new conversation cancels the answer streaming in the one before, which then touches nothing of the new one", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)])
+        let stream = HeldStream()
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), streamer: stream, sleep: { _ in }, now: { sendTime })
+        await model.load()
+        model.draft = "Connect Qonto"
+        let first = Task { await model.send() }
+        while stream.open.isEmpty { await Task.yield() }
+        for line in ["event: session", #"data: {"session":"s1","new_session":false,"message":{"id":"m9"}}"#, "", "event: text", #"data: {"text":"I can "}"#, ""] {
+            stream.open[0].yield(line)
+        }
+        for _ in 0..<20 { await Task.yield() }
+        try expectEqual(model.live?.text, "I can ")
+        model.newChat()
+        // The stream before was cancelled: its send ends without reading anything more.
+        await first.value
+        try expectEqual(model.live, nil)
+        let read = transport.sent.count
+        model.draft = "And Gmail"
+        let second = Task { await model.send() }
+        while stream.open.count < 2 { await Task.yield() }
+        // The old stream's end, late: nothing of the new conversation is touched.
+        stream.open[0].finish()
+        for _ in 0..<20 { await Task.yield() }
+        try expectEqual(model.pending?.text, "And Gmail")
+        try expectEqual(model.pending?.failed, nil)
+        try expectEqual(transport.sent.count, read)
+        let body = try JSONSerialization.jsonObject(with: stream.asked[1].body) as? NSDictionary
+        try expectEqual(body, ["text": "And Gmail", "new_chat": true, "new_chat_after_handover": true])
+        stream.open[1].finish()
+        await second.value
     }),
 ]

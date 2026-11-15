@@ -46,6 +46,8 @@ final class CoachModel: ObservableObject {
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
     private var following = 0
+    /// The answer streaming now, as the iPad's `setupStream`: a new conversation cancels it.
+    private var streaming: Task<Void, Never>?
 
     /// As the phones do on the plain route: the thread is read again every 4 seconds, at
     /// most 30 times, while an answer is owed.
@@ -89,11 +91,14 @@ final class CoachModel: ObservableObject {
         guard isCoach, case .loaded(let coach, _) = state else { return }
         conversation += 1
         following += 1
+        streaming?.cancel()
+        streaming = nil
         live = nil
         pending = nil
         stopped = nil
+        // The Mac keeps a message refused for want of the AI consent as `pending`, where the
+        // iPad puts it back in the composer: with `pending` gone, its consent ask goes too.
         consent = nil
-        notAnswered = [:]
         chat = nil
         fresh = true
         state = .loaded(coach, .empty)
@@ -231,7 +236,7 @@ final class CoachModel: ObservableObject {
                 } catch {
                     // The stream couldn't open. If tafs cloud has the message all the same, the
                     // thread is followed; only if it doesn't is the message sent plainly, below.
-                    if let page = try? await read(coach), let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
+                    if let page = try? await read(coach), mine == conversation, let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
                         state = .loaded(coach, page)
                         pending = nil
                         await follow(coach)
@@ -241,7 +246,10 @@ final class CoachModel: ObservableObject {
                 if let opened {
                     // tafs cloud answered the stream route: it has the message. Whatever the
                     // stream does from here, the message is never sent again.
-                    await stream(opened, coach, mine)
+                    let started = mine
+                    let task = Task { await self.stream(opened, coach, started) }
+                    streaming = task
+                    await task.value
                     return
                 }
             }
@@ -283,10 +291,16 @@ final class CoachModel: ObservableObject {
                     break
                 }
                 if case .broke = event { break }
-                if answer.take(event) { await reload(coach) }
+                if answer.take(event) {
+                    await reload(coach)
+                    guard mine == conversation else { return }
+                }
                 live = answer
             }
         } catch {}
+        // A new conversation since: what follows the end is the new one's, never this answer's.
+        guard mine == conversation else { return }
+        streaming = nil
         live = nil
         await follow(coach)
         // The message was taken even if the thread didn't show it in time: it is not left
