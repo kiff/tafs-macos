@@ -22,6 +22,8 @@ struct TafsApp: App {
             }
             .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
             .environment(\.words, words)
+            // The theme the person chose, from the last launch.
+            .onAppear { ThemeChoice.saved().apply() }
         }
     }
 

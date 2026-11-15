@@ -12,10 +12,11 @@ enum Usage {
         let words: String
         let detail: String?
         let warning: String?
-        /// The plan's line, and whether it needs the person.
+        /// The plan's line, and whether it needs the person: `ok`, `warning` or `waiting`.
         let planLine: String?
+        let planTone: String
 
-        enum Keys: String, CodingKey { case balance, planLine = "plan_line" }
+        enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone" }
         enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning }
 
         init(from decoder: Decoder) throws {
@@ -29,6 +30,7 @@ enum Usage {
             detail = Usage.text((try? c.decodeIfPresent(String.self, forKey: .detail)) ?? nil)
             warning = Usage.text((try? c.decodeIfPresent(String.self, forKey: .warning)) ?? nil)
             planLine = Usage.text((try? root.decodeIfPresent(String.self, forKey: .planLine)) ?? nil)
+            planTone = ((try? root.decodeIfPresent(String.self, forKey: .planTone)) ?? nil) ?? "ok"
         }
 
         var waiting: Bool { state == "waiting" }

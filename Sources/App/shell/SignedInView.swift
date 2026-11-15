@@ -5,6 +5,7 @@ struct SignedInView: View {
     @Environment(\.words) private var words
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
+    @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
     @StateObject private var calendar: CalendarModel
@@ -29,6 +30,7 @@ struct SignedInView: View {
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
+        _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
@@ -39,7 +41,7 @@ struct SignedInView: View {
 
     var body: some View {
         ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
-                  held: heldRows) { screen in
+                  held: heldRows, accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
             case .overview: return AnyView(OverviewView(model: overview))
@@ -52,7 +54,8 @@ struct SignedInView: View {
             }
         }
         .onAppear { notifier.opened = { selection = .needsYou } }
-
+        // Who is signed in is read once, whatever screen is open.
+        .task { await accountModel.load() }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
@@ -75,29 +78,12 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            DevicesView(model: devices)
-            if route == .phoneOrPasskey {
-                // A Mac that can't approve: how to add it with a phone that can.
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(words("pair.view_only.title")).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.dim)
-                    Text(words("pair.view_only.lead", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    Button(words("pair.view_only.add", ["device": words("device.mac")])) { addThisMac() }
-                        .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.coach)
-                }
-                .padding(.horizontal, 28).padding(.bottom, 8)
-                .frame(maxWidth: 720, alignment: .leading)
+        AccountView(model: accountModel, devices: devices, open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+            Task {
+                // Ended at KIFF first; this Mac forgets its session either way.
+                try? await account.signOut()
+                signedOut()
             }
-            Button(words("settings.devices.sign_out")) {
-                Task {
-                    // Ended at KIFF first; this Mac forgets its session either way.
-                    try? await account.signOut()
-                    signedOut()
-                }
-            }
-            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-            .padding(28)
-        }
-        .background(Theme.background)
+        })
     }
 }
