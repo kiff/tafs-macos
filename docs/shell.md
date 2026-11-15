@@ -27,6 +27,25 @@ Top to bottom, as on the iPad:
   under 4.5:1 on the raised ground. The rows' words are KIFF's and the taf's, drawn as sent.
 - The tafs in the sidebar don't open anything yet: a taf's own page arrives in its pull request.
 
+## Reading at launch, and how long it takes
+
+- **The held calls and the tafs are read side by side**, at launch and with each 30-second
+  round, as the iPad's `refresh` reads Home, the held calls and the account together
+  (`AppModel.swift:1815-1821`). What this person may do with each taf is read after the list,
+  as there. Who is signed in is read at once on its own.
+- **The list last read shows in the first frame** (`RememberedHome`, the iPad's remembered
+  list, `AppModel.swift:2022-2054`): the tafs alone from Home's answer, kept with their account
+  in the app's preferences, shown only for that account and read again at once. It holds the
+  tafs' names, states, colours, Cards and lines: never the rest of Home, a chat, a key or a
+  session. It is replaced by each list read, and forgotten whenever a session is kept or ended:
+  sign-in, pairing and sign-out, as the iPad's `useSession` and `forgetSession`
+  (`AppModel.swift:868, 1323`). Sign-out marks the Overview ended before its first wait, so a
+  read still on its way keeps nothing. A read that fails leaves a list on screen as it is, as
+  the iPad's (`AppModel.swift:1909-1916`); only an empty screen says why.
+- **`LaunchClock`** writes to the system log how long the app took from launch to its first
+  window and to its first list read, once each ("tafs: first window after 412 ms"). Read
+  them in Console, or with `log stream --predicate 'process == "tafs"'`.
+
 ## Words and the mascot
 
 The build copies each shipped language's lines and the mascot from kiff/tafs at the pin into

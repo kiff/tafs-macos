@@ -12,6 +12,16 @@ struct HTTPRequest: Equatable {
 /// What carries a request to KIFF: the network in the app, canned answers in tests.
 protocol Transport {
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data)
+    /// The same, with the answer's `ETag`, for a read asked again with `If-None-Match`.
+    func exchange(_ request: HTTPRequest) async throws -> (status: Int, body: Data, etag: String?)
+}
+
+extension Transport {
+    /// A transport that doesn't read headers answers no `ETag`.
+    func exchange(_ request: HTTPRequest) async throws -> (status: Int, body: Data, etag: String?) {
+        let (status, body) = try await send(request)
+        return (status, body, nil)
+    }
 }
 
 /// Why KIFF didn't do what was asked, by the code it answered.

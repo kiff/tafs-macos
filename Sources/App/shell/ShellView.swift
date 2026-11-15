@@ -22,8 +22,19 @@ struct ShellView: View {
     var open: (Home.Taf) -> Void = { _ in }
     /// Who is signed in, under Account: their email, as KIFF says it.
     var accountLine: String?
+    /// Every ready-made job, for "Explore jobs" and the strip under the tafs list; and what
+    /// opens the gallery, and one job's sheet.
+    var gallery: Gallery?
+    var openGallery: (GalleryMode) -> Void = { _ in }
+    var openRecipe: (Recipes.Recipe) -> Void = { _ in }
+    /// Start a new taf, as the iPad's + New: the gallery where tafs cloud sends it, else Coach.
+    var newTaf: (() -> Void)?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
     var screen: (Screen) -> AnyView? = { _ in nil }
+    /// Start a new taf: a new conversation in Coach, Coach open or not.
+    var startNewTaf: () -> Void = {}
+    /// The sidebar's Coach: opens Coach, as the iPad's `openCoach`.
+    var openCoach: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -81,6 +92,7 @@ struct ShellView: View {
                         .padding(.horizontal, -10)
                         .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
                     }
+                    jobs
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 26)
@@ -90,6 +102,46 @@ struct ShellView: View {
         }
         .padding(.horizontal, 28)
         .padding(.bottom, 16)
+    }
+
+    /// The jobs, as the iPad's sidebar has them (HomeSplitView.swift:338-374): "Explore jobs" to
+    /// browse with nothing created, with or without tafs, once tafs cloud sends the row's words;
+    /// then, with tafs, a few jobs the account doesn't run yet, where tafs cloud shows them, in its
+    /// order, each on its category's colour, and the row that opens them all.
+    @ViewBuilder private var jobs: some View {
+        if let words = gallery?.explore {
+            Spacer().frame(height: 10)
+            Button { openGallery(.browse) } label: {
+                Label(words, systemImage: "square.grid.2x2").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        if !tafs.isEmpty, let gallery, !gallery.stripRecipes.isEmpty {
+            Spacer().frame(height: 10)
+            eyebrow(gallery.strip.title, color: Theme.soft)
+            ForEach(gallery.stripRecipes) { recipe in
+                Button { openRecipe(recipe) } label: {
+                    HStack(spacing: 10) {
+                        (gallery.category(of: recipe)?.color.map { Color($0) } ?? Theme.line)
+                            .frame(width: 4, height: 28).clipShape(Capsule()).accessibilityHidden(true)
+                        Text(verbatim: recipe.lead).font(.system(size: 14)).foregroundColor(Theme.ink).lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            // The strip shows a few: this row opens them all, in tafs cloud's words for them.
+            if let words = gallery.seeAll {
+                Button { openGallery(.browse) } label: {
+                    Text(verbatim: words).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     /// The iPad's eyebrow: mono 12, tracking 0.7.
@@ -176,8 +228,11 @@ struct ShellView: View {
 
     private var foot: some View {
         VStack(alignment: .leading, spacing: 8) {
-            footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { selection = .coach }
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { selection = .coach }
+            // A new taf, as the iPad's + New (`HomeSplitView.startNewTaf`, HomeSplitView.swift:434-438):
+            // the gallery where tafs cloud sends it, else a new conversation in Coach.
+            footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { if let newTaf { newTaf() } else { startNewTaf() } }
+            // Coach opens, as the iPad's `openCoach`; it closes from its own Back.
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { openCoach() }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     // As the iPad's: soft, and filled amber while Account is chosen.

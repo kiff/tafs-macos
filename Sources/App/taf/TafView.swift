@@ -103,6 +103,14 @@ struct TafView: View {
     var halted: () async -> Void = {}
     /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
+    /// Who is signed in: Setup's account time zone and email.
+    var me: Me? = nil
+    /// Its doors, for whoever manages it; nil for anyone else, or a taf tafs cloud doesn't run.
+    var doors: DoorsModel? = nil
+    /// tafs cloud offers doors here.
+    var doorsOffered = false
+    /// This person's sign-in email, for their own key on a door.
+    var myEmail: String? = nil
     /// Who uses the taf, under its head for whoever manages it; nil where nothing reads it.
     var shareLine: ShareLine? = nil
     /// The Card in front of the stack; nil for the first, the live one.
@@ -147,7 +155,8 @@ struct TafView: View {
             case .card: cardTab
             case .activity:
                 if let pages {
-                    TafActivityTab(model: pages, taf: taf, openUsage: openUsage) { tab = .card }
+                    TafActivityTab(model: pages, taf: taf, openUsage: openUsage, openCard: { tab = .card },
+                                   doors: manages ? doors : nil, doorsOffered: doorsOffered)
                 }
             case .setup:
                 if let pages {
@@ -155,7 +164,8 @@ struct TafView: View {
                     TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted)
+                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted,
+                       doors: manages ? doors : nil, taf: taf, manages: manages, me: me, myEmail: myEmail)
                 }
             }
         }

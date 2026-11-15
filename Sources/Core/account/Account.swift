@@ -42,8 +42,10 @@ struct Me: Decodable, Equatable {
     /// What this person may do on the account, as KIFF says ("cards.manage", …); nil from a
     /// KIFF that doesn't say.
     let capabilities: [String]?
+    /// The account's time zone, as KIFF says it ("Europe/Paris"), as the iPad's `Account.timeZone`.
+    let timeZone: String?
 
-    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode", capabilities }
+    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode", capabilities, timeZone = "time_zone" }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func text(_ key: CodingKeys) -> String? {
@@ -54,6 +56,7 @@ struct Me: Decodable, Equatable {
         account = text(.name) ?? text(.slug)
         approvalMode = text(.approvalMode)
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
+        timeZone = try c.decodeIfPresent(String.self, forKey: .timeZone)
     }
 
     /// Whether this person manages the account's Cards (KIFF's `cards.manage`), as the iPad's

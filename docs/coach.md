@@ -112,6 +112,35 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
   dropped.
 - A taf's own chat has no conversations: its messages go to its live chat.
 
+## Coach's title row, Previous conversations, and Start a new taf
+
+As the iPad's Coach mode (`CoachMode.swift:13-31`), its toolbar (`SetupChatView.swift:105-110,
+136-141`), `SetupChatsList` (`:803-857`), `openCoach` (`AppModel.swift:6767-6778`),
+`startNewTaf` (`:6801-6804`), `openSetupChat` (`:7124-7135`), `loadSetupChats` (`:7138-7143`)
+and `loadSetupThread` (`:7328-7375`):
+
+- **Coach's title row:** Back on the left, which closes Coach (Esc too), back to the screen
+  it opened over; on the right, New conversation (the pencil, which does nothing on an empty
+  chat) and the conversations' menu, with Previous conversations.
+- **The sidebar's Coach** only opens Coach, as `openCoach`. Coach closes from its own Back.
+- **Previous conversations** lists Coach's chats (`GET /v1/tafs/{id}/chats`) as tafs cloud
+  lists them: each by its title and when it was last written to, the one shown marked. One
+  click reopens it: what was on its way belonged to the chat before (a consent ask with it),
+  and the chat is read by its session. A list read that fails keeps the list as it was. A
+  reopen whose read fails keeps the page shown, with "The conversation couldn't be loaded: …" and
+  Try again under it, as `loadSetupThread`'s `setupError`. Done (Esc) closes it.
+- **After sign-out**, a chats list or a reopened chat that comes back late is dropped, as the
+  iPad's `accountGeneration` guard.
+- **Start a new taf**, from Home's Own words, the gallery's own words, and the sidebar's +
+  when tafs cloud sends no gallery (`HomeSplitView.swift:434-438`; with one, + opens it, see
+  `docs/overview.md`), opens a new conversation in Coach, so Coach mode's start shows, whether
+  Coach was open or not. Asked before Coach is read, Coach opens on a new conversation once it is.
+
+### Mac differences
+
+- **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
+  Coach closes a taf's page first, so Back from there lands on the screen under it.
+
 ## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
 
 As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
@@ -240,8 +269,8 @@ A message still going is at 0.7.
 ## Not yet
 
 Answering questions, approving a connection or a Card,
-the list of earlier conversations (Previous conversations, archiving), Coach mode over a
-taf's page, and attachments. Each is its own pull request; the ones
+archiving a conversation and the archived ones (Previous conversations' swipe and
+Archived), Coach mode over a taf's page, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests

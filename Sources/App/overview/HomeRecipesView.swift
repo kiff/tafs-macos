@@ -12,9 +12,13 @@ struct HomeRecipesView: View {
     let canHand: Bool
     /// Hands a recipe to Coach: its words in Coach's box, to edit and send.
     let hand: (Recipes.Recipe) -> Void
+    /// The label over a job's sample, the gallery's; nil when tafs cloud sends none.
+    var sampleLabel: String? = nil
+    /// Opens a job elsewhere, as the gallery does with its own sheet; nil opens this list's.
+    var open: ((Recipes.Recipe) -> Void)? = nil
     /// A category picked narrows the list; picked again, every recipe shows.
     @State private var picked: String?
-    @State private var open: Recipes.Recipe?
+    @State private var opened: Recipes.Recipe?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -32,9 +36,9 @@ struct HomeRecipesView: View {
                 ForEach(group.recipes) { recipe in row(recipe, tint: group.category.color) }
             }
         }
-        .sheet(item: $open) { recipe in
-            RecipeSheet(recipe: recipe, recipes: recipes, canHand: canHand, close: { open = nil }) {
-                open = nil
+        .sheet(item: $opened) { recipe in
+            RecipeSheet(recipe: recipe, recipes: recipes, canHand: canHand, sampleLabel: sampleLabel, close: { opened = nil }) {
+                opened = nil
                 hand(recipe)
             }
         }
@@ -61,7 +65,7 @@ struct HomeRecipesView: View {
     /// One recipe, as the iPad's `RecipeRow`: the problem it ends, its line, the apps it uses,
     /// on an edge in its category's colour.
     private func row(_ recipe: Recipes.Recipe, tint: Shade?) -> some View {
-        Button { open = recipe } label: {
+        Button { if let open { open(recipe) } else { opened = recipe } } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Text(verbatim: recipe.lead).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
                     .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
@@ -126,6 +130,11 @@ struct RecipeSheet: View {
     let recipes: Recipes
     /// Whether this person may use Coach: without it, the sheet has no button.
     let canHand: Bool
+    /// The button's words where the gallery says them ("Try it with Coach" while browsing);
+    /// nil for the sheet's own (`labels.hand`).
+    var handWords: String? = nil
+    /// The label over the job's sample, tafs cloud's; nil when it sends none.
+    var sampleLabel: String? = nil
     let close: () -> Void
     let hand: () -> Void
 
@@ -159,12 +168,15 @@ struct RecipeSheet: View {
                         }
                     }
                     if !recipe.sample.isEmpty {
-                        Text(verbatim: recipe.sample).font(.system(size: 14)).foregroundColor(Theme.ink)
-                            .padding(16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let sampleLabel { Eyebrow(text: sampleLabel) }
+                            Text(verbatim: recipe.sample).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
                     }
-                    if canHand, let handWords = recipes.handWords {
+                    if canHand, let handWords = handWords ?? recipes.handWords {
                         Button(action: hand) {
                             Text(verbatim: handWords).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
                                 .frame(maxWidth: .infinity, minHeight: 44)

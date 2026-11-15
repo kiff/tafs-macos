@@ -40,6 +40,10 @@ final class SignInModel: ObservableObject {
     /// `removeOpenedFiles` in `useSession` and `forgetSession`, so a person's chats never stay
     /// on the Mac after them.
     var exportFolder = ChatsExport.folder
+    /// Where the list last read is kept: an earlier session's tafs never show in this one, so
+    /// it's forgotten with each session kept or ended, as the iPad's `useSession` and
+    /// `forgetSession` (AppModel.swift:868, 1323).
+    var rememberedList: UserDefaults = .standard
     /// Ends a session at KIFF, signed in with its own key: for the view-only session a
     /// pairing replaces.
     private let endSession: (Session, SigningKey) async -> Void
@@ -121,6 +125,7 @@ final class SignInModel: ObservableObject {
                 try DeviceKey.promoteNext(in: store)
                 try sessions.save(got)
                 ChatsExport.removeFiles(in: exportFolder)
+                RememberedHome.forget(in: rememberedList)
                 key = pairingKey
                 session = got
                 step = .welcome
@@ -158,6 +163,7 @@ final class SignInModel: ObservableObject {
     /// Forgets the session on this Mac. Ending it at KIFF is the caller's, with the session.
     func signedOut() {
         ChatsExport.removeFiles(in: exportFolder)
+        RememberedHome.forget(in: rememberedList)
         sessions.forget()
         session = nil
         step = .welcome
@@ -167,6 +173,7 @@ final class SignInModel: ObservableObject {
         guard mine == attempt else { return }
         try sessions.save(got)
         ChatsExport.removeFiles(in: exportFolder)
+        RememberedHome.forget(in: rememberedList)
         session = got
         step = .welcome
     }

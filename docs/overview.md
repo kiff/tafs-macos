@@ -36,6 +36,11 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
   taf's page**, and "Each line opens the taf." says so under the table.
 
+Every cell of a taf's row is centred on the row's height, which its avatar sets, so Now,
+Card and Last result sit level with its name. The iPad's grid aligns its cells to the top
+(`Grid(alignment: .topLeading)`, `ShareViews.swift:315`); on macOS 12 the owner asked for
+them centred, so the Mac differs here.
+
 ## Last result (`Runs`)
 
 While the Overview is shown, each taf's runs are read once (`GET /v1/tafs/{id}/runs`), then
@@ -65,13 +70,41 @@ Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `Recip
   who may use Coach, `home.empty.coach` or `home.empty.shared`), then Own words.
 - **Who may use Coach** (`mayUseCoach`): KIFF's `use` for the Setup agent, else
   `members.manage`. Without it, no Own words and no Hand it to Coach.
+- **Own words** starts a new taf, as the iPad's `startNewTaf` (`HomeView.swift:272`): a new
+  conversation in Coach, so Coach mode's start shows, whatever Coach was showing.
+
+## Every job: the gallery (`Gallery`, `RecipeGallerySheet`)
+
+Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode`,
+`GalleryChoice`), `TafsCloud.Gallery` and the gallery's places in `HomeSplitView.swift`
+(the sidebar's Explore row and strip, + New, `sheetRecipes`, `actOnGalleryChoice`).
+
+- **Read** (`GET /v1/recipes/gallery`) with each list read, with tafs or without; a read that
+  fails keeps what was read, and a tafs cloud without it (404) leaves none. Everything reads
+  leniently, as on the iPad: a category or job that doesn't read is left out, never the
+  gallery; missing words are none.
+- **Start a new taf** opens the gallery where tafs cloud sends it, else Coach as before. It
+  leads with **Say it in your own words** (Coach with nothing in its box), for someone who may
+  use Coach, then tafs cloud's "All jobs" and every job by category, as the recipes on the
+  Overview are drawn. A job's sheet hands it to Coach with the sheet's own words.
+- **Explore jobs**, in the sidebar under the tafs, with or without tafs, once tafs cloud sends
+  its words and lists a job: the same gallery under "Explore jobs", with no own-words row, each
+  job's one action "Try it with Coach".
+- **The strip**, in the sidebar with tafs, where tafs cloud shows it: its title, its jobs in
+  its order (an id the gallery doesn't list is skipped), each on its category's colour and
+  opening its sheet, then "See all jobs" (else "All jobs"), unless the strip shows them all.
+- A job's sheet draws from the Overview's recipes when the job is on them, else the gallery's,
+  with `/v1/recipes`' sheet words where the gallery sends none; a sample is under tafs cloud's
+  label for it.
+- What's chosen in the gallery is acted on once it has closed: a job goes to Coach's box, own
+  words open Coach.
 
 ## Not yet
 
-- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`), and Own
-  words opening one (`startNewTaf`): Coach on the Mac has one conversation, so the words go in
-  its box and Own words opens it as it is.
-- The apps' logos beside their names, and `RecipeGallery` with its sample's label.
+- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`): its words
+  go in the box of the conversation Coach shows.
+- The apps' logos beside their names.
+- A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
 - Who uses a taf, under its name, for someone who manages it.
 - Reading the list again by itself. It is read when the screen opens, and with each round.
 

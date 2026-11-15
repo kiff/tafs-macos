@@ -236,6 +236,8 @@ struct NeedsYouView: View {
     var now: Date?
     /// Whether this person answers the account's held calls (KIFF's `holds.answer`).
     var answersHolds = true
+    /// Opens a taf where its door knocks are answered: its Activity.
+    var openKnocks: (Home.Taf) -> Void = { _ in }
     /// Reads the lists again once a step is answered: the taf's run goes on.
     var answered: () async -> Void = {}
     @Environment(\.openURL) private var openURL
@@ -257,11 +259,15 @@ struct NeedsYouView: View {
                     ProgressView().controlSize(.small)
                 case .unread(let why):
                     Text(words("needs_you.request_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
-                case .loaded(let calls) where calls.isEmpty:
+                case .loaded(let calls) where calls.isEmpty && knocked.isEmpty:
                     if model.unproven.isEmpty, model.steps.isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
                 }
+                // A knock at a taf's door waits for the owner too, after the held calls, as on the
+                // iPad (NeedsYouView.swift:21, 33): its count is Home's, so the rows show whether
+                // KIFF's list has been read or not.
+                ForEach(knocked) { knockRow($0) }
             }
             .padding(28)
             .frame(maxWidth: 720, alignment: .leading)
@@ -370,6 +376,33 @@ struct NeedsYouView: View {
     /// approval key gets neither the line nor the buttons until its Yes or No is ported.
     static func saysCantApprove(answersHolds: Bool, route: ApprovalRoute) -> Bool {
         answersHolds && route == .phoneOrPasskey
+    }
+
+    /// The tafs with knocks at their doors, as Home counts them (`NeedsYouView.knocks`).
+    private var knocked: [Home.Taf] { tafs.filter { TafDoors.knocks($0.doors) > 0 } }
+
+    /// A taf's knocks, as the iPad's row: its avatar, its name and how many knocked, opening it
+    /// where they're answered.
+    private func knockRow(_ taf: Home.Taf) -> some View {
+        Button { openKnocks(taf) } label: {
+            HStack(spacing: 10) {
+                TafAvatar(name: taf.name, color: taf.color, size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: taf.name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                    Text(words.count("needs_you.knocks", TafDoors.knocks(taf.doors)))
+                        .font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.dim)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(words("needs_you.opens_where_you_answer", ["taf": taf.name]))
     }
 
     private func card(_ call: HeldCall) -> some View {
