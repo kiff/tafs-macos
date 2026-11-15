@@ -87,7 +87,7 @@ struct UsageView: View {
         case .unread(let why):
             Text(words("usage.balance_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let balance):
-            Text(balance.words).font(.system(size: 16, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
+            Text(verbatim: balance.words).font(.system(size: 16, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
             if let meter = balance.meter {
                 GeometryReader { space in
                     ZStack(alignment: .leading) {
@@ -100,9 +100,9 @@ struct UsageView: View {
                 .accessibilityLabel(words("usage.label"))
                 .accessibilityValue(words.number(meter) + " %")
             }
-            if let detail = balance.detail { Text(detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
-            if let warning = balance.warning { Text(warning).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText) }
-            if let plan = balance.planLine { Text(plan).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            if let detail = balance.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
+            if let warning = balance.warning { Text(verbatim: warning).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText) }
+            if let plan = balance.planLine { Text(verbatim: plan).font(.system(size: 13)).foregroundColor(Theme.soft) }
         }
     }
 
@@ -135,7 +135,7 @@ struct UsageView: View {
         case .unread(let why):
             Text(words("usage.credits_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let credits):
-            Text(credits.words).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(verbatim: credits.words).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
         }
     }
 
@@ -144,18 +144,18 @@ struct UsageView: View {
         if case .loaded(let credits) = model.credits {
             ForEach(credits.rows) { row in
                 panel {
-                    Text(row.words).font(.system(size: 14)).foregroundColor(Theme.ink)
-                    if let pace = row.pace { Text(pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
+                    Text(verbatim: row.words).font(.system(size: 14)).foregroundColor(Theme.ink)
+                    if let pace = row.pace { Text(verbatim: pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
                 }
             }
             if credits.coach != nil || credits.notCounted != nil {
                 panel {
-                    if let not = credits.notCounted { Text(not).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
-                    ForEach(credits.notCountedLines, id: \.self) { line in Text(line).font(.system(size: 14)).foregroundColor(Theme.soft) }
-                    if let coach = credits.coach { Text(coach).font(.system(size: 14)).foregroundColor(Theme.soft) }
+                    if let not = credits.notCounted { Text(verbatim: not).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
+                    ForEach(Array(credits.notCountedLines.enumerated()), id: \.offset) { _, line in Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft) }
+                    if let coach = credits.coach { Text(verbatim: coach).font(.system(size: 14)).foregroundColor(Theme.soft) }
                 }
             }
-            if let note = credits.note { Text(note).font(.system(size: 13)).foregroundColor(Theme.soft).padding(.leading, 4) }
+            if let note = credits.note { Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.soft).padding(.leading, 4) }
         }
     }
 
