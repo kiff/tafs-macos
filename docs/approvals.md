@@ -108,8 +108,8 @@ first on Needs you, oldest first.
 This app is for Macs without Touch ID, so it never holds an approval key. An approval on such a
 Mac can be the person's passkey: a USB security key signing the exact request, sent as
 `KIFF-Passkey-Assertion`. The route is the public spec's "A Mac without Touch ID, and Linux", in
-[How a computer approves with a passkey](https://github.com/kiff/tafs/blob/main/docs/computer-passkeys.md)
-(in review); KIFF's checks are as `docs/secure-connection.md` describes them. Anything else is
+[How a computer approves with a passkey](https://github.com/kiff/tafs/blob/main/docs/computer-passkeys.md);
+KIFF's checks are as `docs/secure-connection.md` describes them. Anything else is
 approved on the phone ("Approve on your phone"). macOS 12 has no system cross-device passkey (it
 came in macOS 13), and its platform authenticator needs Touch ID, so neither is used.
 
@@ -150,22 +150,43 @@ before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
   `y² ≡ x³ − 3x + b (mod p)`, both coordinates below `p`), in Core, so Linux tests it too.
   CryptoKit's key init isn't used as the check: on macOS it takes a point off the curve.
 
+**The security key** (`FidoKey`, in the app), over libfido2: CTAP2 over USB HID.
+- **Built from pinned source** by `scripts/fido.sh`, never a prebuilt binary: libfido2 1.17.0,
+  libcbor 0.13.0 and OpenSSL 3.5.9's libcrypto, each checked against its pinned SHA-256 before
+  it's unpacked, as static libraries for each architecture ([building.md](building.md)). zlib is
+  the SDK's. Their three licences ship in the app (`Contents/Resources/licenses/`).
+- **Only two requests reach the key:** `fido_dev_get_assert` and `fido_dev_make_cred`, and its PIN
+  retry count is read. It's never reset, its PIN is never set or changed, and its credentials are
+  never listed or deleted.
+- **An assertion** (`SecurityKeyAssertionAsk`) is kiff.dev, the `clientDataHash` this app computed,
+  the one credential this Mac approves with in the allow list, and presence and verification
+  required. **A new credential** (`SecurityKeyCredentialAsk`) is ES256 on kiff.dev ("KIFF"), not
+  discoverable, the person verified, with Windows' two minutes to answer.
+- **Core checks what comes back**, whatever libfido2 says: the raw authenticator data
+  (`fido_assert_authdata_raw_ptr`, not the CBOR-wrapped one) goes through `PasskeyApprover`'s
+  checks, and the DER signature is sent as the key gave it.
+- **The PIN** (`SecurityKeyPIN`) is one buffer the app owns: made from the bytes typed, which it
+  clears; handed to libfido2 once as a C string; then cleared (`memset_s`) and freed, whatever
+  happens. One that's never handed over is cleared too. It's never kept, logged or sent. A PIN
+  under 4 characters, over 63 bytes or with a NUL is refused before the key is asked.
+- **Which key:** exactly one FIDO2 key with a PIN set. None, several, a U2F-only key or a key
+  without a PIN is refused before anything is asked of it (`SecurityKeyFailure`).
+- **Its failures, by libfido2's code** (`SecurityKeyFailure.of`): a wrong PIN with the tries left
+  (`triesLeft()` reads them before asking), a blocked key (no tries left), three wrong in a row
+  (unplug it and plug it in again), another key than this Mac's, not touched in time, refused or
+  cancelled at the key, and unplugged. A cancelled task cancels the request at the key.
+
 **Next, each its own change:**
-1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on the review's conditions:
-   - libfido2 and its CBOR and crypto libraries pinned, built from source in CI with their source
-     checksums checked, never a prebuilt binary; their licence notices shipped;
-   - only `make_cred` and `get_assert`, given the `clientDataHash` this app computes; never
-     credential management, reset or enrolment;
-   - the PIN asked in the app's own prompt for each approval, handed over once, its buffer zeroed;
-     never kept, logged or sent; the tries left said, and a blocked key said to be blocked;
-   - confirmed on a real Mac: an unsigned app reads a FIDO HID device on macOS 12 without an
-     Input Monitoring prompt.
-2. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
+1. **The PIN sheet**, which asks for the PIN for each approval, says the tries left, and says each
+   failure. The shared words don't have its lines yet, so it waits for them.
+2. **Confirmed on a real Mac:** an unsigned app reads a FIDO HID device on macOS 12 without an
+   Input Monitoring prompt. libfido2 opens the key's FIDO interface (usage page `0xF1D0`), which
+   isn't a keyboard, so none is expected.
+3. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
    credential, shows the `kind: "passkey"` pairing QR naming it, the phone approves the pairing,
    and the claim proves it with `credential_proof`. The key then goes with this Mac: signing
    this Mac out in Devices removes it.
-3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on
-   once the public spec's route has merged.
+4. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on.
 
 ## Tests
 

@@ -1,2 +1,2 @@
 /// The approvals part's tests that need a Mac.
-let approvalsMacTests: [Test] = approvalsRefusalTests + approvalsScreenTests + approvalsPasskeyMacTests
+let approvalsMacTests: [Test] = approvalsRefusalTests + approvalsScreenTests + approvalsPasskeyMacTests + approvalsFidoMacTests

@@ -47,8 +47,15 @@ echo "exit(run(suites))" >> "$MAIN"
 echo "$MAIN" >> "$FILES"
 
 TARGET=""
-# On a Mac, the SDK the app is built against, named (scripts/sdk.sh).
-[ "$(uname)" = "Darwin" ] && TARGET="-target $(uname -m)-apple-macos12.0 -sdk $(scripts/sdk.sh)"
+# On a Mac, the SDK the app is built against, named (scripts/sdk.sh), and with the app's views,
+# the security key's library (scripts/fido.sh).
+if [ "$(uname)" = "Darwin" ]; then
+    TARGET="-target $(uname -m)-apple-macos12.0 -sdk $(scripts/sdk.sh)"
+    if [ "$CORE" = 0 ]; then
+        scripts/fido.sh
+        TARGET="$TARGET -I build/fido/$(uname -m)/include -L build/fido/$(uname -m)/lib"
+    fi
+fi
 # shellcheck disable=SC2086
 xargs swiftc -swift-version 5 -Onone $TARGET -module-name TafsTests -o "$OUT/run" < "$FILES"
 "$OUT/run"

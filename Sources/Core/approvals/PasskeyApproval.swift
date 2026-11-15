@@ -85,12 +85,12 @@ struct PasskeyMade: Equatable {
     let attestationObject: Data
 }
 
-/// The security key, over libfido2 in the app (the next change); a fake in tests. It's given the
-/// hash of the `clientDataJSON` this app built, never the JSON, as CTAP2 takes it. The PIN, when
-/// given, is used once and its buffer cleared by the caller.
+/// The security key: `FidoKey` in the app, over libfido2; a fake in tests. It's given the hash of
+/// the `clientDataJSON` this app built, never the JSON, as CTAP2 takes it. The PIN is handed to
+/// the key once, then cleared (`SecurityKeyPIN`).
 protocol PasskeyAuthenticator {
-    func getAssertion(clientDataHash: Data, credentialID: Data, pin: [UInt8]?) async throws -> PasskeyAssertion
-    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: [UInt8]?) async throws -> PasskeyMade
+    func getAssertion(clientDataHash: Data, credentialID: Data, pin: SecurityKeyPIN?) async throws -> PasskeyAssertion
+    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: SecurityKeyPIN?) async throws -> PasskeyMade
 }
 
 /// Approves one exact request, or two together, with this Mac's registered passkey, as Windows'
@@ -127,7 +127,7 @@ struct PasskeyApprover {
     /// One fresh assertion over `message`, as the header's `t=…,a=…`. Only this file's two shapes
     /// reach it: one request (`approve`) and the pair (`RequestsTogether.approve`), each with the
     /// `signedAt` that went into its message. Switched off, it refuses before the key is asked.
-    fileprivate func sign(_ message: Data, signedAt: String, pin: [UInt8]?) async throws -> String {
+    fileprivate func sign(_ message: Data, signedAt: String, pin: SecurityKeyPIN?) async throws -> String {
         guard enabled else { throw PasskeyRefusal.off }
         let clientData = Self.clientDataJSON(message, sha256: sha256)
         let assertion = try await authenticator.getAssertion(clientDataHash: sha256(clientData), credentialID: credentialID, pin: pin)
@@ -144,7 +144,7 @@ struct PasskeyApprover {
 
     /// Approves one request: its `kiff.request.v1`, at a signing time never used twice.
     func approve(tenant: String, method: String, path: String, body: Data, signedAt: String = SigningTime.next(),
-                 pin: [UInt8]? = nil) async throws -> String {
+                 pin: SecurityKeyPIN? = nil) async throws -> String {
         let message = KIFFMessage.request(tenant: tenant, method: method, path: path,
                                           bodyHash: Encoding.hex(sha256(body)), signedAt: signedAt)
         return try await sign(Data(message.utf8), signedAt: signedAt, pin: pin)
@@ -178,7 +178,7 @@ enum RequestsTogether {
     /// The pair approved by this Mac's passkey: one assertion, its challenge over the pair's
     /// message, in each request's `KIFF-Passkey-Assertion: t=…,a=…,with=sha256:<the other's hash>`.
     static func approve(_ approver: PasskeyApprover, tenant: String, _ first: Request, _ second: Request,
-                        signedAt: String = SigningTime.next(), pin: [UInt8]? = nil) async throws -> (first: String, second: String) {
+                        signedAt: String = SigningTime.next(), pin: SecurityKeyPIN? = nil) async throws -> (first: String, second: String) {
         func own(_ request: Request) -> String {
             let message = KIFFMessage.request(tenant: tenant, method: request.method, path: request.path,
                                               bodyHash: Encoding.hex(approver.sha256(request.body)), signedAt: signedAt)
