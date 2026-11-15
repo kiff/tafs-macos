@@ -101,6 +101,12 @@ struct TafView: View {
     var manages = false
     /// Reads the list again after the taf was halted.
     var halted: () async -> Void = {}
+    /// Plan & usage, from a health fix.
+    var openUsage: () -> Void = {}
+    /// Who uses the taf, under its head for whoever manages it; nil where nothing reads it.
+    var shareLine: ShareLine? = nil
+    /// The Card in front of the stack; nil for the first, the live one.
+    @State private var frontCard: String?
     @State var tab: Tab = .chat
 
     var body: some View {
@@ -114,6 +120,14 @@ struct TafView: View {
                 if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
             }
             .padding(.top, 40)
+            // Under the header, as the iPad's `headerLine`: its live version, which opens
+            // Versions, then who it's shared with, for whoever manages the taf.
+            if manages {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let pages { versionLine(pages) }
+                    if let shareLine { shareLine }
+                }
+            }
             HStack(spacing: 0) {
                 ForEach(Tab.allCases) { choice in
                     let chosen = tab == choice
@@ -132,7 +146,9 @@ struct TafView: View {
             case .chat: chatTab
             case .card: cardTab
             case .activity:
-                if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
+                if let pages {
+                    TafActivityTab(model: pages, taf: taf, openUsage: openUsage) { tab = .card }
+                }
             case .setup:
                 if let pages {
                     // An app's week opens the taf's Activity of its calls, as on the iPad.
@@ -153,10 +169,10 @@ struct TafView: View {
         HStack(alignment: .top, spacing: 20) {
             CoachView(model: chat, embedded: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let card = taf.cards.first {
+            if !taf.cards.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Eyebrow(text: words.count("card.heading", taf.cards.count))
-                    CardFace(card: card, color: Theme.tafColor(taf.color))
+                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
                     Button { tab = .card } label: {
                         Text(words.count("card.all_of", taf.cards.count)).font(.system(size: 14)).foregroundColor(Theme.ink)
                             .frame(maxWidth: .infinity).frame(height: 40)
@@ -168,6 +184,11 @@ struct TafView: View {
                 .padding(.top, 8)
             }
         }
+    }
+
+    /// "Version 3 · live", which opens the taf's versions, as the iPad's `versionLine`.
+    private func versionLine(_ pages: TafPagesModel) -> some View {
+        VersionLine(model: pages)
     }
 
     /// The iPad's `StateChip`: the word on its tone at 15%, in a capsule.
@@ -190,10 +211,12 @@ struct TafView: View {
         ScrollView {
             VStack(spacing: 16) {
                 // No Card listed says nothing: tafs cloud sends no field that says one was revoked.
-                ForEach(taf.cards) { card in
-                    CardFace(card: card, color: Theme.tafColor(taf.color))
+                // The Cards as the iPad's wallet: a click brings one to the front, and the panel
+                // is the front Card's.
+                if !taf.cards.isEmpty {
+                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
                     // A Card with no rules has no panel under it, never an empty one.
-                    if !card.rules.isEmpty { rules(card) }
+                    if let shown = CardStack.front(of: taf.cards, frontCard), !shown.rules.isEmpty { rules(shown) }
                 }
             }
             .padding(.bottom, Look.inset)
@@ -232,5 +255,173 @@ struct TafView: View {
         case .hold: return words("card.outside_held")
         case .unknown: return nil
         }
+    }
+}
+
+/// A taf's Cards as the iPad's `CardStack`: as in a wallet, the furthest back on top, each a band
+/// of 26 points above the one in front, a shade darker so Cards of one colour read apart. A click
+/// brings one to the front. (The iPad's `WalletLayout` is a `Layout`, which macOS 12 hasn't: the
+/// bands are padding in a `ZStack` here.)
+struct CardStack: View {
+    @Environment(\.words) private var words
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let cards: [TafCard]
+    let color: Color
+    /// The Card in front; nil for the first, the live one.
+    @Binding var front: String?
+
+    /// How much of a Card behind shows.
+    static let band: CGFloat = 26
+
+    /// The Card in front: the one chosen, else the first.
+    static func front(of cards: [TafCard], _ chosen: String?) -> TafCard? {
+        cards.first { $0.id == chosen } ?? cards.first
+    }
+
+    /// The Cards top to bottom: the furthest back first, the front one last, as in a wallet.
+    static func ordered(_ cards: [TafCard], front: String?) -> [TafCard] {
+        let shown = Self.front(of: cards, front)
+        return Array(cards.filter { $0.id != shown?.id }.reversed()) + (shown.map { [$0] } ?? [])
+    }
+
+    /// How much darker a Card `depth` places behind the front one is drawn, as the iPad's.
+    static func shade(depth: Int) -> Double { depth <= 0 ? 0 : min(0.12 + 0.08 * Double(depth - 1), 0.32) }
+
+    var body: some View {
+        let ordered = Self.ordered(cards, front: front)
+        ZStack(alignment: .top) {
+            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, card in
+                Button {
+                    // As the iPad's `withMotion`: the spring, unless motion is reduced.
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { front = card.id }
+                } label: {
+                    CardFace(card: card, color: color)
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.black.opacity(Self.shade(depth: ordered.count - 1 - index))))
+                        .shadow(color: .black.opacity(0.16), radius: 4, y: -2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(words("taf.show_card", ["title": card.title]))
+                .padding(.top, CGFloat(index) * Self.band)
+            }
+        }
+        .frame(maxWidth: CardFace.width)
+    }
+}
+
+/// The header's way into the taf's versions: its mark, "Version 3 · live" (else "Versions") and
+/// a caret, in the line's quiet colour, opening the Versions sheet.
+struct VersionLine: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    @State private var open = false
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
+                Text(TafVersions.headerLine(model.versionList, words)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.dim).accessibilityHidden(true)
+            }
+            .foregroundColor(Theme.soft)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .task { await model.loadVersions() }
+        .sheet(isPresented: $open) { VersionsView(model: model) { open = false } }
+    }
+}
+
+/// The taf's versions, as the iPad's `VersionsPanel`: newest first, the live one marked, each
+/// with what changed, who made it and when, and what each ended trial came to; a switch under
+/// way, with Cancel. Installing one and trying one are signed by the phone, so this Mac lists
+/// them only.
+struct VersionsView: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    let close: () -> Void
+
+    private static let when: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    private static let day: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(words("version.title")).font(Theme.display(22)).foregroundColor(Theme.ink)
+                Spacer()
+                Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
+            }
+            Text(words("taf.try_version_first_you_chat")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            if let switching = model.switching { switchUnderWay(switching) }
+            if let list = model.versionList {
+                if list.isEmpty {
+                    Text(words("version.first_only")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(list.reversed()) { row($0) }
+                    }
+                }
+            } else if model.versionError == nil {
+                ProgressView().controlSize(.small)
+            }
+            if let error = model.versionError {
+                Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .task { await model.loadVersions() }
+        .padding(20)
+        .frame(width: 520, height: 520)
+        .background(Theme.background)
+    }
+
+    /// A switch that didn't finish, as the iPad's `switchUnderWay`: the taf doesn't run until it's
+    /// finished or cancelled. Finishing it is signed by the phone; Cancel isn't.
+    private func switchUnderWay(_ sw: TafVersions.Switching) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(words("version.installing_number", ["version": String(sw.n)])).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+            Text(words("version.doesnt_run_until")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(words("common.cancel")) { Task { await model.cancelSwitch() } }
+                .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                .fixedSize()
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func row(_ v: TafVersions.Version) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(words("version.number", ["version": String(v.n)])).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                if v.live {
+                    Text(words("version.live_now")).font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.ok))
+                }
+                Spacer(minLength: 0)
+            }
+            if let note = v.note, !note.isEmpty {
+                Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(verbatim: TafVersions.byline(v, words, when: { Self.when.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.dim)
+            ForEach(Array(v.trials.enumerated()), id: \.offset) { _, trial in
+                Text(verbatim: TafVersions.tried(trial, words, day: { Self.day.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.soft)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
     }
 }
