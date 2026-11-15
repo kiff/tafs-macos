@@ -41,7 +41,7 @@ struct SignedInView: View {
 
     var body: some View {
         ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
-                  held: heldRows) { screen in
+                  held: heldRows, accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
             case .overview: return AnyView(OverviewView(model: overview))

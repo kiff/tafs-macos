@@ -80,5 +80,8 @@ To the iPad's layout: a large title and grouped panels of rows.
 
 Each line is read on its own: one that can't be read is left out, never the page.
 
+The sidebar's Account button shows the same `GET /v1/me` under it: the email, else the
+account's name. With neither, it shows nothing under Account.
+
 Not on the Mac yet: People & groups, Coach's suggestions, Alerts, Language, AI use, Time zone,
 Export my chats, About.
