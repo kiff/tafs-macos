@@ -69,7 +69,8 @@ It writes `build/screenshots/record-*.png`. There is no fixture for the Record i
   calls shown, whichever group tafs cloud sent them in, by the day they were made in the
   account's time zone (KIFF's `time_zone`), newest first (`Record.days`). Its title is "Today ·
   Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13" (`AccountTime.dayTitle`,
-  `calendar.today_date`, `calendar.yesterday_date`), in capitals, 11 medium monospaced, `dim`.
+  `calendar.today_date`, `calendar.yesterday_date`), its date and weekday in the app's language,
+  never this Mac's, in capitals, 11 medium monospaced, `dim`.
   A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. The iPad adds the
   day's spend ("€640 spent"); the Record sends each call's amount as text only, so the Mac
   doesn't add them up.
