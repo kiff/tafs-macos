@@ -22,8 +22,8 @@ Laid out as the iPad's: the screen's name small and centred at the top, then pan
 18, as `Look.panelRadius`). The balance's panel is edged in red while the tafs wait and in
 amber with a warning, and the warning takes the same colour.
 
-- **Balance**, a panel: the words (red while the tafs wait), the meter (green when fine, amber
-  otherwise), then the detail, the warning and the plan's line.
+- **Balance**, a panel: the words (red while the tafs wait), the meter (the iPad's `Meter`: a
+  5-high capsule on ink at 10%, green when fine, amber otherwise), then the detail, the warning and the plan's line.
 - **Credits**, a panel: its heading, Last period and This period as the iPad's two-part
   switch, and the total.
 - **Each taf's line** is its own panel, with its pace under it.
