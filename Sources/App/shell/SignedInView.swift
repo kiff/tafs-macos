@@ -15,6 +15,7 @@ struct SignedInView: View {
     @StateObject private var usage: UsageModel
     @StateObject private var connect: ConnectAppsModel
     @StateObject private var coach: CoachModel
+    @StateObject private var alerts: AlertsModel
     @State private var selection: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
@@ -57,6 +58,8 @@ struct SignedInView: View {
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
+        // Alerts are kept per account, as the iPad keys them by tenant.
+        _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
     }
 
     var body: some View {
@@ -81,6 +84,7 @@ struct SignedInView: View {
         }
         .onAppear {
             notifier.opened = { selection = .needsYou }
+            notifier.account = account.session.tenant
             LaunchClock.mark("first window")
         }
         // A screen chosen from elsewhere (a notification) closes it too.
@@ -150,7 +154,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
             Task {

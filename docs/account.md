@@ -126,7 +126,32 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
   the person's act behind their device's key on the iPad, so on the Mac they come with
   approvals (#16).
 
-Not on the Mac yet: Coach's suggestions, Alerts, AI use, Time zone, and Export my chats.
+## Alerts (`AlertPrefs`, `AlertsView`)
+
+Ported from the iPad's `NotificationSettingsView`: Account › Alerts, a row on its own.
+
+- What an alert looks like: a loud one and a silent one, in the shared words, with the
+  app's mark (the iPad's `LockScreenAlert`).
+- **Alerts on this Mac** is on only once the person turned it on **and** macOS allows tafs to
+  alert, as the iPad's (`AppModel.swift:1639-1651`). Turning it on asks macOS first; refused,
+  it says `alert.allow_notifications` and stays off. It's read again from macOS each time the
+  screen opens, so turning notifications off in System Preferences shows it off.
+- **The choice is kept per account** (`tafs.alerts.on|{tenant}`), as the iPad keys it by tenant
+  (`alerts.enabled|{tenant}`, `AppModel.swift:89`): an account that signs in on this Mac never
+  inherits another's. **Sound** ("For a hold or a halt only") is the Mac's, on until turned
+  off, as the iPad's `alertSound`; it's off and greyed while alerts are off, its choice kept.
+- **`Notifier`** announces a call only once alerts are on for the signed-in account. With
+  Sound off an alert still arrives, quietly: no sound and no banner, only Notification Center
+  (`interruptionLevel` `.passive`, and `[.list]` with the window in front), as tafs cloud
+  sends the iPad's (`interruption-level: passive`).
+- Needs you's "Know the moment a taf needs you" card isn't drawn: its line promises alerts
+  "even with tafs closed", which a Mac without a signed build can't keep.
+- On the Mac an alert comes while tafs is open: a push with the app closed needs a signed
+  build, so this screen never says alerts come with tafs closed. What alerts the account's
+  phones is kept per phone by tafs cloud (`GET /v1/push`, by the phone's token), so it isn't
+  listed here. Haptics are the phone's.
+
+Not on the Mac yet: Coach's suggestions, AI use, Time zone, and Export my chats.
 Their rows come with their screens: a row that opens nothing isn't drawn.
 
 ## Export my chats
