@@ -85,10 +85,7 @@ struct TafActivityTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let taf: Home.Taf
-    /// Whether this person manages the taf: Coach's fix is theirs.
-    var manages = false
     /// Coach with tafs cloud's words in its box; Plan & usage.
-    var askCoach: (String) -> Void = { _ in }
     var openUsage: () -> Void = {}
     /// Opens the Card tab, from the Card's line.
     let openCard: () -> Void
@@ -138,9 +135,8 @@ struct TafActivityTab: View {
     }
 
     /// A taf that isn't healthy, as the iPad's `HealthLines`: each line, amber when at risk and
-    /// red when failing, with the fixes tafs cloud decided for it. Coach's fix opens Coach with
-    /// tafs cloud's words in the box, nothing sent, for whoever manages the taf; the credits fix
-    /// opens Plan & usage. A fix of a kind the app doesn't know is no button.
+    /// red when failing, with the fixes tafs cloud decided for it. The credits fix opens Plan &
+    /// usage. A fix of a kind the app doesn't know is no button.
     private func healthLines(_ health: Home.Taf.Health) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(health.lines.enumerated()), id: \.offset) { index, line in
@@ -164,8 +160,9 @@ struct TafActivityTab: View {
     private func action(_ fix: Home.Taf.Health.Fix) -> (() -> Void)? {
         switch fix.kind {
         case "coach":
-            guard let say = fix.say, !say.isEmpty, manages else { return nil }
-            return { askCoach(say) }
+            // The iPad's improves the taf in Coach mode (`askCoachAbout`): it comes with Coach
+            // mode, and until then no button.
+            return nil
         case "credits":
             return openUsage
         default:

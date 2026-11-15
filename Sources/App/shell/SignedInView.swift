@@ -136,8 +136,7 @@ struct SignedInView: View {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
                                halted: { await readTafs() },
-                               // Coach or Plan & usage in place of the taf's page.
-                               askCoach: { say in coach.draft = say; openTaf = nil; selection = .coach },
+                               // Plan & usage in place of the taf's page.
                                openUsage: { openTaf = nil; selection = .usage }).id(taf.id))
     }
 

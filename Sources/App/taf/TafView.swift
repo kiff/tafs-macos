@@ -101,8 +101,7 @@ struct TafView: View {
     var manages = false
     /// Reads the list again after the taf was halted.
     var halted: () async -> Void = {}
-    /// Coach with tafs cloud's words in its box, from a health fix; Plan & usage, from another.
-    var askCoach: (String) -> Void = { _ in }
+    /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
@@ -141,7 +140,7 @@ struct TafView: View {
             case .card: cardTab
             case .activity:
                 if let pages {
-                    TafActivityTab(model: pages, taf: taf, manages: manages, askCoach: askCoach, openUsage: openUsage) { tab = .card }
+                    TafActivityTab(model: pages, taf: taf, openUsage: openUsage) { tab = .card }
                 }
             case .setup:
                 if let pages {
@@ -258,6 +257,7 @@ struct TafView: View {
 /// bands are padding in a `ZStack` here.)
 struct CardStack: View {
     @Environment(\.words) private var words
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let cards: [TafCard]
     let color: Color
     /// The Card in front; nil for the first, the live one.
@@ -284,7 +284,10 @@ struct CardStack: View {
         let ordered = Self.ordered(cards, front: front)
         ZStack(alignment: .top) {
             ForEach(Array(ordered.enumerated()), id: \.element.id) { index, card in
-                Button { front = card.id } label: {
+                Button {
+                    // As the iPad's `withMotion`: the spring, unless motion is reduced.
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { front = card.id }
+                } label: {
                     CardFace(card: card, color: color)
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .fill(Color.black.opacity(Self.shade(depth: ordered.count - 1 - index))))
