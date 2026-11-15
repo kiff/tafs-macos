@@ -76,6 +76,22 @@ enum Agenda {
             events(on: day).filter { $0.minute / 60 == hour }
         }
 
+        /// The colours of the tafs with work on a day, at most three, for the month card's dots.
+        func marks(on day: String) -> [Int] {
+            var seen: [String] = [], colors: [Int] = []
+            for event in events(on: day) where !seen.contains(event.taf) {
+                seen.append(event.taf)
+                colors.append(event.color)
+                if colors.count == 3 { break }
+            }
+            return colors
+        }
+
+        /// How many firings a day holds, a folded dense schedule counting each.
+        func count(on day: String) -> Int {
+            events.filter { $0.day == day }.reduce(0) { $0 + $1.count }
+        }
+
         /// Whether tafs cloud's line goes under the top line: when it halted, or when it cut
         /// the read at its most (`more`), as on the iPad.
         var saysWhy: Bool { (halted || more) && !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -139,6 +155,27 @@ enum Days {
         guard let p = parts(day) else { return nil }
         let index = p.year * 12 + (p.month - 1) + offset
         return String(format: "%04d-%02d-01", index / 12, index % 12 + 1)
+    }
+
+    /// The same day a month or more before or after, the last of its month when that month is
+    /// shorter (31 January and one month is 28 February), as the iPad's month arrows go.
+    static func adding(months: Int, to day: String) -> String? {
+        guard let d = date(day), let next = calendar.date(byAdding: .month, value: months, to: d) else { return nil }
+        return string(next)
+    }
+
+    /// What one read asks for: the six weeks of the month card around `day`, as on the iPad, so
+    /// the card can mark each day with work whatever the view, and moving within them reads nothing.
+    static func range(of day: String) -> (from: String, to: String)? {
+        let grid = monthGrid(of: day)
+        guard let from = grid.first, let to = grid.last else { return nil }
+        return (from, to)
+    }
+
+    /// The days of the month `day` is in, the 1st to the last.
+    static func month(of day: String) -> [String] {
+        guard let p = parts(day) else { return [] }
+        return monthGrid(of: day).filter { parts($0)?.month == p.month }
     }
 
     /// The hours a day's grid shows: 08:00 to 18:00, wider when an event falls outside.
