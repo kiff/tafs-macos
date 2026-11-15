@@ -20,6 +20,15 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let overviewTests: [Test] = [
+    Test("a taf's status is tafs cloud's, active when it isn't sent, as the iPad's CloudTaf.status") {
+        func taf(_ fields: String) throws -> Home.Taf {
+            try AccountClient.decoder.decode(Home.Taf.self, from: Data((#"{"kiff_agent":"a1","name":"Refunds","#  + fields + "}").utf8))
+        }
+        try expectEqual(try taf(#""state":"waiting","status":"paused""#).paused, true)
+        try expectEqual(try taf(#""state":"paused""#).status, "active")
+        try expectEqual(try taf(#""state":"paused""#).paused, false)
+        try expect((try? taf(#""state":"idle","status":7"#)) == nil, "a status that isn't words doesn't read")
+    },
     Test("the list is read as tafs cloud sends it, with its own counts and words", awaiting: {
         let (client, transport) = cloud([(200, homePage)])
         let page = try await client.home()
@@ -147,6 +156,87 @@ let overviewTests: [Test] = [
         // The contract leaves the recipes out: nothing listed, never an empty list drawn.
         try expectEqual(recipes.homeListsRecipes, false)
     },
+    Test("the gallery reads as the iPad's: a job or category that doesn't read is left out, missing words are none", awaiting: {
+        let json = #"""
+        {"categories":[{"id":"money","title":"Money"},{"title":"no id"}],
+         "recipes":[{"id":"r1","title":"Refunds","category":"money","say":"Refund"},{"id":"r2","title":"Disputes","category":"money"},{"id":"r3","title":"Invoices","category":"money"},{"title":"no id"},{"id":"r4","title":"x","say":7}],
+         "strip":{"shown":true,"title":"Jobs to try","ids":["r3","gone","r1"]},
+         "words":{"title":"New taf","all":"All jobs","own_words":"Say it in your own words","explore":" Explore jobs ","see_all":"See all jobs","try":"Try it with Coach","sample":"What it reported","own_words_line":7},
+         "labels":{"hand":"Set it up with Coach"}}
+        """#
+        let (client, transport) = cloud([(200, json), (200, "{}")])
+        let gallery = try await client.recipesGallery()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/recipes/gallery")
+        try expectEqual(gallery.categories.map(\.id), ["money"])
+        try expectEqual(gallery.recipes.map(\.id), ["r1", "r2", "r3"])
+        // The strip in tafs cloud's order, an id it doesn't list skipped.
+        try expectEqual(gallery.stripRecipes.map(\.id), ["r3", "r1"])
+        try expectEqual(gallery.seeAll, "See all jobs")
+        try expectEqual(gallery.explore, "Explore jobs")
+        try expectEqual(gallery.title(browse: true), "Explore jobs")
+        try expectEqual(gallery.title(browse: false), "New taf")
+        try expectEqual(gallery.handWords(browse: true, labels: gallery.labels), "Try it with Coach")
+        try expectEqual(gallery.handWords(browse: false, labels: gallery.labels), "Set it up with Coach")
+        try expectEqual(gallery.sampleLabel, "What it reported")
+        try expectEqual(gallery.words.ownWordsLine, "")
+        try expectEqual(gallery.category(of: gallery.recipes[0])?.title, "Money")
+        try expectEqual(gallery.asRecipes().labels?.hand, "Set it up with Coach")
+        try expectEqual(gallery.asRecipes().byCategory.first?.recipes.map(\.id), ["r1", "r2", "r3"])
+        let empty = try await client.recipesGallery()
+        try expectEqual(empty.recipes, [])
+        try expectEqual(empty.explore, nil)
+        try expectEqual(empty.seeAll, nil)
+        try expectEqual(empty.stripRecipes, [])
+        try expectEqual(empty.title(browse: true), "")
+        try expectEqual(empty.handWords(browse: true, labels: nil), nil)
+        try expectEqual(empty.sampleLabel, nil)
+    }),
+    Test("the strip's See all is tafs cloud's, else its All jobs, and none when the strip shows every job; it shows only when tafs cloud says") {
+        let gallery = { (strip: String, words: String) in
+            try JSONDecoder().decode(Gallery.self, from: Data((#"{"recipes":[{"id":"r1","title":"A"},{"id":"r2","title":"B"}],"strip":"# + strip + #","words":"# + words + "}").utf8))
+        }
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1"]}"#, #"{"all":"All jobs"}"#).seeAll, "All jobs")
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1","r2"]}"#, #"{"see_all":"See all"}"#).seeAll, nil)
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1"]}"#, #"{"see_all":"  "}"#).seeAll, nil)
+        try expectEqual(try gallery(#"{"shown":false,"ids":["r1"]}"#, "{}").stripRecipes, [])
+        // The sheet's words from /v1/recipes, where the gallery sends none.
+        let recipes = try JSONDecoder().decode(Recipes.self, from: Data(#"{"labels":{"hand":"Hand it over"}}"#.utf8))
+        try expectEqual(try gallery("{}", "{}").asRecipes(labels: recipes.labels).labels?.hand, "Hand it over")
+    },
+    Test("the list last read is kept for its account alone, as the iPad's remembered list, and forgotten at sign-out", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let (client, transport) = cloud([(200, homePage)])
+        let read = try await client.homeRead()
+        try expectEqual(transport.sent.map(\.path), ["/v1/home"])
+        try expectEqual(read.page, try AccountClient.decoder.decode(Home.Page.self, from: Data(homePage.utf8)))
+        RememberedHome.remember(read.body, tenant: "t1", in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs, read.page.tafs)
+        // Another account's list never shows.
+        try expectEqual(RememberedHome.shown(tenant: "t2", in: defaults), nil)
+        RememberedHome.forget(in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), nil)
+    }),
+    Test("only the tafs are kept, as the iPad's remembered list: never the rest of Home", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let home = #"{"tafs":[{"name":"Bare","kiff_agent":"agent_bare","state":"stopped"}],"coach_waiting":{"chat":"c1","line":"Your draft is waiting."},"headline":{"words":"1 taf."}}"#
+        RememberedHome.remember(Data(home.utf8), tenant: "t1", in: defaults)
+        guard let data = defaults.data(forKey: RememberedHome.key), let kept = String(data: data, encoding: .utf8) else { throw Failure(description: "nothing kept") }
+        // Kept as base64 inside the record: read it back to look for what mustn't be there.
+        let record = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let inner = (record?["home"] as? String).flatMap({ Data(base64Encoded: $0) }) else { throw Failure(description: "no list in \(kept)") }
+        let body = try JSONSerialization.jsonObject(with: inner) as? [String: Any]
+        try expectEqual(body.map { Array($0.keys) }, ["tafs"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs.map(\.name), ["Bare"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.headline, nil)
+        // An answer without tafs keeps nothing.
+        RememberedHome.forget(in: defaults)
+        RememberedHome.remember(Data(#"{"coach_waiting":{"chat":"c1"}}"#.utf8), tenant: "t1", in: defaults)
+        try expectEqual(defaults.data(forKey: RememberedHome.key), nil)
+    }),
     Test("a taf's health keeps tafs cloud's fixes for its lines, only of the kinds the app acts on", awaiting: {
         let json = #"{"tafs":[{"kiff_agent":"a","name":"A","state":"idle","health":{"level":"at_risk","lines":["Its bank needs signing in again.","  ","Credits are low."],"fixes":[{"line":0,"kind":"coach","words":"Fix it with Coach","say":"Sign my bank in again"},{"line":0,"kind":"coach","words":"No say"},{"line":1,"kind":"credits","words":"Add credits"},{"line":0,"kind":"teleport","words":"Beam it"},{"kind":7}]}}]}"#
         let taf = try await cloud([(200, json)]).0.home().tafs[0]
