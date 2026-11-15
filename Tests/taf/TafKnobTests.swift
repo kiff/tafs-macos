@@ -64,7 +64,7 @@ let tafKnobTests: [Test] = [
         setting.busy = "latest"
         let change = try await cloud.putKnob(of: "taf-1", setting)
         try expectEqual(change, Knob.Change(version: 4, words: ["Runs twice a day"]))
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "PUT /v1/tafs/taf%2D1/knob")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "PUT /v1/tafs/taf-1/knob")
         try expectEqual(String(decoding: transport.sent[0].body, as: UTF8.self),
                         #"{"results":["app",{"page":"p1","place":"notion"}],"wakes":[{"cron":"0 8 * * 1-5"},{"event":"mail"}],"when":{"busy":"latest"}}"#)
     }),
@@ -77,8 +77,8 @@ let tafKnobTests: [Test] = [
         try await cloud.setPaused("taf-1", true)
         try await cloud.setPaused("taf-1", false)
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, [
-            "GET /v1/tafs/taf%2D1/knob", "GET /v1/tafs/taf%2D1/knob?version=4", "PUT /v1/tafs/taf%2D1/results",
-            "DELETE /v1/tafs/taf%2D1/follow-ups/fu%201", "POST /v1/tafs/taf%2D1/pause", "POST /v1/tafs/taf%2D1/resume",
+            "GET /v1/tafs/taf-1/knob", "GET /v1/tafs/taf-1/knob?version=4", "PUT /v1/tafs/taf-1/results",
+            "DELETE /v1/tafs/taf-1/follow-ups/fu%201", "POST /v1/tafs/taf-1/pause", "POST /v1/tafs/taf-1/resume",
         ])
         try expectEqual(String(decoding: transport.sent[2].body, as: UTF8.self), #"{"places":["door_reply","app"]}"#)
         try expectEqual(transport.sent[3].body, Data())

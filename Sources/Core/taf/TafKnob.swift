@@ -331,12 +331,12 @@ struct Knob: Decodable, Equatable {
 extension CloudClient {
     /// A taf's dial; with `version`, that version's (a change waiting to go live).
     func knob(of taf: String, version: Int? = nil) async throws -> Knob {
-        try await get("/v1/tafs/\(Self.query(taf))/knob" + (version.map { "?version=\($0)" } ?? ""))
+        try await get("/v1/tafs/\(Self.escaped(taf))/knob" + (version.map { "?version=\($0)" } ?? ""))
     }
 
     /// Changes the taf's dial: its next version, made live only by the version switch.
     func putKnob(of taf: String, _ setting: Knob.Setting) async throws -> Knob.Change {
-        let body = try await send("PUT", "/v1/tafs/\(Self.query(taf))/knob", body: setting)
+        let body = try await send("PUT", "/v1/tafs/\(Self.escaped(taf))/knob", body: setting)
         guard let change = try? JSONDecoder().decode(Knob.Change.self, from: body) else { throw KIFFError.unreadable }
         return change
     }
@@ -345,19 +345,19 @@ extension CloudClient {
     /// `door_reply`, `app` and `owner_email`. Live at once, no new version.
     func putResults(of taf: String, places: [String]) async throws {
         struct Body: Encodable { let places: [String] }
-        _ = try await send("PUT", "/v1/tafs/\(Self.query(taf))/results", body: Body(places: places))
+        _ = try await send("PUT", "/v1/tafs/\(Self.escaped(taf))/results", body: Body(places: places))
     }
 
     /// A follow-up the taf set itself, removed before it fires.
     func removeFollowUp(of taf: String, _ followUp: String) async throws {
         struct Removed: Decodable { let removed: String }
-        let body = try await send("DELETE", "/v1/tafs/\(Self.query(taf))/follow-ups/\(Self.query(followUp))", body: Optional<[String: String]>.none)
+        let body = try await send("DELETE", "/v1/tafs/\(Self.escaped(taf))/follow-ups/\(Self.escaped(followUp))", body: Optional<[String: String]>.none)
         guard (try? JSONDecoder().decode(Removed.self, from: body)) != nil else { throw KIFFError.unreadable }
     }
 
     /// Pauses or resumes every start of the taf at tafs cloud (`POST …/pause` or `…/resume`).
     func setPaused(_ taf: String, _ paused: Bool) async throws {
-        _ = try await post("/v1/tafs/\(Self.query(taf))/\(paused ? "pause" : "resume")", [:])
+        _ = try await post("/v1/tafs/\(Self.escaped(taf))/\(paused ? "pause" : "resume")", [:])
     }
 
     /// One request that changes something, with its method, and its body when it has one. A

@@ -20,7 +20,7 @@ let tafKnobMacTests: [Test] = [
         let pending = #"{"version":3,"pending":{"version":4,"changes":1}}"#
         let (m, transport) = model([(200, pending), (404, #"{"error":"not_found"}"#), (200, knobAnswer)])
         await m.load(words: words)
-        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf%2D1/knob", "/v1/tafs/taf%2D1/knob?version=4", "/v1/tafs/taf%2D1/knob"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-1/knob", "/v1/tafs/taf-1/knob?version=4", "/v1/tafs/taf-1/knob"])
         try expectEqual(m.knob?.version, 3)
         try expectEqual(m.lastError, nil)
         let (unread, _) = model([(500, "")])
@@ -56,7 +56,7 @@ let tafKnobMacTests: [Test] = [
         let done = await m.setResultPlaces(["door_reply", "app"], manages: true, words: words, refreshed: { refreshed += 1 })
         try expectEqual(done, true)
         try expectEqual(refreshed, 1)
-        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["PUT /v1/tafs/taf%2D1/results", "GET /v1/tafs/taf%2D1/knob"])
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["PUT /v1/tafs/taf-1/results", "GET /v1/tafs/taf-1/knob"])
     }),
     Test("pausing says tafs cloud's words, or that not every start could be paused", awaiting: { @MainActor in
         let words = Words.load(folder: strings, preferred: ["en"])
