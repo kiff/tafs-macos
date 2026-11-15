@@ -6,7 +6,8 @@ name: Developer ID certificate
 # is made inside this run and leaves it only encrypted to the public key an admin
 # gives as input: the .p12 and its password, under AES-256, whose key is under
 # RSA-OAEP (SHA-256). The admin decrypts it on their own machine, stores
-# DEVELOPER_ID_P12 and DEVELOPER_ID_P12_PASSWORD as repository secrets, then
+# DEVELOPER_ID_P12 and DEVELOPER_ID_P12_PASSWORD as secrets of the `mac-signing`
+# environment (never repository secrets), then
 # deletes the artifact. Nothing readable is printed, kept in the repo, or
 # uploaded: this repository is public, so its logs and artifacts are too.
 #

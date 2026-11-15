@@ -11,8 +11,9 @@ name: DMG
 #   `v<version>-<build>`, for the team (the PM's call; a public link from
 #   kiff.dev/tafs/download is the owner's, later). It reads the Developer ID certificate (DEVELOPER_ID_P12,
 #   DEVELOPER_ID_P12_PASSWORD) and the App Store Connect key notarization uses
-#   (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8), all repository secrets. It never
-#   prints any of them.
+#   (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8), all secrets of the `mac-signing`
+#   environment (main only, a required reviewer), never repository secrets, so no
+#   workflow on another branch can read them. It never prints any of them.
 
 on:
   pull_request:
@@ -42,6 +43,7 @@ jobs:
 
   release:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: mac-signing
     runs-on: macos-15
     timeout-minutes: 45
     permissions:

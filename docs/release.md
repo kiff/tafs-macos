@@ -6,7 +6,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 
 ## Make one
 
-**By hand, from main:** Actions → **DMG** → Run workflow on `main`. The run:
+**By hand, from main:** Actions → **DMG** → Run workflow on `main`, then approve it as the `mac-signing` environment's reviewer. The run:
 
 1. builds the app (`scripts/build.sh`);
 2. imports the Developer ID certificate into a keychain of its own, which it deletes at the end;
@@ -27,12 +27,12 @@ scripts/build.sh && scripts/dmg.sh            # signed ad hoc: for a check, not 
 
 ## The secrets
 
-All are **repository** secrets of kiff/tafs-macos, read only by the DMG workflow's `release` job:
+All are secrets of kiff/tafs-macos's **`mac-signing` environment**, never repository secrets. Any workflow on any branch that someone with write access pushes can read a repository secret, and a leaked Developer ID certificate signs software that Macs trust as ours. The environment allows `main` only and asks its reviewer before each run, so only the DMG workflow's `release` job and the certificate workflow read them, run from main and approved:
 
 | Secret | What it is | Made by |
 |---|---|---|
 | `DEVELOPER_ID_P12`, `DEVELOPER_ID_P12_PASSWORD` | the Developer ID Application certificate and its key, as a .p12 (base64), and its password | the certificate workflow, below |
-| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` | an App Store Connect API key, which the notary service accepts | the same key as kiff/tafs's, stored here too |
+| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` | an App Store Connect API key, which the notary service accepts | the same key as kiff/tafs's, stored here too, in the environment (`gh secret set NAME --env mac-signing -R kiff/tafs-macos`) |
 
 A run without them stops at once and names the ones missing.
 
@@ -57,8 +57,8 @@ The **Developer ID certificate** workflow makes the certificate. It's kiff/tafs'
      -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256
    openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in sealed/developer-id.tar.enc -out bundle.tar -pass file:aes.key
    mkdir out && tar -C out -xf bundle.tar
-   base64 < out/developer-id.p12 | tr -d '\n' | gh secret set DEVELOPER_ID_P12 -R kiff/tafs-macos
-   tr -d '\n' < out/password.txt | gh secret set DEVELOPER_ID_P12_PASSWORD -R kiff/tafs-macos
+   base64 < out/developer-id.p12 | tr -d '\n' | gh secret set DEVELOPER_ID_P12 --env mac-signing -R kiff/tafs-macos
+   tr -d '\n' < out/password.txt | gh secret set DEVELOPER_ID_P12_PASSWORD --env mac-signing -R kiff/tafs-macos
    ```
 
 4. **Delete the run's artifact** and the local files: `sealed`, `aes.key`, `bundle.tar`, `out` and, once the secrets are stored, `developer-id-signing.pem`.
