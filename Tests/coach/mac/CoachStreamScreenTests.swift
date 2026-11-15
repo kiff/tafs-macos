@@ -37,6 +37,12 @@ private final class HeldStream: LineStream, @unchecked Sendable {
     }
 }
 
+/// A wait that lasts until the test lets it go, as a follow's pause does.
+private final class HeldSleep: @unchecked Sendable {
+    private(set) var waiting: [CheckedContinuation<Void, Never>] = []
+    func sleep(_ seconds: TimeInterval) async { await withCheckedContinuation { waiting.append($0) } }
+}
+
 @MainActor
 private func make(_ plan: CannedStream.Plan, _ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, CannedStream) {
     let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
@@ -147,6 +153,36 @@ let coachStreamMacTests: [Test] = [
         let body = try JSONSerialization.jsonObject(with: stream.asked[1].body) as? NSDictionary
         try expectEqual(body, ["text": "And Gmail", "new_chat": true, "new_chat_after_handover": true])
         stream.open[1].finish()
+        await second.value
+    }),
+    Test("an answer followed past its end leaves the next conversation's message alone, as the iPad's followSetupStream", awaiting: { @MainActor in
+        let working = #"{"working":true,"items":[{"type":"message","message":{"id":"m9","from":"owner","text":"Connect Qonto"}}]}"#
+        let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before), (200, working)])
+        let stream = HeldStream()
+        let held = HeldSleep()
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), streamer: stream, sleep: { await held.sleep($0) }, now: { sendTime })
+        await model.load()
+        model.draft = "Connect Qonto"
+        let first = Task { await model.send() }
+        while stream.open.isEmpty { await Task.yield() }
+        for line in ["event: session", #"data: {"session":"s1","new_session":false,"message":{"id":"m9"}}"#, ""] { stream.open[0].yield(line) }
+        // The stream ends while the thread still says Coach is at work: the answer is followed,
+        // and its follow waits.
+        stream.open[0].finish()
+        while held.waiting.isEmpty { await Task.yield() }
+        model.newChat()
+        model.draft = "And Gmail"
+        let second = Task { await model.send() }
+        while stream.open.count < 2 { await Task.yield() }
+        try expectEqual(model.pending?.text, "And Gmail")
+        // The old follow goes on: it touches nothing of the new conversation.
+        held.waiting.forEach { $0.resume() }
+        await first.value
+        try expectEqual(model.pending?.text, "And Gmail")
+        try expectEqual(model.pending?.failed, nil)
+        stream.open[1].finish()
+        for _ in 0..<50 { await Task.yield() }
+        held.waiting.dropFirst().forEach { $0.resume() }
         await second.value
     }),
 ]

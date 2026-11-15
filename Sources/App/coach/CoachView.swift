@@ -303,6 +303,9 @@ final class CoachModel: ObservableObject {
         streaming = nil
         live = nil
         await follow(coach)
+        // A new conversation while this one was followed: its message is the new one's, as the
+        // iPad's `followSetupStream` checks again after `loadSetupThread`.
+        guard mine == conversation else { return }
         // The message was taken even if the thread didn't show it in time: it is not left
         // looking unsent, with a Retry that would send it again.
         if pending?.failed == nil { pending = nil }
