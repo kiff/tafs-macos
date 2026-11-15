@@ -25,7 +25,7 @@ makes an answer count only for the hold as the person saw it.
 
 | Answer | Grants authority? | Who signs on a Mac |
 |---|---|---|
-| **Refuse** (`reject`) | No: it takes authority away | The device key. Any signed-in Mac may refuse. |
+| **Refuse** (`reject`) | No: it takes authority away | The device key, once the person confirms with Touch ID or the Mac's password. Any signed-in Mac may refuse. |
 | **Approve once** (`approve-once`) | Yes | Touch ID's approval key on a Mac that has one. Otherwise the phone, or a passkey. |
 | **Extra room** (`change-card`) | Yes | The same as Approve once. |
 
@@ -33,6 +33,16 @@ makes an answer count only for the hold as the person saw it.
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
 - **A refusal is not sent** without the device key, without the hold's accounting version,
   or with a next step that isn't one of the hold's own.
+- **A refusal is confirmed before it's signed**, as the iPad's `answer(_:with:)` signs with
+  `signer.sign(_:reason:)` (`AppModel.swift:2917-2990`): after the checks above, the person
+  confirms with Touch ID or the Mac's login password (`.deviceOwnerAuthentication`, which every
+  Mac has), prompted "Answer {summary}" (`needs_you.prompt.answer`). A prompt the person
+  closed keeps the call and says nothing was approved
+  (`approval.cancelled_nothing_approved_request_kept`); any other failure says it wasn't sent
+  (`common.not_sent_unconfirmed`). Neither signs nor sends.
+  - **Mac difference:** the summary is the call's title, else its action, as its card shows
+    it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
+    for a call without arguments) isn't ported yet.
 
 Approving with Touch ID, on the phone and with a passkey each arrive in their own pull request.
 

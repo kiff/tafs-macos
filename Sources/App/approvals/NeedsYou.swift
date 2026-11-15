@@ -192,13 +192,21 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// Refuses a call, then reads the list again: KIFF's list is the truth, not this screen's.
+    /// The person confirms first, Touch ID or the Mac's password, as the iPad's `answer(_:with:)`
+    /// signs with `signer.sign(_:reason:)`: "Answer {summary}". A prompt the person closed keeps
+    /// the call ("Cancelled. Nothing was approved"); any other failure says it wasn't sent for
+    /// want of a confirmation. Neither signs nor sends.
     func refuse(_ call: HeldCall, nextStep: String? = nil) async {
         answering = call.id
         defer { answering = nil }
         do {
-            try await account.refuse(call, nextStep: nextStep)
+            try await account.refuse(call, nextStep: nextStep) {
+                try await self.confirm(Words.app("needs_you.prompt.answer", ["summary": call.title ?? call.action]))
+            }
             notTaken[call.id] = nil
             await load()
+        } catch let unconfirmed as Unconfirmed {
+            notTaken[call.id] = Self.cancelled(unconfirmed.error) ?? Words.app("common.not_sent_unconfirmed")
         } catch {
             notTaken[call.id] = Self.why(error)
         }

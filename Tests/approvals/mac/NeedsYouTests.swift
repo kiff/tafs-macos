@@ -44,6 +44,29 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(model.notTaken["exc_1"], "approver_only")
         try expectEqual(model.count, 1)
     }),
+    Test("Refuse asks for Touch ID or the Mac's password first, as the iPad's sign(_:reason:): closed, or failed, nothing is sent", awaiting: { @MainActor in
+        var asked: [String] = []
+        let (confirmed, confirmedTransport) = model([(200, one), (200, "{}"), (200, none)], confirm: { asked.append($0) })
+        await confirmed.load()
+        guard case .loaded(let calls) = confirmed.state else { throw Failure(description: "not loaded") }
+        await confirmed.refuse(calls[0])
+        try expectEqual(asked, [Words.app("needs_you.prompt.answer", ["summary": "Refund a payment"])])
+        try expectEqual(confirmedTransport.sent.map(\.method), ["GET", "POST", "GET"])
+        // Closed by the person: the call is kept, nothing is signed or sent.
+        let (cancelled, cancelledTransport) = model([(200, one)], confirm: { _ in throw LAError(.userCancel) })
+        await cancelled.load()
+        await cancelled.refuse(calls[0])
+        try expectEqual(cancelledTransport.sent.map(\.method), ["GET"])
+        try expectEqual(cancelled.notTaken["exc_1"], Words.app("approval.cancelled_nothing_approved_request_kept"))
+        try expectEqual(cancelled.count, 1)
+        // Any other failure: not sent, for want of a confirmation.
+        let (failed, failedTransport) = model([(200, one)], confirm: { _ in throw LAError(.authenticationFailed) })
+        await failed.load()
+        await failed.refuse(calls[0])
+        try expectEqual(failedTransport.sent.map(\.method), ["GET"])
+        try expectEqual(failed.notTaken["exc_1"], Words.app("common.not_sent_unconfirmed"))
+        try expectEqual(failed.answering, nil)
+    }),
     Test("a list that can't be read says so, and is never shown as empty", awaiting: { @MainActor in
         let (model, _) = model([(500, "")])
         await model.load()
