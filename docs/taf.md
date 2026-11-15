@@ -89,9 +89,10 @@ iPad's reader.
   what halting does, or since when it holds; once halting, who holds it: no run starts
   (kiff/agents), KIFF refuses its calls, the connection sends nothing (planque), each Done or
   Waiting. A taf halted with the whole account says so.
-- **Resuming gives authority back**, so it is signed. This app is for Macs without Face ID or
-  Touch ID, so where the iPad has Resume it shows the iPad's line for such a device
-  (`approval.has_no_face_id_touch`): approve on your phone.
+- **Resuming gives authority back**, so it is signed. Until this Mac can sign it, where the
+  iPad has Resume it shows the iPad's line for an approval that can't be made here
+  (`approval.device_can_not_approve_approve`, `Biometry.short`): approve on another device,
+  which for most people is their phone.
 - A halt tafs cloud refuses says why, in the shared words with the refusal's why (see
   [shared.md](shared.md): its words, else its error, else "tafs cloud answered {status}"), and
   stays as it was. A halt it answers reads the list and KIFF's access again at once, still

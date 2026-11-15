@@ -160,10 +160,10 @@ struct HaltView: View {
                     .buttonStyle(OutlineButtonStyle(color: Theme.no))
                     .disabled(model.busy)
             case .halted:
-                // Resuming gives authority back: it's signed, and this Mac has no Face ID or Touch
-                // ID, so it's approved on the phone (the iPad's line for such a device).
+                // Resuming gives authority back, so it's signed: until this Mac can sign it, the
+                // iPad's line for an approval that can't be made here (`Biometry.short`).
                 if !(h.account && model.taf != nil) {
-                    Text(words("approval.has_no_face_id_touch", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
