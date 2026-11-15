@@ -19,8 +19,10 @@ final class RecordModel: ObservableObject {
     @Published var search = ""
     /// Which calls are shown, of those read.
     @Published var filter: Record.Filter = .all
+    /// One taf's calls only, by its id at tafs cloud; nil for every taf's.
+    @Published var taf: String?
 
-    var shown: [Record.Group] { filter.keeping(groups) }
+    var shown: [Record.Group] { Record.only(taf: taf, in: filter.keeping(groups)) }
 
     private let cloud: CloudClient
     private var cursor: String?
@@ -80,11 +82,13 @@ final class RecordModel: ObservableObject {
 struct RecordView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: RecordModel
+    /// The person's tafs: a chip each, and each call's taf colour.
+    var tafs: [Home.Taf] = []
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                ScreenTitle(title: words("record.title"), lead: words("record.lead")).padding(.top, 56)
+                ScreenTitle(title: words("record.title"), lead: words("record.lead"), size: 34).padding(.top, 56)
                 // The search box, across the screen, with tafs cloud's own hint in it.
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").font(.system(size: 15)).foregroundColor(Theme.soft)
@@ -94,6 +98,15 @@ struct RecordView: View {
                 .padding(.horizontal, 14).frame(height: 40)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+                // "All tafs", then a chip for each taf with its colour, as on the iPad.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        Chip(title: words("record.all_tafs"), chosen: model.taf == nil) { model.taf = nil }
+                        ForEach(tafs.filter { $0.tafID != nil }) { taf in
+                            Chip(title: taf.name, chosen: model.taf == taf.tafID, dot: Theme.tafColor(taf.color)) { model.taf = taf.tafID }
+                        }
+                    }
+                }
                 HStack(spacing: 8) {
                     ForEach(Record.Filter.allCases) { filter in
                         Chip(title: words(filter.titleKey), chosen: model.filter == filter) { model.filter = filter }
@@ -111,12 +124,16 @@ struct RecordView: View {
                         Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
                     }
                     ForEach(model.shown) { group in
-                        if !group.title.isEmpty { Eyebrow(text: group.title).padding(.top, 6) }
+                        // The day, as the iPad's: 11 medium monospaced, in capitals.
+                        if !group.title.isEmpty {
+                            Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+                        }
                         VStack(spacing: 8) {
                             ForEach(group.entries) { entry in
                                 row(entry)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
-                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+                                    .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+                                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                         }
                     }
@@ -135,22 +152,25 @@ struct RecordView: View {
         .task { await model.load() }
     }
 
+    /// One call, as the iPad's `RecordRow`: its status dot; then its taf's dot and "Taf · what it
+    /// did · amount", with its time at the right; then what it was about and how it went.
     private func row(_ entry: Record.Entry) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle().fill(color(entry.kind)).frame(width: 8, height: 8).padding(.top, 6).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                Text(entry.detail).font(.system(size: 13)).foregroundColor(Theme.soft)
-                Text(verbatim: [entry.taf.name, entry.about].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 12)).foregroundColor(Theme.soft)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                if let amount = entry.amountText { Text(amount).font(Theme.mono(14, weight: .semibold)).foregroundColor(Theme.ink) }
-                Text(entry.time).font(.system(size: 12)).foregroundColor(Theme.dim)
+        let taf = tafs.first { $0.tafID == entry.taf.id }
+        let head = [entry.taf.name, entry.title, entry.amountText].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        return HStack(alignment: .top, spacing: 12) {
+            Circle().fill(color(entry.kind)).frame(width: 9, height: 9).padding(.top, 6).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Circle().fill(taf.map { Theme.tafColor($0.color) } ?? Theme.soft).frame(width: 8, height: 8).accessibilityHidden(true)
+                    Text(verbatim: head).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                    Spacer()
+                    Text(verbatim: entry.time).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
+                }
+                Text(verbatim: [entry.about, entry.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 13)).foregroundColor(Theme.soft)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .padding(14)
         .accessibilityElement(children: .combine)
     }
 

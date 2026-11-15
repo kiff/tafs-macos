@@ -47,7 +47,7 @@ let accountPageTests: [Test] = [
         defaults.set("neon", forKey: ThemeChoice.key)
         try expectEqual(ThemeChoice.saved(in: defaults), .system)
     }),
-    Test("the screenshots: Account in three languages, view-only and not", awaiting: { @MainActor in
+    Test("the screenshots: Account in three languages, view-only and not, and the whole page", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -60,6 +60,14 @@ let accountPageTests: [Test] = [
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 900)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("\(name).png"))
         }
+        // The whole page, down to Language, About and Sign out.
+        let model = make([(200, mePasskey)], [(200, balanceLine)], defaults: scratchDefaults())
+        await model.load()
+        let devices = DevicesModel(account: AccountClient(transport: CannedTransport([]), session: session))
+        let view = AccountView(model: model, devices: devices, open: { _ in }, addThisMac: {}, signOut: {})
+            .environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 1800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("account-whole-en.png"))
     }),
 ]
 

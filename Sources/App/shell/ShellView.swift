@@ -92,9 +92,9 @@ struct ShellView: View {
         .padding(.bottom, 16)
     }
 
+    /// The iPad's eyebrow: mono 12, tracking 0.7.
     private func eyebrow(_ text: String, color: Color) -> some View {
-        Text(text.uppercased()).font(Theme.mono(11)).tracking(2).foregroundColor(color)
-            .accessibilityAddTraits(.isHeader)
+        Eyebrow(text: text, color: color).accessibilityAddTraits(.isHeader)
     }
 
     /// A held call, as the iPad lists it: an amber dot, the taf and what it asks, then why and
@@ -152,16 +152,15 @@ struct ShellView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// A taf in the sidebar: its coloured square with its first letter, its name, and tafs
-    /// cloud's line for where its work stands.
+    /// A taf in the sidebar, as the iPad's `tafRow`: its 34 avatar, its name (15 semibold), and
+    /// tafs cloud's line for where its work stands (13). The line is soft, not the iPad's dim:
+    /// dim is under 4.5:1 on the raised ground.
     private func tafRow(_ taf: Home.Taf) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 7).fill(Theme.tafColor(taf.color)).frame(width: 28, height: 28)
-                .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 13, weight: .bold)).foregroundColor(.white))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(verbatim: taf.name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
-                if let now = taf.now { Text(verbatim: now).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1) }
+        HStack(spacing: 12) {
+            TafAvatar(name: taf.name, color: taf.color, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                if let now = taf.now { Text(verbatim: now).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(1) }
             }
         }
         .accessibilityElement(children: .combine)
@@ -173,7 +172,11 @@ struct ShellView: View {
             footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { selection = .coach }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: Screen.account.symbol).font(.system(size: 20)).foregroundColor(Theme.ink)
+                    // As the iPad's: soft, and filled amber while Account is chosen.
+                    // While a taf's page is open, Account isn't the one chosen.
+                    let chosen = selection == .account && openTaf == nil
+                    Image(systemName: chosen ? "person.crop.circle.fill" : "person.crop.circle")
+                        .font(.system(size: 20)).foregroundColor(chosen ? Theme.amberText : Theme.soft)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(words(Screen.account.titleKey)).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
                         if let accountLine { Text(verbatim: accountLine).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(1) }

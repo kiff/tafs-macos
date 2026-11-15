@@ -92,6 +92,35 @@ let calendarTests: [Test] = [
             try expect(words("calendar.month_title.\(p.monthKey)") != "calendar.month_title.\(p.monthKey)", p.monthKey)
         }
     },
+    Test("one read is the month card's six weeks; a month on keeps the day, or its month's last") {
+        try expectEqual(Days.range(of: "2026-11-16")?.from, "2026-10-26")
+        try expectEqual(Days.range(of: "2026-11-16")?.to, "2026-12-06")
+        // Every week of the month is in its read, the last one too.
+        try expect(Days.monthGrid(of: "2026-11-30").contains("2026-12-06"), "the week of 30 November")
+        try expectEqual(Days.month(of: "2026-11-16").count, 30)
+        try expectEqual(Days.month(of: "2026-11-16").first, "2026-11-01")
+        try expectEqual(Days.adding(months: 1, to: "2026-11-16"), "2026-12-16")
+        try expectEqual(Days.adding(months: 1, to: "2027-01-31"), "2027-02-28")
+        try expectEqual(Days.adding(months: -1, to: "2026-01-15"), "2025-12-15")
+        try expect(Days.range(of: "nope") == nil, "no range for no date")
+    },
+    Test("a day's dots are its tafs' colours, each taf once and three at most; its count adds folded firings", awaiting: {
+        let page = try await CloudClient(transport: CannedTransport([(200, agendaPage)]), session: session).calendar(from: "a", to: "b")
+        try expectEqual(page.marks(on: "2026-11-16"), [4, 1])
+        try expectEqual(page.marks(on: "2026-11-18"), [1])
+        try expectEqual(page.marks(on: "2026-11-17"), [])
+        try expectEqual(page.count(on: "2026-11-16"), 2)
+        try expectEqual(page.count(on: "2026-11-18"), 108)
+        let busy = #"{"events":["# + (1...4).map { #"{"taf":"t\#($0)","color":\#($0),"at":"x\#($0)","day":"2026-11-20","time":"09:00","minute":540}"# }.joined(separator: ",") + "]}"
+        let four = try await CloudClient(transport: CannedTransport([(200, busy)]), session: session).calendar(from: "a", to: "b")
+        try expectEqual(four.marks(on: "2026-11-20").count, 3)
+    }),
+    Test("the date pill is a medium date in the app's language, the same day in every zone") {
+        try expectEqual(Days.medium("2026-11-15", language: "en"), "Nov 15, 2026")
+        let french = Days.medium("2026-11-15", language: "fr")
+        try expect(french.hasPrefix("15 nov") && french.hasSuffix("2026"), french)
+        try expectEqual(Days.medium("2026-02-30", language: "en"), "2026-02-30")
+    },
     Test("today is the date in the account's zone, not the Mac's") {
         let lateInParis = Date(timeIntervalSince1970: 1_794_697_200) // 2026-11-14T23:00:00Z
         try expectEqual(Days.today(in: "Europe/Paris", now: lateInParis), "2026-11-15")

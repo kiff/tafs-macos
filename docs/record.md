@@ -40,3 +40,15 @@ Opening a case from a row, a taf's detail, and exporting receipts.
 an ungrouped page, an unreadable one, a refusal's code, a case, the paging and the restart.
 It writes `build/screenshots/record-*.png`. There is no fixture for the Record in kiff/tafs's
 `contracts/` yet: the shape is taken from kiff/tafs's `docs/api.md` and the iPad app's reader.
+
+## The layout, as the iPad's
+
+- **Taf chips** above the filters: "All tafs", then one pill a taf with its colour's dot. A
+  taf's pill keeps that taf's calls (`Record.only(taf:in:)`), with the filter.
+- **A day** is tafs cloud's title, in capitals, 11 medium monospaced, `dim`. The iPad adds the
+  day's spend ("€640 spent"); the Record sends each call's amount as text only, so the Mac
+  doesn't add them up.
+- **A call** is a panel (radius 14, padding 14): its status dot (9), then its taf's dot and
+  "Taf · what it did · amount" in 14 semibold with its time at the right in 12 monospaced
+  `dim`, then what it was about and how it went, at 13 `soft`.
+

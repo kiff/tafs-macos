@@ -32,14 +32,20 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   opens Needs you.
 - **A taf's row:** its coloured square and name; **Now**, tafs cloud's line alone; **Card**,
   the first Card's one line ("€1,960 left today of €2,000", `TafCard.line`, from KIFF's numbers
-  as #39 reads them), else "–"; **Last result**, "–". **A row opens its taf's page**, and
-  "Each line opens the taf." says so under the table.
+  as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
+  taf's page**, and "Each line opens the taf." says so under the table.
+
+## Last result (`Runs`)
+
+While the Overview is shown, each taf's runs are read once (`GET /v1/tafs/{id}/runs`), then
+the report of its newest run with a chat (`GET /v1/tafs/{id}/runs/{session}`). The column
+says, by the iPad's rule: the report's first line without Markdown's marks; else why the run
+stopped, from the runs list (a report never says); else "Last ran at {time}"; else "Nothing
+yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's contracts,
+`taf-runs.json` and `taf-run-report*.json`, read by `scripts/test.sh contracts`.
 
 ## Not yet
 
-- **The Last result column.** The iPad reads each taf's runs and its last report (`GET
-  /v1/tafs/{id}/runs`, then the report). There is no contract for either in kiff/tafs's
-  `contracts/` yet, so the column says "–".
 - Who uses a taf, under its name, for someone who manages it.
 - Reading the list again by itself. It is read when the screen opens, and with each round.
 

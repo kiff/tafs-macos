@@ -65,7 +65,8 @@ its session.
 
 ## The Account page (`AccountView`, `AccountModel`)
 
-To the iPad's layout: a large title and grouped panels of rows.
+To the iPad's layout: a large title and grouped panels of rows. Rows are 17, the list's body
+size on the iPad; each group's heading is 17 semibold in the soft colour.
 
 | Group | Rows |
 |---|---|
@@ -74,8 +75,10 @@ To the iPad's layout: a large title and grouped panels of rows.
 | People & apps | Devices (opens the list), Connect apps. |
 | Plan | Always there. tafs cloud's `plan_line` at 16 semibold in `plan_tone`'s colour (red waiting, amber warning), then "Plan & usage"; just "Plan & usage" when the balance can't be read. It opens Plan & usage. |
 | Theme | Light, Dark, or System. Kept for the next launch and applied to the whole app. |
+| Language | **Language**, the app's language by its own name ("Français"), then **Change language** in amber, which opens macOS's Language & Region, where a language is chosen for one app. The app declares every shipped language (`CFBundleLocalizations`) so macOS lists it there; a test keeps that list the shipped one. |
 | How it works | The shared line. |
 | Legal | Terms and Privacy policy, on kiff.dev. Only those two pages are ever opened from here. In any language but English each says "(in English)", as on the iPad. |
+| About | **Version**, the version and its build ("0.1 (1)"), then the tagline in dim. |
 | Account actions | Sign out, **confirmed first** with the iPad's words ("Sign out of KIFF?", a destructive Sign out, and Cancel), so a stray click never ends the session. |
 
 - **Where View only comes from.** The Mac reads KIFF's contract field: `GET /v1/me` gives the
@@ -90,5 +93,5 @@ Each line is read on its own: one that can't be read is left out, never the page
 The sidebar's Account button shows the same `GET /v1/me` under it: the email, else the
 account's name. With neither, it shows nothing under Account.
 
-Not on the Mac yet: People & groups, Coach's suggestions, Alerts, Language, AI use, Time zone,
-Export my chats, About.
+Not on the Mac yet: People & groups, Coach's suggestions, Alerts, AI use, Time zone, and
+Export my chats. Their rows come with their screens: a row that opens nothing isn't drawn.

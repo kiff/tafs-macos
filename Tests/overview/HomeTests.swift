@@ -52,4 +52,15 @@ let overviewTests: [Test] = [
         try expectEqual(bare.headline, nil)
         try expectEqual(bare.needsYouCount, nil)
     }),
+    Test("a last result is its report's first line without Markdown's marks", awaiting: {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let report = try JSONDecoder().decode(Runs.Report.self, from: Data(#"{"report":{"status":"idle","text":"\n## **Done:** 3 refunds\nMore"}}"#.utf8))
+        try expectEqual(Runs.line(latest: nil, newest: nil, report: report, words: words, time: { _ in "" }), "Done: 3 refunds")
+        // The newest run with a chat is the one whose report is read.
+        let page = try AccountClient.decoder.decode(Runs.Page.self, from: Data(#"{"runs":[{"session":null,"error":"x"},{"session":"s2"}]}"#.utf8))
+        try expectEqual(Runs.latest(page.runs)?.session, "s2")
+        let transport = CannedTransport([(200, #"{"runs":[]}"#)])
+        _ = try await CloudClient(transport: transport, session: Session(accessToken: "t", expiresIn: 60, tenant: "t1", subject: "u", deviceID: nil)).runs(of: "taf-1")
+        try expectEqual(transport.sent.map { "\($0.method) \($0.path)" }, ["GET /v1/tafs/taf%2D1/runs"])
+    }),
 ]

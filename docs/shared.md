@@ -44,6 +44,7 @@ someone's Mac.
 | `setup-start.json`, `setup-start-draft-alone.json`, `setup-time-zone.json` | Coach's first start | with the Coach screens |
 | `recipes-home.json` | `HomeWords`: tafs cloud's line for an account with no taf | read |
 | `taf-activity.json`, `taf-setup.json`, `taf-setup-connected.json`, `taf-setup-reconnect.json` | A taf's Activity and Setup tabs | with the taf page |
+| `taf-runs.json`, `taf-run-report.json`, `taf-run-report-running.json`, `taf-run-report-terminated.json` | The Overview's Last result | read |
 
 A fixture that is in kiff/tafs and in neither list of `Tests/contracts/ContractTests.swift`
 fails the tests: a new contract is read, or its screen is named. The contracts run on every
