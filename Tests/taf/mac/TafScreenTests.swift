@@ -30,8 +30,8 @@ private func contract(_ file: String) throws -> String {
 
 /// A taf's Activity and Setup, read from the contracts.
 @MainActor
-private func pages() async throws -> (TafPagesModel, CannedTransport) {
-    let transport = CannedTransport([(200, try contract("taf-activity.json")), (200, try contract("taf-setup.json"))])
+private func pages(setup: String = "taf-setup.json") async throws -> (TafPagesModel, CannedTransport) {
+    let transport = CannedTransport([(200, try contract("taf-activity.json")), (200, try contract(setup))])
     let model = TafPagesModel(cloud: CloudClient(transport: transport, session: session), taf: "taf-1")
     await model.loadActivity()
     await model.loadSetup()
@@ -55,6 +55,12 @@ let tafMacTests: [Test] = [
         transport.answers.append((403, #"{"error":"not_allowed"}"#))
         await model.loadSetup()
         guard case .unread = model.setup else { throw Failure(description: "a refusal read as a Setup") }
+    }),
+    Test("a Setup with an expired sign-in lists the app as to sign in again, with tafs cloud's words", awaiting: { @MainActor in
+        let (model, _) = try await pages(setup: "taf-setup-reconnect.json")
+        guard case .loaded(let setup) = model.setup else { throw Failure(description: "not read") }
+        try expectEqual(setup.connections.map(\.reconnect), [true])
+        try expect(setup.connectAgain != nil, "Connect again's words")
     }),
     Test("every tab's name is a shared line, in the iPad's order") {
         try expectEqual(TafView.Tab.allCases, [.chat, .activity, .card, .setup])
@@ -91,7 +97,8 @@ let tafMacTests: [Test] = [
         for language in ["en", "fr", "pt"] {
             for tab in TafView.Tab.allCases {
                 let (taf, chat, _) = try await make([(200, tafThread)])
-                let (read, _) = try await pages()
+                // The Setup with a connection whose sign-in expired: its rows and Connect again show.
+                let (read, _) = try await pages(setup: "taf-setup-reconnect.json")
                 let view = TafView(taf: taf, chat: chat, pages: read, tab: tab).environment(\.words, Words.load(folder: strings, preferred: [language]))
                 guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 860)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
                 try png.write(to: folder.appendingPathComponent("taf-\(tab.rawValue)-\(language).png"))

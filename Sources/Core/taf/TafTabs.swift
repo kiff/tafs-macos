@@ -118,11 +118,62 @@ struct TafSetup: Decodable, Equatable {
     let workflow: Part?
     let memory: Part?
     let versions: Part?
+    /// The apps the taf is connected to, as tafs cloud words them.
+    let connections: [Connection]
+    /// tafs cloud's words when the taf's own sign-in expired and it must connect again.
+    let connectAgain: ConnectAgain?
     /// tafs cloud's line when the connections couldn't be read.
     let connectionsError: String?
     let exceptions: [CardUnitException]
 
-    enum Keys: String, CodingKey { case workflow, memory, versions, connections, connectionsError = "connections_error", exceptions = "card_unit_exceptions" }
+    /// One connected app: its name, tafs cloud's words for its status, its actions with their
+    /// limits, and its week in words. `reconnect` when its sign-in must be done again.
+    struct Connection: Decodable, Identifiable, Equatable {
+        struct Action: Decodable, Equatable {
+            let title: String
+            let limits: [String]
+
+            enum Keys: String, CodingKey { case title, limits }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: Keys.self)
+                title = try c.decode(String.self, forKey: .title)
+                limits = (((try? c.decodeIfPresent([String].self, forKey: .limits)) ?? nil) ?? []).compactMap(Lines.line)
+            }
+        }
+
+        let id: String
+        let name: String
+        let statusWords: String?
+        let reconnect: Bool
+        let actionWords: String?
+        let actions: [Action]
+        let statsWords: String?
+
+        enum Keys: String, CodingKey { case id, name, statusWords = "status_words", reconnect, actionWords = "action_words", actions, stats }
+        enum StatsKeys: String, CodingKey { case words }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            id = try c.decode(String.self, forKey: .id)
+            name = try c.decode(String.self, forKey: .name)
+            statusWords = Lines.line((try? c.decodeIfPresent(String.self, forKey: .statusWords)) ?? nil)
+            reconnect = ((try? c.decodeIfPresent(Bool.self, forKey: .reconnect)) ?? nil) ?? false
+            actionWords = Lines.line((try? c.decodeIfPresent(String.self, forKey: .actionWords)) ?? nil)
+            actions = ((try? c.decodeIfPresent([Lenient<Action>].self, forKey: .actions)) ?? nil)?.compactMap(\.value) ?? []
+            let stats = try? c.nestedContainer(keyedBy: StatsKeys.self, forKey: .stats)
+            statsWords = Lines.line(stats.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil })
+        }
+    }
+
+    /// Connect again: tafs cloud's title and words for it.
+    struct ConnectAgain: Decodable, Equatable {
+        let title: String
+        let words: String?
+    }
+
+    enum Keys: String, CodingKey {
+        case workflow, memory, versions, connections, connectionsError = "connections_error", exceptions = "card_unit_exceptions"
+        case connectAgain = "connect_again"
+    }
     enum PartKeys: String, CodingKey { case title, summary, latest }
 
     init(from decoder: Decoder) throws {
@@ -137,6 +188,8 @@ struct TafSetup: Decodable, Equatable {
         workflow = part(.workflow)
         memory = part(.memory, line: .latest)
         versions = part(.versions)
+        connections = ((try? c.decodeIfPresent([Lenient<Connection>].self, forKey: .connections)) ?? nil)?.compactMap(\.value) ?? []
+        connectAgain = (try? c.decodeIfPresent(ConnectAgain.self, forKey: .connectAgain)) ?? nil
         connectionsError = Lines.line((try? c.decodeIfPresent(String.self, forKey: .connectionsError)) ?? nil)
         exceptions = ((try? c.decodeIfPresent([Lenient<CardUnitException>].self, forKey: .exceptions)) ?? nil)?.compactMap(\.value) ?? []
         // A Setup with none of its parts isn't one.

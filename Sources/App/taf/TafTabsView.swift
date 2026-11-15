@@ -179,7 +179,9 @@ struct TafSetupTab: View {
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
                 case .loaded(let setup):
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
+                    if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }
+                    ForEach(setup.connections) { connection($0) }
                     if let error = setup.connectionsError {
                         // In red with Try again, as the iPad says it.
                         HStack(spacing: 10) {
@@ -199,6 +201,48 @@ struct TafSetupTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadSetup() }
+    }
+
+    /// The taf's own sign-in expired: tafs cloud's words for it, edged in amber. Connecting again
+    /// is a sign-in, done on the phone for now: no button here.
+    private func connectAgain(_ again: TafSetup.ConnectAgain) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(verbatim: again.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+            if let words = again.words { Text(verbatim: words).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.7)))
+    }
+
+    /// One connected app: its name and status, its actions with their limits, and its week,
+    /// each in tafs cloud's words.
+    private func connection(_ app: TafSetup.Connection) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(verbatim: app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Spacer()
+                if let status = app.statusWords {
+                    Text(verbatim: status).font(.system(size: 13, weight: .semibold)).foregroundColor(app.reconnect ? Theme.amberText : Theme.ok)
+                }
+            }
+            if let actions = app.actionWords { Text(verbatim: actions).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            ForEach(Array(app.actions.enumerated()), id: \.offset) { _, action in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: action.title).font(.system(size: 14)).foregroundColor(Theme.ink)
+                    if !action.limits.isEmpty {
+                        Text(verbatim: action.limits.joined(separator: " · ")).font(.system(size: 12)).foregroundColor(Theme.soft)
+                    }
+                }
+                .padding(.leading, 10)
+            }
+            if let stats = app.statsWords { Text(verbatim: stats).font(.system(size: 12)).foregroundColor(Theme.dim) }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .accessibilityElement(children: .combine)
     }
 
     private func part(_ part: TafSetup.Part) -> some View {
