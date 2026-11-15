@@ -32,7 +32,8 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   opens Needs you.
 - **A taf's row:** its coloured square and name; **Now**, tafs cloud's line alone; **Card**,
   the first Card's one line ("€1,960 left today of €2,000", `TafCard.line`, from KIFF's numbers
-  as #39 reads them), else "–"; **Last result**, as the iPad's (below).
+  as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
+  taf's page**, and "Each line opens the taf." says so under the table.
 
 ## Last result (`Runs`)
 

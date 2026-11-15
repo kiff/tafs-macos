@@ -68,4 +68,23 @@ let tafTests: [Test] = [
         let unknown = #"{"id":"c","title":"t","calls":{"limit":200,"window":"calendar_day"}}"#
         try expectEqual(try JSONDecoder().decode(TafCard.self, from: Data(unknown.utf8)).line(words), nil)
     },
+    Test("a rule's limits read as the iPad's summary, held or refused above them, with the extra room apart") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        func rule(_ json: String) throws -> TafCard.Rule { try JSONDecoder().decode(TafCard.Rule.self, from: Data(json.utf8)) }
+        let eur = { (minor: Int) in #"{"minor":\#(minor),"unit":"EUR","scale":2}"# }
+        let held = try rule(#"{"label":"Refunds","outside":"hold","per_action":\#(eur(15000)),"per_window":\#(eur(200000)),"count_per_window":20,"window_words":{"each":"a day","now":"today"}}"#)
+        try expectEqual(held.summary(words), "up to €150 each; more asks you first · €2,000 in total a day, then it asks you · 20 calls a day, then it asks you")
+        try expectEqual(held.eachFact(words), "up to €150 each; more asks you first")
+        let refused = try rule(#"{"label":"Pay","outside":"refuse","per_action":\#(eur(10000)),"per_window":\#(eur(100000)),"count_per_window":1,"window_words":{"each":"a day"}}"#)
+        try expectEqual(refused.summary(words), "≤ €100 each · €1,000 a day · 1 call a day")
+        let asksEach = try rule(#"{"label":"Read","outside":"hold","count_per_window":0,"window_words":{"each":"a day"}}"#)
+        try expectEqual(asksEach.summary(words), "Each call asks you first")
+        // The Card's own total, and the extra room apart: never one sum.
+        let room = try rule(#"{"label":"Refunds","outside":"hold","per_window":\#(eur(230000)),"extra_room":\#(eur(30000)),"base_limit":\#(eur(200000)),"window_words":{"each":"a day","now":"today"}}"#)
+        try expectEqual(room.summary(words), "€2,000 in total a day, then it asks you · +€300 extra room today")
+        // Room with no base: per_window already holds it, so it is said once, never twice.
+        let roomOnly = try rule(#"{"label":"Refunds","outside":"hold","per_window":\#(eur(230000)),"extra_room":\#(eur(30000)),"window_words":{"each":"a day","now":"today"}}"#)
+        try expectEqual(roomOnly.summary(words), "€2,300 in total a day, then it asks you")
+        try expectEqual(try rule(#"{"label":"x","outside":"hold"}"#).summary(words), "")
+    },
 ]

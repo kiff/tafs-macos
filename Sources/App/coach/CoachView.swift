@@ -45,9 +45,13 @@ final class CoachModel: ObservableObject {
     static let followEvery: TimeInterval = 4
     static let followAtMost = 30
 
-    init(cloud: CloudClient, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
+    /// The taf whose chat this is, when it isn't Coach's: then nothing is read to find it.
+    private let fixed: Coach?
+
+    init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          now: @escaping () -> Date = Date.init) {
         self.cloud = cloud
+        self.fixed = taf
         self.streamer = streamer
         self.sleep = sleep
         self.now = now
@@ -244,7 +248,8 @@ final class CoachModel: ObservableObject {
 
     func load() async {
         do {
-            guard let coach = try await cloud.coach() else { state = .notStarted; return }
+            let found = try await (fixed == nil ? cloud.coach() : fixed)
+            guard let coach = found else { state = .notStarted; return }
             state = .loaded(coach, try await cloud.thread(of: coach.id))
         } catch {
             state = .unread(why: NeedsYouModel.why(error))
@@ -266,13 +271,16 @@ struct CoachView: View {
     var listed: Set<String> = []
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
+    /// Coach's own screen has its name at the top and its wash; a taf's chat sits in its page.
+    var embedded = false
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
     @State private var planOpen = false
 
     var body: some View {
         Group {
-            if model.isEmpty {
+            // A taf's chat with nothing in it yet is its empty thread, never Coach mode's start.
+            if model.isEmpty, !embedded {
                 // Coach mode's start, centred in the height, as the iPad's.
                 VStack(alignment: .leading, spacing: 0) {
                     Spacer(minLength: 18)
@@ -285,12 +293,14 @@ struct CoachView: View {
                 thread
             }
         }
-        .background(Theme.coachWash)
+        .background(embedded ? Theme.background : Theme.coachWash)
         // The screen's name sits small and centred on the background's own colour, as on the iPad.
         .safeAreaInset(edge: .top, spacing: 0) {
-            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
-                .accessibilityAddTraits(.isHeader)
+            if !embedded {
+                Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
+                    .accessibilityAddTraits(.isHeader)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .task { await model.load() }
@@ -303,8 +313,11 @@ struct CoachView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 switch model.state {
-                case .loading, .notStarted:
+                case .loading:
                     ProgressView().controlSize(.small)
+                case .notStarted:
+                    // Coach's own screen shows its start instead; a taf's chat is never unstarted.
+                    EmptyView()
                 case .unread(let why):
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
@@ -334,13 +347,21 @@ struct CoachView: View {
         }
     }
 
+    /// A taf's chat says "Message {taf}", and "Write the next message" while the taf works;
+    /// Coach's says "Ask anything", and "Write the next message" while Coach works.
+    private var placeholder: String {
+        guard embedded else { return words(model.working ? "chat.write_next" : "coach.ask_anything") }
+        guard case .loaded(let taf, let page) = model.state else { return words("chat.write_next") }
+        return page.working || model.live != nil ? words("chat.write_next") : words("chat.message_taf", ["taf": taf.name])
+    }
+
     /// The message box, to the iPad's: a rounded panel with the words, and the send circle at
     /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
             VStack(alignment: .leading, spacing: 4) {
-                // While Coach works, the box asks for the next message, as on the iPad.
-                TextField(words(model.working ? "chat.write_next" : "coach.ask_anything"), text: $model.draft)
+                // While Coach or the taf works, the box asks for the next message, as on the iPad.
+                TextField(placeholder, text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .onSubmit { Task { await model.send() } }
