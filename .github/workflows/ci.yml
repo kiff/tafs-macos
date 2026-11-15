@@ -98,3 +98,12 @@ jobs:
         env:
           PARTS: ${{ needs.parts.outputs.parts }}
         run: scripts/test.sh $PARTS
+      # The screens the tests drew, so a pull request can show them: kept for 14 days.
+      - name: The screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screenshots
+          path: build/screenshots/*.png
+          if-no-files-found: ignore
+          retention-days: 14
