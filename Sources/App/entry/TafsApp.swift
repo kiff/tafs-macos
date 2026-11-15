@@ -6,6 +6,8 @@ struct TafsApp: App {
     private let words = Words.load()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())
 
+    init() { Words.app = words }
+
     var body: some Scene {
         WindowGroup {
             Group {

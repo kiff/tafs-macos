@@ -10,6 +10,11 @@ extension Words {
         let language = Words.language(preferred: preferred, shipped: shipped)
         return (try? Words(language: language, folder: folder)) ?? Words(language: "en", lines: [:])
     }
+
+    /// The app's words where no view hands them over: a model's line for a refusal, as the
+    /// iPad's `Words.line`. Set once at launch, and by the test runner on a Mac (English):
+    /// unset, a line reads as its key.
+    static var app = Words(language: "en", lines: [:])
 }
 
 private struct WordsKey: EnvironmentKey {

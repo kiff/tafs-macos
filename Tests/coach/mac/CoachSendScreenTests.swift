@@ -96,7 +96,8 @@ let coachSendMacTests: [Test] = [
         let (model, transport, _) = await make([(504, ""), (200, arrived)])
         model.draft = "Connect Qonto"
         await model.send()
-        try expectEqual(model.pending?.failed, "504")
+        // tafs cloud sent no words or error: its status line, as the iPad's CloudError.
+        try expectEqual(model.pending?.failed, "tafs cloud answered 504")
         await model.retry()
         try expectEqual(model.pending, nil)
         try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 1)

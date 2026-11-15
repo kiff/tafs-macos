@@ -49,6 +49,7 @@ final class NeedsYouModel: ObservableObject {
 
     static func why(_ error: Error) -> String {
         switch error {
+        case let refusal as CloudRefusal: return refusal.why(Words.app)
         case KIFFError.refused(_, let code) where !code.isEmpty: return code
         case KIFFError.refused(let status, _): return String(status)
         case let error as KIFFError: return String(describing: error)

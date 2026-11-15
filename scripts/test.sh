@@ -24,6 +24,8 @@ MAIN="$OUT/main.swift"
 FILES="$OUT/files"
 : > "$FILES"
 printf 'import Foundation\n\nvar suites: [(name: String, tests: [Test])] = []\n' > "$MAIN"
+# On a Mac the models read the app's words, which the app sets at launch: here, English.
+[ "$CORE" = 1 ] || printf 'Words.app = (try? Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))) ?? Words.app\n' >> "$MAIN"
 
 find Sources/Core Tests/Runner -name '*.swift' | sort >> "$FILES"
 # The app's views are tested on a Mac, without the file that starts the app.

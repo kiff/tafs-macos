@@ -240,11 +240,8 @@ final class CoachModel: ObservableObject {
         }
     }
 
-    /// tafs cloud's words for a refusal when it sent some; else its code, or the network's own words.
-    static func why(_ error: Error) -> String {
-        if let refusal = error as? CloudRefusal { return refusal.words ?? refusal.code ?? String(refusal.status) }
-        return NeedsYouModel.why(error)
-    }
+    /// tafs cloud's words for a refusal, as the iPad's `CloudError`; else the network's own words.
+    static func why(_ error: Error) -> String { NeedsYouModel.why(error) }
 
     func load() async {
         do {
