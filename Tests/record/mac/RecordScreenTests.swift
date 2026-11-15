@@ -50,6 +50,40 @@ let recordMacTests: [Test] = [
         model.taf = nil
         try expectEqual(model.shown.flatMap(\.entries).count, all)
     }),
+    Test("what's typed is searched once the person pauses, once; Return searches at once", awaiting: { @MainActor in
+        let (model, transport) = model([(200, recordPage), (200, recordPage), (200, recordPage)])
+        model.typingPause = 50_000_000
+        await model.load()
+        try expectEqual(model.searched, "")
+        model.search = "o"; model.typed()
+        model.search = "or"; model.typed()
+        model.search = "order 4471"; model.typed()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try expectEqual(transport.sent.map(\.path), ["/v1/record?q=", "/v1/record?q=order%204471"])
+        try expectEqual(model.searched, "order 4471")
+        // The same words again aren't searched again; Return searches at once.
+        model.typed()
+        try await Task.sleep(nanoseconds: 150_000_000)
+        try expectEqual(transport.sent.count, 2)
+        await model.submitted()
+        try expectEqual(transport.sent.count, 3)
+    }),
+    Test("a case opens from a search with its calls and the step that failed, and closes", awaiting: { @MainActor in
+        let found = #"{"about":"Order 4471","steps":[\#(recordEntry("e1"))],"failed":{"id":"e1","words":"The refund didn't go through"}}"#
+        let (model, transport) = model([(200, found), (404, #"{"error":"not_found"}"#)])
+        await model.open(case: "Order 4471")
+        try expectEqual(transport.sent.last?.path, "/v1/record/cases/Order%204471")
+        try expectEqual(model.caseAbout, "Order 4471")
+        try expectEqual(model.openCase?.steps.map(\.id), ["e1"])
+        try expectEqual(model.openCase?.failed?.words, "The refund didn't go through")
+        await model.open(case: "Order 9")
+        try expectEqual(model.openCase, nil)
+        try expect(model.caseError != nil, "why it couldn't be read")
+        model.closeCase()
+        try expectEqual(model.caseAbout, nil)
+        await model.open(case: "  ")
+        try expectEqual(transport.sent.count, 2)
+    }),
     Test("the screenshots: the Record in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")

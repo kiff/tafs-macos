@@ -20,24 +20,34 @@ answer as sent.
 
 - To the iPad's layout: the title and its line, the search box across the screen, then the
   filters as pills.
-- The search box shows tafs cloud's hint; Return searches.
+- The search box shows tafs cloud's hint. **What's typed is searched once the person
+  pauses** (400 ms after the last key, the iPad's `recordQueryTyped`), so a word typed letter
+  by letter is one search; words already shown aren't searched again. Return searches at once.
+- **While a search is shown it stands in for the list**, as on the iPad: the taf chips and
+  the filters are the list's, and each call found has what it's about as a link,
+  "Order 4471 ›", that **opens its case** (the iPad's `RecordHitRow` and `RecordCaseSheet`):
+  every call about the same thing, oldest first (`GET /v1/record/cases/{about}`), the step
+  that didn't go through named first in red, in tafs cloud's words. The Record never sends
+  anything again itself.
 - **Filters** (`Record.Filter`), the iPad's: All, Money moved (done or approved, with an
   amount), Stopped (refused, not done, revoked) and Waiting (held, sending, unknown). They
   choose among the calls already read; a group left with none is left out.
-- Each group has tafs cloud's title; each row has a dot for how it went (green done, amber
-  held, red refused), the call, its taf and what it is about, its amount and its time.
+- Each group has tafs cloud's title; each row has a dot for how it went, in the iPad's kind
+  colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf and what it is about, its amount and its time.
 - The next page loads when the end of the list comes into view, and joins its group.
 - A cursor tafs cloud no longer takes (a call was made since) starts the search again.
 - A slower answer to an older search is dropped.
 
 ## Not yet
 
-Opening a case from a row, a taf's detail, and exporting receipts.
+A taf's detail, exporting receipts (for someone who sees every taf's Record), and folding a
+day's reads into one line, as the iPad's list does.
 
 ## Tests
 
 `scripts/test.sh record` checks the page as tafs cloud sends it, the escaping and the limit,
-an ungrouped page, an unreadable one, a refusal's code, a case, the paging and the restart.
+an ungrouped page, an unreadable one, a refusal's code, a case, the paging and the restart;
+on a Mac, a search once typing pauses and at once on Return, and a case opened and closed.
 It writes `build/screenshots/record-*.png`. There is no fixture for the Record in kiff/tafs's
 `contracts/` yet: the shape is taken from kiff/tafs's `docs/api.md` and the iPad app's reader.
 
