@@ -11,6 +11,17 @@ private func model(_ answers: [(Int, String)]) -> (RecordModel, CannedTransport)
 }
 
 let recordMacTests: [Test] = [
+    Test("a day's title is the iPad's dayTitle: Today and Yesterday with the date, else the weekday, in the account's zone") {
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let paris = AccountTime("Europe/Paris")
+        let now = ISO8601DateFormatter().date(from: "2026-11-15T10:00:00Z")!
+        let day = { (iso: String) in paris.calendar.startOfDay(for: ISO8601DateFormatter().date(from: iso)!) }
+        try expectEqual(paris.dayTitle(day("2026-11-15T08:00:00Z"), words: words, now: now), "Today · Nov 15")
+        try expectEqual(paris.dayTitle(day("2026-11-14T08:00:00Z"), words: words, now: now), "Yesterday · Nov 14")
+        try expectEqual(paris.dayTitle(day("2026-11-13T08:00:00Z"), words: words, now: now), "Friday · Nov 13")
+        // 23:30 UTC on the 14th is already the 15th in Paris: today.
+        try expectEqual(paris.dayTitle(day("2026-11-14T23:30:00Z"), words: words, now: now), "Today · Nov 15")
+    },
     Test("the next page joins its group, and the end's words show only at the end", awaiting: { @MainActor in
         let (model, transport) = model([(200, recordPage), (200, second)])
         await model.load()

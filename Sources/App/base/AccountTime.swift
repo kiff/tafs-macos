@@ -30,6 +30,30 @@ struct AccountTime {
         shortTime(date) + label(at: date, here: here)
     }
 
+    /// A calendar in the account's zone, for "today" and the day a time falls on (the iPad's
+    /// `AccountTime.calendar`).
+    var calendar: Calendar {
+        var c = Calendar.current
+        c.timeZone = zone
+        return c
+    }
+
+    /// A day's title in the Record, as the iPad's `RecordView.dayTitle` (RecordView.swift:146-151):
+    /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone.
+    func dayTitle(_ day: Date, words: Words, now: Date = Date()) -> String {
+        var short = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        short.timeZone = zone
+        let date = day.formatted(short)
+        let calendar = self.calendar
+        if calendar.isDate(day, inSameDayAs: now) { return words("calendar.today_date", ["date": date]) }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(day, inSameDayAs: yesterday) {
+            return words("calendar.yesterday_date", ["date": date])
+        }
+        var weekday = Date.FormatStyle.dateTime.weekday(.wide)
+        weekday.timeZone = zone
+        return day.formatted(weekday) + " · " + date
+    }
+
     /// A date in a style, in the account's zone, with its short name when it isn't this
     /// Mac's (`zonedShown(date:time:)`).
     func zonedShown(_ date: Date, date dateStyle: Date.FormatStyle.DateStyle, time timeStyle: Date.FormatStyle.TimeStyle,
