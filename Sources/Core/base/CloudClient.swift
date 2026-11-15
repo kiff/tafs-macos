@@ -32,6 +32,11 @@ struct CloudClient {
     /// Sends one request that changes something, and answers its body. A refusal throws
     /// `CloudRefusal`, with tafs cloud's own words for the person when it sent some.
     func post(_ path: String, _ fields: [String: String]) async throws -> Data {
+        try await post(path, body: fields)
+    }
+
+    /// The same, with any body that encodes.
+    func post<Body: Encodable>(_ path: String, body fields: Body) async throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let request = HTTPRequest(method: "POST", path: path, headers: [

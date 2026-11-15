@@ -4,21 +4,55 @@ import Foundation
 /// and words it. The app counts nothing itself and draws the lines as sent.
 enum Home {
     struct Taf: Decodable, Identifiable, Equatable {
-        /// Its health, with tafs cloud's lines; absent when it couldn't be read in time.
+        /// Its health, as tafs cloud reads it, ported from the iPad's `TafsCloud.Health`: its
+        /// level, each reason as a line in the person's language, and the fixes tafs cloud decides
+        /// for the lines that have one. The app decides nothing: an unknown level is drawn as its
+        /// lines, and a fix of a kind it doesn't know is no button.
         struct Health: Decodable, Equatable {
+            /// A way to fix what one line says: Coach with `say` in its box (`coach`), or Plan &
+            /// usage (`credits`). `line` is the line's index.
+            struct Fix: Decodable, Equatable {
+                let line: Int
+                let kind: String
+                let words: String
+                let say: String?
+
+                enum CodingKeys: String, CodingKey { case line, kind, words, say }
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    line = (try? c.decode(Int.self, forKey: .line)) ?? -1
+                    kind = (try? c.decode(String.self, forKey: .kind)) ?? ""
+                    words = (try? c.decode(String.self, forKey: .words)) ?? ""
+                    say = (try? c.decodeIfPresent(String.self, forKey: .say)) ?? nil
+                }
+            }
+
             let level: String
             let lines: [String]
+            let fixes: [Fix]
 
-            enum CodingKeys: String, CodingKey { case level, lines }
-            init(level: String, lines: [String]) { self.level = level; self.lines = lines }
+            enum CodingKeys: String, CodingKey { case level, lines, fixes }
+            init(level: String, lines: [String], fixes: [Fix] = []) { self.level = level; self.lines = lines; self.fixes = fixes }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
                 level = ((try? c.decodeIfPresent(String.self, forKey: .level)) ?? nil) ?? "healthy"
-                lines = ((try? c.decodeIfPresent([String].self, forKey: .lines)) ?? nil) ?? []
+                // Each line on its own, as the iPad's `LenientItem<String>`: one that isn't words is
+                // left out, never the others.
+                struct Line: Decodable { let line: String?; init(from decoder: Decoder) throws { line = try? String(from: decoder) } }
+                lines = (((try? c.decodeIfPresent([Line].self, forKey: .lines)) ?? nil) ?? []).compactMap(\.line)
+                    .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                struct Lenient: Decodable { let fix: Fix?; init(from decoder: Decoder) throws { fix = try? Fix(from: decoder) } }
+                fixes = (((try? c.decodeIfPresent([Lenient].self, forKey: .fixes)) ?? nil) ?? []).compactMap(\.fix)
             }
             var healthy: Bool { level == "healthy" }
             /// Not healthy, with tafs cloud's lines for why, as the iPad's `needsAttention`.
             var needsAttention: Bool { !healthy && !lines.isEmpty }
+            var failing: Bool { level == "failing" }
+
+            /// The fixes for one line, of the kinds the app can act on, in tafs cloud's order.
+            func fixes(for line: Int) -> [Fix] {
+                fixes.filter { $0.line == line && ["coach", "credits"].contains($0.kind) && !$0.words.isEmpty && ($0.kind != "coach" || !($0.say ?? "").isEmpty) }
+            }
         }
 
         /// The KIFF agent it acts as: what tells one row from another.
