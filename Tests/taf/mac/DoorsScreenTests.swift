@@ -62,8 +62,9 @@ let tafDoorsMacTests: [Test] = [
         func shows(_ bitmap: NSBitmapImageRep) -> Bool {
             for y in stride(from: 0, to: 900, by: 2) {
                 for x in stride(from: 0, to: 980, by: 2) {
-                    guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
-                    if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
+                    // As stored or as sRGB: a runner's virtual screen keeps the drawn numbers.
+                    for got in Snapshot.hexes(bitmap, x: x, y: y)
+                    where [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
                 }
             }
             return false
@@ -76,7 +77,7 @@ let tafDoorsMacTests: [Test] = [
         }
         // When it isn't seen, what was read at the avatar, and the bitmap's own shape, say why.
         let read = drawn.map { bitmap in
-            [(48, 140), (60, 146), (52, 156)].map { Snapshot.hex(bitmap, x: $0.0, y: $0.1).map { String(format: "%06X", $0) } ?? "nil" }.joined(separator: " ")
+            [(48, 140), (60, 146), (52, 156)].map { Snapshot.hexes(bitmap, x: $0.0, y: $0.1).map { String(format: "%06X", $0) }.joined(separator: "/") }.joined(separator: " ")
                 + " | \(bitmap.pixelsWide)x\(bitmap.pixelsHigh) of \(Int(bitmap.size.width))x\(Int(bitmap.size.height)), \(bitmap.bitsPerSample) bits, "
                 + "format \(bitmap.bitmapFormat.rawValue), \(bitmap.colorSpace.localizedName ?? "?")"
         } ?? "nothing drawn"

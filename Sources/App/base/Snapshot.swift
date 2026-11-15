@@ -50,5 +50,20 @@ enum Snapshot {
         return byte(c.redComponent) << 16 | byte(c.greenComponent) << 8 | byte(c.blueComponent)
     }
 
+    /// The colour at a point both as the bitmap stores it and as sRGB. A Mac at a desk stores
+    /// what it drew in its screen's colours, so the sRGB one is the colour drawn; a test runner's
+    /// virtual screen stores the drawn numbers under its own profile, so the stored one is. A
+    /// check of a colour drawn takes either.
+    static func hexes(_ bitmap: NSBitmapImageRep, x: Int, y: Int) -> [UInt32] {
+        let scale = bitmap.pixelsWide / max(Int(bitmap.size.width), 1)
+        guard let c = bitmap.colorAt(x: x * scale, y: y * scale) else { return [] }
+        func byte(_ v: CGFloat) -> UInt32 { UInt32((min(max(v, 0), 1) * 255).rounded()) }
+        func hex(_ c: NSColor) -> UInt32 { byte(c.redComponent) << 16 | byte(c.greenComponent) << 8 | byte(c.blueComponent) }
+        var out: [UInt32] = []
+        if c.colorSpace.colorSpaceModel == .rgb { out.append(hex(c)) }
+        if let s = c.usingColorSpace(.sRGB) { out.append(hex(s)) }
+        return out
+    }
+
     static func png(_ bitmap: NSBitmapImageRep) -> Data? { bitmap.representation(using: .png, properties: [:]) }
 }
