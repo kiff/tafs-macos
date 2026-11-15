@@ -145,7 +145,7 @@ struct AccountView: View {
                                         .fixedSize(horizontal: false, vertical: true)
                                     Text(words("usage.title")).font(.system(size: 13)).foregroundColor(Theme.amberText)
                                 } else {
-                                    Text(words("usage.title")).font(.system(size: 15)).foregroundColor(Theme.ink)
+                                    Text(words("usage.title")).font(.system(size: 17)).foregroundColor(Theme.ink)
                                 }
                             }
                             Spacer()
@@ -170,6 +170,13 @@ struct AccountView: View {
                     }
                     .padding(2).background(Capsule().fill(Theme.raised)).padding(.vertical, 10)
                 }
+                // The language tafs's lines are in, by its own name, and macOS's own setting to
+                // change it (Language & Region › Applications), as the iPad opens iOS's.
+                group(words("settings.language_title")) {
+                    row(words("settings.language_title"), value: AppInfo.languageName(words.language))
+                    divider
+                    action(words("settings.change_language"), color: Theme.amberText) { Self.openLanguageSettings() }
+                }
                 group(words("sign_in.how_works")) {
                     Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))
                         .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
@@ -178,6 +185,11 @@ struct AccountView: View {
                     action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
                     divider
                     action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
+                }
+                group(words("settings.about")) {
+                    row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))
+                    divider
+                    Text(words("home.tagline")).font(.system(size: 17)).foregroundColor(Theme.dim).padding(.vertical, 12)
                 }
                 group(words("settings.account_actions")) {
                     // Confirmed first, so a stray click never ends the session.
@@ -203,6 +215,12 @@ struct AccountView: View {
         words.language == "en" ? label : words("settings.legal_in_english", ["label": label])
     }
 
+    /// macOS's Language & Region, where a language is chosen for one app.
+    static func openLanguageSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.international") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     /// Only tafs' own pages on kiff.dev are opened from here.
     static func openPage(_ address: String) {
         guard let url = URL(string: address), url.scheme == "https", url.host == "kiff.dev" else { return }
@@ -212,7 +230,7 @@ struct AccountView: View {
     private func group<Content: View>(_ title: String?, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if let title {
-                Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.soft).padding(.leading, 18).padding(.top, 14)
+                Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.soft).padding(.leading, 18).padding(.top, 14)
             } else {
                 Color.clear.frame(height: 14)
             }
@@ -228,9 +246,9 @@ struct AccountView: View {
 
     private func row(_ title: String, value: String) -> some View {
         HStack {
-            Text(title).font(.system(size: 15)).foregroundColor(Theme.ink)
+            Text(title).font(.system(size: 17)).foregroundColor(Theme.ink)
             Spacer()
-            Text(verbatim: value).font(.system(size: 15)).foregroundColor(Theme.soft).lineLimit(1).textSelection(.enabled)
+            Text(verbatim: value).font(.system(size: 17)).foregroundColor(Theme.soft).lineLimit(1).textSelection(.enabled)
         }
         .padding(.vertical, 12)
     }
@@ -238,7 +256,7 @@ struct AccountView: View {
     private func link(_ title: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Text(title).font(.system(size: 15)).foregroundColor(Theme.ink)
+                Text(title).font(.system(size: 17)).foregroundColor(Theme.ink)
                 Spacer()
                 chevron
             }
@@ -249,7 +267,7 @@ struct AccountView: View {
 
     private func action(_ title: String, color: Color, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.system(size: 15)).foregroundColor(color)
+            Text(title).font(.system(size: 17)).foregroundColor(color)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
