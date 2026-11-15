@@ -108,8 +108,9 @@ let recordMacTests: [Test] = [
         model.typingPause = 10_000_000
         model.search = "refund"
         async let first: Void = model.submitted()
-        await Task.yield()
-        // The search has started: its words are the search's at once.
+        // Until the search has started, however the tasks are scheduled; then its words are
+        // the search's at once.
+        for _ in 0..<10_000 where model.found == nil { await Task.yield() }
         try expectEqual(model.found?.q, "refund")
         model.typed()
         try await Task.sleep(nanoseconds: 100_000_000)

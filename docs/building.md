@@ -20,6 +20,19 @@ written in Swift with SwiftUI and AppKit.
   A full Swift 5.7 build needs Xcode 14 or the Command Line Tools of macOS 12. The Mac job
   lists the Xcodes its runner has; the build on a Mac with macOS 12 stays the final check.
 
+## The SDK
+
+`scripts/sdk.sh` names the macOS SDK the app is built against, and `build.sh` and `test.sh`
+pass it to the compiler (`-sdk`), printing it first. It is `$SDK` when that's set, else the
+newest SDK on the Mac whose SwiftUI this Swift can build with: each SDK, newest first, is
+tried with a view that keeps `@State`. An SDK can be newer than the compiler can use: with
+the Command Line Tools alone, MacOSX 27.2's `@State` needs a macro plugin they don't carry,
+while MacOSX 26.5 builds. On macOS 12 with Swift 5.7 it is that Mac's own SDK.
+
+```sh
+SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk scripts/build.sh   # one SDK, named
+```
+
 ## Build
 
 ```sh

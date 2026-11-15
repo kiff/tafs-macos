@@ -47,7 +47,8 @@ echo "exit(run(suites))" >> "$MAIN"
 echo "$MAIN" >> "$FILES"
 
 TARGET=""
-[ "$(uname)" = "Darwin" ] && TARGET="-target $(uname -m)-apple-macos12.0"
+# On a Mac, the SDK the app is built against, named (scripts/sdk.sh).
+[ "$(uname)" = "Darwin" ] && TARGET="-target $(uname -m)-apple-macos12.0 -sdk $(scripts/sdk.sh)"
 # shellcheck disable=SC2086
 xargs swiftc -swift-version 5 -Onone $TARGET -module-name TafsTests -o "$OUT/run" < "$FILES"
 "$OUT/run"
