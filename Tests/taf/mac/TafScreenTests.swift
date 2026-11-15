@@ -159,4 +159,22 @@ let tafScreenTests: [Test] = [
             }
         }
     }),
+    Test("who the taf is shared with shows under its head only for whoever manages it", awaiting: { @MainActor in
+        let groups = #"{"groups":[{"id":"g1","name":"Support","members":[],"agents":["a"]}]}"#
+        let members = #"{"members":[{"subject":"u2","role":"member","status":"active","email":"ana@acme.com"}]}"#
+        let account = AccountClient(transport: CannedTransport([(200, groups), (200, members)]), session: session)
+        let people = PeopleModel(account: account)
+        await people.load()
+        let (taf, chat, _) = try await make([(200, tafThread)])
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let line = ShareLine(agent: taf.kiffAgent, account: account, people: people, email: "zoe@example.com",
+                             shares: [Shares.Share(group: "g1"), Shares.Share(subject: "u2")])
+        let size = CGSize(width: 980, height: 300)
+        guard let managed = Snapshot.bitmap(of: TafView(taf: taf, chat: chat, manages: true, shareLine: line).environment(\.words, words), size: size),
+              let notManaged = Snapshot.bitmap(of: TafView(taf: taf, chat: chat, manages: false, shareLine: line).environment(\.words, words), size: size),
+              let png = Snapshot.png(managed) else { throw Failure(description: "no bitmap") }
+        try expect(Snapshot.png(notManaged) != png, "the line shows only when managed")
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/taf-shared-en.png"))
+    }),
 ]
