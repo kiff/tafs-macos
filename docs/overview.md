@@ -54,4 +54,5 @@ yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's co
 `scripts/test.sh overview`: the list as tafs cloud sends it, each Card's one line (in the
 `taf` part), what Now falls back to, a taf
 with only its required fields, an unreadable list, a malformed headline. It writes
-`build/screenshots/overview-*.png`.
+`build/screenshots/overview-*.png`, and `overview-contract-en.png` from tafs cloud's own
+`home.json`, whose taf has a Card, so the Card column shows its line.
