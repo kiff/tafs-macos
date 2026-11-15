@@ -103,4 +103,18 @@ let tafTabsTests: [Test] = [
         try expect(Halt.running.explanation(all: true, words, time: { _ in "" }).contains("your tafs"), "every taf")
         try expect((try? JSONDecoder().decode(Halt.self, from: Data(#"{"state":"paused"}"#.utf8))) == nil, "a state it doesn't know isn't one")
     }),
+    Test("a taf's versions read as the iPad's, with its lines: the live one, who and when, and each ended trial", awaiting: {
+        let json = #"{"versions":[{"n":1,"note":"First","created":"2026-11-01T09:00:00Z","live":false,"trials":[{"started":"2026-11-02T09:00:00Z","ended":"2026-11-03T09:00:00Z","why":"back","calls":3,"held":1,"refused":0}]},{"n":2,"note":"Reads invoices too","by_words":"By Coach mode","created":"2026-11-10T09:00:00Z","live":true,"draft":"d1"}],"switching":null}"#
+        let transport = CannedTransport([(200, json)])
+        let state = try await CloudClient(transport: transport, session: session).versions(of: "taf-1")
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/tafs/taf%2D1/versions"])
+        try expectEqual(state.versions.map(\.n), [1, 2])
+        try expectEqual(state.switching, nil)
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(TafVersions.headerLine(state.versions, words), "Version 2 · live")
+        try expectEqual(TafVersions.headerLine(nil, words), "Versions")
+        try expectEqual(TafVersions.byline(state.versions[1], words, when: { _ in "10 Nov" }), "By Coach mode · 10 Nov · brings a new Card")
+        try expectEqual(TafVersions.byline(state.versions[0], words, when: { _ in "1 Nov" }), "1 Nov")
+        try expectEqual(TafVersions.tried(state.versions[0].trials[0], words, day: { _ in "2 Nov" }), "Tried 2 Nov · 3 calls, 1 held · went back")
+    }),
 ]

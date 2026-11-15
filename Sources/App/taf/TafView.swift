@@ -118,6 +118,9 @@ struct TafView: View {
                 Spacer(minLength: 8)
                 if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
             }
+            // Under the header, as the iPad's `headerLine`: its live version, which opens Versions,
+            // for whoever manages the taf.
+            if manages, let pages { versionLine(pages) }
             .padding(.top, 40)
             HStack(spacing: 0) {
                 ForEach(Tab.allCases) { choice in
@@ -175,6 +178,11 @@ struct TafView: View {
                 .padding(.top, 8)
             }
         }
+    }
+
+    /// "Version 3 · live", which opens the taf's versions, as the iPad's `versionLine`.
+    private func versionLine(_ pages: TafPagesModel) -> some View {
+        VersionLine(model: pages)
     }
 
     /// The iPad's `StateChip`: the word on its tone at 15%, in a capsule.
@@ -288,5 +296,113 @@ struct CardStack: View {
             }
         }
         .frame(maxWidth: CardFace.width)
+    }
+}
+
+/// The header's way into the taf's versions: its mark, "Version 3 · live" (else "Versions") and
+/// a caret, in the line's quiet colour, opening the Versions sheet.
+struct VersionLine: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    @State private var open = false
+
+    var body: some View {
+        Button { open = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
+                Text(TafVersions.headerLine(loaded, words)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.dim).accessibilityHidden(true)
+            }
+            .foregroundColor(Theme.soft)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .task { await model.loadVersions() }
+        .sheet(isPresented: $open) { VersionsView(model: model) { open = false } }
+    }
+
+    private var loaded: [TafVersions.Version]? {
+        if case .loaded(let state) = model.versions { return state.versions }
+        return nil
+    }
+}
+
+/// The taf's versions, as the iPad's `VersionsPanel`: newest first, the live one marked, each
+/// with what changed, who made it and when, and what each ended trial came to. Installing one
+/// and trying one are signed by the phone, so this Mac lists them only.
+struct VersionsView: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    let close: () -> Void
+
+    private static let when: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    private static let day: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(words("version.title")).font(Theme.display(22)).foregroundColor(Theme.ink)
+                Spacer()
+                Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
+            }
+            switch model.versions {
+            case .loading:
+                ProgressView().controlSize(.small)
+            case .unread(let why):
+                Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
+                Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
+            case .loaded(let state):
+                if let switching = state.switching {
+                    // A switch that didn't finish: the taf doesn't run until it's finished, on the phone.
+                    Text(words("version.installing_number", ["version": String(switching.n)])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                    Text(words("version.doesnt_run_until")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                }
+                if state.versions.count == 1 {
+                    Text(words("version.first_only")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(state.versions.reversed()) { row($0) }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 520, height: 520)
+        .background(Theme.background)
+    }
+
+    private func row(_ v: TafVersions.Version) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(words("version.number", ["version": String(v.n)])).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                if v.live {
+                    Text(words("version.live_now")).font(.system(size: 11, weight: .bold)).foregroundColor(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Theme.ok))
+                }
+                Spacer(minLength: 0)
+            }
+            if let note = v.note, !note.isEmpty {
+                Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(verbatim: TafVersions.byline(v, words, when: { Self.when.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.dim)
+            ForEach(Array(v.trials.enumerated()), id: \.offset) { _, trial in
+                Text(verbatim: TafVersions.tried(trial, words, day: { Self.day.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.soft)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
     }
 }

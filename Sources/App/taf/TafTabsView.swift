@@ -11,6 +11,8 @@ final class TafPagesModel: ObservableObject {
 
     @Published private(set) var activity: State<TafActivity> = .loading
     @Published private(set) var setup: State<TafSetup> = .loading
+    /// Its versions, for the header's line and the Versions sheet.
+    @Published private(set) var versions: State<TafVersions.State> = .loading
     /// The Activity filter shown, as tafs cloud names it.
     @Published private(set) var filter = "all"
     /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
@@ -66,6 +68,10 @@ final class TafPagesModel: ObservableObject {
         query = activityQuery
         filter = "all"
         activity = .loading
+    }
+
+    func loadVersions() async {
+        do { versions = .loaded(try await cloud.versions(of: taf)) } catch { versions = .unread(why: NeedsYouModel.why(error)) }
     }
 
     func loadSetup() async {
