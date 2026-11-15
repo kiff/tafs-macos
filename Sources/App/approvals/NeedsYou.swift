@@ -15,6 +15,8 @@ final class NeedsYouModel: ObservableObject {
     @Published private(set) var notTaken: [String: String] = [:]
     /// The call being answered now: its buttons wait.
     @Published private(set) var answering: String?
+    /// "Did this happen?": the money calls whose outcome KIFF can't prove, newest first.
+    @Published private(set) var unproven: [Unproven] = []
 
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
@@ -32,6 +34,13 @@ final class NeedsYouModel: ObservableObject {
 
     func load() async {
         do { state = .loaded(try await account.heldCalls()) } catch { state = .unread(why: Self.why(error)) }
+    }
+
+    /// Reads "Did this happen?" from KIFF, for someone who answers held calls, as the iPad's
+    /// `loadUnproven`. A read that fails keeps the list: it's read again next time.
+    func loadUnproven(answersHolds: Bool) async {
+        guard answersHolds, let calls = try? await account.didThisHappen() else { return }
+        unproven = calls
     }
 
     /// Refuses a call, then reads the list again: KIFF's list is the truth, not this screen's.
@@ -67,26 +76,23 @@ struct NeedsYouView: View {
     var tafs: [Home.Taf] = []
     /// The time the countdowns start from; the live view ticks every second from it.
     var now: Date?
+    /// Whether this person answers the account's held calls (KIFF's `holds.answer`).
+    var answersHolds = true
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(words("needs_you.title")).font(Theme.display(34)).foregroundColor(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
+                // A money call whose outcome KIFF can't prove: the owner says whether it happened.
+                ForEach(model.unproven) { happened($0) }
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)
                 case .unread(let why):
                     Text(words("needs_you.request_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                 case .loaded(let calls) where calls.isEmpty:
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(words("needs_you.nothing")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                        Text(words("needs_you.empty_hint")).font(.system(size: 14)).foregroundColor(Theme.soft)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+                    if model.unproven.isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
                 }
@@ -96,7 +102,49 @@ struct NeedsYouView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
-        .task { await model.load() }
+        .task {
+            await model.load()
+            await model.loadUnproven(answersHolds: answersHolds)
+        }
+    }
+
+    private var nothing: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(words("needs_you.nothing")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(words("needs_you.empty_hint")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+
+    /// "Did this happen?", as the iPad's `DidThisHappenCard`: KIFF's words for the call (else its
+    /// title and amount) and for why it asks. The answer is signed like an approval, which this
+    /// Mac can't do: for someone who answers held calls, it says to answer on the phone, as the
+    /// iPad says on a device that can't approve.
+    private func happened(_ call: Unproven) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(words("record.did_this_happen.title")).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
+            Text(verbatim: call.words ?? call.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if call.words == nil, let money = call.money {
+                Text(verbatim: money.unit == nil ? words("card.no_currency", ["amount": money.written(language: words.language)]) : money.written(language: words.language))
+                    .font(.system(size: 15)).foregroundColor(Theme.ink)
+            }
+            if let why = call.statusWords {
+                Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+            if answersHolds {
+                Text(words("approval.has_no_face_id_touch", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
+        .accessibilityElement(children: .contain)
     }
 
     private func card(_ call: HeldCall) -> some View {

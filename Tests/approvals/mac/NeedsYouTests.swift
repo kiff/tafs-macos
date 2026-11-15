@@ -44,6 +44,27 @@ let approvalsScreenTests: [Test] = [
         await model.load()
         try expectEqual(model.state, .unread(why: "500"))
     }),
+    Test("Did this happen? is read only for someone who answers held calls, and a failed read keeps the list", awaiting: { @MainActor in
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","words":"Refund a payment: 40.00 EUR."}]}"#
+        let (model, transport) = model([(200, list), (500, "")])
+        await model.loadUnproven(answersHolds: false)
+        try expectEqual(transport.sent.count, 0)
+        await model.loadUnproven(answersHolds: true)
+        try expectEqual(model.unproven.map(\.proposal), ["p1"])
+        await model.loadUnproven(answersHolds: true)
+        try expectEqual(model.unproven.map(\.proposal), ["p1"])
+    }),
+    Test("the screenshot: Did this happen? above the calls, said to be answered on the phone", awaiting: { @MainActor in
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","words":"Refund a payment: 40.00 EUR.","status_words":"Its answer was lost, so KIFF can't tell whether it went through."}]}"#
+        let (model, _) = model([(200, none), (200, list)])
+        await model.load()
+        await model.loadUnproven(answersHolds: true)
+        let view = NeedsYouView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800))
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-happened-en.png"))
+    }),
     Test("the screenshots: Needs you with a call, and with none, in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")

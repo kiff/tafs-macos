@@ -36,6 +36,22 @@ makes an answer count only for the hold as the person saw it.
 
 Approving with Touch ID, on the phone and with a passkey each arrive in their own pull request.
 
+## Did this happen?
+
+As the iPad's `DidThisHappenCard` and `loadUnproven` (`NeedsYouView.swift:22-23, 95-136`,
+`AppModel.swift:2118-2133`, `KIFFClient.swift:1623-1670`): KIFF's money calls whose outcome
+it can't prove (`GET /v1/me/did-this-happen`), read when Needs you opens, only for someone
+who answers held calls (KIFF's `holds.answer`; a KIFF that doesn't say leaves it to KIFF). A
+read that fails keeps the list.
+
+- Each is drawn above the held calls, edged in amber: "Did this happen?", KIFF's sentence for
+  the call (else its title, and its amount), and KIFF's words for why it asks.
+- **The answer is signed like an approval**, behind Face ID or Touch ID, which this Mac doesn't
+  have. So for someone who answers held calls, the card says to answer on the phone
+  (`approval.has_no_face_id_touch`), as the iPad says on a device that can't approve, and has
+  no Yes or No.
+- "Nothing waiting" shows only when there's nothing to say about either.
+
 ## Tests
 
 `scripts/test.sh approvals`: the hold as KIFF sends it, the answer's message line by line,
