@@ -62,7 +62,7 @@ let coachStreamTests: [Test] = [
         let client = CloudClient(transport: CannedTransport([]), session: session, language: "pt")
         let request = client.streamRequest("  Connect Qonto ", to: "taf-coach")
         try expectEqual(request?.method, "POST")
-        try expectEqual(request?.path, "/v1/tafs/taf%2Dcoach/messages/stream")
+        try expectEqual(request?.path, "/v1/tafs/taf-coach/messages/stream")
         try expectEqual(request?.headers["Accept"], "text/event-stream")
         try expectEqual(request?.headers["Authorization"], "Bearer tok")
         try expectEqual(request.flatMap { try? JSONDecoder().decode([String: String].self, from: $0.body) }, ["text": "Connect Qonto"])

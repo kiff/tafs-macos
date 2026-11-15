@@ -28,7 +28,7 @@ let coachCardMacTests: [Test] = [
         let (model, transport) = await make([(200, "{}"), (200, answeredThread)])
         let card = cards(model)[0]
         await model.answer(card, with: card.options[0])
-        try expectEqual(posts(transport).map(\.path), ["/v1/tafs/taf%2Dcoach/components/plan%2D1/answer"])
+        try expectEqual(posts(transport).map(\.path), ["/v1/tafs/taf-coach/components/plan-1/answer"])
         try expectEqual(cards(model)[0].answered, "Agree")
         try expectEqual(model.answering, nil)
     }),

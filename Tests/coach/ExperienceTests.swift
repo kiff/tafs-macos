@@ -66,7 +66,7 @@ let coachExperienceTests: [Test] = [
         let transport = CannedTransport([(200, "{}"), (200, "{}")])
         let client = CloudClient(transport: transport, session: session)
         try await client.decline(all[1], in: "taf-coach")
-        try expectEqual(transport.sent[0].path, "/v1/tafs/taf%2Dcoach/components/approval%2D1/answer")
+        try expectEqual(transport.sent[0].path, "/v1/tafs/taf-coach/components/approval-1/answer")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["answer": "declined", "session": "s1"])
         let signIn = try JSONDecoder().decode(Thread.Page.self, from: Data(#"{"items":[{"type":"card","card":{"component":{"id":"s","type":"sign_in","waits":"owner"}}}]}"#.utf8))
         guard case .card(let card, _) = signIn.items[0] else { throw Failure(description: "no card") }

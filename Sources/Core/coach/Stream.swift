@@ -145,7 +145,7 @@ extension CloudClient {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard let body = try? encoder.encode(["text": text]) else { return nil }
-        return HTTPRequest(method: "POST", path: "/v1/tafs/\(Self.query(taf))/messages/stream", headers: [
+        return HTTPRequest(method: "POST", path: "/v1/tafs/\(Self.escaped(taf))/messages/stream", headers: [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "text/event-stream", "Content-Type": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
         ], body: body)

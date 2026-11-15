@@ -48,7 +48,7 @@ let coachStreamMacTests: [Test] = [
         watching.cancel()
         try expectEqual(seen, ["I can connect ", "I can connect Qonto with its key."])
         try expectEqual(stream.asked.count, 1)
-        try expectEqual(stream.asked[0].path, "/v1/tafs/taf%2Dcoach/messages/stream")
+        try expectEqual(stream.asked[0].path, "/v1/tafs/taf-coach/messages/stream")
         try expectEqual(posts(transport), 0)
         try expectEqual(model.live, nil)
         try expectEqual(model.pending, nil)

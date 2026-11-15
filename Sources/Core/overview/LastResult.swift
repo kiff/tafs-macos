@@ -63,11 +63,11 @@ enum Runs {
 
 extension CloudClient {
     func runs(of taf: String) async throws -> [Runs.Run] {
-        let page: Runs.Page = try await get("/v1/tafs/\(Self.query(taf))/runs")
+        let page: Runs.Page = try await get("/v1/tafs/\(Self.escaped(taf))/runs")
         return page.runs
     }
 
     func report(of taf: String, session: String) async throws -> Runs.Report {
-        try await get("/v1/tafs/\(Self.query(taf))/runs/\(Self.query(session))")
+        try await get("/v1/tafs/\(Self.escaped(taf))/runs/\(Self.escaped(session))")
     }
 }

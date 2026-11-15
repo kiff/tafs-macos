@@ -13,7 +13,7 @@ let coachScreenTests: [Test] = [
     Test("Coach's chat is read from its own taf, and an account with no Coach reads no thread", awaiting: { @MainActor in
         let (model, transport) = make([(200, setupAnswer), (200, threadAnswer)])
         await model.load()
-        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf%2Dcoach/conversation"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf-coach/conversation"])
         guard case .loaded(let coach, let page) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(coach.id, "taf-coach")
         try expectEqual(page.items.count, 6)

@@ -271,7 +271,7 @@ extension CloudClient {
     func activity(of taf: String, filter: String = "all", query: String? = nil, cursor: String? = nil) async throws -> TafActivity {
         let more = cursor.map { "&cursor=\(Self.query($0))" } ?? ""
         let asked = query.flatMap(Self.activityQuery) ?? "filter=\(Self.query(filter))"
-        return try await get("/v1/tafs/\(Self.query(taf))/activity?\(asked)\(more)")
+        return try await get("/v1/tafs/\(Self.escaped(taf))/activity?\(asked)\(more)")
     }
 
     /// tafs cloud's query for an app's calls, sent as it wrote it, but only as a query: names
@@ -284,6 +284,6 @@ extension CloudClient {
 
     /// A taf's Setup.
     func setup(of taf: String) async throws -> TafSetup {
-        try await get("/v1/tafs/\(Self.query(taf))/setup")
+        try await get("/v1/tafs/\(Self.escaped(taf))/setup")
     }
 }
