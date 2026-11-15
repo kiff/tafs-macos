@@ -24,11 +24,16 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     /// The hold's accounting version: part of what is signed, so an answer counts only for
     /// the hold as it stood when the person saw it.
     let accountingVersion: Int?
+    /// What the call moves, from KIFF's numbers: the first of its `parameters` that KIFF names
+    /// a unit for (`parameter_units`), as the iPad reads it. Nil when KIFF names none: the
+    /// app never guesses an amount's unit.
+    let amount: TafCard.Amount?
 
     enum CodingKeys: String, CodingKey {
         case id, subject, action, title, reasonText = "reason_text", tafAbout = "taf_about", tafReason = "taf_reason"
         case nextSteps = "next_steps", canApproveOnce = "can_approve_once", createdAt = "created_at"
         case expiresAt = "expires_at", accountingVersion = "accounting_version"
+        case parameters, parameterUnits = "parameter_units"
     }
 
     init(from decoder: Decoder) throws {
@@ -50,6 +55,16 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         tafReason = text(.tafReason)
         nextSteps = ((try? c.decodeIfPresent([String].self, forKey: .nextSteps)) ?? nil) ?? []
         canApproveOnce = ((try? c.decodeIfPresent(Bool.self, forKey: .canApproveOnce)) ?? nil) ?? true
+        struct Unit: Decodable { let unit: String; let scale: Int }
+        let parameters = ((try? c.decodeIfPresent([String: Int64].self, forKey: .parameters)) ?? nil) ?? [:]
+        let units = ((try? c.decodeIfPresent([String: Unit].self, forKey: .parameterUnits)) ?? nil) ?? [:]
+        let byName = Dictionary(units.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { first, _ in first })
+        if let named = parameters.sorted(by: { $0.key < $1.key }).first(where: { byName[$0.key.lowercased()] != nil }),
+           let unit = byName[named.key.lowercased()] {
+            amount = TafCard.Amount(minor: named.value, unit: unit.unit, scale: unit.scale)
+        } else {
+            amount = nil
+        }
     }
 }
 

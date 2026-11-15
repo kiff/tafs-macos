@@ -13,6 +13,9 @@ drawn as sent. The app never words a hold itself.
   and never decide anything.
 - Words that aren't text are left out. A hold without its id or its time makes the whole
   answer unreadable: a hold is never dropped silently.
+- **The amount** is KIFF's own number: the first of the call's `parameters` that KIFF names a
+  unit for in `parameter_units`, written in the app's language ("€640"). A number KIFF names
+  no unit for is never shown as money, and a call without one shows none.
 
 ## Answers
 
@@ -41,15 +44,23 @@ signature verifies with the device key and is not an approval's.
 
 ## The Needs you screen
 
-`NeedsYouView`, driven by `NeedsYouModel`, draws each held call as a card:
+`NeedsYouView`, driven by `NeedsYouModel`, draws each held call as the iPad's
+`HeldCallCard`, on a panel edged in amber (radius 18):
 
-- KIFF's name for the call and its reason, as sent;
-- "The taf says", then the taf's own words, apart from KIFF's and drawn plain;
-- the time left, or "expired";
+- **the taf**, by the KIFF agent the call is for: its coloured square and its name, or "A taf"
+  when the list doesn't have it; and at the right **the time left, counting down every
+  second** as a clock ("8:06 left", or "1:02:05 left"), then "expired";
+- **the amount** in large rounded figures, when KIFF gives one, then KIFF's name for the call;
+- **KIFF's reason on an amber pill**;
+- "The taf says", then the taf's own words **in a box of their own**, apart from KIFF's and
+  drawn plain;
 - "Nothing is sent until you approve.";
-- **Refuse**;
+- **Refuse**, as an outlined red button the card's width;
 - on a Mac with no approval key, "This device can't approve. Approve on another device
   signed in to your account."
+
+The title is the iPad's, large and rounded, with no count under it. With no call, "Nothing
+needs you." and its hint sit on a panel.
 
 After a refusal the list is read again from KIFF: its list is the truth, not the screen's.
 A refusal KIFF doesn't take stays on the card with KIFF's reason, and the call stays listed.

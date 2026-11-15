@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
-private let one = #"{"exceptions":[{"id":"exc_1","subject":"a","action":"stripe.refund","title":"Refund a payment","reason_text":"€640 is over its €500 limit.","taf_about":"Dispute #4825","taf_reason":"The customer was charged twice.","created_at":"2026-11-14T18:00:00Z","expires_at":"2026-11-14T18:42:00Z","accounting_version":3}]}"#
+private let one = #"{"exceptions":[{"id":"exc_1","subject":"a","action":"stripe.refund","title":"Refund a payment","reason_text":"€640 is over its €500 limit.","taf_about":"Dispute #4825","taf_reason":"The customer was charged twice.","created_at":"2026-11-14T18:00:00Z","expires_at":"2026-11-14T18:42:00Z","accounting_version":3,"parameters":{"amount":64000},"parameter_units":{"amount":{"unit":"EUR","scale":2}}}]}"#
 private let none = #"{"exceptions":[]}"#
 
 @MainActor
@@ -13,6 +13,14 @@ private func model(_ answers: [(Int, String)], route: ApprovalRoute = .phoneOrPa
 }
 
 let approvalsScreenTests: [Test] = [
+    Test("a call's time left counts down as a clock, m:ss or h:mm:ss, in the shared words, and says when it expired") {
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let at = Date(timeIntervalSince1970: 1_794_679_800)
+        try expectEqual(NeedsYouView.left(until: at.addingTimeInterval(486), at: at, words: words), "8:06 left")
+        try expectEqual(NeedsYouView.left(until: at.addingTimeInterval(59), at: at, words: words), "0:59 left")
+        try expectEqual(NeedsYouView.left(until: at.addingTimeInterval(3_725), at: at, words: words), "1:02:05 left")
+        try expectEqual(NeedsYouView.left(until: at, at: at, words: words), "expired")
+    },
     Test("the list is KIFF's: loaded, counted, and read again after a refusal", awaiting: { @MainActor in
         let (model, transport) = model([(200, one), (200, "{}"), (200, none)])
         await model.load()
@@ -44,7 +52,8 @@ let approvalsScreenTests: [Test] = [
             for (name, body) in [("call", one), ("empty", none)] {
                 let (model, _) = model([(200, body)])
                 await model.load()
-                let view = NeedsYouView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800))
+                let tafs = (try? JSONDecoder().decode(Home.Page.self, from: Data(#"{"tafs":[{"name":"Refunds","kiff_agent":"a","color":1,"state":"waiting"}]}"#.utf8)))?.tafs ?? []
+                let view = NeedsYouView(model: model, tafs: tafs, now: Date(timeIntervalSince1970: 1_794_679_800))
                     .environment(\.words, Words.load(folder: strings, preferred: [language]))
                 guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else {
                     throw Failure(description: "no PNG")

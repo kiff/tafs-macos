@@ -28,6 +28,18 @@ private func refusal(_ body: @autoclosure () async throws -> Void, is code: Stri
 }
 
 let approvalsTests: [Test] = [
+    Test("a held call's amount is the first parameter KIFF names a unit for, and none without one") {
+        func call(_ fields: String) throws -> HeldCall {
+            try AccountClient.decoder.decode(HeldCall.self, from: Data(#"{"id":"e","subject":"a","action":"refund","created_at":"2026-11-14T18:00:00Z"\#(fields)}"#.utf8))
+        }
+        let named = try call(#","parameters":{"Amount":64000,"count":3},"parameter_units":{"amount":{"unit":"EUR","scale":2}}"#)
+        try expectEqual(named.amount, TafCard.Amount(minor: 64000, unit: "EUR", scale: 2))
+        try expectEqual(named.amount?.written(language: "en"), "€640")
+        // A number KIFF names no unit for is never shown as money.
+        try expectEqual(try call(#","parameters":{"count":3}"#).amount, nil)
+        try expectEqual(try call("").amount, nil)
+        try expectEqual(try call(#","parameters":"x","parameter_units":7"#).amount, nil)
+    },
     Test("a held call is read with KIFF's words as sent, and words that aren't text are left out", awaiting: {
         let (account, transport) = client([(200, held)])
         let all = try await account.heldCalls()
