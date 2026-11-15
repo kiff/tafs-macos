@@ -57,6 +57,13 @@ struct Me: Decodable, Equatable {
 
     /// The session reads everything and approves nothing here: exactly when KIFF says `view`.
     var viewOnly: Bool { approvalMode == "view" }
+
+    /// The "Signed in as" row: the email, unless it is the account's own name, as on the iPad.
+    var signedInAs: String? {
+        guard let email = email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty else { return nil }
+        if let account, email.caseInsensitiveCompare(account.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame { return nil }
+        return email
+    }
 }
 
 /// KIFF's routes for a signed-in Mac. Every request carries the session; one that KIFF wants

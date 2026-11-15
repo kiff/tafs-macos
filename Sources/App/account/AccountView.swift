@@ -31,8 +31,8 @@ enum ThemeChoice: String, CaseIterable, Identifiable {
 final class AccountModel: ObservableObject {
     /// Who is signed in, once KIFF has said; nil until then, and if it can't be read.
     @Published private(set) var me: Me?
-    /// The plan's one line, in tafs cloud's words.
-    @Published private(set) var planLine: String?
+    /// The balance, for the Plan card: tafs cloud's `plan_line` in `plan_tone`'s colour.
+    @Published private(set) var balance: Usage.Balance?
     @Published var theme: ThemeChoice
 
     private let account: AccountClient
@@ -49,7 +49,23 @@ final class AccountModel: ObservableObject {
     /// Each line is read on its own: one that can't be read is left out, never the page.
     func load() async {
         me = try? await account.me()
-        planLine = (try? await cloud.balance())?.words
+        balance = try? await cloud.balance()
+    }
+
+    /// The Account page reads only what the window's own read didn't get: `/v1/me` is read
+    /// once, not again each time the page opens.
+    func loadIfNeeded() async {
+        if me == nil { me = try? await account.me() }
+        if balance == nil { balance = try? await cloud.balance() }
+    }
+
+    /// The plan line's colour, by its tone as on the iPad.
+    var planColor: Color {
+        switch balance?.planTone {
+        case "waiting": return Theme.no
+        case "warning": return Theme.amberText
+        default: return Theme.ink
+        }
     }
 
     func choose(_ theme: ThemeChoice) {
@@ -68,6 +84,7 @@ struct AccountView: View {
     let addThisMac: () -> Void
     let signOut: () -> Void
     @State private var showingDevices = false
+    @State private var confirmingSignOut = false
 
     var body: some View {
         if showingDevices {
@@ -96,7 +113,12 @@ struct AccountView: View {
                 group(words("settings.your_account")) {
                     row(words("settings.mode"), value: words("settings.mode_kiff"))
                     divider
-                    row(words("settings.kiff_account"), value: model.me?.email ?? model.me?.account ?? "")
+                    row(words("settings.kiff_account"), value: model.me?.account ?? "")
+                    // Who signed in, when it isn't the account's own name, as on the iPad.
+                    if let email = model.me?.signedInAs {
+                        divider
+                        row(words("settings.signed_in_as"), value: email)
+                    }
                 }
                 if model.me?.viewOnly == true {
                     // Exactly when KIFF says this session is view-only.
@@ -112,21 +134,26 @@ struct AccountView: View {
                     divider
                     link(words("connect.apps.title")) { open(.connectApps) }
                 }
-                if let plan = model.planLine {
-                    group(words("settings.plan")) {
-                        Button { open(.usage) } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(verbatim: plan).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                                    Text(words("usage.title")).font(.system(size: 12)).foregroundColor(Theme.amberText)
+                // The Plan card always, as on the iPad: tafs cloud's plan line in its tone's
+                // colour when it is read, else Plan & usage alone.
+                group(words("settings.plan")) {
+                    Button { open(.usage) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                if let plan = model.balance?.planLine {
+                                    Text(verbatim: plan).font(.system(size: 16, weight: .semibold)).foregroundColor(model.planColor)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Text(words("usage.title")).font(.system(size: 13)).foregroundColor(Theme.amberText)
+                                } else {
+                                    Text(words("usage.title")).font(.system(size: 15)).foregroundColor(Theme.ink)
                                 }
-                                Spacer()
-                                chevron
                             }
-                            .padding(.vertical, 12).contentShape(Rectangle())
+                            Spacer()
+                            chevron
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 12).contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
                 group(words("settings.theme_title")) {
                     HStack(spacing: 0) {
@@ -145,15 +172,16 @@ struct AccountView: View {
                 }
                 group(words("sign_in.how_works")) {
                     Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))
-                        .font(.system(size: 13)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
+                        .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
                 }
                 group(words("settings.legal")) {
-                    action(words("settings.terms"), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
+                    action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
                     divider
-                    action(words("settings.privacy_policy"), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
+                    action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
                 }
-                group(nil) {
-                    action(words("settings.sign_out"), color: Theme.no, signOut)
+                group(words("settings.account_actions")) {
+                    // Confirmed first, so a stray click never ends the session.
+                    action(words("settings.sign_out"), color: Theme.no) { confirmingSignOut = true }
                 }
             }
             .padding(.horizontal, Look.inset)
@@ -161,7 +189,18 @@ struct AccountView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
-        .task { await model.load() }
+        .task { await model.loadIfNeeded() }
+        .alert(words("settings.sign_out_of_kiff.title"), isPresented: $confirmingSignOut) {
+            Button(words("settings.sign_out"), role: .destructive) { signOut() }
+            Button(words("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(words("settings.sign_out_of_kiff.body_device", ["device": words("device.mac")]))
+        }
+    }
+
+    /// The legal pages are in English: a label says so in any other language, as on the iPad.
+    private func legal(_ label: String) -> String {
+        words.language == "en" ? label : words("settings.legal_in_english", ["label": label])
     }
 
     /// Only tafs' own pages on kiff.dev are opened from here.

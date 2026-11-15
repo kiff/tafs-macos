@@ -24,15 +24,18 @@ let accountPageTests: [Test] = [
         await both.load()
         try expectEqual(both.me?.email, "you@example.com")
         try expectEqual(both.me?.viewOnly, true)
-        try expectEqual(both.planLine, "No limit · 2,231 credits used")
+        try expectEqual(both.balance?.planLine, "Solo · renews 1 December")
+        try expectEqual(both.balance?.planTone, "warning")
+        try expectEqual(both.planColor, Theme.amberText)
         let noPlan = make([(200, mePasskey)], [(503, "")], defaults: scratchDefaults())
         await noPlan.load()
         try expectEqual(noPlan.me?.viewOnly, false)
-        try expectEqual(noPlan.planLine, nil)
+        try expectEqual(noPlan.balance, nil)
+        try expectEqual(noPlan.planColor, Theme.ink)
         let noMe = make([(500, "")], [(200, balanceLine)], defaults: scratchDefaults())
         await noMe.load()
         try expectEqual(noMe.me, nil)
-        try expectEqual(noMe.planLine, "No limit · 2,231 credits used")
+        try expectEqual(noMe.balance?.planLine, "Solo · renews 1 December")
     }),
     Test("the theme chosen is kept for the next launch, and System is the start", awaiting: { @MainActor in
         let defaults = scratchDefaults()
@@ -60,4 +63,4 @@ let accountPageTests: [Test] = [
     }),
 ]
 
-private let balanceLine = #"{"balance":{"state":"ok","meter_pct":null,"words":"No limit · 2,231 credits used"}}"#
+private let balanceLine = #"{"balance":{"state":"ok","meter_pct":null,"words":"No limit · 2,231 credits used"},"plan_line":"Solo · renews 1 December","plan_tone":"warning"}"#

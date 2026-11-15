@@ -88,6 +88,15 @@ let accountTests: [Test] = [
         try expectEqual(silent.email, nil)
         do { _ = try await account.me(); throw Failure(description: "HTML was read") } catch let error as KIFFError { try expectEqual(error, .unreadable) }
     }),
+    Test("Signed in as is the email, unless it is the account's own name", awaiting: {
+        let (account, _) = client([(200, #"{"tenant_slug":"acme","tenant_display_name":"Acme","email":"you@example.com"}"#),
+                                   (200, #"{"tenant_slug":"you@example.com","email":"You@Example.com "}"#),
+                                   (200, #"{"tenant_slug":"acme"}"#)])
+        let named = try await account.me(), sameAsName = try await account.me(), none = try await account.me()
+        try expectEqual(named.signedInAs, "you@example.com")
+        try expectEqual(sameAsName.signedInAs, nil)
+        try expectEqual(none.signedInAs, nil)
+    }),
     Test("signing out ends the session at KIFF", awaiting: {
         let (account, transport) = client([(200, "{}")])
         try await account.signOut()
