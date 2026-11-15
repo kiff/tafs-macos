@@ -9,7 +9,7 @@ private let answeredThread = cardsThread.replacingOccurrences(of: #"{"key":"s1:p
 
 @MainActor
 private func make(_ answers: [(Int, String)]) async -> (CoachModel, CannedTransport) {
-    let transport = CannedTransport([(200, setupAnswer), (200, cardsThread)] + answers)
+    let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, cardsThread)] + answers)
     let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in })
     await model.load()
     return (model, transport)
