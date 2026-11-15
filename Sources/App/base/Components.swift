@@ -78,6 +78,8 @@ struct TafAvatar: View {
             .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(Theme.tafColor(color)))
             .accessibilityHidden(true)
+    }
+}
 
 /// The iPad's outlined button: 15 medium in ink, at least 48 high, on a continuous rounded
 /// stroke at 40%, faded while disabled.
