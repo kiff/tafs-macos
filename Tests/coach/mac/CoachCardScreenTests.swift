@@ -2,8 +2,10 @@ import Foundation
 import SwiftUI
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
-private let answeredThread = cardsThread.replacingOccurrences(of: #""options":[{"label":"Agree","value":"agree"},{"label":"Change something","value":"change"},{"label":"","value":"x"},{"label":"No value"},7],"waits":"owner""#,
-                                                              with: #""options":[{"label":"Agree","value":"agree"}],"answer":{"state":"answered","words":"Agree"}"#)
+/// The same thread once the first card is answered: tafs cloud's answer sits beside the card's
+/// component, as `{key, session, answer, component}`.
+private let answeredThread = cardsThread.replacingOccurrences(of: #"{"key":"s1:plan-1","session":"s1","component":"#,
+                                                              with: #"{"key":"s1:plan-1","session":"s1","answer":{"state":"answered","words":"Agree","at":"2026-11-15T00:30:00Z"},"component":"#)
 
 @MainActor
 private func make(_ answers: [(Int, String)]) async -> (CoachModel, CannedTransport) {

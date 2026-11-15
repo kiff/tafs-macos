@@ -10,10 +10,11 @@ enum StreamEvent: Equatable {
     case text(String)
     /// tafs cloud's word for where the run is ("Working…" lines), when it sends one.
     case state(words: String?)
-    /// A step begins, in tafs cloud's words ("Asking KIFF: List payments…").
-    case activity(words: String?)
-    /// A step ended; with tafs cloud's one line of why when it failed.
-    case step(failed: Bool, why: String?)
+    /// A step begins, in tafs cloud's words ("Asking KIFF: List payments…"), by its call.
+    case activity(words: String?, call: String?)
+    /// A step ended, by its call: `done`, `error` or `not_made` (refused back unmade); with
+    /// tafs cloud's one line of why when it failed.
+    case step(call: String?, status: String, why: String?)
     /// Something the thread now has that the stream doesn't carry: a held call, a card, a
     /// message the run read, a run that went on. The thread is read again.
     case threadChanged
@@ -33,8 +34,11 @@ enum StreamEvent: Equatable {
         case "session": return .session(message: (o["message"] as? [String: Any])?["id"] as? String)
         case "text": return (o["text"] as? String).map(StreamEvent.text)
         case "state": return .state(words: line("words"))
-        case "activity": return .activity(words: line("step"))
-        case "step": return .step(failed: o["failed"] as? Bool ?? false, why: line("why"))
+        case "activity": return .activity(words: line("step"), call: line("call_id"))
+        case "step":
+            // An older tafs cloud says only `failed`.
+            let status = line("status") ?? ((o["failed"] as? Bool ?? false) ? "error" : "done")
+            return .step(call: line("call_id"), status: status, why: line("why"))
         case "held", "taken", "component", "part": return .threadChanged
         case "end": return .end(words: line("words"))
         case "error": return .broke
@@ -66,8 +70,27 @@ struct LiveAnswer: Equatable {
     private(set) var line: String?
     /// The latest step that failed, in tafs cloud's one line.
     private(set) var trouble: String?
+    /// The steps so far, in tafs cloud's words: the list under the live line.
+    private(set) var steps: [Step] = []
+
+    struct Step: Equatable {
+        let words: String
+        /// The call it is, as tafs cloud names it: what its end is matched by.
+        var call: String? = nil
+        var done = false
+        var failed = false
+        /// Refused back unmade: nothing reached KIFF or the app. Not a failure, and not done.
+        var notMade = false
+    }
     /// The longest answer kept while it is written; the thread has it whole.
     static let longest = 200_000
+
+    /// A live step's words as the finished list has them: without the trailing "…".
+    static func plain(_ words: String) -> String {
+        var out = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        while out.hasSuffix("…") || out.hasSuffix(".") && out.hasSuffix("...") { out = String(out.dropLast(out.hasSuffix("…") ? 1 : 3)) }
+        return out.trimmingCharacters(in: .whitespaces)
+    }
 
     /// Takes one event. Answers whether the thread must be read again now.
     mutating func take(_ event: StreamEvent) -> Bool {
@@ -76,10 +99,29 @@ struct LiveAnswer: Equatable {
             if text.count < Self.longest { text += more }
         case .state(let words):
             if let words { line = words }
-        case .activity(let words):
+        case .activity(let words, let call):
             line = words
-        case .step(let failed, let why):
+            // A step with no words has no line, and isn't listed.
+            if let words, steps.count < 200 { steps.append(Step(words: Self.plain(words), call: call)) }
+        case .step(let call, let status, let why):
+            let failed = status == "error"
             if failed { trouble = why }
+            // The step that ended is the one with its call: calls may overlap, and a step with no
+            // words ends without touching a listed one. With no call named, the last open one.
+            let open: Int?
+            if let call {
+                open = steps.lastIndex { $0.call == call && !$0.done && !$0.notMade }
+            } else {
+                open = steps.lastIndex { !$0.done && !$0.notMade }
+            }
+            if let open {
+                if status == "not_made" {
+                    steps[open].notMade = true
+                } else {
+                    steps[open].done = true
+                    steps[open].failed = failed
+                }
+            }
         case .threadChanged:
             return true
         case .session, .end, .broke:

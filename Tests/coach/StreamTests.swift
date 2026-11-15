@@ -22,8 +22,8 @@ let coachStreamTests: [Test] = [
         try expectEqual(events, [
             .session(message: "m9"),
             .state(words: "Looking at Qonto…"),
-            .activity(words: "Asking KIFF: connect Qonto…"),
-            .step(failed: true, why: "Why: managed sign-in isn't set up for this app"),
+            .activity(words: "Asking KIFF: connect Qonto…", call: "c1"),
+            .step(call: "c1", status: "error", why: "Why: managed sign-in isn't set up for this app"),
             .text("I can connect "), .text("Qonto with its key."),
             .threadChanged,
             .end(words: nil),
@@ -52,10 +52,10 @@ let coachStreamTests: [Test] = [
     },
     Test("a step with no words clears the line, and a state with none keeps it") {
         var live = LiveAnswer()
-        _ = live.take(.activity(words: "Drafting the Card…"))
+        _ = live.take(.activity(words: "Drafting the Card…", call: nil))
         _ = live.take(.state(words: nil))
         try expectEqual(live.line, "Drafting the Card…")
-        _ = live.take(.activity(words: nil))
+        _ = live.take(.activity(words: nil, call: nil))
         try expectEqual(live.line, nil)
     },
     Test("the stream's request is the same message, asked for as events") {

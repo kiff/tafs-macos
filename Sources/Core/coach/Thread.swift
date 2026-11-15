@@ -13,9 +13,35 @@ enum Thread {
         /// `kickoff` (a job's instruction, shown as a small note) or `message`.
         let kind: String
         let text: String
+        /// What the run did before these words: how long it worked, and its steps.
+        var work: Work?
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
+    }
+
+    /// A run's work, on its first message: the time from its start to its last words, and the
+    /// steps it took, in tafs cloud's words. A step with no words isn't shown; its tool's name
+    /// never is.
+    struct Work: Equatable {
+        struct Step: Equatable {
+            let words: String
+            let failed: Bool
+            /// tafs cloud's one line of why it failed.
+            let why: String?
+            /// Refused back unmade: nothing reached KIFF or the app, so it isn't a failure.
+            let notMade: Bool
+        }
+        let ms: Int
+        let steps: [Step]
+
+        /// How long it worked, in the shared words by the iPad's rule: "32 s" under a minute,
+        /// else "1 min 59 s".
+        func took(_ words: Words) -> String {
+            let seconds = max(1, Int((Double(ms) / 1000).rounded()))
+            if seconds < 60 { return words("work.duration.seconds", ["seconds": String(seconds)]) }
+            return words("work.duration.minutes", ["minutes": String(seconds / 60), "seconds": String(seconds % 60)])
+        }
     }
 
     /// A card Coach or a taf showed. The run pauses on one that waits, and its answer goes
@@ -38,10 +64,47 @@ enum Thread {
         let options: [Option]
         /// `owner` when its run waits on the person; `service` when tafs cloud answers it.
         let waits: String?
-        /// What was answered, in tafs cloud's words, once it was.
+        /// tafs cloud's answer to it: `answered`, `wrote` (the person wrote past it) or
+        /// `no_answer` (it stopped waiting). Nil while none is recorded.
+        let answerState: String?
+        /// What was answered, in tafs cloud's words: only for an answer the person chose.
         let answered: String?
+        /// A plan's steps (`steps`): each with its label and whether it is done.
+        var plan: [PlanStep] = []
+        /// `info`, `success`, `warning` or `error`, for a notice.
+        var tone: String?
+        /// tafs cloud's line for a plan ("Done · 2 of 2", "Step 2 of 3: …").
+        var planLine: String?
+        /// The taf a hand-over (`result`) is about: its name, and its KIFF agent.
+        var tafName: String?
+        var tafAgent: String?
+        /// What came of a hand-over, once tafs cloud answered it.
+        var outcome: Outcome?
+        /// The tools a hand-over lists, in KIFF's words for them.
+        var tools: [String] = []
+        /// On an approval whose connection is already made: tafs cloud's line for it.
+        var connectionWords: String?
 
-        var waitsForPerson: Bool { waits == "owner" && answered == nil }
+        /// A hand-over's outcome (`answer.outcome`): the taf made, the version it became, why it
+        /// failed, or the plan it needs.
+        struct Outcome: Equatable {
+            var tafID: String?
+            var version: Int?
+            var failed: String?
+            var planNeeded: String?
+        }
+
+        struct PlanStep: Equatable {
+            let label: String
+            /// pending, active, done, failed or skipped.
+            let status: String
+        }
+
+        var isPlan: Bool { type == "steps" && !plan.isEmpty }
+        var isHandOver: Bool { type == "result" && tafName != nil }
+        var planDone: Int { plan.filter { $0.status == "done" }.count }
+
+        var waitsForPerson: Bool { waits == "owner" && answerState == nil }
         /// A choice between a few answers, which grants nothing: the only kind answered here.
         var isChoice: Bool { type == "confirm" && !options.isEmpty }
         /// A card whose answer is a signature: approving a connection or a Card.
@@ -71,10 +134,19 @@ enum Thread {
 
         enum Keys: String, CodingKey { case items, working }
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text }
-        enum CardKeys: String, CodingKey { case key, id, type, session, title, text, options, waits, answer }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
+        /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
+        /// under `component`, what tafs cloud keeps about it beside it.
+        enum CardKeys: String, CodingKey { case key, session, answer, component }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection }
+        enum PlanKeys: String, CodingKey { case label, status }
+        enum TafKeys: String, CodingKey { case name, agent }
+        enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
+        enum ConnectionKeys: String, CodingKey { case done, words }
+        enum WorkKeys: String, CodingKey { case ms, steps }
+        enum WorkStepKeys: String, CodingKey { case words, failed, error, why, notMade = "not_made" }
         enum OptionKeys: String, CodingKey { case label, value }
-        enum AnswerKeys: String, CodingKey { case words, state }
+        enum AnswerKeys: String, CodingKey { case words, state, outcome }
         enum HeldKeys: String, CodingKey { case exception }
 
         init(from decoder: Decoder) throws {
@@ -93,18 +165,40 @@ enum Thread {
                           let from = try? m.decode(String.self, forKey: .from),
                           let text = try? m.decode(String.self, forKey: .text) else { continue }
                     let at = ((try? m.decodeIfPresent(String.self, forKey: .at)) ?? nil).flatMap(Thread.time)
+                    var work: Work?
+                    if let w = try? m.nestedContainer(keyedBy: WorkKeys.self, forKey: .work), let ms = try? w.decode(Int.self, forKey: .ms), ms >= 0 {
+                        var steps: [Work.Step] = []
+                        if var list = try? w.nestedUnkeyedContainer(forKey: .steps) {
+                            while !list.isAtEnd {
+                                guard let step = try? list.nestedContainer(keyedBy: WorkStepKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                                // A step is shown by tafs cloud's words for it, never by its tool's name.
+                                guard let words = (try? step.decodeIfPresent(String.self, forKey: .words)) ?? nil,
+                                      !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                                let failed = ((try? step.decodeIfPresent(Bool.self, forKey: .failed)) ?? nil) ?? ((try? step.decodeIfPresent(Bool.self, forKey: .error)) ?? nil) ?? false
+                                steps.append(Work.Step(words: words, failed: failed, why: (try? step.decodeIfPresent(String.self, forKey: .why)) ?? nil,
+                                                       notMade: ((try? step.decodeIfPresent(Bool.self, forKey: .notMade)) ?? nil) ?? false))
+                            }
+                        }
+                        work = Work(ms: ms, steps: steps)
+                    }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
-                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text), position: position))
+                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work), position: position))
                 case "card":
-                    guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card) else { continue }
-                    func text(_ key: CardKeys) -> String? {
+                    guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
+                          let shown = try? card.nestedContainer(keyedBy: ComponentKeys.self, forKey: .component) else { continue }
+                    func outer(_ key: CardKeys) -> String? {
                         guard let value = (try? card.decodeIfPresent(String.self, forKey: key)) ?? nil,
                               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
                         return value
                     }
-                    guard let id = text(.id) ?? text(.key) else { continue }
+                    func text(_ key: ComponentKeys) -> String? {
+                        guard let value = (try? shown.decodeIfPresent(String.self, forKey: key)) ?? nil,
+                              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                        return value
+                    }
+                    guard let id = text(.id) ?? outer(.key) else { continue }
                     var options: [Card.Option] = []
-                    if var list = try? card.nestedUnkeyedContainer(forKey: .options) {
+                    if var list = try? shown.nestedUnkeyedContainer(forKey: .options) {
                         while !list.isAtEnd {
                             guard let option = try? list.nestedContainer(keyedBy: OptionKeys.self) else { _ = try? list.decode(Skipped.self); continue }
                             // An option with no value can't be answered, and one with no label can't be read.
@@ -113,10 +207,42 @@ enum Thread {
                             options.append(Card.Option(label: label, value: value))
                         }
                     }
+                    // tafs cloud's answer: shown as answered only when the person chose one, as on the iPad.
                     let answer = try? card.nestedContainer(keyedBy: AnswerKeys.self, forKey: .answer)
-                    let answered = answer.flatMap { ((try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ((try? $0.decodeIfPresent(String.self, forKey: .state)) ?? nil) }
-                    items.append(.card(Card(key: text(.key) ?? id, id: id, type: text(.type) ?? "", session: text(.session), title: text(.title),
-                                            text: text(.text), options: options, waits: text(.waits), answered: answered), position: position))
+                    let state = answer.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .state)) ?? nil }
+                    let words = answer.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+                    let answered = state == "answered" ? words.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } : nil
+                    var made = Card(key: outer(.key) ?? id, id: id, type: text(.type) ?? "", session: outer(.session), title: text(.title),
+                                    text: text(.text), options: options, waits: text(.waits), answerState: state, answered: answered)
+                    if var list = try? shown.nestedUnkeyedContainer(forKey: .steps) {
+                        while !list.isAtEnd {
+                            guard let step = try? list.nestedContainer(keyedBy: PlanKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                            guard let label = try? step.decode(String.self, forKey: .label), !label.isEmpty else { continue }
+                            made.plan.append(Card.PlanStep(label: label, status: ((try? step.decodeIfPresent(String.self, forKey: .status)) ?? nil) ?? "pending"))
+                        }
+                    }
+                    made.planLine = text(.line)
+                    made.tone = text(.tone)
+                    if let taf = try? shown.nestedContainer(keyedBy: TafKeys.self, forKey: .taf) {
+                        func named(_ key: TafKeys) -> String? { ((try? taf.decodeIfPresent(String.self, forKey: key)) ?? nil).flatMap { $0.isEmpty ? nil : $0 } }
+                        made.tafName = named(.name)
+                        made.tafAgent = named(.agent)
+                    }
+                    if let o = try? answer?.nestedContainer(keyedBy: OutcomeKeys.self, forKey: .outcome) {
+                        var outcome = Card.Outcome()
+                        outcome.tafID = (try? o.decodeIfPresent(String.self, forKey: .tafID)) ?? nil
+                        outcome.version = (try? o.decodeIfPresent(Int.self, forKey: .version)) ?? nil
+                        outcome.failed = (try? o.decodeIfPresent(String.self, forKey: .failed)) ?? nil
+                        struct Needed: Decodable { let words: String? }
+                        outcome.planNeeded = ((try? o.decodeIfPresent(Needed.self, forKey: .planNeeded)) ?? nil)?.words
+                        made.outcome = outcome
+                    }
+                    made.tools = (((try? shown.decodeIfPresent([String].self, forKey: .tools)) ?? nil) ?? []).filter { !$0.isEmpty }
+                    if let connection = try? shown.nestedContainer(keyedBy: ConnectionKeys.self, forKey: .connection),
+                       ((try? connection.decodeIfPresent(Bool.self, forKey: .done)) ?? nil) == true {
+                        made.connectionWords = ((try? connection.decodeIfPresent(String.self, forKey: .words)) ?? nil).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+                    }
+                    items.append(.card(made, position: position))
                 case "held":
                     guard let held = try? item.nestedContainer(keyedBy: HeldKeys.self, forKey: .held),
                           let exception = try? held.decode(String.self, forKey: .exception) else { continue }
@@ -216,6 +342,21 @@ extension CloudClient {
             throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
         }
         var fields = ["answer": option.value]
+        if let session = card.session { fields["session"] = session }
+        _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
+    }
+
+    /// Says no to a card whose answer would be a signature: `declined` for an approval, `not now`
+    /// for a sign-in. Saying no grants nothing, so it needs no signature. These two words are
+    /// the only answers this app ever sends such a card.
+    func decline(_ card: Thread.Card, in taf: String) async throws {
+        let word: String
+        switch card.type {
+        case "approval": word = "declined"
+        case "sign_in": word = "not now"
+        default: throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
+        }
+        var fields = ["answer": word]
         if let session = card.session { fields["session"] = session }
         _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
     }

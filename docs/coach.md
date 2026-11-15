@@ -28,6 +28,30 @@ The app draws the list as it comes. It places and folds nothing itself.
   an empty chat.
 - With no Coach, or an empty chat: "Ask anything about your tafs".
 
+## What a conversation carries (`Thread`, `LiveAnswer`, `Rich`)
+
+A card item is `{key, session, answer?, component: {…}}`, as tafs cloud's `ThreadComponent`
+sends it: what the agent showed (`id`, `type`, `title`, `text`, `options`, `waits`, …) is
+read from `component`, and the card's key, its chat and tafs cloud's answer from beside it.
+
+| Read | From | What |
+|---|---|---|
+| A run's work | a message's `work`: `ms`, `steps[]` | How long it worked, in the shared words by the iPad's rule ("32 s" under a minute, else "1 min 59 s"), and each step by tafs cloud's `words`, failed or not, with its one line of `why`. A step with no words is left out; a tool's name is never kept. A step refused back unmade (`not_made`) isn't a failure. |
+| A plan | a `steps` component's `steps[]` (`label`, `status`) and `line` | Each step and where it stands, and tafs cloud's line for it ("Step 2 of 3: …"). |
+| A notice | a component's `tone` | `info`, `success`, `warning` or `error`. |
+| A hand-over | a `result` component's `taf` (`name`, `agent`) and `tools`; the card's `answer.outcome` | The taf it is about, by its agent, and its tools in KIFF's words; once tafs cloud answered it, what came of it: the taf made (`taf_id`), a `version`, why it `failed`, or `plan_needed`. A component's own `taf_id` is a dial card's, never the hand-over's. |
+| An answer | the card's `answer.state` and `words` | Shown as answered only when the person chose (`answered`). One they wrote past (`wrote`) or that stopped waiting (`no_answer`) waits no more, and shows no answer. |
+| A connection already made | an approval component's `connection`, when `done` | tafs cloud's line for it. |
+| The live steps | the stream's `activity {step, call_id}` and `step {call_id, status}` | Listed as they come, without the trailing "…", and each ended **by its call**: calls may overlap, and a step with no words ends without touching a listed one. `done`, `error` (failed) or `not_made` (its own state, not done). At most 200. |
+
+- **Coach's words are read as the iPad's `MarkdownText` reads them**, so no mark shows as
+  written (`Rich`): bold, italic, inline code, headings, bulleted and numbered items. **A link
+  is drawn as its label only, and an image as its words: nothing leads anywhere.** HTML and a
+  mark with no partner stay as written. Text over 20,000 characters is left plain.
+- **Declining** (`CloudClient.decline`) sends `declined` to an approval and `not now` to a
+  sign-in, and refuses any other card before anything is sent. Saying no grants nothing, so
+  it is never signed. Those two words are the only answers this app ever sends such a card.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
@@ -123,4 +147,5 @@ that grant authority come with their approval.
 `scripts/test.sh coach`: Coach or none, no time zone sent, the thread in tafs cloud's order,
 items that don't read, a card's key, an unreadable answer; what is and isn't a message, the
 send's exact body, each refusal, the following's pace and its limit, Retry, and both answers
-to the consent. It writes `build/screenshots/coach-*.png`.
+to the consent; a run's work, each kind of card, declining, the live steps, and what `Rich`
+reads. It writes `build/screenshots/coach-*.png`.

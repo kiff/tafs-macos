@@ -4,11 +4,11 @@ private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", s
 
 let cardsThread = #"""
 {"working":false,"items":[
-  {"type":"card","card":{"id":"plan-1","key":"s1:plan-1","type":"confirm","session":"s1","title":"Refunds up to €100","text":"It refunds on its own up to €100, and asks you above.","options":[{"label":"Agree","value":"agree"},{"label":"Change something","value":"change"},{"label":"","value":"x"},{"label":"No value"},7],"waits":"owner"}},
-  {"type":"card","card":{"id":"plan-0","key":"s1:plan-0","type":"confirm","options":[{"label":"Agree","value":"agree"}],"answer":{"state":"answered","words":"Agree","at":"2026-11-14T18:00:00Z"}}},
-  {"type":"card","card":{"id":"approval-1","key":"s1:approval-1","type":"approval","session":"s1","title":"Connect Qonto","options":[{"label":"Approve","value":"approved"}],"waits":"owner"}},
-  {"type":"card","card":{"id":"signin-1","key":"s1:signin-1","type":"sign_in","waits":"owner"}},
-  {"type":"card","card":{"type":"confirm"}}
+  {"type":"card","card":{"key":"s1:plan-1","session":"s1","component":{"id":"plan-1","type":"confirm","title":"Refunds up to €100","text":"It refunds on its own up to €100, and asks you above.","options":[{"label":"Agree","value":"agree"},{"label":"Change something","value":"change"},{"label":"","value":"x"},{"label":"No value"},7],"waits":"owner"}}},
+  {"type":"card","card":{"key":"s1:plan-0","answer":{"state":"answered","words":"Agree","at":"2026-11-14T18:00:00Z"},"component":{"id":"plan-0","type":"confirm","options":[{"label":"Agree","value":"agree"}]}}},
+  {"type":"card","card":{"key":"s1:approval-1","session":"s1","component":{"id":"approval-1","type":"approval","title":"Connect Qonto","options":[{"label":"Approve","value":"approved"}],"waits":"owner"}}},
+  {"type":"card","card":{"key":"s1:signin-1","component":{"id":"signin-1","type":"sign_in","waits":"owner"}}},
+  {"type":"card","card":{"component":{"type":"confirm"}}}
 ]}
 """#
 

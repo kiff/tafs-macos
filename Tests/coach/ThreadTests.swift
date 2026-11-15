@@ -7,8 +7,8 @@ let threadAnswer = #"""
 {"messages":[],"components":[],"working":true,"items":[
   {"type":"message","message":{"id":"m1","at":"2026-11-14T18:00:00.000Z","from":"owner","kind":"message","text":"Connect Qonto for my refunds taf","session":"s1"}},
   {"type":"message","message":{"id":"m2","at":"2026-11-14T18:00:20Z","from":"taf","kind":"message","text":"I can connect Qonto. **Approve** its Card to go on.","session":"s1"}},
-  {"type":"card","card":{"id":"confirm-1","key":"s1:confirm-1","type":"confirm","waits":"owner"}},
-  {"type":"card","card":{"id":"result-1","key":"s1:result-1","type":"result","waits":"service"}},
+  {"type":"card","card":{"key":"s1:confirm-1","component":{"id":"confirm-1","type":"confirm","waits":"owner"}}},
+  {"type":"card","card":{"key":"s1:result-1","component":{"id":"result-1","type":"result","waits":"service"}}},
   {"type":"held","held":{"exception":"exc_1","run":"r1","session":"s1","at":"2026-11-14T18:01:00Z"}},
   {"type":"drive","drive":{"id":"d1"}},
   {"type":"message","message":{"from":"taf"}},
@@ -52,7 +52,7 @@ let coachThreadTests: [Test] = [
         try expectEqual(page.waitsForPerson, true)
     }),
     Test("a card is known by its key, never only by the name the model gave it") {
-        let both = #"{"items":[{"type":"card","card":{"id":"confirm-1","key":"s2:confirm-1","waits":"owner"}},{"type":"card","card":{"id":"confirm-1","key":"s3:confirm-1"}}]}"#
+        let both = #"{"items":[{"type":"card","card":{"key":"s2:confirm-1","component":{"id":"confirm-1","waits":"owner"}}},{"type":"card","card":{"key":"s3:confirm-1","component":{"id":"confirm-1"}}}]}"#
         let page = try JSONDecoder().decode(Thread.Page.self, from: Data(both.utf8))
         let keys: [String] = page.items.compactMap { if case .card(let card, _) = $0 { return card.key } else { return nil } }
         try expectEqual(keys, ["s2:confirm-1", "s3:confirm-1"])
