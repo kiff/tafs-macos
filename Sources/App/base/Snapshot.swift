@@ -9,9 +9,15 @@ enum Snapshot {
         host.frame = CGRect(origin: .zero, size: size)
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         host.layoutSubtreeIfNeeded()
-        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+        guard let bitmap = canvas(host) else { return nil }
         host.cacheDisplay(in: host.bounds, to: bitmap)
         return bitmap
+    }
+
+    /// A bitmap for `host`, in sRGB whatever screen the Mac has: the app's colours are sRGB, so a
+    /// colour read back is the one drawn. A runner's screen profile would otherwise move them.
+    private static func canvas(_ host: NSView) -> NSBitmapImageRep? {
+        host.bitmapImageRepForCachingDisplay(in: host.bounds)?.retagging(with: .sRGB)
     }
 
     /// The same view drawn until `drawn` holds for its bitmap, up to `tries` times, in one host
@@ -33,7 +39,7 @@ enum Snapshot {
         var last: NSBitmapImageRep?
         for _ in 0..<tries {
             host.layoutSubtreeIfNeeded()
-            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
+            guard let bitmap = canvas(host) else { return nil }
             host.cacheDisplay(in: host.bounds, to: bitmap)
             last = bitmap
             if drawn(bitmap) { return bitmap }
