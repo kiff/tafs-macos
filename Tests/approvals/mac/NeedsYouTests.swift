@@ -44,6 +44,14 @@ let approvalsScreenTests: [Test] = [
         await model.load()
         try expectEqual(model.state, .unread(why: "500"))
     }),
+    Test("Did this happen?'s amount reads as the iPad's Money, and its line shows only where the Mac approves elsewhere") {
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        try expectEqual(NeedsYouView.amount(TafCard.Amount(minor: 725, unit: nil, scale: 0), words: words), "725 (no currency)")
+        try expectEqual(NeedsYouView.amount(TafCard.Amount(minor: 4000, unit: "EUR", scale: 2), words: words), "€40")
+        try expectEqual(NeedsYouView.saysCantApprove(answersHolds: true, route: .phoneOrPasskey), true)
+        try expectEqual(NeedsYouView.saysCantApprove(answersHolds: true, route: .touchID), false)
+        try expectEqual(NeedsYouView.saysCantApprove(answersHolds: false, route: .phoneOrPasskey), false)
+    },
     Test("Did this happen? is read only for someone who answers held calls, and a failed read keeps the list", awaiting: { @MainActor in
         let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","words":"Refund a payment: 40.00 EUR."}]}"#
         let (model, transport) = model([(200, list), (500, "")])

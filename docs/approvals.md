@@ -39,7 +39,7 @@ Approving with Touch ID, on the phone and with a passkey each arrive in their ow
 ## Did this happen?
 
 As the iPad's `DidThisHappenCard` and `loadUnproven` (`NeedsYouView.swift:22-23, 95-136`,
-`AppModel.swift:2118-2133`, `KIFFClient.swift:1623-1670`): KIFF's money calls whose outcome
+`AppModel.swift:2125-2136`, `KIFFClient.swift:1625-1670`): KIFF's money calls whose outcome
 it can't prove (`GET /v1/me/did-this-happen`), read when Needs you opens, only for someone
 who answers held calls (KIFF's `holds.answer`; a KIFF that doesn't say leaves it to KIFF). A
 read that fails keeps the list.
@@ -49,7 +49,10 @@ read that fails keeps the list.
 - **The answer is signed like an approval**, which this Mac can't do yet. So for someone who
   answers held calls, the card says to approve on another device
   (`approval.device_can_not_approve_approve`, the iPad's `Biometry.short` where an approval
-  can't be made), as the held calls do, and has no Yes or No.
+  can't be made), as the held calls do, and has no Yes or No. The line shows only on a Mac
+  that approves elsewhere (`.phoneOrPasskey`), where the iPad's `ApprovalGate` would show
+  `ApprovalNotReady`; a Mac with its own approval key shows neither until its Yes or No is ported.
+- An amount with no unit is drawn whole, "725 (no currency)", as the iPad's `Money` keeps it.
 - "Nothing waiting" shows only when there's nothing to say about either.
 
 ## Tests

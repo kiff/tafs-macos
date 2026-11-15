@@ -21,8 +21,9 @@ struct Unproven: Decodable, Equatable, Identifiable {
     let statusWords: String?
 
     var id: String { proposal }
-    /// Its amount, as the iPad's `money`: two places when KIFF doesn't say.
-    var money: TafCard.Amount? { amount.map { TafCard.Amount(minor: $0, unit: unit, scale: scale ?? 2) } }
+    /// Its amount, as the iPad's `money` (`Money(minor:currency:scale: scale ?? 2)`): two places
+    /// when KIFF doesn't say, and none for an amount with no unit, as `Money.init` keeps it.
+    var money: TafCard.Amount? { amount.map { TafCard.Amount(minor: $0, unit: unit, scale: unit == nil ? 0 : (scale ?? 2)) } }
 
     enum CodingKeys: String, CodingKey { case proposal, agent, tool, title, status, amount, unit, scale, at, words, statusWords = "status_words" }
     init(from decoder: Decoder) throws {

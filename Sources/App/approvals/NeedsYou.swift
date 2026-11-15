@@ -38,6 +38,8 @@ final class NeedsYouModel: ObservableObject {
 
     /// Reads "Did this happen?" from KIFF, for someone who answers held calls, as the iPad's
     /// `loadUnproven`. A read that fails keeps the list: it's read again next time.
+    /// The model lives and dies with the signed-in window, so a read that ends after a sign-out
+    /// lands on a model no longer shown: the iPad's `gen == accountGeneration` check comes to that.
     func loadUnproven(answersHolds: Bool) async {
         guard answersHolds, let calls = try? await account.didThisHappen() else { return }
         unproven = calls
@@ -129,13 +131,12 @@ struct NeedsYouView: View {
             Text(verbatim: call.words ?? call.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 .fixedSize(horizontal: false, vertical: true)
             if call.words == nil, let money = call.money {
-                Text(verbatim: money.unit == nil ? words("card.no_currency", ["amount": money.written(language: words.language)]) : money.written(language: words.language))
-                    .font(.system(size: 15)).foregroundColor(Theme.ink)
+                Text(verbatim: Self.amount(money, words: words)).font(.system(size: 15)).foregroundColor(Theme.ink)
             }
             if let why = call.statusWords {
                 Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
-            if answersHolds {
+            if Self.saysCantApprove(answersHolds: answersHolds, route: model.route) {
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -145,6 +146,19 @@ struct NeedsYouView: View {
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
         .accessibilityElement(children: .contain)
+    }
+
+    /// An amount as the iPad's `Money.formatted`: with its unit, or saying it has none.
+    static func amount(_ money: TafCard.Amount, words: Words) -> String {
+        let figure = money.written(language: words.language)
+        return money.unit == nil ? words("card.no_currency", ["amount": figure]) : figure
+    }
+
+    /// Where the iPad's `ApprovalGate` shows `ApprovalNotReady`: someone who answers held calls,
+    /// on a Mac that approves elsewhere, as the held calls' card says it. A Mac with its own
+    /// approval key gets neither the line nor the buttons until its Yes or No is ported.
+    static func saysCantApprove(answersHolds: Bool, route: ApprovalRoute) -> Bool {
+        answersHolds && route == .phoneOrPasskey
     }
 
     private func card(_ call: HeldCall) -> some View {

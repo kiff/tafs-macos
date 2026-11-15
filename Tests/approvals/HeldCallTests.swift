@@ -128,8 +128,9 @@ let approvalsTests: [Test] = [
         try expectEqual(calls[0].statusWords, "Its answer was lost.")
         try expectEqual(calls[1].title, "")
         try expectEqual(calls[1].status, "unknown")
-        // Two places when KIFF doesn't say, as the iPad's `money`.
-        try expectEqual(calls[1].money, TafCard.Amount(minor: 725, unit: nil, scale: 2))
+        // No unit is no places, as the iPad's `Money.init`; a unit without a scale is two.
+        try expectEqual(calls[1].money, TafCard.Amount(minor: 725, unit: nil, scale: 0))
+        try expectEqual(calls[0].money, TafCard.Amount(minor: 4000, unit: "EUR", scale: 2))
         let empty = try await account.didThisHappen()
         try expectEqual(empty, [])
         let noProposal = try? await account.didThisHappen()
