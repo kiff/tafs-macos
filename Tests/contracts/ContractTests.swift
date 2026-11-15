@@ -5,7 +5,7 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "recipes-home.json"]
+private let read = ["ai-consent.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json"]
 private let notYet = [
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
@@ -14,10 +14,6 @@ private let notYet = [
     "taf-setup.json": "a taf's Setup tab, with the taf page",
     "taf-setup-connected.json": "a taf's Setup tab's connections, with the taf page",
     "taf-setup-reconnect.json": "a taf's Setup tab's connections, with the taf page",
-    "taf-runs.json": "the Overview's Last result",
-    "taf-run-report.json": "the Overview's Last result",
-    "taf-run-report-running.json": "the Overview's Last result",
-    "taf-run-report-terminated.json": "the Overview's Last result",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
@@ -30,6 +26,13 @@ private func cases(_ file: String) throws -> [(name: String, status: Int, body: 
         }
         return (name, status, try JSONSerialization.data(withJSONObject: body))
     }
+}
+
+/// A fixture's one answer (`{about, answer}`), as the bytes the app would read.
+private func answer(_ file: String) throws -> Data {
+    let root = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(file))) as? [String: Any]
+    guard let answer = root?["answer"] else { throw Failure(description: "\(file) has no answer") }
+    return try JSONSerialization.data(withJSONObject: answer)
 }
 
 let contractsTests: [Test] = [
@@ -76,6 +79,25 @@ let contractsTests: [Test] = [
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":{"shown":false,"words":"Pick a job."}}"#.utf8)).line, nil)
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":7}"#.utf8)).line, nil)
         try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data("{}".utf8)).line, nil)
+    },
+    Test("a taf's runs and a run's report read as tafs cloud answers, and give the Overview's Last result") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let runs = try AccountClient.decoder.decode(Runs.Page.self, from: answer("taf-runs.json")).runs
+        try expectEqual(runs.map(\.session), ["sess3", "sess1"])
+        try expectEqual(runs[0].error, nil)
+        try expect(runs[1].error?.isEmpty == false, "why the second stopped")
+        let ended = try AccountClient.decoder.decode(Runs.Report.self, from: answer("taf-run-report.json"))
+        let running = try AccountClient.decoder.decode(Runs.Report.self, from: answer("taf-run-report-running.json"))
+        let stopped = try AccountClient.decoder.decode(Runs.Report.self, from: answer("taf-run-report-terminated.json"))
+        try expectEqual([ended.status, running.status, stopped.status], ["idle", "running", "terminated"])
+        let time: (Date) -> String = { _ in "12:00" }
+        // An ended run: its answer's first line.
+        try expectEqual(Runs.line(latest: runs[0], newest: runs[0], report: ended, words: words, time: time), ended.text.components(separatedBy: "\n")[0])
+        // A run still working has no answer yet: when it last ran.
+        try expectEqual(Runs.line(latest: runs[0], newest: runs[0], report: running, words: words, time: time), "Last ran at 12:00")
+        // A run that stopped on an error: why, from the runs list, since a report never says.
+        try expectEqual(Runs.line(latest: runs[1], newest: runs[1], report: stopped, words: words, time: time), runs[1].error)
+        try expectEqual(Runs.line(latest: nil, newest: nil, report: nil, words: words, time: time), "Nothing yet")
     },
     Test("the consent's words come in the person's language, as sent") {
         let french = try cases("ai-consent.json").first { $0.name.contains("French") }

@@ -11,6 +11,8 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var state: State = .loading
     /// tafs cloud's line for an account with no taf yet, for the sidebar.
     @Published private(set) var noTafsLine: String?
+    /// Each taf's Last result, by its id at tafs cloud, once read.
+    @Published private(set) var lastResults: [String: String] = [:]
     private let cloud: CloudClient
 
     init(cloud: CloudClient) { self.cloud = cloud }
@@ -31,6 +33,21 @@ final class OverviewModel: ObservableObject {
         do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
         // The line is only an invitation: if it can't be read, the sidebar just doesn't show one.
         noTafsLine = (try? await cloud.homeWords())?.line
+    }
+
+    /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
+    /// Only while the Overview is shown, and once a taf; one that can't be read stays "–".
+    func loadLastResults(words: Words) async {
+        let clock = DateFormatter()
+        clock.dateStyle = .none
+        clock.timeStyle = .short
+        for taf in tafs {
+            guard let id = taf.tafID, lastResults[id] == nil, let runs = try? await cloud.runs(of: id) else { continue }
+            let latest = Runs.latest(runs)
+            var report: Runs.Report?
+            if let session = latest?.session { report = try? await cloud.report(of: id, session: session) }
+            lastResults[id] = Runs.line(latest: latest, newest: runs.first, report: report, words: words, time: { clock.string(from: $0) })
+        }
     }
 }
 
@@ -68,6 +85,7 @@ struct OverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
+        .task { await model.loadLastResults(words: words) }
     }
 
     /// NEEDS YOU, as the iPad's: one row per held call, then a row for the rest tafs cloud
@@ -144,7 +162,7 @@ struct OverviewView: View {
             Group {
                 Text(verbatim: taf.now ?? "–").foregroundColor(Theme.ink)
                 Text(verbatim: taf.cards.first?.line(words) ?? "–").foregroundColor(Theme.ink)
-                Text(verbatim: "–").foregroundColor(Theme.soft).lineLimit(2)
+                Text(verbatim: taf.tafID.flatMap { model.lastResults[$0] } ?? "–").foregroundColor(Theme.soft).lineLimit(2)
             }
             .font(.system(size: 13))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,3 +170,4 @@ struct OverviewView: View {
         .accessibilityElement(children: .combine)
     }
 }
+
