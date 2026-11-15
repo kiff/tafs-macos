@@ -5,15 +5,13 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json"]
+private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json", "taf-setup-connected.json", "taf-setup-reconnect.json"]
 private let notYet = [
     "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
-    "taf-setup-connected.json": "a taf's Setup tab's connections, with the taf page",
-    "taf-setup-reconnect.json": "a taf's Setup tab's connections, with the taf page",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
@@ -150,10 +148,33 @@ let contractsTests: [Test] = [
         try expectEqual(setup.workflow, TafSetup.Part(title: "Workflow", summary: "Ask Coach to set its workflow"))
         try expectEqual(setup.memory, TafSetup.Part(title: "0 notes", summary: nil))
         try expectEqual(setup.versions, TafSetup.Part(title: "Changes to how it runs", summary: "Runs its original definition"))
+        try expectEqual(setup.connections, [])
+        try expectEqual(setup.connectAgain, nil)
         try expect(setup.connectionsError?.isEmpty == false, "tafs cloud's line for unread connections")
         try expectEqual(setup.exceptions.map(\.title), ["Rae needs a USD limit"])
         try expect(setup.exceptions[0].words?.isEmpty == false, "its words")
         try expect(setup.exceptions[0].history?.isEmpty == false, "its history")
+    },
+    Test("a taf's Setup lists its connections, and says when one must connect again, as tafs cloud answers") {
+        let connected = try AccountClient.decoder.decode(TafSetup.self, from: answer("taf-setup-connected.json"))
+        try expectEqual(connected.connections.count, 1)
+        let app = connected.connections[0]
+        try expect(!app.name.isEmpty, "its name")
+        try expectEqual(app.reconnect, false)
+        try expect(app.statusWords?.isEmpty == false, "its status in words")
+        try expect(app.actionWords?.isEmpty == false, "its actions in words")
+        try expect(!app.actions.isEmpty && !app.actions[0].title.isEmpty, "each action's title")
+        try expect(app.statsWords?.isEmpty == false, "its week in words")
+        try expectEqual(app.actionCount, 1)
+        try expectEqual(app.running, false)
+        // Its week opens the taf's Activity with tafs cloud's own query, kept as a query.
+        try expect(app.activityQuery.flatMap(CloudClient.activityQuery) != nil, "its Activity query")
+        try expectEqual(TafSetup.nodes(connected.connections).map(\.app.id), [app.id])
+        try expectEqual(connected.connectAgain, nil)
+        let expired = try AccountClient.decoder.decode(TafSetup.self, from: answer("taf-setup-reconnect.json"))
+        try expectEqual(expired.connections.map(\.reconnect), [true])
+        try expect(expired.connectAgain?.title.isEmpty == false, "Connect again's title")
+        try expect(expired.connectAgain?.words?.isEmpty == false, "Connect again's words")
     },
     Test("the consent's words come in the person's language, as sent") {
         let french = try cases("ai-consent.json").first { $0.name.contains("French") }

@@ -53,4 +53,22 @@ let tafTabsTests: [Test] = [
         try expectEqual(setup.memory, TafSetup.Part(title: "1 note", summary: "Refunds over €100 need the receipt"))
         try expectEqual(setup.workflow, TafSetup.Part(title: "Workflow", summary: "Reads cases"))
     },
+    Test("connections are one node per app: the one with actions, else one to sign in again, else the first") {
+        func app(_ id: String, _ name: String, count: Int = 0, reconnect: Bool = false) -> String {
+            #"{"id":"\#(id)","name":"\#(name)","action_count":\#(count),"reconnect":\#(reconnect)}"#
+        }
+        let json = "{\"workflow\":{\"title\":\"W\"},\"connections\":[" + [app("s1", "Stripe"), app("g1", "Gmail", reconnect: true), app("s2", "Stripe", count: 2), app("g2", "Gmail"), app("q1", "Qonto")].joined(separator: ",") + "]}"
+        let setup = try JSONDecoder().decode(TafSetup.self, from: Data(json.utf8))
+        let nodes = TafSetup.nodes(setup.connections)
+        try expectEqual(nodes.map(\.app.id), ["s2", "g1", "q1"])
+        try expectEqual(nodes.map { $0.others.map(\.id) }, [["s1"], ["g2"], []])
+    },
+    Test("an app's Activity is asked for with tafs cloud's query as written, and only a query is sent", awaiting: {
+        let transport = CannedTransport([(200, #"{"entries":[]}"#), (200, #"{"entries":[]}"#)])
+        let client = CloudClient(transport: transport, session: session)
+        _ = try await client.activity(of: "taf-1", query: "tools=fetch_emails&from=2026-10-22T10%3A00%3A00.000Z")
+        _ = try await client.activity(of: "taf-1", query: "x=1#frag/../../v1/other")
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf%2D1/activity?tools=fetch_emails&from=2026-10-22T10%3A00%3A00.000Z",
+                                                     "/v1/tafs/taf%2D1/activity?filter=all"])
+    }),
 ]

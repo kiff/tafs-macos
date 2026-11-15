@@ -53,15 +53,16 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
 | Tab | Route | Drawn |
 |---|---|---|
 | Activity | `GET /v1/tafs/{id}/activity?filter=` | The taf's first Card in one line ("€1,960 left today of €2,000", its title), which opens the Card tab; what waits on the Card for want of a unit; tafs cloud's `filters` as pills, each asked for again with its id; then its calls by day (`groups`, else `entries` as one list): each with its kind's dot as the iPad's (done and approved green; refused, not done and revoked red; held, sending and any other kind amber), its `title`, `detail`, `time`, and `amount_text` under the time; while `next_cursor` is sent, the next page when the list's end shows (`&cursor=`), an untitled first day carrying on the last; and `end_words` under the last page. |
-| Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber), then the workflow, the line for connections that couldn't be read, the versions, each by tafs cloud's `title` and `summary`, and under "What it remembers" the notes' `title` and `latest` note. The connections' line is red, with Try again. Someone who doesn't manage the taf is refused: the tab says it couldn't be read. |
+| Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber); tafs cloud's **Connect again** words when the taf's own sign-in expired (`connect_again`, edged in amber); the workflow; under "Connected apps", **one row per app**, as the iPad's `TafPresentationViews.swift` (`ConnectedToolsRing`'s nodes, as a list): connections to the same app are grouped, the one shown is the first with actions (`action_count`), else one to sign in again, else the first; each row its name, `action_words` (green while `running`, else soft) and `status_words` (amber when it must sign in again). A row opens the app's sheet (`ConnectedAppSheet`): its status, what it may do (each action's title, its `limits` and `step_words`), its week (`stats.words`), which opens the taf's Activity with tafs cloud's `stats.activity_query` (sent only as a query; disabled with no actions), and the other sign-ins to the same app. Sign in again and Disconnect wait for approvals; the line for connections that couldn't be read; then the versions, by tafs cloud's `title` and `summary`, and under "What it remembers" the notes' `title` and `latest` note. The connections' line is red, with Try again. Someone who doesn't manage the taf is refused: the tab says it couldn't be read. |
 
 - **Everything is drawn as sent**, with `Text(verbatim:)`. The app words no call, no part and
   no filter.
 - A call, a day, a filter or an exception that doesn't read is left out, never the tab. An
   Activity with neither `groups` nor `entries`, or a Setup with none of its parts, is
   unreadable.
-- **Not yet:** the connections' and the workflow steps' rows (the contract has none to read
-  them by), the Card-unit exception's "Add a limit" (it goes through Coach, with its approval),
+- **Not yet:** the workflow steps' rows (the contract has none to read them by), the
+  Connect again button (a sign-in, on the phone for now), opening an app's week in Activity
+  (`stats.activity_query`), the Card-unit exception's "Add a limit" (it goes through Coach, with its approval),
   Forget a note, Pause, and asking again with the `revision` as `If-None-Match`.
 
 ## Tests
