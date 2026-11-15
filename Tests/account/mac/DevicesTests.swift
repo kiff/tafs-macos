@@ -61,14 +61,17 @@ let accountScreenTests: [Test] = [
     }),
     Test("a Mac that can't approve draws no Sign out for another device, and never sends a removal", awaiting: { @MainActor in
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        // Drawing the screen reads the list again (its `.task`), so the list is answered twice.
-        let (without, transport) = model([(200, two), (200, two), (200, two)], canRemoveOthers: false)
+        // The screen is drawn from a model of its own: drawing reads the list again (its
+        // `.task`), as often as the system draws, so the model under test sees only its own calls.
+        let (drawn, _) = model([(200, two), (200, two), (200, two), (200, two)], canRemoveOthers: false)
+        await drawn.load()
+        try expect(!draws(Palette.no.light, in: DevicesView(model: drawn), words: words), "no red Sign out is drawn")
+        let (without, transport) = model([(200, two)], canRemoveOthers: false)
         await without.load()
         guard case .loaded(let devices) = without.state else { throw Failure(description: "not loaded") }
-        try expect(!draws(Palette.no.light, in: DevicesView(model: without), words: words), "no red Sign out is drawn")
         await without.remove(devices[1])
-        // Only reads, however many the drawing made: no removal is ever sent.
-        try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
+        // Its one read, and no removal.
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/devices"])
         try expectEqual(without.state, .loaded(devices))
         // Each row opens its device's sheet. This Mac's has Sign out, in red, so the check can
         // find it; another device's says it takes a device that can approve, with no red.

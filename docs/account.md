@@ -69,6 +69,9 @@ to approve. So:
 then KIFF ends the session and the Mac forgets it. A view-only device can always leave.
 
 `scripts/test.sh account` writes `build/screenshots/devices-*.png`.
+The screen's own reads (its `.task`, run as often as macOS draws it) are never counted: a
+test that draws the screen draws it from a model of its own, and the model under test sees
+only the calls it makes.
 
 ## The Account page (`AccountView`, `AccountModel`)
 
