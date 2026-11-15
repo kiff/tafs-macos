@@ -1,8 +1,9 @@
 # Connect apps
 
 The account's own connections, then the catalog of apps a taf can use. **This screen lists.**
-An app is connected through Coach, where its Card is approved with it; that flow arrives
-with Coach.
+An app is connected through Coach, where its Card is approved with it, so the row's Connect
+and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends nothing but
+`GET`.
 
 ## What is read (`Apps`, `CloudClient.apps(_:cursor:)`)
 
@@ -17,6 +18,8 @@ with Coach.
 | How it connects | `method`, else `how`, through the shared lines `connect.how.*` |
 | Which tafs use it | `used_by[].name`, through `connect.apps.used_by`; a user that doesn't read is left out |
 | Which list it is in | `state`: `connected` and `needs_reconnect` are **Yours**, the rest **Discover** |
+| The app's icon | `logo`, only as tafs cloud's own `/v1/logos/` and 32 lowercase hex digits (`Apps.logoPath`), as the iPad keeps it; any other address is dropped |
+| "Not listed? Ask Coach" | `by_key`: `true` only; anything else reads as false |
 
 - A connection to sign in again has its line in amber.
 - A row this app can't read is left out. An answer with no list is unreadable, never "No app
@@ -30,8 +33,8 @@ Laid out as the iPad's: the large title with the search box at its top right, th
 panels.
 
 - **Yours** is a table with the iPad's columns (`ConnectColumns`: the app at least 200 wide,
-  How 150, Whose 130, Status 230, 12 apart): **App** (its initial's square, its name and what
-  this entry is), **How it connects** ("With a key" when tafs cloud's `method`, or an older
+  How 150, Whose 130, Status 230, 12 apart): **App** (the app's 24-point icon when tafs cloud
+  sends one and nothing otherwise, its name and what this entry is), **How it connects** ("With a key" when tafs cloud's `method`, or an older
   one's `how`, is `key`; else "Sign in", as the iPad decides it), **Whose** (`whose`, as
   sent), and **Status**: "Connected" in green or "Sign in again" in amber, with **"Used by
   …"** under it, the names in `used_by` as the language lists them.
@@ -39,6 +42,13 @@ panels.
   there is no Yours. An app an operator sets up first is named in the soft colour, with tafs
   cloud's `words` in its Status cell.
 
+- **Each row ends as the iPad's** (`trailing`): a green check for a connected app; nothing
+  for one an operator sets up first; else an outlined **Connect**, or **Sign in again**, as
+  wide as its words (`OutlineButtonStyle`: 15 medium, at least 48 high, a 14-radius stroke at
+  40%). The iPad's chevron on a connected row is left out: a connection has no page of its
+  own here yet.
+- **"Not listed? Ask Coach"** ends the screen only while tafs cloud says Coach can connect an
+  app by key (`by_key`). A new search asks again; the next page of one keeps it.
 - Search by name; Return searches. What is typed is escaped and cut at 100 characters.
 - **Show more apps** reads the next page of the same search. An app already listed isn't
   listed twice.
@@ -46,11 +56,13 @@ panels.
 
 ## Not yet
 
-Connecting, signing in again, removing access, the app's logo, and a connection's detail.
+Connecting and signing in again from this screen, removing access, and a connection's
+detail.
 Each of the first three changes what a taf may do, so each comes with its approval.
 
 ## Tests
 
 `scripts/test.sh connections`: the catalog as tafs cloud sends it, rows that don't read, the
-two lists, a search's escaping and limit, paging without repeats, an unreadable catalog, and
-**that nothing but `GET` is ever sent**. It writes `build/screenshots/connect-apps-*.png`.
+two lists, a search's escaping and limit, paging without repeats, an unreadable catalog, the
+logo paths kept and dropped, each row's end, `by_key`, and **that nothing but `GET` is ever
+sent**. It writes `build/screenshots/connect-apps-*.png`.

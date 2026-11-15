@@ -33,6 +33,18 @@ let connectionsMacTests: [Test] = [
         try expectEqual(unread.state, .unread(why: "502"))
         try expectEqual(unread.apps.count, 0)
     }),
+    Test("Not listed? Ask Coach shows only while tafs cloud says Coach can connect by key; a new search asks again", awaiting: { @MainActor in
+        let byKey = #"{"apps":[{"entry":"connector:p:slack","name":"Slack","state":"available"}],"by_key":true,"next_cursor":"c2"}"#
+        let (model, _) = make([(200, appsPage), (200, byKey), (200, second), (200, appsPage)])
+        await model.load()
+        try expectEqual(model.byKey, false)
+        await model.load()
+        try expectEqual(model.byKey, true)
+        await model.more()
+        try expectEqual(model.byKey, true)
+        await model.load()
+        try expectEqual(model.byKey, false)
+    }),
     Test("the screenshots: Connect apps in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
