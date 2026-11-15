@@ -34,7 +34,7 @@ extension CloudClient {
     func report(_ message: String, of taf: String, reason: AnswerReport.Reason, note: String?, session: String?) async throws -> AnswerReport.Kept {
         struct Body: Encodable { let reason: AnswerReport.Reason; let note: String?; let session: String? }
         struct Answer: Decodable { let report: AnswerReport.Kept }
-        let body = try await post("/v1/tafs/\(Self.query(taf))/messages/\(Self.query(message))/report", body: Body(reason: reason, note: note, session: session))
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages/\(Self.escaped(message))/report", body: Body(reason: reason, note: note, session: session))
         guard let answer = try? JSONDecoder().decode(Answer.self, from: body) else { throw KIFFError.unreadable }
         return answer.report
     }

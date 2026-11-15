@@ -97,7 +97,7 @@ let coachSendTests: [Test] = [
         let (client, transport) = cloud([(200, kept), (200, kept)])
         let first = try await client.report("m 9", of: "taf-coach", reason: .wrong, note: "It made up a number.", session: "s1")
         try expectEqual(first, AnswerReport.Kept(id: "r1", at: "2026-11-15T10:00:00Z", new: true))
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf%2Dcoach/messages/m%209/report")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-coach/messages/m%209/report")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["reason": "wrong", "note": "It made up a number.", "session": "s1"])
         _ = try await client.report("m9", of: "taf-coach", reason: .other, note: nil, session: nil)
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[1].body), ["reason": "other"])
