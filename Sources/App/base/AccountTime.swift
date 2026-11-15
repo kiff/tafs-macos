@@ -39,9 +39,13 @@ struct AccountTime {
     }
 
     /// A day's title in the Record, as the iPad's `RecordView.dayTitle` (RecordView.swift:146-151):
-    /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone.
+    /// "Today · Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13", in the account's zone and
+    /// the app's language.
     func dayTitle(_ day: Date, words: Words, now: Date = Date()) -> String {
-        var short = Date.FormatStyle.dateTime.day().month(.abbreviated)
+        // In the app's language, the words' own, never this Mac's: a Spanish Mac showing the app
+        // in English reads "Today · Nov 15", as the iPad's formatter in its app language.
+        let locale = Locale(identifier: words.language)
+        var short = Date.FormatStyle(locale: locale).day().month(.abbreviated)
         short.timeZone = zone
         let date = day.formatted(short)
         let calendar = self.calendar
@@ -49,7 +53,7 @@ struct AccountTime {
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(day, inSameDayAs: yesterday) {
             return words("calendar.yesterday_date", ["date": date])
         }
-        var weekday = Date.FormatStyle.dateTime.weekday(.wide)
+        var weekday = Date.FormatStyle(locale: locale).weekday(.wide)
         weekday.timeZone = zone
         return day.formatted(weekday) + " · " + date
     }
