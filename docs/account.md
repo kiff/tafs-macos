@@ -57,6 +57,9 @@ to approve. So:
   passkey), another device's sheet has no Sign out. It says the shared line "To sign another
   device out, use a device that can approve." (`settings.devices.signout_needs_approver`),
   and the model sends no removal even if asked. KIFF refuses it with `view_only` anyway.
+- **Before any Mac may sign another device out,** that removal becomes the iPad's signed
+  approval (`prepareRemoveDevice`, then `signApproval`), not a bare `DELETE`. Until then
+  `canRemoveOthers` stays off on every Mac, and the `DELETE` is never reached.
 - **Where this Mac may**, the sheet has Sign out, which asks first, naming the device (the
   iPad's `confirmationDialog`). After a removal the list is read again from KIFF. KIFF's
   refusal for want of an approval shows "This device can't approve…"; any other refusal says

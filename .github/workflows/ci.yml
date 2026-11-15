@@ -77,6 +77,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/shared.sh drift
 
+  # What a Mac on macOS 12 builds with: Swift 5.7 and its SDK. Every file parses with Swift 5.7,
+  # and no SwiftUI builder holds more than 10 views, which only that SDK refuses
+  # (docs/building.md). On every change: it needs no Mac.
+  swift57:
+    runs-on: ubuntu-latest
+    container: swift:5.7
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Python for the builder check
+        run: command -v python3 || (apt-get update -qq && apt-get install -y -qq python3)
+      - name: The builder check catches a builder of 11
+        run: |
+          printf 'struct V: View {\n var body: some View {\n VStack {\n%s }\n }\n}\n' "$(for i in $(seq 11); do printf '  Text("%s")\n' $i; done)" > /tmp/eleven.swift
+          if python3 scripts/viewbuilders.py /tmp/eleven.swift; then echo "a builder of 11 passed"; exit 1; fi
+      - name: Every file parses with Swift 5.7, and no builder holds more than 10 views
+        run: scripts/swift57.sh
+
   core:
     needs: parts
     if: needs.parts.outputs.parts != ''
@@ -101,6 +121,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # Which Xcodes this runner has: a full Swift 5.7 build needs Xcode 14 (docs/building.md).
+      - name: The Xcodes on this runner
+        run: ls -d /Applications/Xcode*.app || true
       - name: Build for Intel and Apple silicon
         run: |
           scripts/build.sh

@@ -15,10 +15,14 @@ APP="$OUT/tafs.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# The SDK, named: the newest this Swift can build SwiftUI with, or $SDK (scripts/sdk.sh).
+SDK=$(scripts/sdk.sh)
+echo "SDK: $SDK"
+
 SLICES=""
 for arch in $ARCHS; do
     echo "Compiling for $arch"
-    find Sources -name '*.swift' | sort | xargs swiftc -swift-version 5 -parse-as-library $OPT \
+    find Sources -name '*.swift' | sort | xargs swiftc -swift-version 5 -parse-as-library $OPT -sdk "$SDK" \
         -target "$arch-apple-macos12.0" -module-name Tafs -o "$OUT/tafs-$arch"
     SLICES="$SLICES $OUT/tafs-$arch"
 done

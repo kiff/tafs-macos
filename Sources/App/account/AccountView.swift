@@ -188,36 +188,39 @@ struct AccountView: View {
                     }
                     .padding(2).background(Capsule().fill(Theme.raised)).padding(.vertical, 10)
                 }
-                // The language tafs's lines are in, by its own name, and macOS's own setting to
-                // change it (Language & Region › Applications), as the iPad opens iOS's.
-                group(words("settings.language_title")) {
-                    row(words("settings.language_title"), value: AppInfo.languageName(words.language))
-                    divider
-                    action(words("settings.change_language"), color: Theme.amberText) { Self.openLanguageSettings() }
-                }
-                // Their own copy, for their rights of access and portability, as the iPad's.
-                if let exportChats {
-                    group(nil) { ExportChatsRow(model: exportChats) }
-                    Text(words("export.own_chats_each_taf_coach")).font(.system(size: 13)).foregroundColor(Theme.dim)
-                        .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 18)
-                }
-                group(words("sign_in.how_works")) {
-                    Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))
-                        .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
-                }
-                group(words("settings.legal")) {
-                    action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
-                    divider
-                    action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
-                }
-                group(words("settings.about")) {
-                    row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))
-                    divider
-                    Text(words("home.tagline")).font(.system(size: 17)).foregroundColor(Theme.dim).padding(.vertical, 12)
-                }
-                group(words("settings.account_actions")) {
-                    // Confirmed first, so a stray click never ends the session.
-                    action(words("settings.sign_out"), color: Theme.no) { confirmingSignOut = true }
+                // A builder takes at most 10 views on macOS 12 (Swift 5.7): the last sections are one.
+                Group {
+                    // The language tafs's lines are in, by its own name, and macOS's own setting to
+                    // change it (Language & Region › Applications), as the iPad opens iOS's.
+                    group(words("settings.language_title")) {
+                        row(words("settings.language_title"), value: AppInfo.languageName(words.language))
+                        divider
+                        action(words("settings.change_language"), color: Theme.amberText) { Self.openLanguageSettings() }
+                    }
+                    // Their own copy, for their rights of access and portability, as the iPad's.
+                    if let exportChats {
+                        group(nil) { ExportChatsRow(model: exportChats) }
+                        Text(words("export.own_chats_each_taf_coach")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                            .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 18)
+                    }
+                    group(words("sign_in.how_works")) {
+                        Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))
+                            .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
+                    }
+                    group(words("settings.legal")) {
+                        action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
+                        divider
+                        action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
+                    }
+                    group(words("settings.about")) {
+                        row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))
+                        divider
+                        Text(words("home.tagline")).font(.system(size: 17)).foregroundColor(Theme.dim).padding(.vertical, 12)
+                    }
+                    group(words("settings.account_actions")) {
+                        // Confirmed first, so a stray click never ends the session.
+                        action(words("settings.sign_out"), color: Theme.no) { confirmingSignOut = true }
+                    }
                 }
             }
             .padding(.horizontal, Look.inset)
