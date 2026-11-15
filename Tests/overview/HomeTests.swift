@@ -156,10 +156,29 @@ let overviewTests: [Test] = [
         try expectEqual(transport.sent.map(\.path), ["/v1/home"])
         try expectEqual(read.page, try AccountClient.decoder.decode(Home.Page.self, from: Data(homePage.utf8)))
         RememberedHome.remember(read.body, tenant: "t1", in: defaults)
-        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), read.page)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs, read.page.tafs)
         // Another account's list never shows.
         try expectEqual(RememberedHome.shown(tenant: "t2", in: defaults), nil)
         RememberedHome.forget(in: defaults)
         try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), nil)
+    }),
+    Test("only the tafs are kept, as the iPad's remembered list: never the rest of Home", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let home = #"{"tafs":[{"name":"Bare","kiff_agent":"agent_bare","state":"stopped"}],"coach_waiting":{"chat":"c1","line":"Your draft is waiting."},"headline":{"words":"1 taf."}}"#
+        RememberedHome.remember(Data(home.utf8), tenant: "t1", in: defaults)
+        guard let data = defaults.data(forKey: RememberedHome.key), let kept = String(data: data, encoding: .utf8) else { throw Failure(description: "nothing kept") }
+        // Kept as base64 inside the record: read it back to look for what mustn't be there.
+        let record = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard let inner = (record?["home"] as? String).flatMap({ Data(base64Encoded: $0) }) else { throw Failure(description: "no list in \(kept)") }
+        let body = try JSONSerialization.jsonObject(with: inner) as? [String: Any]
+        try expectEqual(body.map { Array($0.keys) }, ["tafs"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.tafs.map(\.name), ["Bare"])
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults)?.headline, nil)
+        // An answer without tafs keeps nothing.
+        RememberedHome.forget(in: defaults)
+        RememberedHome.remember(Data(#"{"coach_waiting":{"chat":"c1"}}"#.utf8), tenant: "t1", in: defaults)
+        try expectEqual(defaults.data(forKey: RememberedHome.key), nil)
     }),
 ]

@@ -25,12 +25,38 @@ let overviewMacTests: [Test] = [
         try expectEqual(first.state, .loading)
         await first.load()
         guard case .loaded(let page) = first.state else { throw Failure(description: "not read") }
-        // The next launch draws it before any read.
+        // The next launch draws its tafs before any read: the tafs alone are kept.
         let next = OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: session), remembered: defaults)
-        try expectEqual(next.state, .loaded(page))
+        guard case .loaded(let shown) = next.state else { throw Failure(description: "nothing shown") }
+        try expectEqual(shown.tafs, page.tafs)
+        try expectEqual(shown.headline, nil)
         // Another account's list doesn't show.
         let other = Session(accessToken: "tok", expiresIn: 60, tenant: "t2", subject: "u9", deviceID: nil)
         try expectEqual(OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: other), remembered: defaults).state, .loading)
+    }),
+    Test("a list on screen stays when a read fails, as the iPad's; only an empty screen says why", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        RememberedHome.remember(Data(homePage.utf8), tenant: session.tenant, in: defaults)
+        let failing = #"{"error":{"code":"internal","message":"x"}}"#
+        let next = OverviewModel(cloud: CloudClient(transport: CannedTransport([(500, failing)]), session: session), remembered: defaults)
+        guard case .loaded(let shown) = next.state else { throw Failure(description: "nothing shown") }
+        await next.load()
+        try expectEqual(next.state, .loaded(shown))
+        // Nothing on screen: the failed read says why.
+        let empty = model([(500, failing)])
+        await empty.load()
+        guard case .unread = empty.state else { throw Failure(description: "not said") }
+    }),
+    Test("once the session ends, a read still on its way keeps nothing for the next launch", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let ending = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, homePage)]), session: session), remembered: defaults)
+        ending.endSession()
+        await ending.load()
+        try expectEqual(RememberedHome.shown(tenant: session.tenant, in: defaults), nil)
     }),
     Test("the screenshot: the Overview's rows, each cell centred on the row", awaiting: { @MainActor in
         let loaded = model([(200, homePage)])

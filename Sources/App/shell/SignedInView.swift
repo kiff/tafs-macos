@@ -95,7 +95,7 @@ struct SignedInView: View {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
                 // The held calls and the tafs side by side, as the iPad's `refresh`
-                // (AppModel.swift:1814-1822): neither waits for the other. The tafs, for the
+                // (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the
                 // sidebar and the Overview, are read once here and again with each round, so a
                 // taf made in Coach shows without opening the Overview; what this person may do
                 // with each is read after the list, as there (`readTafs`).
@@ -157,11 +157,12 @@ struct SignedInView: View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
+            // A list read still on its way keeps nothing from here.
+            overview.endSession()
             Task {
-                // Ended at KIFF first; this Mac forgets its session either way.
+                // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
+                // either way.
                 try? await account.signOut()
-                // An earlier session's tafs never show in this one (AppModel.swift:868, 1322).
-                RememberedHome.forget(in: .standard)
                 signedOut()
             }
         })

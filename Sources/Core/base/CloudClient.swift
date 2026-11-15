@@ -16,6 +16,11 @@ struct CloudClient {
     /// With `saying`, a refusal throws `CloudRefusal` instead, with tafs cloud's own words for
     /// the person, for a screen that says them (the iPad's `CloudError`, kiff/tafs#397).
     func get<Answer: Decodable>(_ path: String, saying: Bool = false) async throws -> Answer {
+        try decoded(try await read(path, saying: saying))
+    }
+
+    /// One route's answer as sent, refused as `get` refuses.
+    func read(_ path: String, saying: Bool = false) async throws -> Data {
         let request = HTTPRequest(method: "GET", path: path, headers: [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
@@ -25,6 +30,11 @@ struct CloudClient {
             if saying { throw CloudRefusal(status: status, body: body) }
             throw KIFFError(status: status, body: body)
         }
+        return body
+    }
+
+    /// An answer in the expected shape; any other is unreadable, never an empty page.
+    func decoded<Answer: Decodable>(_ body: Data) throws -> Answer {
         guard let answer = try? AccountClient.decoder.decode(Answer.self, from: body) else { throw KIFFError.unreadable }
         return answer
     }

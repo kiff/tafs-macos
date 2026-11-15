@@ -18,6 +18,8 @@ final class OverviewModel: ObservableObject {
     private let cloud: CloudClient
     /// Where the list last read is kept for the next launch's first frame; nil keeps none.
     private let remembered: UserDefaults?
+    /// Set at sign-out before its first wait: a read still on its way then keeps nothing.
+    private var ended = false
 
     /// With `remembered`, the list last read for this account shows at once, as the iPad's
     /// `showRememberedList`, and is read again with the first read.
@@ -41,14 +43,24 @@ final class OverviewModel: ObservableObject {
         return false
     }
 
+    /// The session is ending: nothing read from now on is kept for the next launch.
+    func endSession() { ended = true }
+
     func load() async {
         do {
             let read = try await cloud.homeRead()
             state = .loaded(read.page)
-            // Kept for the next launch's first frame, as the iPad's `rememberList` after `show`.
-            if let remembered { RememberedHome.remember(read.body, tenant: cloud.session.tenant, in: remembered) }
+            // Kept for the next launch's first frame, as the iPad's `rememberList` after `show`;
+            // never once the session ends or this read was given up.
+            if let remembered, !ended, !Task.isCancelled {
+                RememberedHome.remember(read.body, tenant: cloud.session.tenant, in: remembered)
+            }
             LaunchClock.mark("first list read")
-        } catch { state = .unread(why: NeedsYouModel.why(error)) }
+        } catch {
+            // A list on screen stays when a read fails, as the iPad's (AppModel.swift:1909-1916);
+            // only an empty screen says why.
+            if case .loaded = state {} else { state = .unread(why: NeedsYouModel.why(error)) }
+        }
         // As the iPad's `refresh` and `loadRecipes` (AppModel.swift:1852-1857, 7210-7215): read
         // with each list read that has no taf, and a read that fails keeps what was read.
         if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
