@@ -1,0 +1,142 @@
+import Foundation
+
+/// Setting this Mac up with planque, as the iPad's `enrolPlanque` (`AppModel.swift:6267-6310`):
+/// planque gets this device's key, and a KIFF key that connects tools and does nothing else,
+/// minted with a signed setup call and never kept on this Mac. The caller has set planque's
+/// `tenant`, `signer`, `bodyHash` and `transport`, and the account's `sign`: both sign with the
+/// device key, which asks no one.
+enum PlanqueEnrolment {
+    /// Why enrolment stopped. Nothing was minted, or the one key minted went to planque.
+    enum Stop: Equatable {
+        /// planque's code-less 409: another device connects this account's apps
+        /// (`coach.connect_other_device`).
+        case otherDevice
+        /// KIFF's 403 on the mint: only an admin connects apps (`coach.connect_admin_only`).
+        case adminOnly
+        /// Anything else: connecting apps isn't set up, with why (`coach.connecting_not_set_up`).
+        case notSetUp(why: Why)
+        /// The session ended while it ran: nothing more is done or said, as the iPad's
+        /// `gen == accountGeneration`.
+        case ended
+
+        /// The person's line for it, in the shared words; nil says nothing.
+        func words(_ say: Words) -> String? {
+            switch self {
+            case .otherDevice: return say("coach.connect_other_device")
+            case .adminOnly: return say("coach.connect_admin_only")
+            case .notSetUp(let why): return say("coach.connecting_not_set_up", ["why": why.words(say)])
+            case .ended: return nil
+            }
+        }
+    }
+
+    /// Why enrolment didn't go, as the iPad's `error.localizedDescription` for each error: planque's
+    /// own words, else the plain line for its status; KIFF's plain line, never its code.
+    enum Why: Equatable {
+        case planque(status: Int, words: String?)
+        case kiff(status: Int)
+        /// Not signed: the step wasn't confirmed (`error.needs_confirmation_first`).
+        case notSigning
+        /// This device's id couldn't be read (`error.no_device_name`).
+        case noDevice
+        /// An answer that wasn't in its shape.
+        case unreadable
+        /// Not reached, with the system's own words.
+        case other(String)
+
+        init(_ error: Error) {
+            switch error {
+            case PlanqueClient.PlanqueError.server(let status, _, let words): self = .planque(status: status, words: words)
+            // Only on the first enrolment does `needs_key` mint; on the second it's a refusal like any other.
+            case PlanqueClient.PlanqueError.needsKey: self = .planque(status: 409, words: nil)
+            case PlanqueClient.PlanqueError.notSigning: self = .notSigning
+            case PlanqueClient.PlanqueError.noDevice: self = .noDevice
+            // The mint with no device key to sign it: the same as planque with no signer.
+            case KIFFError.refused(_, "no_device_key"): self = .notSigning
+            case KIFFError.refused(let status, _): self = .kiff(status: status)
+            case KIFFError.unreadable: self = .unreadable
+            default: self = .other(error.localizedDescription)
+            }
+        }
+
+        func words(_ say: Words) -> String {
+            switch self {
+            case .planque(let status, let words): return words ?? say(StepRefusal.plainKey(status: status))
+            case .kiff(401): return say("error.signed_out")
+            case .kiff(let status): return say(StepRefusal.plainKey(status: status))
+            case .notSigning: return say("error.needs_confirmation_first")
+            case .noDevice: return say("error.no_device_name")
+            case .unreadable: return say("error.ours")
+            case .other(let words): return words
+            }
+        }
+    }
+
+    /// Enrols this device with planque, and hands it a fresh connector key only when planque says
+    /// it needs one. Nil once done; else why it stopped.
+    ///
+    /// **Who may run it**, as the iPad's `setUpPlanque` and `startSetup` (`AppModel.swift:6230-6249`,
+    /// `:7556-7575`): only after the person confirmed the step, with Touch ID or the Mac's password
+    /// over `tafs.planque.v1|{tenant}`, or inside Start's Touch ID (`:7567`); never in a view-only
+    /// session or one without a device key (`:6231`). The caller checks the account after the prompt
+    /// (`:6241`, `:7569`), sets planque's `signer` only after it and clears it when this returns
+    /// (`defer`, `:6246-6247`, `:7574-7575`). Nothing calls it before that gate.
+    ///
+    /// planque's enrolled connector key, while KIFF still takes it, is kept: asked first with no
+    /// key, it answers `kept`, and no key is minted that would only be left live in KIFF (a device
+    /// can't revoke a connector key). A key is minted only on `409 needs_key`; a 2xx without
+    /// `kept` mints nothing either. Any other answer (not reached, a 5xx, a refused signature, a
+    /// 400 for a body it couldn't read) mints nothing: a second enrolment would likely fail too and
+    /// leave the key live. It says why, and the next try asks again.
+    ///
+    /// `ended` says the session ended meanwhile, as the iPad's `gen != accountGeneration`, checked
+    /// where it checks (`:6275`, `:6290`, `:6307`) and first in each refusal: then nothing more is
+    /// done or said (`.ended`). A request the system cancelled is the same. Once minted, the key is
+    /// handed to planque before `ended` is checked (the iPad returns at `:6293`, dropping it).
+    static func enrol(planque: PlanqueClient, account: AccountClient, deviceKey: Data, ended: () -> Bool) async -> Stop? {
+        do {
+            let standing = try await planque.enrol(deviceKey: deviceKey, connectorKey: nil)
+            guard !ended() else { return .ended }
+            if standing.kept == true { return nil }
+            // A 2xx that didn't keep mints nothing (Windows #63, Android): planque answered
+            // oddly, and a key minted now could be left live in KIFF, where no device can
+            // revoke it. The next try asks again.
+            return .notSetUp(why: .unreadable)
+        } catch PlanqueClient.PlanqueError.needsKey {
+        } catch PlanqueClient.PlanqueError.server(409, _, _) where planque.lastRefusalCode == nil {
+            if ended() { return .ended }
+            // A code-less 409 is an older planque's other device; a coded one (a replayed signature,
+            // a changed enrolment) says why below, never "another device".
+            return .otherDevice
+        } catch {
+            if ended() || cancelled(error) { return .ended }
+            return .notSetUp(why: Why(error))
+        }
+        guard !ended() else { return .ended }
+        do {
+            let key = try await account.mintConnectorKey()
+            // Once minted, the key is handed to planque whatever happens: KIFF already holds it
+            // live, and dropping it here would leave it orphaned. A sign-out doesn't cancel this
+            // task (`ended` is the account check), so the hand-over is sent; `ended` is checked after.
+            _ = try await planque.enrol(deviceKey: deviceKey, connectorKey: key)
+        } catch KIFFError.refused(403, _) {
+            if ended() { return .ended }
+            return .adminOnly
+        } catch PlanqueClient.PlanqueError.server(409, _, _) where planque.lastRefusalCode == nil {
+            if ended() { return .ended }
+            return .otherDevice
+        } catch {
+            if ended() || cancelled(error) { return .ended }
+            return .notSetUp(why: Why(error))
+        }
+        guard !ended() else { return .ended }
+        return nil
+    }
+
+    /// A request the system cancelled (the task ended): nothing to say, as an ended session.
+    static func cancelled(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let url = error as? URLError, url.code == .cancelled { return true }
+        return false
+    }
+}
