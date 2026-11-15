@@ -79,15 +79,26 @@ struct AccountView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: AccountModel
     @ObservedObject var devices: DevicesModel
+    /// People & groups, read from KIFF; nil leaves its row out.
+    var people: PeopleModel? = nil
+    /// A taf's name by its KIFF agent, for what each group uses.
+    var tafName: (String) -> String? = { _ in nil }
     /// Opens another screen of the sidebar from its row.
     let open: (Screen) -> Void
     let addThisMac: () -> Void
     let signOut: () -> Void
     @State private var showingDevices = false
+    @State private var showingPeople = false
     @State private var confirmingSignOut = false
 
     var body: some View {
-        if showingDevices {
+        if showingPeople, let people {
+            VStack(alignment: .leading, spacing: 0) {
+                back { showingPeople = false }
+                PeopleView(model: people, me: model.me, tafName: tafName)
+            }
+            .background(Theme.background)
+        } else if showingDevices {
             VStack(alignment: .leading, spacing: 0) {
                 Button { showingDevices = false } label: {
                     HStack(spacing: 4) {
@@ -130,6 +141,11 @@ struct AccountView: View {
                     }
                 }
                 group(words("settings.people_apps")) {
+                    // People & groups first, as the iPad's list has it.
+                    if people != nil {
+                        link(words("people.title")) { showingPeople = true }
+                        divider
+                    }
                     link(words("settings.devices.title")) { showingDevices = true }
                     divider
                     link(words("connect.apps.title")) { open(.connectApps) }
@@ -239,6 +255,19 @@ struct AccountView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
         }
+    }
+
+    /// Back to Account, as the iPad's navigation bar does.
+    private func back(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                Text(words("settings.title")).font(.system(size: 14))
+            }
+            .foregroundColor(Theme.amberText).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Look.inset).padding(.top, 18)
     }
 
     private var divider: some View { Rectangle().fill(Theme.line).frame(height: 1) }
