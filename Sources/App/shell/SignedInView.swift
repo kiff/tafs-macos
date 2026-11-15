@@ -33,9 +33,21 @@ struct SignedInView: View {
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
+    /// planque, for the Setup read's proof: kept for this session, with this device's id once
+    /// read, as the iPad's `planque` (its `deviceID` and `deviceLoader`).
+    @State private var planque: PlanqueClient
+
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
          addThisMac: @escaping () -> Void = {}) {
         self.account = account
+        let planque = PlanqueClient()
+        // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
+        // KIFF's `this_device`.
+        planque.deviceLoader = { [account] in
+            guard account.signMessage != nil else { return nil }
+            return try? await account.thisDeviceID()
+        }
+        _planque = State(initialValue: planque)
         self.cloud = cloud
         self.streamer = streamer
         self.signedOut = signedOut
@@ -110,11 +122,20 @@ struct SignedInView: View {
         return calls.map { HeldRow($0, tafs: overview.tafs) }
     }
 
+    /// This device's planque proof for a taf's Setup, as the iPad's `loadTafSetup`: the account's
+    /// tenant, signed with the device key and no prompt (`signConfirmed`: it reads, it grants
+    /// nothing); nil when it can't be made.
+    private func setupProof() async -> String? {
+        guard let sign = account.signMessage else { return nil }
+        planque.tenant = account.session.tenant
+        return try? await planque.grantsReadProof(signedBy: sign)
+    }
+
     /// Opens a taf's page, with its own chat. An agent tafs doesn't run has no page.
     private func open(_ taf: Home.Taf) {
         guard let id = taf.tafID else { return }
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id)
+        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() })
         openTaf = taf.id
     }
 
