@@ -16,6 +16,7 @@ struct SignedInView: View {
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
+    @State private var tafPages: TafPagesModel?
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -95,12 +96,13 @@ struct SignedInView: View {
     private func open(_ taf: Home.Taf) {
         guard let id = taf.tafID else { return }
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
+        tafPages = TafPagesModel(cloud: cloud, taf: id)
         openTaf = taf.id
     }
 
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
-        return AnyView(TafView(taf: taf, chat: chat).id(taf.id))
+        return AnyView(TafView(taf: taf, chat: chat, pages: tafPages).id(taf.id))
     }
 
     private var accountScreen: some View {

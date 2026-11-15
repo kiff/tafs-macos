@@ -5,13 +5,11 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json"]
+private let read = ["ai-consent.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json"]
 private let notYet = [
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
-    "taf-activity.json": "a taf's Activity tab, with the taf page",
-    "taf-setup.json": "a taf's Setup tab, with the taf page",
     "taf-setup-connected.json": "a taf's Setup tab's connections, with the taf page",
     "taf-setup-reconnect.json": "a taf's Setup tab's connections, with the taf page",
 ]
@@ -98,6 +96,29 @@ let contractsTests: [Test] = [
         // A run that stopped on an error: why, from the runs list, since a report never says.
         try expectEqual(Runs.line(latest: runs[1], newest: runs[1], report: stopped, words: words, time: time), runs[1].error)
         try expectEqual(Runs.line(latest: nil, newest: nil, report: nil, words: words, time: time), "Nothing yet")
+    },
+    Test("a taf's Activity reads as tafs cloud answers it") {
+        let activity = try AccountClient.decoder.decode(TafActivity.self, from: answer("taf-activity.json"))
+        try expectEqual(activity.groups.map(\.title), ["Today"])
+        try expectEqual(activity.groups[0].entries.map(\.kind), ["done"])
+        try expectEqual(activity.groups[0].entries[0].title, "Read a case")
+        try expectEqual(activity.groups[0].entries[0].detail, "Done, within its Card")
+        try expectEqual(activity.groups[0].entries[0].time, "12:00")
+        try expectEqual(activity.filters.map(\.id), ["all", "done", "held", "refused"])
+        try expectEqual(activity.filter, "all")
+        try expect(activity.revision?.isEmpty == false, "a revision to send back")
+        try expectEqual(activity.endWords, "Nothing older in this view")
+        try expectEqual(activity.exceptions, [])
+    },
+    Test("a taf's Setup reads as tafs cloud answers it") {
+        let setup = try AccountClient.decoder.decode(TafSetup.self, from: answer("taf-setup.json"))
+        try expectEqual(setup.workflow, TafSetup.Part(title: "Workflow", summary: "Ask Coach to set its workflow"))
+        try expectEqual(setup.memory, TafSetup.Part(title: "0 notes", summary: nil))
+        try expectEqual(setup.versions, TafSetup.Part(title: "Changes to how it runs", summary: "Runs its original definition"))
+        try expect(setup.connectionsError?.isEmpty == false, "tafs cloud's line for unread connections")
+        try expectEqual(setup.exceptions.map(\.title), ["Rae needs a USD limit"])
+        try expect(setup.exceptions[0].words?.isEmpty == false, "its words")
+        try expect(setup.exceptions[0].history?.isEmpty == false, "its history")
     },
     Test("the consent's words come in the person's language, as sent") {
         let french = try cases("ai-consent.json").first { $0.name.contains("French") }
