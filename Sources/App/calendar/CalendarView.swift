@@ -244,7 +244,7 @@ struct CalendarView: View {
                 .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .bottom)
                 // tafs cloud's line for a halt; else the app's line for an empty range.
                 if page.halted, !page.words.isEmpty {
-                    Text(page.words).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no).padding(.top, 12)
+                    Text(verbatim: page.words).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no).padding(.top, 12)
                 } else if page.events.isEmpty {
                     Text(words(model.mode == .week ? "calendar.nothing_this_week" : "calendar.nothing_on_day"))
                         .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.top, 12)
@@ -344,7 +344,7 @@ struct CalendarView: View {
             if case .loaded(let page) = model.state {
                 if page.events.isEmpty {
                     // tafs cloud's own line for the range; the app's when it sent none.
-                    Text(page.words.isEmpty ? words("calendar.nothing_these_days") : page.words).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    Text(verbatim: page.words.isEmpty ? words("calendar.nothing_these_days") : page.words).font(.system(size: 13)).foregroundColor(Theme.soft)
                 }
                 ForEach(model.days.filter { !page.events(on: $0).isEmpty }, id: \.self) { day in
                     Text(heading(day)).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.soft)
@@ -354,7 +354,7 @@ struct CalendarView: View {
                             Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7).accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(verbatim: event.name).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink)
-                                if !event.words.isEmpty { Text(event.words).font(.system(size: 11)).foregroundColor(Theme.soft) }
+                                if !event.words.isEmpty { Text(verbatim: event.words).font(.system(size: 11)).foregroundColor(Theme.soft) }
                             }
                         }
                         .accessibilityElement(children: .combine)

@@ -72,10 +72,13 @@ let calendarTests: [Test] = [
         try expectEqual(parts?.monthKey, "november")
         try expectEqual(parts?.day, 14)
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
-        for day in Days.week(of: "2026-11-14") + ["2026-01-01", "2026-06-30"] {
+        let months = (1...12).map { String(format: "2026-%02d-01", $0) }
+        for day in Days.week(of: "2026-11-14") + months {
             guard let p = Days.parts(day) else { throw Failure(description: day) }
             try expect(words("calendar.weekday.\(p.weekdayKey)") != "calendar.weekday.\(p.weekdayKey)", p.weekdayKey)
             try expect(words("calendar.month_name.\(p.monthKey)") != "calendar.month_name.\(p.monthKey)", p.monthKey)
+            // The month card's title.
+            try expect(words("calendar.month_title.\(p.monthKey)") != "calendar.month_title.\(p.monthKey)", p.monthKey)
         }
     },
     Test("today is the date in the account's zone, not the Mac's") {
