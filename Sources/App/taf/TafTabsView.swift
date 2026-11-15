@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// A taf's Activity and Setup, read from tafs cloud when their tab opens. Both only read.
@@ -22,21 +23,39 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var filter = "all"
     /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
     @Published private(set) var query: String?
+    /// The runs it kept: the panel's first few (`false`), and all of them (`true`).
+    @Published private(set) var runPages: [Bool: TafRuns.Pages] = [:]
+    /// Run now, kept by taf for the whole app (`RunNowModel`), so it outlives this page.
+    let runs: RunNowModel
+    /// Run now is on its way: a second click sends nothing.
+    var runInFlight: Bool { runs.inFlight.contains(taf) }
+    /// tafs cloud's words when Run now started no run.
+    var runNowWords: String? { runs.words[taf] }
+    /// Why Run now didn't start a run, where the iPad says it in its error line.
+    var runNotStarted: String? { runs.notStarted[taf] }
+    private var following: AnyCancellable?
 
     private let cloud: CloudClient
     let taf: String
     /// The taf's halt, from its Setup.
     let halt: HaltModel
+    /// The taf's dial, for Setup's Starts when and Results go to.
+    let knob: TafKnobModel
     private var asked = 0
 
     /// This device's planque proof for the Setup read; nil reads without it.
     private let proof: () async -> String?
 
-    init(cloud: CloudClient, taf: String, proof: @escaping () async -> String? = { nil }) {
+    init(cloud: CloudClient, taf: String, proof: @escaping () async -> String? = { nil },
+         runs: RunNowModel? = nil) {
         self.cloud = cloud
         self.taf = taf
         self.proof = proof
         halt = HaltModel(cloud: cloud, taf: taf)
+        knob = TafKnobModel(cloud: cloud, taf: taf)
+        self.runs = runs ?? RunNowModel(cloud: cloud)
+        // The page draws Run now from the app's model: it changes when that does.
+        following = self.runs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
@@ -77,6 +96,36 @@ final class TafPagesModel: ObservableObject {
         query = activityQuery
         filter = "all"
         activity = .loading
+    }
+
+    /// Reads the runs it kept, as the iPad's `loadRunPage`: three for the panel, twenty a page
+    /// for all of them. Asked again with what was read, a 304 keeps it. `more` reads the next
+    /// page; asked while a read is on its way, it waits for that one.
+    func loadRunPage(all: Bool = false, more: Bool = false) async {
+        var cache = runPages[all] ?? TafRuns.Pages()
+        guard !cache.loading else {
+            if more { cache.moreWhenReady = true; runPages[all] = cache }
+            return
+        }
+        let cursor = more ? cache.pages.last?.nextCursor : nil
+        if more && cursor == nil { return }
+        cache.loading = true; cache.moreWhenReady = false; cache.error = nil; runPages[all] = cache
+        do {
+            let (page, tag) = try await cloud.runsPage(of: taf, cursor: cursor, etag: more ? nil : cache.etag, limit: TafRuns.limit(all: all))
+            if let page { cache.pages = more ? cache.pages + [page] : [page] }
+            if !more { cache.etag = tag }
+        } catch { cache.error = NeedsYouModel.why(error) }
+        let follow = cache.error == nil && runPages[all]?.moreWhenReady == true
+        cache.loading = false; cache.moreWhenReady = false; runPages[all] = cache
+        if follow { await loadRunPage(all: all, more: true) }
+    }
+
+    /// Runs the taf now, as the iPad's `runNow`: once at a time; tafs cloud's words when it
+    /// started no run; the runs read again when it did. Waiting for credits says tafs cloud's
+    /// words; any other refusal says the run didn't start, and why.
+    @discardableResult
+    func runNow(words: Words) async -> String? {
+        await runs.runNow(taf, words: words)
     }
 
     /// Reads the versions, as the iPad's `loadVersions` (AppModel.swift:3906-3922): what was read
@@ -122,17 +171,26 @@ struct TafActivityTab: View {
     var openUsage: () -> Void = {}
     /// Opens the Card tab, from the Card's line.
     let openCard: () -> Void
+    /// The taf's doors, for whoever manages it: their knocks come first, as the iPad's
+    /// `TafActivityList.parts`; nil for anyone else.
+    var doors: DoorsModel? = nil
+    /// tafs cloud offers doors here: only then are they read.
+    var doorsOffered = false
 
     var body: some View {
         ScrollView {
             // Lazy, so the list's end shows only when it's scrolled to, and the next page is
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
+                if let doors { TafKnocksPanel(taf: taf, doors: doors, offered: doorsOffered) }
                 if let card = taf.cards.first { cardLine(card) }
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
                 if let health = taf.health, health.needsAttention { workPanel(health) }
+                // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
+                RunsPanel(model: model, taf: taf)
+                RetainedRuns(model: model)
                 switch model.activity {
                 case .loading:
                     ProgressView().controlSize(.small)
@@ -281,25 +339,47 @@ struct TafSetupTab: View {
     /// Whether its halt is offered: to whoever manages the taf, as KIFF says, and not for a
     /// taf whose Card is no longer active, as the iPad's `TafDetailView`.
     var halts = false
-    /// Reads the list again after a halt tafs cloud answered.
+    /// Reads the list again after a halt tafs cloud answered, or a pause or a change of where
+    /// its results go.
     var halted: () async -> Void = {}
+    /// The taf's doors, for whoever manages it, as the iPad's Setup › Starts when › Doors;
+    /// nil for anyone else.
+    var doors: DoorsModel? = nil
+    /// The taf, for Starts when and Results go to; nil leaves them out.
+    var taf: Home.Taf? = nil
+    /// Whether this person manages the taf, as KIFF says: changing what starts it and where
+    /// its results go is theirs.
+    var manages = false
+    /// Who is signed in: the account's time zone, and their email for Email me.
+    var me: Me? = nil
+    /// This person's sign-in email: their own key reads "You".
+    var myEmail: String? = nil
+    @State private var startsOpen = false
+    @State private var resultsOpen = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if let doors, let taf { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
                 switch model.setup {
                 case .loading:
                     ProgressView().controlSize(.small)
+                    // Starts when and Results go to don't wait on the Setup read, as the iPad's
+                    // (TafDetailView.swift:302-317): only on the taf being tafs cloud's.
+                    dialLinks
                 case .unread(let why):
                     Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
+                    dialLinks
                 case .loaded(let setup):
                     // Halting is a job of its own: its row opens its screen, for whoever manages the taf.
                     if halts { HaltRow(model: model.halt, name: tafName, halted: halted) }
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }
+                    // Starts when, then the apps, then Results go to, as the iPad's Setup.
+                    if taf != nil { link(words("setup.starts_when"), symbol: "clock") { startsOpen = true } }
                     let nodes = TafSetup.nodes(setup.connections)
                     if !nodes.isEmpty {
                         // One row per app, as the iPad's `ConnectedToolsRing` has one node per app.
@@ -315,6 +395,7 @@ struct TafSetupTab: View {
                         }
                         .padding(.horizontal, 4)
                     }
+                    if taf != nil { link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true } }
                     if let versions = setup.versions { part(versions) }
                     if let memory = setup.memory {
                         Eyebrow(text: words("taf.memory.title")).padding(.top, 6)
@@ -325,12 +406,53 @@ struct TafSetupTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadSetup() }
+        // A Home read after a change brings the taf's own record: it, not the change's answer, is
+        // the one drawn from then on, as the iPad's `cloudTafs` takes each newer read.
+        .onChange(of: taf?.status) { _ in model.knob.homeRead() }
+        .onChange(of: taf?.results) { _ in model.knob.homeRead() }
+        .sheet(isPresented: $startsOpen) {
+            if let taf {
+                StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted) { startsOpen = false }
+                    .environment(\.words, words)
+            }
+        }
+        .sheet(isPresented: $resultsOpen) {
+            if let taf {
+                ResultsGoToView(model: model.knob, taf: taf, manages: manages, email: me?.email, refreshed: halted) { resultsOpen = false }
+                    .environment(\.words, words)
+            }
+        }
         .sheet(item: $chosen) { node in
             ConnectedAppSheet(node: node, close: { chosen = nil }, openActivity: { query in
                 chosen = nil
                 openActivity(query)
             })
         }
+    }
+
+    /// A Setup screen's way in, as the iPad's `PanelLink`: its mark and name in amber, and the
+    /// caret that says it opens.
+    /// Starts when and Results go to, while the Setup is read or couldn't be.
+    @ViewBuilder private var dialLinks: some View {
+        if taf != nil {
+            link(words("setup.starts_when"), symbol: "clock") { startsOpen = true }
+            link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true }
+        }
+    }
+
+    private func link(_ title: String, symbol: String, _ open: @escaping () -> Void) -> some View {
+        Button(action: open) {
+            HStack {
+                Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// An app, as the iPad's node: its name, and its actions in words, green while the taf uses

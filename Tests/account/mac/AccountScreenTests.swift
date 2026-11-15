@@ -64,15 +64,17 @@ let accountPageTests: [Test] = [
         defaults.set("neon", forKey: ThemeChoice.key)
         try expectEqual(ThemeChoice.saved(in: defaults), .system)
     }),
-    Test("the screenshots: Account in three languages, view-only and not, and the whole page", awaiting: { @MainActor in
+    Test("the screenshots: Account in three languages, view-only and not, view-only with a software key, and the whole page", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        for (language, me, name) in [("en", meView, "account-view-only-en"), ("en", mePasskey, "account-en"), ("fr", mePasskey, "account-fr"), ("pt", mePasskey, "account-pt")] {
+        // A software key pairs view-only (the iPad's Pairing.swift:88-91): its line, never Add this Mac.
+        for (language, me, softwareKey, name) in [("en", meView, false, "account-view-only-en"), ("en", meView, true, "account-view-only-software-key-en"),
+                                                  ("en", mePasskey, false, "account-en"), ("fr", mePasskey, false, "account-fr"), ("pt", mePasskey, false, "account-pt")] {
             let model = make([(200, me)], [(200, balanceLine)], defaults: scratchDefaults())
             await model.load()
             let devices = DevicesModel(account: AccountClient(transport: CannedTransport([]), session: session))
-            let view = AccountView(model: model, devices: devices, open: { _ in }, addThisMac: {}, signOut: {})
+            let view = AccountView(model: model, devices: devices, open: { _ in }, addThisMac: {}, softwareKey: softwareKey, signOut: {})
                 .environment(\.words, Words.load(folder: strings, preferred: [language]))
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 900)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("\(name).png"))

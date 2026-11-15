@@ -6,7 +6,11 @@ struct TafsApp: App {
     private let words = Words.load()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())
 
-    init() { Words.app = words }
+    init() {
+        Words.app = words
+        // The launch's time, for how long the first window and the first list take.
+        _ = LaunchClock.started
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -16,7 +20,7 @@ struct TafsApp: App {
                     SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language),
                                  cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
                                  route: .phoneOrPasskey, streamer: NetworkLineStream(), signedOut: { signIn.signedOut() },
-                                 addThisMac: { Task { await signIn.pair() } })
+                                 addThisMac: { Task { await signIn.pair() } }, softwareKey: signIn.key.keyStore == "software")
                         .id(session.accessToken)
                 } else {
                     SignInView(model: signIn)

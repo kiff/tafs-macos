@@ -14,15 +14,29 @@ struct SignedInView: View {
     @StateObject private var calendar: CalendarModel
     @StateObject private var usage: UsageModel
     @StateObject private var connect: ConnectAppsModel
+    /// Run now for every taf, kept while signed in, as the iPad's app model keeps it.
+    @StateObject private var runs: RunNowModel
     @StateObject private var coach: CoachModel
     @StateObject private var alerts: AlertsModel
     @State private var selection: Screen = .overview
+    /// The screen shown last, and the one Coach opened over: Coach's Back returns there.
+    @State private var shown: Screen = .overview
+    @State private var beforeCoach: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
     @State private var tafPages: TafPagesModel?
     /// What this person may do with each taf, as KIFF says, by KIFF agent.
     @State private var access: [String: Access] = [:]
+    /// A job's sheet, from the strip; the gallery, and what was chosen in it, acted on once it
+    /// has closed (HomeSplitView.swift:86-90).
+    @State private var openRecipe: Recipes.Recipe?
+    @State private var showingGallery: GalleryMode?
+    @State private var galleryChoice: GalleryChoice?
+    /// Each taf's doors, one model per taf, as the iPad's `doors(for:)`.
+    @StateObject private var doorModels = DoorModels()
+    /// The tab a taf's page opens on.
+    @State private var tafTab: TafView.Tab = .chat
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -30,6 +44,8 @@ struct SignedInView: View {
     private let account: AccountClient
     private let signedOut: () -> Void
     private let addThisMac: () -> Void
+    /// This Mac's device key is a software key: pairing it again with the phone gives no more.
+    private let softwareKey: Bool
     private let route: ApprovalRoute
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
@@ -39,7 +55,7 @@ struct SignedInView: View {
     @State private var planque: PlanqueClient
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
-         addThisMac: @escaping () -> Void = {}) {
+         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false) {
         self.account = account
         let planque = PlanqueClient()
         // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
@@ -53,6 +69,7 @@ struct SignedInView: View {
         self.streamer = streamer
         self.signedOut = signedOut
         self.addThisMac = addThisMac
+        self.softwareKey = softwareKey
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
@@ -61,10 +78,12 @@ struct SignedInView: View {
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
-        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
+        // The list last read shows in the first frame, as the iPad's remembered list.
+        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
+        _runs = StateObject(wrappedValue: RunNowModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
         // Alerts are kept per account, as the iPad keys them by tenant.
         _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
@@ -75,37 +94,64 @@ struct SignedInView: View {
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
         ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
-                  accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account,
+                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
-            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+            // A taf's knocks are answered on its Activity, so its row opens there.
+            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, openKnocks: { open($0, on: .activity) },
                                                         answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
-                                                        mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
+                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach))
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach))
             case .account: return AnyView(accountScreen)
+            }
+        }, startNewTaf: startNewTaf, openCoach: openCoach)
+        .sheet(item: $openRecipe) { recipe in
+            RecipeSheet(recipe: recipe, recipes: overview.sheetRecipes(for: recipe), canHand: mayUseCoach,
+                        sampleLabel: overview.gallery?.sampleLabel, close: { openRecipe = nil }) {
+                openRecipe = nil
+                handToCoach(recipe)
+            }
+            .environment(\.words, words)
+        }
+        .sheet(item: $showingGallery, onDismiss: actOnGalleryChoice) { mode in
+            if let gallery = overview.gallery {
+                RecipeGallerySheet(gallery: gallery, mode: mode, labels: overview.recipes?.labels, canHand: mayUseCoach,
+                                   choose: { galleryChoice = $0; showingGallery = nil }, close: { showingGallery = nil })
+                    .environment(\.words, words)
             }
         }
         .onAppear {
             notifier.opened = { selection = .needsYou }
             notifier.account = account.session.tenant
+            LaunchClock.mark("first window")
         }
-        // A screen chosen from elsewhere (a notification) closes it too.
-        .onChange(of: selection) { _ in openTaf = nil }
+        // A screen chosen from elsewhere (a notification) closes it too. Coach remembers the
+        // screen it opened over, for its Back.
+        .onChange(of: selection) { screen in
+            openTaf = nil
+            if screen == .coach, shown != .coach { beforeCoach = shown }
+            shown = screen
+        }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
-                await needsYou.load()
-                // The tafs, for the sidebar and the Overview: read once here, and again with each round,
-                // so a taf made in Coach shows without opening the Overview.
-                await readTafs()
+                // The held calls and the tafs side by side, as the iPad's `refresh`
+                // (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the
+                // sidebar and the Overview, are read once here and again with each round, so a
+                // taf made in Coach shows without opening the Overview; what this person may do
+                // with each is read after the list, as there (`readTafs`).
+                async let held: Void = needsYou.load()
+                async let tafs: Void = readTafs()
+                _ = await (held, tafs)
                 if case .loaded(let calls) = needsYou.state {
                     notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
                 }
@@ -141,17 +187,60 @@ struct SignedInView: View {
     }
 
     /// Opens a taf's page, with its own chat. An agent tafs doesn't run has no page.
-    private func open(_ taf: Home.Taf) {
+    private func open(_ taf: Home.Taf) { open(taf, on: .chat) }
+
+    private func open(_ taf: Home.Taf, on tab: TafView.Tab) {
         guard let id = taf.tafID else { return }
+        tafTab = tab
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() })
+        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
         openTaf = taf.id
+    }
+
+    /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back.
+    private func closeCoach() {
+        openTaf = nil
+        selection = beforeCoach == .coach ? .overview : beforeCoach
+    }
+
+    /// The sidebar's Coach, as the iPad's `openCoach` (AppModel.swift:6767-6778): it only opens
+    /// Coach. Coach closes from its own Back (Esc too).
+    private func openCoach() {
+        openTaf = nil
+        selection = .coach
+    }
+
+    /// Start a new taf, as the iPad's `startNewTaf` (AppModel.swift:6801-6804): a new
+    /// conversation in Coach, so Coach mode's start shows, whether Coach was open or not. Own
+    /// words and the gallery's own words come here, and the sidebar's + without a gallery.
+    private func startNewTaf() {
+        coach.startNewTaf()
+        openTaf = nil
+        selection = .coach
     }
 
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: KIFF's answer for Setup,
     /// else an account admin.
     private var mayUseCoach: Bool {
         Access.mayUseCoach(setup: access["setup"], capabilities: accountModel.me?.capabilities)
+    }
+
+    /// Start a new taf, as the iPad's + New (`HomeSplitView.startNewTaf`, HomeSplitView.swift:434-438):
+    /// every ready-made job where tafs cloud sends the gallery; without it, a new conversation in
+    /// Coach (`startNewTaf`).
+    private func newTaf() {
+        if overview.gallery != nil { showingGallery = .create } else { startNewTaf() }
+    }
+
+    /// What was chosen in the gallery, once it has closed, as the iPad's `actOnGalleryChoice`
+    /// (HomeSplitView.swift:440-448): Coach opens over the Overview.
+    private func actOnGalleryChoice() {
+        guard let choice = galleryChoice else { return }
+        galleryChoice = nil
+        switch choice {
+        case .recipe(let recipe): handToCoach(recipe)
+        case .ownWords: startNewTaf()
+        }
     }
 
     /// A recipe handed to Coach from the Overview, as the iPad's `handRecipeToCoach`
@@ -173,19 +262,24 @@ struct SignedInView: View {
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
                                halted: { await readTafs() },
                                // Plan & usage in place of the taf's page.
-                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) },
-                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email)).id(taf.id))
+                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }, me: accountModel.me,
+                               doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
+                               myEmail: accountModel.me?.email,
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email), tab: tafTab).id(taf.id))
     }
 
     private var accountScreen: some View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
-                    open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
+            // A list read still on its way keeps nothing from here.
+            overview.endSession()
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
             usage.cancelAnswers()
             Task {
-                // Ended at KIFF first; this Mac forgets its session either way.
+                // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
+                // either way.
                 try? await account.signOut()
                 // What's still on its way in a chat is the session before's.
                 coach.signedOut()

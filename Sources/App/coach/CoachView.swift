@@ -21,7 +21,11 @@ final class CoachModel: ObservableObject {
         var id: String?
     }
 
-    @Published private(set) var state: State = .loading
+    @Published private(set) var state: State = .loading {
+        // A thread read, or a new conversation, puts right a reopen that failed, as the
+        // iPad's `setupError = nil` on each read.
+        didSet { notReopened = nil }
+    }
     @Published var draft = ""
     @Published private(set) var pending: Pending?
     /// The card whose answer is on its way, by its key, and why an answer didn't go.
@@ -117,11 +121,68 @@ final class CoachModel: ObservableObject {
     /// An improvement asked for before Coach was read: the iPad's `improveTaf` doesn't wait for
     /// Coach, so here it's kept and started once Coach is read.
     private var improveWhenRead: Improving?
+    /// A new taf asked for before Coach was read: started once Coach is read, as an improvement is.
+    private var newWhenRead = false
+
+    /// Start a new taf, as the iPad's `startNewTaf` (AppModel.swift:6801-6804): a new
+    /// conversation, so Coach mode's start shows, from wherever Coach is, open or not.
+    func startNewTaf() {
+        guard isCoach else { return }
+        guard case .loaded = state else { newWhenRead = true; improveWhenRead = nil; return }
+        newChat()
+    }
+
+    /// Coach's past chats, for Previous conversations, as the iPad's `setupChats`.
+    @Published private(set) var chats: [CoachChat] = []
+
+    /// Reads Coach's past chats, as the iPad's `loadSetupChats` (AppModel.swift:7138-7143): a read
+    /// that fails keeps the list as it was, and one that comes back after sign-out is dropped.
+    func loadChats() async {
+        guard isCoach, case .loaded(let coach, _) = state else { return }
+        let gen = accountGeneration
+        guard let read = try? await cloud.chats(of: coach.id), gen == accountGeneration else { return }
+        chats = read
+    }
+
+    /// Why a past chat reopened from Previous conversations couldn't be read, as the iPad's
+    /// `setupError` from `loadSetupThread`: the page shown stays, with this under it.
+    @Published private(set) var notReopened: String?
+
+    /// Opens one of Coach's past chats, as the iPad's `openSetupChat` (AppModel.swift:7124-7135):
+    /// what was on its way belonged to the chat before; the chat is then read, as
+    /// `loadSetupThread` reads it (:7328-7375): an answer after sign-out, or for a chat since left,
+    /// is dropped, and a read that fails keeps the page shown and says why.
+    func open(chat session: String) async {
+        guard isCoach, case .loaded(let coach, _) = state else { return }
+        conversation += 1
+        following += 1
+        streaming?.cancel()
+        streaming = nil
+        live = nil
+        improving = nil
+        chat = session
+        fresh = false
+        pending = nil
+        // A consent ask belongs to the `pending` it drops, as in `newChat`.
+        consent = nil
+        stopped = nil
+        notReopened = nil
+        let gen = accountGeneration
+        let mine = conversation
+        do {
+            let page = try await read(coach) ?? .empty
+            guard gen == accountGeneration, mine == conversation else { return }
+            state = .loaded(coach, page)
+        } catch {
+            guard gen == accountGeneration, mine == conversation else { return }
+            notReopened = NeedsYouModel.why(error)
+        }
+    }
 
     /// A new conversation on a taf, as the iPad's `improveTaf`.
     func improve(_ taf: Improving) {
         guard isCoach else { return }
-        guard case .loaded = state else { improveWhenRead = taf; return }
+        guard case .loaded = state else { improveWhenRead = taf; newWhenRead = false; return }
         newChat()
         improving = taf
     }
@@ -495,6 +556,9 @@ final class CoachModel: ObservableObject {
             if let taf = improveWhenRead {
                 improveWhenRead = nil
                 improve(taf)
+            } else if newWhenRead {
+                newWhenRead = false
+                newChat()
             }
         } catch {
             state = .unread(why: NeedsYouModel.why(error))
@@ -519,12 +583,17 @@ struct CoachView: View {
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
     /// answered here.
     var mayUseCoach = false
+    /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back; nil
+    /// draws no Back.
+    var close: (() -> Void)? = nil
     /// Coach's own screen has its name at the top and its wash; a taf's chat sits in its page.
     var embedded = false
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
     /// The answer being reported, in its sheet.
     @State private var reporting: ReportedAnswer?
+    /// Previous conversations is open.
+    @State private var showingChats = false
     @State private var planOpen = false
 
     var body: some View {
@@ -547,18 +616,7 @@ struct CoachView: View {
         // The screen's name sits small and centred on the background's own colour, as on the iPad.
         .safeAreaInset(edge: .top, spacing: 0) {
             if !embedded {
-                Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    .accessibilityAddTraits(.isHeader)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
-                    // New conversation, as the iPad's pencil: an empty chat is already one.
-                    .overlay(alignment: .trailing) {
-                        Button { if !model.chatIsEmpty { model.newChat() } } label: {
-                            Image(systemName: "square.and.pencil").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(words("coach.new_conversation"))
-                        .padding(.trailing, Look.inset)
-                    }
+                header
                     .background(Theme.background)
             }
         }
@@ -568,6 +626,58 @@ struct CoachView: View {
             consentSheet(consent)
         }
         .sheet(item: $reporting) { ReportAnswerSheet(model: model, answer: $0).environment(\.words, words) }
+        .sheet(isPresented: $showingChats) {
+            CoachChatsSheet(model: model) { session in
+                showingChats = false
+                Task { await model.open(chat: session) }
+            }
+            .environment(\.words, words)
+        }
+    }
+
+    /// Coach's title row, as the iPad's Coach mode: Back on the left, which closes Coach (Esc
+    /// too), and on the right New conversation (the pencil) and the conversations' menu with
+    /// Previous conversations (`CoachMode.swift:13-31`, `SetupChatView.swift:105-110`).
+    private var header: some View {
+        HStack(spacing: 14) {
+            if let close {
+                Button(action: close) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                        Text(words("common.back")).font(.system(size: 14))
+                    }
+                    .foregroundColor(Theme.coach).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityLabel(words("common.back"))
+            }
+            Spacer(minLength: 0)
+            // New conversation, as the iPad's `newConversation`: an empty chat is already one.
+            Button { if !model.chatIsEmpty { model.newChat() } } label: {
+                Image(systemName: "square.and.pencil").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(words("coach.new_conversation"))
+            Menu {
+                Button(words("coach.chats.previous")) { showingChats = true }
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel(words("coach.conversations"))
+        }
+        .padding(.horizontal, Look.inset)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        // The screen's name, centred over the row whatever its ends hold.
+        .overlay {
+            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .accessibilityAddTraits(.isHeader)
+                .allowsHitTesting(false)
+        }
     }
 
     private var thread: some View {
@@ -599,6 +709,13 @@ struct CoachView: View {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text(words("chat.working")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                        }
+                    }
+                    // A past chat that couldn't be reopened: what was shown stays, as the iPad's.
+                    if let why = model.notReopened, let chat = model.chat {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
+                            Button(words("common.try_again")) { Task { await model.open(chat: chat) } }
                         }
                     }
                 }
