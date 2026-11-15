@@ -78,6 +78,13 @@ struct CardFace: View {
 
 /// A taf's page, to the iPad's: its mark and name, its tabs, and the tab's content.
 struct TafView: View {
+    /// Whether a taf's Halt shows, as the iPad's `TafDetailView.swift:404`: only for whoever
+    /// manages it, as KIFF says, and not for a revoked taf (`KIFFMapping.swift:114-127` maps every
+    /// state Home doesn't name for a live taf to revoked).
+    static func halts(manages: Bool, state: String) -> Bool {
+        manages && ["working", "waiting", "idle", "paused", "halted"].contains(state)
+    }
+
     enum Tab: String, CaseIterable, Identifiable {
         // The iPad's order.
         case chat, activity, card, setup
@@ -128,13 +135,11 @@ struct TafView: View {
                 if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
             case .setup:
                 if let pages {
-                    // An app's week opens the taf's Activity of its calls, as on the iPad. Halt is not
-                    // for a taf whose Card is no longer active (a state Home doesn't name).
+                    // An app's week opens the taf's Activity of its calls, as on the iPad.
                     TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }, tafName: taf.name,
-                                halts: manages && ["working", "waiting", "idle", "paused", "halted"].contains(taf.state), halted: halted)
+                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted)
                 }
             }
         }

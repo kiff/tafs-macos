@@ -53,7 +53,7 @@ struct Me: Decodable, Equatable {
         email = text(.email)
         account = text(.name) ?? text(.slug)
         approvalMode = text(.approvalMode)
-        capabilities = (try? c.decodeIfPresent([String].self, forKey: .capabilities)) ?? nil
+        capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
     }
 
     /// Whether this person manages the account's Cards (KIFF's `cards.manage`), as the iPad's
@@ -151,18 +151,13 @@ struct AccountClient {
 
 /// What a person may do with a taf, as KIFF answers it: use it, see everyone's work with it,
 /// change it (halt it, its Card, its versions).
+/// Decoded as the iPad's `KIFFClient.Access` (KIFFClient.swift:1417-1422): each flag is a
+/// required Bool and `groups` an optional list, so a flag missing or mistyped fails the read.
 struct Access: Decodable, Equatable {
-    let use: Bool
-    let oversee: Bool
-    let manage: Bool
-
-    enum CodingKeys: String, CodingKey { case use, oversee, manage }
-    init(use: Bool = false, oversee: Bool = false, manage: Bool = false) { self.use = use; self.oversee = oversee; self.manage = manage }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        func flag(_ key: CodingKeys) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: key)) ?? nil) ?? false }
-        use = flag(.use); oversee = flag(.oversee); manage = flag(.manage)
-    }
+    var use = false
+    var oversee = false
+    var manage = false
+    var groups: [String]? = nil
 
     /// Whether this person manages the taf, as the iPad's `manages`: without KIFF's answer for
     /// it (not read yet, or failed), nothing is shown.

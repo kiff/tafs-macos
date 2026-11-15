@@ -12,27 +12,45 @@ let tafHaltTests: [Test] = [
         ])
         let model = HaltModel(cloud: CloudClient(transport: transport, session: session), taf: "taf-1", sleep: { _ in })
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        let answered = await model.halt(words: words)
+        var busyWhileRead: Bool?
+        let answered = await model.halt(words: words, halted: { busyWhileRead = model.busy })
         try expectEqual(answered, true)
-        // The POST answered: the list is read again at once (by the screen), then it's followed.
+        // The POST answered: the list is read again at once, still busy as the iPad's, then it's followed.
+        try expectEqual(busyWhileRead, true)
+        try expectEqual(model.busy, false)
         try expectEqual(transport.sent.map(\.method), ["POST"])
         await model.follow()
         try expectEqual(transport.sent.map(\.method), ["POST", "GET", "GET"])
         try expectEqual(model.halt.state, .halted)
         try expectEqual(model.notHalted, nil)
     }),
-    Test("a halt tafs cloud refuses says why, its words first, else its code, and stays running", awaiting: { @MainActor in
-        let transport = CannedTransport([(403, #"{"error":"not_allowed","words":"Only someone who manages Cards can halt every taf."}"#), (403, #"{"error":"not_allowed"}"#)])
+    Test("a halt tafs cloud refuses says why as the iPad's CloudError: its words, else its error, else its status, never its code", awaiting: { @MainActor in
+        let transport = CannedTransport([(403, #"{"error":"not_allowed","words":"Only someone who manages Cards can halt every taf."}"#),
+                                         (403, #"{"error":"not_allowed","code":"halted"}"#), (403, #"{"code":"halted"}"#)])
         let model = HaltModel(cloud: CloudClient(transport: transport, session: session), taf: nil, sleep: { _ in })
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        let answered = await model.halt(words: words)
+        Words.app = words
+        var read = false
+        let answered = await model.halt(words: words, halted: { read = true })
         try expectEqual(answered, false)
         try expectEqual(model.halt.state, .running)
         try expectEqual(model.notHalted, "tafs couldn't halt your tafs. Only someone who manages Cards can halt every taf.")
         await model.halt(words: words)
         try expectEqual(model.notHalted, "tafs couldn't halt your tafs. not_allowed")
-        // Nothing is followed after a refusal.
-        try expectEqual(transport.sent.map(\.method), ["POST", "POST"])
+        await model.halt(words: words)
+        try expectEqual(model.notHalted, "tafs couldn't halt your tafs. tafs cloud answered 403")
+        // Nothing is read again or followed after a refusal.
+        try expectEqual(read, false)
+        try expectEqual(transport.sent.map(\.method), ["POST", "POST", "POST"])
+    }),
+    Test("a taf's Halt shows only for whoever manages it, and never for a revoked taf", {
+        try expectEqual(TafView.halts(manages: true, state: "working"), true)
+        try expectEqual(TafView.halts(manages: true, state: "halted"), true)
+        try expectEqual(TafView.halts(manages: false, state: "working"), false)
+        try expectEqual(TafView.halts(manages: true, state: "revoked"), false)
+        try expectEqual(TafView.halts(manages: true, state: "something_new"), false)
+        // Without KIFF's answer for the taf, nothing is shown.
+        try expectEqual(TafView.halts(manages: Access.manages(nil), state: "working"), false)
     }),
     Test("the screenshots: a halt running, and halted with who holds it", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

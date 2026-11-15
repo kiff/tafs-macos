@@ -25,20 +25,22 @@ final class HaltModel: ObservableObject {
     }
 
     /// One click, no key: it only takes authority away. True when tafs cloud answered: then the
-    /// list is read again at once, and the halt followed while it is halting.
+    /// list is read again at once (`halted`), still busy, as the iPad's `halt` with its `refresh()`,
+    /// and the halt followed while it is halting.
     @discardableResult
-    func halt(words: Words) async -> Bool {
+    func halt(words: Words, halted: () async -> Void = {}) async -> Bool {
         guard !busy else { return false }
         busy = true
         notHalted = nil
         do {
             halt = try await cloud.halt(taf)
         } catch {
-            // tafs cloud's words first, then its code, as the iPad's.
+            // tafs cloud's words, else its error, else its status, as the iPad's `CloudError`.
             notHalted = words(taf == nil ? "taf.halt.not_halted_all" : "taf.halt.not_halted", ["why": NeedsYouModel.why(error)])
             busy = false
             return false
         }
+        await halted()
         busy = false
         return true
     }
@@ -144,7 +146,7 @@ struct HaltView: View {
             switch h.state {
             case .running:
                 Button(model.busy ? words("taf.halt.halting") : words(model.taf == nil ? "halt.all_now" : "halt.now")) {
-                    Task { if await model.halt(words: words) { await halted(); await model.follow() } }
+                    Task { if await model.halt(words: words, halted: halted) { await model.follow() } }
                 }
                 .buttonStyle(OutlineButtonStyle(color: Theme.no))
                 .disabled(model.busy)
@@ -154,13 +156,14 @@ struct HaltView: View {
                     Text(words("taf.halt.halting_wait")).font(.system(size: 14)).foregroundColor(Theme.dim)
                 }
                 // Halt again: a part that didn't take it the first time is asked again.
-                Button(words("halt.again")) { Task { if await model.halt(words: words) { await halted(); await model.follow() } } }
+                Button(words("halt.again")) { Task { if await model.halt(words: words, halted: halted) { await model.follow() } } }
                     .buttonStyle(OutlineButtonStyle(color: Theme.no))
                     .disabled(model.busy)
             case .halted:
-                // Resuming gives authority back: it's signed, on a device that can approve.
+                // Resuming gives authority back: it's signed, and this Mac has no Face ID or Touch
+                // ID, so it's approved on the phone (the iPad's line for such a device).
                 if !(h.account && model.taf != nil) {
-                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    Text(words("approval.has_no_face_id_touch", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.dim)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

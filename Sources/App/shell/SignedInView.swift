@@ -61,7 +61,7 @@ struct SignedInView: View {
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
@@ -77,21 +77,28 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
-        // What this person may do with each taf: read once, as the iPad's `refreshAccess`.
-        .task { if let read = try? await account.myAccess() { access = read } }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
                 await needsYou.load()
                 // The tafs, for the sidebar and the Overview: read once here, and again with each round,
                 // so a taf made in Coach shows without opening the Overview.
-                await overview.load()
+                await readTafs()
                 if case .loaded(let calls) = needsYou.state {
                     notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
                 }
                 try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
             }
         }
+    }
+
+    /// The tafs, then what this person may do with each, as the iPad's `refresh()` with its
+    /// `refreshAccess` (AppModel.swift:1894-1896, 1118-1122): access decides Halt, so it's read
+    /// with the list, once the list has read. A read that fails keeps what was read.
+    private func readTafs() async {
+        await overview.load()
+        guard case .loaded = overview.state, let read = try? await account.myAccess() else { return }
+        access = read
     }
 
     /// The calls held for the person, for the sidebar, each with its taf's name.
@@ -111,7 +118,7 @@ struct SignedInView: View {
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
-                               halted: { await overview.load() }).id(taf.id))
+                               halted: { await readTafs() }).id(taf.id))
     }
 
     private var accountScreen: some View {

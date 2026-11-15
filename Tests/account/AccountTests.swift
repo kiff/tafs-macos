@@ -162,13 +162,24 @@ let accountTests: [Test] = [
         try expectEqual(try me(#"{"capabilities":["cards.manage","members.manage"]}"#).managesCards, true)
         try expectEqual(try me(#"{"capabilities":["tafs.use"]}"#).managesCards, false)
         try expectEqual(try me("{}").managesCards, true)
+        // A list that isn't one fails the read, as the iPad's synthesized `Account`.
+        try expectEqual(try? me(#"{"capabilities":"cards.manage"}"#), nil)
         let (account, transport) = client([(200, #"{"agents":{"rae":{"use":true,"manage":true},"ben":{"use":true},"odd":7}}"#)])
         let read = try? await account.myAccess()
         try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/me/access")
         // One agent that doesn't read fails the read, as the iPad's: then nothing is shown.
         try expectEqual(read, nil)
-        let (fine, _) = client([(200, #"{"agents":{"rae":{"use":true,"manage":true},"ben":{"use":true}}}"#)])
+        // Each flag is required, as the iPad's synthesized `Access`: one missing or not a Bool, or
+        // groups that aren't a list, fails the whole read.
+        for agents in [#"{"ben":{"use":true}}"#, #"{"ben":{"use":true,"oversee":false,"manage":"yes"}}"#,
+                       #"{"ben":{"use":true,"oversee":false,"manage":false,"groups":"g1"}}"#] {
+            let (strict, _) = client([(200, #"{"agents":"# + agents + "}")])
+            let read = try? await strict.myAccess()
+            try expectEqual(read, nil)
+        }
+        let (fine, _) = client([(200, #"{"agents":{"rae":{"use":true,"oversee":true,"manage":true,"groups":["g1"]},"ben":{"use":true,"oversee":false,"manage":false}}}"#)])
         let access = try await fine.myAccess()
+        try expectEqual(access["rae"]?.groups, ["g1"])
         try expectEqual(Access.manages(access["rae"]), true)
         try expectEqual(Access.manages(access["ben"]), false)
         try expectEqual(Access.manages(access["gone"]), false)

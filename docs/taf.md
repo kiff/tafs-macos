@@ -53,7 +53,7 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
 | Tab | Route | Drawn |
 |---|---|---|
 | Activity | `GET /v1/tafs/{id}/activity?filter=` | The taf's first Card in one line ("€1,960 left today of €2,000", its title), which opens the Card tab; what waits on the Card for want of a unit; tafs cloud's `filters` as pills, each asked for again with its id; then its calls by day (`groups`, else `entries` as one list): each with its kind's dot as the iPad's (done and approved green; refused, not done and revoked red; held, sending and any other kind amber), its `title`, `detail`, `time`, and `amount_text` under the time; while `next_cursor` is sent, the next page when the list's end shows (`&cursor=`), an untitled first day carrying on the last; and `end_words` under the last page. |
-| Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber); tafs cloud's **Connect again** words when the taf's own sign-in expired (`connect_again`, edged in amber); the workflow; under "Connected apps", **one row per app**, as the iPad's `TafPresentationViews.swift` (`ConnectedToolsRing`'s nodes, as a list): connections to the same app are grouped, the one shown is the first with actions (`action_count`), else one to sign in again, else the first; each row its name, `action_words` (green while `running`, else soft) and `status_words` (amber when it must sign in again). A row opens the app's sheet (`ConnectedAppSheet`): its status, what it may do (each action's title, its `limits` and `step_words`), its week (`stats.words`), which opens the taf's Activity with tafs cloud's `stats.activity_query` (sent only as a query; disabled with no actions), and the other sign-ins to the same app. Sign in again and Disconnect wait for approvals; the line for connections that couldn't be read; then the versions, by tafs cloud's `title` and `summary`, and under "What it remembers" the notes' `title` and `latest` note. The connections' line is red, with Try again. Someone who doesn't manage the taf is refused: the tab says it couldn't be read. |
+| Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber); tafs cloud's **Connect again** words when the taf's own sign-in expired (`connect_again`, edged in amber); the workflow; under "Connected apps", **one row per app**, as the iPad's `TafPresentationViews.swift` (`ConnectedToolsRing`'s nodes, as a list): connections to the same app are grouped, the one shown is the first with actions (`action_count`), else one to sign in again, else the first; each row its name, `action_words` (green while `running`, else soft) and `status_words` (amber when it must sign in again). A row opens the app's sheet (`ConnectedAppSheet`): its status, what it may do (each action's title, its `limits` and `step_words`), its week (`stats.words`), which opens the taf's Activity with tafs cloud's `stats.activity_query` (sent only as a query; disabled with no actions), and the other sign-ins to the same app. Sign in again and Disconnect wait for approvals; the line for connections that couldn't be read; then the versions, by tafs cloud's `title` and `summary`, and under "What it remembers" the notes' `title` and `latest` note. The connections' line is red, with Try again. Someone who neither uses nor oversees the taf is refused: the tab says it couldn't be read. |
 
 - **Everything is drawn as sent**, with `Text(verbatim:)`. The app words no call, no part and
   no filter.
@@ -73,7 +73,10 @@ iPad's reader.
 
 - **Where, and for whom,** as the iPad's: a taf's own halt is the first row of its Setup, only
   for whoever manages the taf as KIFF says (`GET /v1/me/access`, `Access.manages`; nothing until
-  that is read) and not for a taf whose Card is no longer active. Every taf's is a row on the
+  that is read) and not for a taf whose Card is no longer active. KIFF's access is read with
+  every read of the tafs, once the list has read, as the iPad's `refresh()`; a read that fails
+  keeps what was read. Each of `use`, `oversee` and `manage` must be there as a Bool, as the
+  iPad's `Access`: one missing fails the whole read. Every taf's is a row on the
   Overview, only for whoever manages the account's Cards (`Me.managesCards`: `cards.manage`, or
   KIFF doesn't say), while a taf runs, and also with no taf while the account is halted, where
   it is resumed from. (tafs cloud's Setup answers anyone who uses or oversees the taf, so the
@@ -86,11 +89,13 @@ iPad's reader.
   what halting does, or since when it holds; once halting, who holds it: no run starts
   (kiff/agents), KIFF refuses its calls, the connection sends nothing (planque), each Done or
   Waiting. A taf halted with the whole account says so.
-- **Resuming gives authority back**, so it is signed with the device's key: on this Mac it
-  says to approve on a device that can, until the approval key (#16).
-- A halt tafs cloud refuses says why, in the shared words with tafs cloud's own words first
-  (else its code), and stays as it was. A halt it answers reads the list again at once, so
-  the taf reads halted there too, then is followed while halting.
+- **Resuming gives authority back**, so it is signed. This app is for Macs without Face ID or
+  Touch ID, so where the iPad has Resume it shows the iPad's line for such a device
+  (`approval.has_no_face_id_touch`): approve on your phone.
+- A halt tafs cloud refuses says why, in the shared words with the refusal's why (see
+  [shared.md](shared.md): its words, else its error, else "tafs cloud answered {status}"), and
+  stays as it was. A halt it answers reads the list and KIFF's access again at once, still
+  busy, so the taf reads halted there too, then is followed while halting.
 - The iPad's `stopped` (how many runs a halt stopped) isn't read: no screen shows it.
 
 ## Tests
