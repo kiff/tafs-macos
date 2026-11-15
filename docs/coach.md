@@ -14,8 +14,8 @@ The app draws the list as it comes. It places and folds nothing itself.
 
 | Item | Drawn as |
 |---|---|
-| A message from the person | Their words, on Coach's blue, at the right |
-| A message from Coach | Its words, at the left. Plain text: the model's words are never read as formatting or as a line of the app's. |
+| A message from the person | Their words, on the brand's gradient, at the right, as on the iPad |
+| A message from Coach | Its words as text on the page, with no bubble. Plain text: the model's words are never read as formatting or as a line of the app's. |
 | A job's instruction (`kickoff`) | A small note |
 | A card that waits for the person (`waits: owner`) | "Needs you · a question" |
 | A card tafs cloud answers itself (`waits: service`) | Nothing |
@@ -105,6 +105,12 @@ screen**: its title, its lines, Allow and Not now.
 - **No key allows.** The person has just pressed Return to send their message; Return on the
   consent's screen answers nothing, so consent is always a deliberate click. Esc is Not now.
 - A consent without its words is no screen: the refusal is then shown as a failure.
+
+## The layout
+
+To the iPad's: the screen's name small and centred at the top; the chat on Coach's own wash;
+a card's choices as white pills under what it asks; and the message box as a rounded panel
+at the foot, with the send circle in it.
 
 ## Not yet
 
