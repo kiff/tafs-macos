@@ -7,6 +7,10 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 /// the pull request that will read it. A fixture in neither list fails the test below.
 private let read = ["ai-consent.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json"]
 private let notYet = [
+    "home.json": "the tafs list read from Home, in its own pull request after this pin",
+    "home-paused.json": "the tafs list read from Home, in its own pull request after this pin",
+    "tafs.json": "the tafs list read from GET /v1/tafs, in its own pull request after this pin",
+    "tafs-paused.json": "the tafs list read from GET /v1/tafs, in its own pull request after this pin",
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
