@@ -28,7 +28,7 @@ private final class CannedStream: LineStream, @unchecked Sendable {
 
 @MainActor
 private func make(_ plan: CannedStream.Plan, _ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, CannedStream) {
-    let transport = CannedTransport([(200, setupAnswer), (200, before)] + answers)
+    let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
     let stream = CannedStream(plan)
     let model = CoachModel(cloud: CloudClient(transport: transport, session: session), streamer: stream, sleep: { _ in }, now: { sendTime })
     await model.load()

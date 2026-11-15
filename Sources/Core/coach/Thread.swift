@@ -151,6 +151,10 @@ enum Thread {
         let working: Bool
 
         enum Keys: String, CodingKey { case items, working }
+
+        init(items: [Item], working: Bool) { self.items = items; self.working = working }
+        /// A new conversation, before its first message: nothing to read yet.
+        static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
         enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
@@ -345,7 +349,10 @@ enum Outgoing {
     struct Sent: Decodable, Equatable {
         struct Message: Decodable, Equatable { let id: String }
         let session: String
+        /// tafs cloud started a new chat for it (the chat named had handed a taf over).
+        let newSession: Bool
         let message: Message?
+        enum CodingKeys: String, CodingKey { case session, message, newSession = "new_session" }
     }
 }
 
@@ -357,11 +364,11 @@ extension CloudClient {
         return answer.setup
     }
 
-    /// Sends the person's message to a taf's live chat, or to Coach's. It starts a run: only
-    /// ever called for what the person typed and sent.
-    func send(_ text: String, to taf: String) async throws -> Outgoing.Sent {
+    /// Sends the person's message to a taf's chat: its live one unless `target` names one or
+    /// asks for a new one. It starts a run: only ever called for what the person typed and sent.
+    func send(_ text: String, to taf: String, target: ChatTarget = .live) async throws -> Outgoing.Sent {
         guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
-        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", ["text": text])
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", body: ChatTarget.Message(text, target))
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
     }
@@ -397,8 +404,8 @@ extension CloudClient {
         _ = try await post("/v1/me/ai-consent", ["version": version])
     }
 
-    /// The thread of the person's chats with a taf, or with Coach.
-    func thread(of taf: String) async throws -> Thread.Page {
-        try await get("/v1/tafs/\(Self.escaped(taf))/conversation")
+    /// The thread of the person's chats with a taf, or with Coach; with `session`, that chat's alone.
+    func thread(of taf: String, session: String? = nil) async throws -> Thread.Page {
+        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""))
     }
 }

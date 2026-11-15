@@ -8,7 +8,8 @@ Coach is where a taf is set up, an app is connected and a taf is changed, in con
 | Call | Route | What |
 |---|---|---|
 | `coach()` | `GET /v1/setup` | The account's Coach, or none before Coach is started. A plain read: unlike the phones' first read it sends no time zone, so it changes nothing on the account. |
-| `thread(of:)` | `GET /v1/tafs/{id}/conversation` | The chat as one ordered list (`items`): messages, cards and held calls by time. |
+| `thread(of:session:)` | `GET /v1/tafs/{id}/conversation[/{session}]` | The chat as one ordered list (`items`): messages, cards and held calls by time; with a session, that chat's alone. |
+| `chats(of:)` | `GET /v1/tafs/{id}/chats` | Coach's chats (`session`, `started`, `updated`, `title`), each one strictly. |
 
 The app draws the list as it comes. It places and folds nothing itself.
 
@@ -87,6 +88,25 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
   sign-in, and refuses any other card before anything is sent. Saying no grants nothing, so
   it is never signed. Those two words are the only answers this app ever sends such a card.
 
+## Coach's conversations (`CoachModel.chat`, `fresh`, `ChatTarget`)
+
+As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-6720`,
+`7000-7014`, `7164-7188`, `7285-7303`):
+
+- **Coach opens on its newest chat** (`updated`), read by its session. Without the list, or with
+  none yet, the thread reads as before.
+- **New conversation** (the pencil by Coach's title, `coach.new_conversation`) empties the
+  chat and reads nothing until its first message; an empty chat is already one, so it does
+  nothing there. What's typed stays in the box.
+- **Where a message goes:** a new chat (`new_chat: true`), else the chat shown (`session`),
+  else the live one. Coach's say `new_chat_after_handover: true`: tafs cloud starts a new chat
+  for a message to one that already handed a taf over.
+- **The first message's answer** (or the stream's `session` event) names the new chat, which
+  is then the one shown. When it says `new_session: true` with another chat, Coach goes on in
+  that one; the old one stays tafs cloud's. What comes back for an earlier conversation is
+  dropped.
+- A taf's own chat has no conversations: its messages go to its live chat.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
@@ -113,7 +133,7 @@ shows as Coach writes it. tafs cloud trims the stream to what an app shows.
 
 | Event | What the app does |
 |---|---|
-| `session` | Notes the person's message's id, to match it in the thread. |
+| `session` | Notes the person's message's id, to match it in the thread, and the chat it went to (a new one, or one tafs cloud started after a hand-over). |
 | `text` | Adds to the answer, drawn under the person's message. |
 | `state`, `activity` | The one line of where the run is, in tafs cloud's words; "Thinking…" before either. |
 | `step` | If it failed, tafs cloud's one line of why, under the answer. |
@@ -177,7 +197,8 @@ A message still going is at 0.7.
 ## Not yet
 
 Answering questions, approving a connection or a Card,
-the list of earlier conversations, and attachments. Each is its own pull request; the ones
+the list of earlier conversations (Previous conversations, archiving), improving a taf in a
+new conversation (`/improve`, the next pull request), and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests

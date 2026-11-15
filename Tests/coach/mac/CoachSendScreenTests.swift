@@ -11,7 +11,7 @@ private let sendTime = Date(timeIntervalSince1970: 1_794_679_200)
 
 @MainActor
 private func make(_ answers: [(Int, String)]) async -> (CoachModel, CannedTransport, () -> [TimeInterval]) {
-    let transport = CannedTransport([(200, setupAnswer), (200, before)] + answers)
+    let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, before)] + answers)
     var slept: [TimeInterval] = []
     let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { slept.append($0) }, now: { sendTime })
     await model.load()
@@ -26,7 +26,7 @@ let coachSendMacTests: [Test] = [
         await model.send()
         try expectEqual(model.draft, "")
         try expectEqual(model.pending, nil)
-        try expectEqual(transport.sent.map(\.method), ["GET", "GET", "POST", "GET", "GET"])
+        try expectEqual(transport.sent.map(\.method), ["GET", "GET", "GET", "POST", "GET", "GET"])
         try expectEqual(slept(), [4])
         guard case .loaded(_, let page) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(page.items.count, 3)
@@ -69,7 +69,7 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.consent, nil)
         try expectEqual(transport.sent.filter { $0.method == "POST" }.map(\.path),
                         ["/v1/tafs/taf-coach/messages", "/v1/me/ai-consent", "/v1/tafs/taf-coach/messages"])
-        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["version": "3"])
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[4].body), ["version": "3"])
         try expectEqual(model.pending, nil)
     }),
     Test("no key gives the AI consent: Return answers nothing, and Esc is Not now") {
@@ -123,5 +123,41 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.pending?.failed, "")
         try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 1)
         try expect(!transport.sent.contains { $0.path == "/v1/me/ai-consent" }, "no consent was sent")
+    }),
+    Test("Coach opens on its newest chat, as the iPad's loadSetupThread", awaiting: { @MainActor in
+        let chats = #"{"chats":[{"session":"s1","started":"2026-11-13T09:00:00Z","updated":"2026-11-13T10:00:00Z","title":"Old"},{"session":"s2","started":"2026-11-14T09:00:00Z","updated":"2026-11-14T10:00:00Z","title":"New"}]}"#
+        let transport = CannedTransport([(200, setupAnswer), (200, chats), (200, before)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in })
+        await model.load()
+        try expectEqual(model.chat, "s2")
+        try expectEqual(transport.sent.map(\.path), ["/v1/setup", "/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s2"])
+    }),
+    Test("a new conversation reads nothing, keeps what's typed, and its first message asks for a new chat it then goes on in", awaiting: { @MainActor in
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered)])
+        model.draft = "Connect Qonto"
+        model.newChat()
+        try expectEqual(model.fresh, true)
+        try expectEqual(model.isEmpty, true)
+        try expectEqual(model.draft, "Connect Qonto")
+        try expectEqual(transport.sent.count, 3)
+        await model.send()
+        let body = try JSONSerialization.jsonObject(with: transport.sent[3].body) as? NSDictionary
+        try expectEqual(body, ["text": "Connect Qonto", "new_chat": true, "new_chat_after_handover": true])
+        try expectEqual(model.chat, "s1")
+        try expectEqual(model.fresh, false)
+        try expectEqual(transport.sent[4].path, "/v1/tafs/taf-coach/conversation/s1")
+        try expectEqual(model.target, ChatTarget(session: "s1", newChatAfterHandover: true))
+    }),
+    Test("a message to a chat that handed a taf over goes on in the new chat tafs cloud started", awaiting: { @MainActor in
+        let moved = #"{"session":"s7","new_session":true,"message":{"id":"m9"}}"#
+        let (model, transport, _) = await make([(200, sentAnswer), (200, answered), (200, moved), (200, answered)])
+        model.newChat()
+        model.draft = "Connect Qonto"
+        await model.send()
+        try expectEqual(model.chat, "s1")
+        model.draft = "And Gmail"
+        await model.send()
+        try expectEqual(model.chat, "s7")
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-coach/conversation/s7")
     }),
 ]

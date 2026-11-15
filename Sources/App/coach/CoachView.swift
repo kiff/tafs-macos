@@ -33,6 +33,13 @@ final class CoachModel: ObservableObject {
     @Published private(set) var live: LiveAnswer?
     /// tafs cloud's words for why the last run stopped, when it stopped with a reason for the person.
     @Published private(set) var stopped: String?
+    /// Coach's chat shown, by its session: the newest when Coach opens, as the iPad's `setupChat`.
+    @Published private(set) var chat: String?
+    /// A new conversation before its first message, as the iPad's `setupFresh`: nothing is read
+    /// for it, and its first message asks tafs cloud for a new chat.
+    @Published private(set) var fresh = false
+    /// Moves on with each new conversation: what comes back for the one before is dropped.
+    private var conversation = 0
     private let cloud: CloudClient
     /// Opens the answer's stream; nil sends plainly and reads the thread again instead.
     private let streamer: LineStream?
@@ -55,6 +62,60 @@ final class CoachModel: ObservableObject {
         self.streamer = streamer
         self.sleep = sleep
         self.now = now
+    }
+
+    /// Coach's own chat, not a taf's: only it has conversations.
+    private var isCoach: Bool { fixed == nil }
+
+    /// Where the next message goes, as the iPad's `setupTarget`: a new chat, the one shown, else
+    /// the live one. Coach's all say they follow a new chat after a hand-over. A taf's chat
+    /// goes to its live one.
+    var target: ChatTarget {
+        guard isCoach else { return .live }
+        var target = fresh ? ChatTarget.new : chat.map { ChatTarget(session: $0) } ?? .live
+        target.newChatAfterHandover = true
+        return target
+    }
+
+    /// The chat shown, read; nil while a new conversation has nothing to read.
+    private func read(_ coach: Coach) async throws -> Thread.Page? {
+        if fresh { return nil }
+        return try await cloud.thread(of: coach.id, session: isCoach ? chat : nil)
+    }
+
+    /// A new conversation, as the iPad's `newSetupChat`: nothing in it until its first message.
+    /// What's typed stays in the box.
+    func newChat() {
+        guard isCoach, case .loaded(let coach, _) = state else { return }
+        conversation += 1
+        following += 1
+        live = nil
+        pending = nil
+        stopped = nil
+        consent = nil
+        notAnswered = [:]
+        chat = nil
+        fresh = true
+        state = .loaded(coach, .empty)
+    }
+
+    /// The new conversation's first message made its chat, as the iPad's `settleSetupChat`.
+    private func settle(_ session: String) {
+        guard fresh else { return }
+        chat = session
+        fresh = false
+    }
+
+    /// tafs cloud started a new chat for the message just sent, as the iPad's
+    /// `followNewSetupChat`: the chat shown had handed a taf over. Coach goes on in the new
+    /// one, with the message just sent; the old one stays tafs cloud's. True once it moved.
+    private func followNew(_ session: String, newSession: Bool, _ coach: Coach) -> Bool {
+        guard newSession, !session.isEmpty, let open = chat, open != session else { return false }
+        conversation += 1
+        chat = session
+        fresh = false
+        state = .loaded(coach, .empty)
+        return true
     }
 
     /// Coach is at work: a message on its way, an answer being written, or tafs cloud says a
@@ -126,7 +187,7 @@ final class CoachModel: ObservableObject {
     /// (its answer was lost), the thread already has it: then nothing is sent a second time.
     func retry() async {
         guard case .loaded(let coach, _) = state, let tried = pending, tried.failed != nil else { return }
-        if let page = try? await cloud.thread(of: coach.id), page.hasPersonsLast(tried.text, since: tried.at) {
+        if let page = try? await read(coach), page.hasPersonsLast(tried.text, since: tried.at) {
             pending = Pending(text: tried.text, at: tried.at)
             state = .loaded(coach, page)
             pending = nil
@@ -159,8 +220,9 @@ final class CoachModel: ObservableObject {
     private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil) async {
         pending = Pending(text: text, at: firstTried ?? now())
         stopped = nil
+        var mine = conversation
         do {
-            if let streamer, let request = cloud.streamRequest(text, to: coach.id) {
+            if let streamer, let request = cloud.streamRequest(text, to: coach.id, target: target) {
                 var opened: AsyncThrowingStream<String, Error>?
                 do {
                     opened = try await streamer.lines(request)
@@ -169,7 +231,7 @@ final class CoachModel: ObservableObject {
                 } catch {
                     // The stream couldn't open. If tafs cloud has the message all the same, the
                     // thread is followed; only if it doesn't is the message sent plainly, below.
-                    if let page = try? await cloud.thread(of: coach.id), let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
+                    if let page = try? await read(coach), let tried = pending, page.hasPersonsLast(tried.text, since: tried.at) {
                         state = .loaded(coach, page)
                         pending = nil
                         await follow(coach)
@@ -179,17 +241,22 @@ final class CoachModel: ObservableObject {
                 if let opened {
                     // tafs cloud answered the stream route: it has the message. Whatever the
                     // stream does from here, the message is never sent again.
-                    await stream(opened, coach)
+                    await stream(opened, coach, mine)
                     return
                 }
             }
-            let sent = try await cloud.send(text, to: coach.id)
+            let sent = try await cloud.send(text, to: coach.id, target: target)
+            guard mine == conversation else { return }
+            settle(sent.session)
+            if followNew(sent.session, newSession: sent.newSession, coach) { mine = conversation }
             pending?.id = sent.message?.id
             await follow(coach)
         } catch let refusal as CloudRefusal where refusal.needsConsent {
+            guard mine == conversation else { return }
             live = nil
             consent = refusal.consent
         } catch {
+            guard mine == conversation else { return }
             live = nil
             pending?.failed = Self.why(error)
         }
@@ -197,14 +264,20 @@ final class CoachModel: ObservableObject {
 
     /// Draws the answer as its events come, then reads the thread, which has it whole. A
     /// stream that breaks, at any point, only ends the drawing: the thread has the rest.
-    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach) async {
+    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach, _ started: Int) async {
         var reader = EventReader()
         var answer = LiveAnswer()
+        var mine = started
         live = answer
         do {
             for try await line in lines {
+                // A new conversation since: this answer is the one before's, and tafs cloud keeps it.
+                guard mine == conversation else { return }
                 guard let event = reader.read(line) else { continue }
-                if case .session(let id) = event { pending?.id = id }
+                if case .session(let session, let newSession, let id) = event {
+                    if followNew(session, newSession: newSession, coach) { mine = conversation } else { settle(session) }
+                    pending?.id = id
+                }
                 if case .end(let words) = event {
                     stopped = words
                     break
@@ -222,7 +295,8 @@ final class CoachModel: ObservableObject {
     }
 
     private func reload(_ coach: Coach) async {
-        guard let page = try? await cloud.thread(of: coach.id) else { return }
+        let mine = conversation
+        guard let page = try? await read(coach), mine == conversation else { return }
         state = .loaded(coach, page)
         if let id = pending?.id, page.has(message: id) { pending = nil }
     }
@@ -232,7 +306,7 @@ final class CoachModel: ObservableObject {
         following += 1
         let mine = following
         for _ in 0..<Self.followAtMost {
-            guard mine == following, let page = try? await cloud.thread(of: coach.id) else { return }
+            guard mine == following, let page = try? await read(coach), mine == following else { return }
             state = .loaded(coach, page)
             if let id = pending?.id, page.has(message: id) { pending = nil }
             if pending == nil, !page.working { return }
@@ -247,7 +321,15 @@ final class CoachModel: ObservableObject {
         do {
             let found = try await (fixed == nil ? cloud.coach() : fixed)
             guard let coach = found else { state = .notStarted; return }
-            state = .loaded(coach, try await cloud.thread(of: coach.id))
+            // Coach opens on its newest chat, as the iPad's `loadSetupThread`; without the list,
+            // or with none yet, the thread reads as before.
+            let mine = conversation
+            if isCoach, chat == nil, !fresh, let chats = try? await cloud.chats(of: coach.id), mine == conversation,
+               let newest = chats.max(by: { $0.updated < $1.updated }) {
+                chat = newest.session
+            }
+            guard mine == conversation else { return }
+            state = .loaded(coach, try await read(coach) ?? .empty)
         } catch {
             state = .unread(why: NeedsYouModel.why(error))
         }
@@ -295,8 +377,18 @@ struct CoachView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             if !embedded {
                 Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
                     .accessibilityAddTraits(.isHeader)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    // New conversation, as the iPad's pencil: an empty chat is already one.
+                    .overlay(alignment: .trailing) {
+                        Button { if !model.isEmpty { model.newChat() } } label: {
+                            Image(systemName: "square.and.pencil").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.soft)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(words("coach.new_conversation"))
+                        .padding(.trailing, Look.inset)
+                    }
+                    .background(Theme.background)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
