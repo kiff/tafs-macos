@@ -92,16 +92,27 @@ struct QuestionSelection: Equatable {
     }
 }
 
+/// A card's answer as tafs cloud takes it, as the iPad's `CardAnswered` (`KIFF/TafsCloud.swift:1355-1359`):
+/// the chat it's in, and the run that waited on it, which goes on.
+struct CardAnswered: Decodable, Equatable {
+    let session: String
+    let run: String
+    let status: String
+}
+
 extension CloudClient {
     /// Answers a questions card, as data (`POST …/components/{id}/answer`), as the iPad's
     /// `answerCard` with `CardAnswerValue.questions` (`KIFF/TafsCloud.swift:1385-1389`): one
     /// answer for each of its questions, and nothing else. It grants nothing, so it isn't signed.
-    func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer], in taf: String) async throws {
+    /// An answer that isn't `CardAnswered` is unreadable, as the iPad's `send` (`:2834`).
+    func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer], in taf: String) async throws -> CardAnswered {
         guard card.isQuestions, !card.grants, Set(answers.keys) == Set(card.questions.map(\.id)) else {
             throw CloudRefusal(status: 0, body: Data(#"{"error":"not_this_cards_answer"}"#.utf8))
         }
         struct Body: Encodable { let answer: [String: QuestionAnswers.Sent]; let session: String? }
-        _ = try await post("/v1/tafs/\(Self.escaped(taf))/components/\(Self.escaped(card.id))/answer",
-                           body: Body(answer: answers.mapValues(QuestionAnswers.sent), session: card.session))
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/components/\(Self.escaped(card.id))/answer",
+                                  body: Body(answer: answers.mapValues(QuestionAnswers.sent), session: card.session))
+        guard let answered = try? JSONDecoder().decode(CardAnswered.self, from: body) else { throw KIFFError.unreadable }
+        return answered
     }
 }

@@ -173,7 +173,7 @@ enum Thread {
         enum WorkKeys: String, CodingKey { case ms, steps }
         enum WorkStepKeys: String, CodingKey { case words, failed, error, why, notMade = "not_made" }
         enum OptionKeys: String, CodingKey { case label, value }
-        enum AnswerKeys: String, CodingKey { case words, state, outcome }
+        enum AnswerKeys: String, CodingKey { case words, state, by, outcome }
         enum HeldKeys: String, CodingKey { case exception }
 
         init(from decoder: Decoder) throws {
@@ -235,10 +235,25 @@ enum Thread {
                             options.append(Card.Option(label: label, value: value))
                         }
                     }
-                    // tafs cloud's answer: shown as answered only when the person chose one, as on the iPad.
-                    let answer = try? card.nestedContainer(keyedBy: AnswerKeys.self, forKey: .answer)
-                    let state = answer.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .state)) ?? nil }
-                    let words = answer.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+                    // tafs cloud's answer, as the iPad's `CardAnswer` (TafsCloud.swift:1796-1802): a
+                    // `state`, `words` or `by` that isn't text leaves the card unanswered; a missing
+                    // `state` is "answered", missing `words` are none. It's shown as answered only
+                    // when the person chose one, as on the iPad.
+                    var state: String?
+                    var words: String?
+                    var answer: KeyedDecodingContainer<AnswerKeys>?
+                    if let recorded = try? card.nestedContainer(keyedBy: AnswerKeys.self, forKey: .answer) {
+                        do {
+                            let readState = try recorded.decodeIfPresent(String.self, forKey: .state)
+                            let readWords = try recorded.decodeIfPresent(String.self, forKey: .words)
+                            _ = try recorded.decodeIfPresent(String.self, forKey: .by)
+                            state = readState ?? "answered"
+                            words = readWords ?? ""
+                            answer = recorded
+                        } catch {
+                            // One of the three isn't text: no answer is read, its outcome neither.
+                        }
+                    }
                     let answered = state == "answered" ? words.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } : nil
                     var made = Card(key: outer(.key) ?? id, id: id, type: text(.type) ?? "", session: outer(.session), title: text(.title),
                                     text: text(.text), options: options, waits: text(.waits), answerState: state, answered: answered)
@@ -250,13 +265,11 @@ enum Thread {
                         }
                     }
                     made.at = outer(.at).flatMap(Thread.time)
-                    if var list = try? shown.nestedUnkeyedContainer(forKey: .questions) {
-                        var read: [Card.Question] = []
-                        var whole = true
-                        while !list.isAtEnd {
-                            if let question = try? list.decode(Card.Question.self) { read.append(question) } else { whole = false; _ = try? list.decode(Skipped.self) }
-                        }
-                        made.questions = whole ? read : []
+                    // A card's questions read whole, as the iPad's `SetupComponent`: when they, or any
+                    // one of them, don't read, the card isn't read (`LenientShown`, TafsCloud.swift:1812-1814).
+                    if shown.contains(.questions), (try? shown.decodeNil(forKey: .questions)) != true {
+                        guard let questions = try? shown.decode([Card.Question].self, forKey: .questions) else { continue }
+                        made.questions = questions
                     }
                     made.planLine = text(.line)
                     made.tone = text(.tone)

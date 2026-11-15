@@ -204,7 +204,7 @@ data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the 
 | Card | On the Mac |
 |---|---|
 | A choice (`confirm`, with options) | Its title and text as Coach wrote them, and a button for each option. One tap answers it. |
-| Questions (`questions`, with questions) | Each question's options, or the person's own words, then **Send answers**, once every question has an answer. |
+| Questions (`questions`, with questions) | In Coach's own chat, for someone who may use Coach, while it has no answer: each question's options, or the person's own words, then **Send answers**, once every question has an answer. |
 | An approval or a sign-in (`approval`, `sign_in`) | "Needs you · approve". **Never answered here**: its answer is a signature, which arrives with approvals on the Mac. |
 | A card already answered | What was answered, in tafs cloud's words. |
 
@@ -218,9 +218,9 @@ data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the 
 
 ### Questions (`Thread.Card.Question`, `QuestionSelection`, `QuestionsCard`)
 
-As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)` and `answerCard`
-(`Views/QuestionsCard.swift`, `Model/QuestionAnswers.swift:62-99`, `AppModel.swift:8223-8251`,
-`KIFF/TafsCloud.swift:1363-1389`):
+As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)`, `cardRef` and `answerCard`
+(`Views/QuestionsCard.swift`, `Model/QuestionAnswers.swift:62-99`, `AppModel.swift:6576-6579`,
+`8223-8250`, `KIFF/TafsCloud.swift:1355-1389`):
 
 - **Every word is Coach's:** each question's text, its options with their descriptions, and its
   note. The app adds **Something else…**, for the person's own words, and **Chat about this**,
@@ -230,18 +230,37 @@ As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)` and `answerCa
   or the person's own words, never both. Opening Something else… clears the picks; picking a
   choice closes the field; blank words are no answer. Send answers waits until every question
   has one.
+- **Who and where:** only in Coach's own chat (the iPad's `setupTaf`), for someone who may use
+  Coach (`mayUseCoach`). A taf's own chat, or someone without it, shows what the card asks.
+- **Whenever it has no answer**, whatever `waits` says, as the iPad's `QuestionsCard`.
 - **Sent as data** (`{"answer": {"<question>": {"value"} | {"values"} | {"own"}}, "session"}`),
-  as the iPad's `CardAnswerValue.questions`. It grants nothing, so it isn't signed. Only the
-  card's own questions, each answered, are ever sent.
-- **A card with a question that doesn't read** keeps none, and says it needs the person: it's
-  never answered in part.
-- Then as a choice: the thread is followed; a card that no longer waits is read again; any
-  other refusal stays on the card with why. An answer that comes back after sign-out is the
+  as the iPad's `CardAnswerValue.questions`, to the card its id names now (`cardRef`: the one
+  waiting under that id, else the latest), in that card's chat. It grants nothing, so it isn't
+  signed. Only the card's own questions, each answered, are ever sent.
+- **tafs cloud's answer is `CardAnswered`** (`session`, `run`, `status`, all text). Its chat is
+  the one shown from then on, for a new conversation (`settleSetupChat`). Then the thread is
+  followed. A card that no longer waits is read again; a refusal stays on the card with tafs
+  cloud's why; an answer that doesn't read, or anything else, says "Your answer didn't reach
+  Setup" (`coach.answer_did_not_reach_setup`). An answer that comes back after sign-out is the
   session before's and is dropped (`gen == accountGeneration`).
-- **Mac differences:** the iPad reads an answer sent the old way, as a message, back into words
-  (`QuestionAnswers.words`); the Mac shows tafs cloud's words for the recorded answer only. A
-  refusal for want of the AI-data consent keeps the card on the iPad with nothing said; here it
-  says tafs cloud's why. Haptics and the driven field are the iPad's own.
+- **Read as the iPad reads it:** a card whose `questions`, or any one question, doesn't read
+  isn't read at all (`LenientShown`). A recorded answer is the iPad's `CardAnswer`: a `state`,
+  `words` or `by` that isn't text leaves it unread; a missing `state` is "answered". This holds
+  for every card's answer.
+- **Mac differences:**
+  - The iPad reads an answer sent the old way, as a message, back into words
+    (`QuestionAnswers.words`); the Mac shows tafs cloud's words for the recorded answer only.
+  - A refusal for want of the AI-data consent keeps the card quietly on the iPad and opens its
+    consent screen; here it says tafs cloud's why.
+  - The iPad follows the answered run's stream (`followAnswered`); the Mac reads the thread
+    until the run is done, as it does after every card's answer.
+  - A card's other fields stay as leniently read as every card's on the Mac: a title or text
+    that isn't text is left out, not the card.
+  - A questions card with an empty list is "0 of 0" and can be sent on the iPad; here it
+    shows what it asks.
+  - Sign-out moves the conversation on (`signedOut`), so nothing answered after it is kept;
+    the iPad also forgets Coach's thread. The window goes then, on the Mac.
+  - Haptics and the driven field are the iPad's own.
 
 ### The AI-data consent
 

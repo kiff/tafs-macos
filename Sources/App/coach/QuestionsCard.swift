@@ -8,6 +8,8 @@ struct QuestionsCard: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
     let card: Thread.Card
+    /// Whether this person may use Coach: the model answers only then.
+    let mayUseCoach: Bool
 
     @State private var selection = QuestionSelection()
     @State private var chatting = false
@@ -37,7 +39,7 @@ struct QuestionsCard: View {
                 }
                 Divider()
                 actions
-                if let why = model.notAnswered[card.key] {
+                if let why = model.notAnswered[model.refKey(card)] {
                     Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
                 }
             }
@@ -63,8 +65,8 @@ struct QuestionsCard: View {
         }
     }
 
-    /// Being answered from this Mac.
-    private var busy: Bool { model.answering == card.key }
+    /// Being answered from this Mac: the card its id names now (`cardRef`).
+    private var busy: Bool { model.answering == model.refKey(card) }
 
     private func question(_ q: Thread.Card.Question, number: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -121,6 +123,6 @@ struct QuestionsCard: View {
 
     private func send() {
         guard let answers = selection.answers(questions) else { return }
-        Task { await model.answer(card, questions: answers) }
+        Task { await model.answer(card, questions: answers, mayUseCoach: mayUseCoach) }
     }
 }
