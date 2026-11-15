@@ -35,14 +35,18 @@ final class OverviewModel: ObservableObject {
 }
 
 /// Overview: today, across the person's tafs, one line each, to the iPad's layout: a large
-/// title, the columns' headings, and plain rows with no panel behind them.
+/// title, what needs the person, the columns' headings, and plain rows with no panel.
 struct OverviewView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: OverviewModel
+    /// The calls held for the person, one row each under NEEDS YOU.
+    var held: [HeldRow] = []
+    /// Opens Needs you, where each is answered.
+    var openNeedsYou: () -> Void = {}
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 20) {
                 ScreenTitle(title: words("home.overview.title"), lead: words("home.overview.subtitle"))
                     .padding(.top, 56)
                 switch model.state {
@@ -53,12 +57,8 @@ struct OverviewView: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(let page):
-                    if let needs = page.needsYouWords, (page.needsYouCount ?? 0) > 0 {
-                        HStack(spacing: 8) {
-                            Circle().fill(Theme.amber).frame(width: 8, height: 8).accessibilityHidden(true)
-                            Text(needs).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
-                        }
-                    }
+                    let count = page.needsYouCount ?? 0
+                    if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
                     table(page.tafs)
                 }
             }
@@ -70,17 +70,58 @@ struct OverviewView: View {
         .background(Theme.background)
     }
 
-    /// The iPad's four columns. The Card and the last result aren't read yet, so their
-    /// columns keep their place and their headings, and say nothing.
+    /// NEEDS YOU, as the iPad's: one row per held call, then a row for the rest tafs cloud
+    /// counts (Coach's chats, steps), in its words. Each opens Needs you.
+    private func needsYou(count: Int, words line: String?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(words("needs_you.title").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
+            ForEach(held) { row in
+                needsRow(row.taf.map { "\($0) · \(row.asks)" } ?? row.asks) {
+                    if let by = row.answerBy {
+                        Text(words("needs_you.answer_by", ["time": Self.clock.string(from: by)])).font(.system(size: 12)).foregroundColor(Theme.soft)
+                    }
+                }
+            }
+            if count > held.count, let line {
+                needsRow(line) {
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+                }
+            }
+        }
+    }
+
+    private func needsRow<End: View>(_ title: String, @ViewBuilder end: () -> End) -> some View {
+        Button(action: openNeedsYou) {
+            HStack(spacing: 10) {
+                Circle().fill(Theme.amber).frame(width: 8, height: 8).accessibilityHidden(true)
+                Text(verbatim: title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                Spacer()
+                end()
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.raised))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// The iPad's four columns, headed in plain 11 bold.
     private func table(_ tafs: [Home.Taf]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 16) {
                 ForEach(["home.overview.column_taf", "home.overview.column_now", "home.overview.column_card", "home.overview.column_last_result"], id: \.self) { key in
-                    Eyebrow(text: words(key)).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(words(key)).font(.system(size: 11, weight: .bold)).foregroundColor(Theme.dim).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             if tafs.isEmpty {
-                Text(words("home.no_tafs")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                Text(words("home.no_tafs")).font(.system(size: 14)).foregroundColor(Theme.dim)
             }
             ForEach(tafs) { taf in
                 Rectangle().fill(Theme.line).frame(height: 1)
@@ -89,29 +130,24 @@ struct OverviewView: View {
         }
     }
 
+    /// One taf: its name; tafs cloud's line for now; its Card's line; and its last result,
+    /// "–" until it is read.
     private func row(_ taf: Home.Taf) -> some View {
         HStack(alignment: .top, spacing: 16) {
-            HStack(alignment: .top, spacing: 10) {
-                RoundedRectangle(cornerRadius: 8).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
-                    .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 14, weight: .bold)).foregroundColor(.white))
+            HStack(alignment: .center, spacing: 10) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
+                    .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(.white))
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    if let job = taf.jobSummary { Text(job).font(.system(size: 12)).foregroundColor(Theme.soft).lineLimit(2) }
-                }
+                Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(taf.now ?? "–").font(.system(size: 13)).foregroundColor(taf.attention ? Theme.amberText : Theme.ink)
-                if let trouble = taf.trouble { Text(trouble).font(.system(size: 12)).foregroundColor(Theme.no) }
-                if taf.waiting > 0 {
-                    Text(words.count("needs_you.count", taf.waiting)).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.amberText)
-                }
+            Group {
+                Text(verbatim: taf.now ?? "–").foregroundColor(Theme.ink)
+                Text(verbatim: taf.cards.first?.line(words) ?? "–").foregroundColor(Theme.ink)
+                Text(verbatim: "–").foregroundColor(Theme.soft).lineLimit(2)
             }
+            .font(.system(size: 13))
             .frame(maxWidth: .infinity, alignment: .leading)
-            // The Card's and the last result's places, kept empty until they are read.
-            Color.clear.frame(maxWidth: .infinity).frame(height: 1)
-            Color.clear.frame(maxWidth: .infinity).frame(height: 1)
         }
         .accessibilityElement(children: .combine)
     }

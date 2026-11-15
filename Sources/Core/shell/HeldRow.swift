@@ -6,6 +6,10 @@ struct HeldRow: Equatable, Identifiable {
     let id: String
     /// The taf's name and the call, or the call alone when the taf isn't in the list.
     let title: String
+    /// The taf's name, when the list has it, and what the call asks, apart: the Overview
+    /// writes them "Taf · what it asks".
+    let taf: String?
+    let asks: String
     /// KIFF's words for why it is held.
     let reason: String?
     let answerBy: Date?
@@ -13,11 +17,10 @@ struct HeldRow: Equatable, Identifiable {
     init(_ call: HeldCall, tafs: [Home.Taf]) {
         id = call.id
         let asks = call.title ?? call.action
-        if let taf = tafs.first(where: { $0.kiffAgent == call.subject }) {
-            title = taf.name + ": " + asks
-        } else {
-            title = asks
-        }
+        let name = tafs.first(where: { $0.kiffAgent == call.subject })?.name
+        self.asks = asks
+        taf = name
+        title = name.map { $0 + ": " + asks } ?? asks
         reason = call.reasonText
         answerBy = call.expiresAt
     }

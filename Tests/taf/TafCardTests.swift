@@ -60,4 +60,12 @@ let tafTests: [Test] = [
         try expectEqual(TafCard.Amount(minor: 42, unit: nil, scale: 0).written(language: "en"), "42")
         try expectEqual(TafCard.Amount(minor: 300, unit: "points", scale: 0).written(language: "en"), "300 points")
     },
+    Test("a Card's one line is what is left of its money, else of its calls, and nothing without a figure") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let all = try cards()
+        try expectEqual(all[1].line(words), "€1,960 left today of €2,000")
+        try expectEqual(all[0].line(words), "199 calls left today of 200")
+        let unknown = #"{"id":"c","title":"t","calls":{"limit":200,"window":"calendar_day"}}"#
+        try expectEqual(try JSONDecoder().decode(TafCard.self, from: Data(unknown.utf8)).line(words), nil)
+    },
 ]

@@ -130,3 +130,19 @@ extension TafCard.Amount {
         return unit.map { "\(number) \($0)" } ?? number
     }
 }
+
+extension TafCard {
+    /// The Card in one line, as the Overview's Card column and the Activity tab say it: what is
+    /// left of its money ("€1,960 left today of €2,000"), else of its calls. Nil with no figure.
+    func line(_ words: Words) -> String? {
+        switch figure {
+        case .money(let left, let limit, let window)?:
+            return left.written(language: words.language) + " " + words("card.hero.left_of", ["window": window, "limit": limit.written(language: words.language)])
+        case .calls(let left, let limit, let window)?:
+            // The line holds no number: the figure goes before it, as the Card's face puts it.
+            return words.number(left) + " " + words.count("card.hero.calls_left_of", left, ["window": window, "limit": words.number(limit)])
+        case nil:
+            return nil
+        }
+    }
+}

@@ -23,21 +23,29 @@ name, at the top of the sidebar.
 
 ## The layout
 
-The iPad's: a large title and its line, the four columns' headings, and plain rows with no
-panel behind them. A taf has its coloured rounded square. The Card and Last result columns
-keep their place and their headings, and stay empty until they are read.
+The iPad's: a large title and its line; **NEEDS YOU**, when something waits; the four
+columns' headings in plain 11 bold; and plain rows with no panel behind them.
+
+- **NEEDS YOU** (amber, mono 12): one row per call KIFF held, an amber dot, "Taf · what it
+  asks" and "answer by {time}", on the raised ground. When tafs cloud counts more than the held
+  calls (Coach's chats, steps), a last row has its `needs_you.words` and a chevron. Every row
+  opens Needs you.
+- **A taf's row:** its coloured square and name; **Now**, tafs cloud's line alone; **Card**,
+  the first Card's one line ("€1,960 left today of €2,000", `TafCard.line`, from KIFF's numbers
+  as #39 reads them), else "–"; **Last result**, "–".
 
 ## Not yet
 
-- **The Card and Last result columns** of the iPad's Overview. The iPad app works the Card's
-  line out itself from many fields of the answer. There is no fixture for `GET /v1/home` in
-  kiff/tafs's `contracts/` yet, and this app won't redo that arithmetic from a reading of
-  another app's code.
-- Opening a taf from its line, and the tafs in the sidebar.
-- Reading the list again by itself. It is read when the screen opens.
+- **The Last result column.** The iPad reads each taf's runs and its last report (`GET
+  /v1/tafs/{id}/runs`, then the report). There is no contract for either in kiff/tafs's
+  `contracts/` yet, so the column says "–".
+- **"Each line opens the taf."** and a row opening its taf: with the taf page (#41).
+- Who uses a taf, under its name, for someone who manages it.
+- Reading the list again by itself. It is read when the screen opens, and with each round.
 
 ## Tests
 
-`scripts/test.sh overview`: the list as tafs cloud sends it, what Now falls back to, a taf
+`scripts/test.sh overview`: the list as tafs cloud sends it, each Card's one line (in the
+`taf` part), what Now falls back to, a taf
 with only its required fields, an unreadable list, a malformed headline. It writes
 `build/screenshots/overview-*.png`.
