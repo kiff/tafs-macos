@@ -86,8 +86,10 @@ struct TafCard: Decodable, Identifiable, Equatable {
         /// The Card's own total, with its extra room apart, never one sum.
         func summary(_ words: Words) -> String {
             let window = each ?? ""
-            let own = extraRoom != nil ? (baseLimit ?? perWindow) : perWindow
-            let room = extraRoom.map { words("card.extra_room", ["extra": $0.written(language: words.language), "window": now ?? ""]) }
+            // The room apart only with the Card's own total beside it: `per_window` already holds
+            // the room, so with no `base_limit` it is the one sum, said once.
+            let own = baseLimit != nil && extraRoom != nil ? baseLimit : perWindow
+            let room = baseLimit == nil ? nil : extraRoom.map { words("card.extra_room", ["extra": $0.written(language: words.language), "window": now ?? ""]) }
             var parts: [String] = []
             switch outside {
             case .hold:

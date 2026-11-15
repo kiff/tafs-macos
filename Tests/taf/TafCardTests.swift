@@ -82,6 +82,9 @@ let tafTests: [Test] = [
         // The Card's own total, and the extra room apart: never one sum.
         let room = try rule(#"{"label":"Refunds","outside":"hold","per_window":\#(eur(230000)),"extra_room":\#(eur(30000)),"base_limit":\#(eur(200000)),"window_words":{"each":"a day","now":"today"}}"#)
         try expectEqual(room.summary(words), "€2,000 in total a day, then it asks you · +€300 extra room today")
+        // Room with no base: per_window already holds it, so it is said once, never twice.
+        let roomOnly = try rule(#"{"label":"Refunds","outside":"hold","per_window":\#(eur(230000)),"extra_room":\#(eur(30000)),"window_words":{"each":"a day","now":"today"}}"#)
+        try expectEqual(roomOnly.summary(words), "€2,300 in total a day, then it asks you")
         try expectEqual(try rule(#"{"label":"x","outside":"hold"}"#).summary(words), "")
     },
 ]
