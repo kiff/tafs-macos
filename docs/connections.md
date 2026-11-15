@@ -64,10 +64,13 @@ KIFF. It gets this device's key, and a KIFF key that connects tools and does not
 
 - **Asked first with no key.** `POST /v1/accounts/{tenant}/enrolment` with `{device_key}`. An
   answer with `kept: true` is done, and nothing is minted.
-- **A key is minted and handed over only when planque doesn't keep one:** `409 needs_key`, or,
-  as the iPad, a 2xx without `kept`. The mint is `POST /v1/keys` with
-  `{"label": "planque", "roles": ["connector"]}`, a signed setup call. Its plaintext goes
-  straight to planque in `{device_key, connector_key}`, and is never kept on this Mac.
+- **A key is minted and handed over only on `409 needs_key`.** A 2xx without `kept` mints
+  nothing and says connecting apps isn't set up, as Windows and Android: planque answered
+  oddly, and a key minted then could be left live in KIFF, where no device can revoke it. The
+  mint is `POST /v1/keys` with `{"label": "planque", "roles": ["connector"]}`, a signed setup
+  call. Its plaintext goes straight to planque in `{device_key, connector_key}`, and is never
+  kept on this Mac. **Once minted, it is handed over even if the session ends then**: dropping
+  it would leave it orphaned. The end is checked after.
 - **Anything else stops with why and mints nothing:** planque not reached, a 400, a 5xx, a
   replayed signature, a changed enrolment. A second enrolment would likely fail too, and leave a
   key live in KIFF that no device can revoke; the next try asks again.
@@ -95,6 +98,7 @@ Each of the first three changes what a taf may do, so each comes with its approv
 two lists, a search's escaping and limit, paging without repeats, an unreadable catalog, the
 logo paths kept and dropped, each row's end, `by_key`, and **that nothing but `GET` is ever
 sent**. It writes `build/screenshots/connect-apps-*.png`. Setting planque up: kept, `needs_key`
-then one key minted and handed over, a 2xx without `kept`, every stop that mints nothing, the
+then one key minted and handed over, a 2xx without `kept` minting nothing, a key handed over
+when the task ends right after its mint, every stop that mints nothing, the
 code-less 409, KIFF's 403, no device or signer, a session that ends, each stop's words, and (on a
 Mac) both signatures checked as planque and KIFF check them.

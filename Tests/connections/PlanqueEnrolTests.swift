@@ -19,10 +19,10 @@ private final class Stubs {
     let account: AccountClient
     var signed: [String] = []
 
-    init(planque answers: [(Int, String)], kiff: [(Int, String)] = [], transport: Transport? = nil) {
+    init(planque answers: [(Int, String)], kiff: [(Int, String)] = [], transport: Transport? = nil, cancelOnMint: Bool = false) {
         planqueSent = CannedTransport(answers)
         self.kiff = CannedTransport(kiff)
-        account = AccountClient(transport: self.kiff, session: session, sign: { _ in "t=x,v1=SIG" })
+        account = AccountClient(transport: cancelOnMint ? CancelOnMint(self.kiff) : self.kiff, session: session, sign: { _ in "t=x,v1=SIG" })
         planque = PlanqueClient(baseURL: "https://planque.test/")
         planque.tenant = "t_01"
         planque.deviceID = "dev_9"
@@ -41,6 +41,17 @@ private final class Stubs {
     }
 
     var mints: Int { kiff.sent.filter { $0.path == "/v1/keys" }.count }
+}
+
+/// KIFF, which cancels the task that minted, right after the mint: as a sign-out at that moment.
+private final class CancelOnMint: Transport, @unchecked Sendable {
+    let inner: CannedTransport
+    init(_ inner: CannedTransport) { self.inner = inner }
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        let answer = try await inner.send(request)
+        if request.path == "/v1/keys" { withUnsafeCurrentTask { $0?.cancel() } }
+        return answer
+    }
 }
 
 let planqueEnrolTests: [Test] = [
@@ -76,13 +87,21 @@ let planqueEnrolTests: [Test] = [
         // Both enrolments are signed.
         try expectEqual(stubs.signed.count, 2)
     }),
-    Test("an enrolment answered without kept goes on to mint and hand a key over, as the iPad's testSetUpPlanqueOnce", awaiting: {
+    Test("an enrolment answered 2xx without kept mints nothing, and says it isn't set up (Windows #63, Android)", awaiting: {
         let stubs = Stubs(planque: [(201, #"{"tenant":"t_01","device":"ab12"}"#), (201, #"{"tenant":"t_01","device":"ab12"}"#)],
                           kiff: [(201, minted)])
         let stop = await stubs.enrol()
-        try expectEqual(stop, nil)
+        try expectEqual(stop, .notSetUp(why: .unreadable))
+        try expectEqual(stubs.mints, 0)
+        try expectEqual(stubs.keysHanded, [nil])
+    }),
+    Test("a key once minted is handed to planque even when the task ends right after the mint, then it ends", awaiting: {
+        let stubs = Stubs(planque: [(409, #"{"error":"needs a key","code":"needs_key"}"#), (201, #"{"tenant":"t_01","device":"ab12","kept":true}"#)],
+                          kiff: [(201, minted)], cancelOnMint: true)
+        let stop = await Task { await stubs.enrol() }.value
         try expectEqual(stubs.mints, 1)
         try expectEqual(stubs.keysHanded, [nil, "kiff_live_connector"])
+        try expectEqual(stop, .ended)
     }),
     Test("planque not reached, a 400, a 5xx, a replayed signature or a changed enrolment mints nothing, and says why, never another device", awaiting: {
         let failures: [(String, (Int, String)?)] = [
