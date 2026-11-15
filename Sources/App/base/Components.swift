@@ -81,6 +81,40 @@ struct TafAvatar: View {
     }
 }
 
+/// The iPad's main button (`PrimaryLook`): 16 semibold on the brand fill, at least 54 high;
+/// while disabled, a neutral fill with the soft ink, so it stays readable on any ground.
+struct PrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Look(configuration: configuration)
+    }
+
+    private struct Look: View {
+        let configuration: Configuration
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 16, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 18)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                // White on the brand, as the iPad's `amberInk`.
+                .foregroundColor(isEnabled ? .white : Theme.soft)
+                .background(fill)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+
+        @ViewBuilder private var fill: some View {
+            if isEnabled {
+                Theme.brand.opacity(configuration.isPressed ? 0.8 : 1)
+            } else {
+                Theme.dim.opacity(0.22)
+            }
+        }
+    }
+}
+
 /// The iPad's outlined button: 15 medium in ink, at least 48 high, on a continuous rounded
 /// stroke at 40%, faded while disabled.
 struct OutlineButtonStyle: ButtonStyle {
