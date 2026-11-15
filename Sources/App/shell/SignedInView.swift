@@ -16,6 +16,9 @@ struct SignedInView: View {
     @StateObject private var connect: ConnectAppsModel
     @StateObject private var coach: CoachModel
     @State private var selection: Screen = .overview
+    /// The screen shown last, and the one Coach opened over: Coach's Back returns there.
+    @State private var shown: Screen = .overview
+    @State private var beforeCoach: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
@@ -60,7 +63,7 @@ struct SignedInView: View {
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
         ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
-                  accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account, screen: { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
@@ -71,13 +74,18 @@ struct SignedInView: View {
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, close: closeCoach))
             case .account: return AnyView(accountScreen)
             }
-        }
+        }, startNewTaf: startNewTaf, toggleCoach: toggleCoach)
         .onAppear { notifier.opened = { selection = .needsYou } }
-        // A screen chosen from elsewhere (a notification) closes it too.
-        .onChange(of: selection) { _ in openTaf = nil }
+        // A screen chosen from elsewhere (a notification) closes it too. Coach remembers the
+        // screen it opened over, for its Back.
+        .onChange(of: selection) { screen in
+            openTaf = nil
+            if screen == .coach, shown != .coach { beforeCoach = shown }
+            shown = screen
+        }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         .task {
@@ -116,6 +124,25 @@ struct SignedInView: View {
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
         tafPages = TafPagesModel(cloud: cloud, taf: id)
         openTaf = taf.id
+    }
+
+    /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back.
+    private func closeCoach() {
+        openTaf = nil
+        selection = beforeCoach == .coach ? .overview : beforeCoach
+    }
+
+    /// The sidebar's Coach: Coach opens, or closes when it's the screen shown.
+    private func toggleCoach() {
+        if selection == .coach && openTaf == nil { closeCoach() } else { openTaf = nil; selection = .coach }
+    }
+
+    /// Start a new taf, as the iPad's `startNewTaf`: a new conversation in Coach, so Coach
+    /// mode's start shows, whether Coach was open or not.
+    private func startNewTaf() {
+        coach.startNewTaf()
+        openTaf = nil
+        selection = .coach
     }
 
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: KIFF's answer for Setup,

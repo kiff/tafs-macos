@@ -24,6 +24,10 @@ struct ShellView: View {
     var accountLine: String?
     /// The screens that are built, each drawn in its place. A screen that isn't shows its name.
     var screen: (Screen) -> AnyView? = { _ in nil }
+    /// Start a new taf: a new conversation in Coach, Coach open or not.
+    var startNewTaf: () -> Void = {}
+    /// The sidebar's Coach: opens Coach, or closes it when it's open.
+    var toggleCoach: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -176,8 +180,10 @@ struct ShellView: View {
 
     private var foot: some View {
         VStack(alignment: .leading, spacing: 8) {
-            footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { selection = .coach }
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { selection = .coach }
+            // A new taf in Coach, as the iPad's `startNewTaf`, Coach open or not.
+            footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { startNewTaf() }
+            // Coach opens, and closes again from here, as Coach mode's own button does.
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { toggleCoach() }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     // As the iPad's: soft, and filled amber while Account is chosen.

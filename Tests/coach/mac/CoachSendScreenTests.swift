@@ -264,4 +264,34 @@ let coachSendMacTests: [Test] = [
         let outcome = await model.report(answer, reason: .wrong, note: "")
         try expectEqual(outcome, .failed("You signed out."))
     }),
+    Test("Start a new taf opens a new conversation, Coach open or not yet read, as the iPad's startNewTaf", awaiting: { @MainActor in
+        let (open, transport, _) = await make([])
+        open.draft = "kept"
+        open.startNewTaf()
+        try expectEqual(open.fresh, true)
+        try expectEqual(open.isEmpty, true)
+        try expectEqual(open.draft, "kept")
+        try expectEqual(transport.sent.count, 3)
+        // Asked before Coach is read: Coach opens on a new conversation once it's read.
+        let unread = CoachModel(cloud: CloudClient(transport: CannedTransport([(200, setupAnswer), (200, noChats), (200, before)]), session: session), sleep: { _ in })
+        unread.startNewTaf()
+        await unread.load()
+        try expectEqual(unread.fresh, true)
+        try expectEqual(unread.isEmpty, true)
+    }),
+    Test("Previous conversations lists Coach's chats and reopens one, read by its session", awaiting: { @MainActor in
+        let chats = #"{"chats":[{"session":"s1","started":"2026-11-13T09:00:00Z","updated":"2026-11-13T10:00:00Z","title":"Refunds"},{"session":"s2","started":"2026-11-14T09:00:00Z","updated":"2026-11-14T10:00:00Z","title":"Invoices"}]}"#
+        let (model, transport, _) = await make([(200, chats), (200, answered), (500, "")])
+        await model.loadChats()
+        try expectEqual(model.chats.map(\.title), ["Refunds", "Invoices"])
+        await model.open(chat: "s1")
+        try expectEqual(model.chat, "s1")
+        try expectEqual(model.fresh, false)
+        try expectEqual(transport.sent.map(\.path).suffix(2), ["/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s1"])
+        guard case .loaded(_, let page) = model.state else { throw Failure(description: "not read") }
+        try expectEqual(page.items.count, 3)
+        // A list read that fails keeps the one read before.
+        await model.loadChats()
+        try expectEqual(model.chats.count, 2)
+    }),
 ]

@@ -112,6 +112,25 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
   dropped.
 - A taf's own chat has no conversations: its messages go to its live chat.
 
+## Coach's title row, Previous conversations, and Start a new taf
+
+As the iPad's Coach mode (`CoachMode.swift:13-31`), its toolbar (`SetupChatView.swift:105-110,
+136-141`), `SetupChatsList` (`:803-857`), `openSetupChat` and `loadSetupChats`
+(`AppModel.swift:7095-7114`) and `startNewTaf` (`:6772-6775`):
+
+- **Coach's title row:** Back on the left, which closes Coach (Esc too), back to the screen
+  it opened over; on the right, New conversation (the pencil, which does nothing on an empty
+  chat) and the conversations' menu, with Previous conversations.
+- **The sidebar's Coach** opens Coach, and closes it when it's the screen shown, as Coach
+  mode's own button does.
+- **Previous conversations** lists Coach's chats (`GET /v1/tafs/{id}/chats`) as tafs cloud
+  lists them: each by its title and when it was last written to, the one shown marked. One
+  click reopens it: what was on its way belonged to the chat before, and the chat is read by
+  its session. A list read that fails keeps the list as it was. Done (Esc) closes it.
+- **Start a new taf** opens a new conversation in Coach, so Coach mode's start shows, whether
+  Coach was open or not. Asked before Coach is read, Coach opens on a new conversation once
+  it is.
+
 ## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
 
 As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement
@@ -240,8 +259,8 @@ A message still going is at 0.7.
 ## Not yet
 
 Answering questions, approving a connection or a Card,
-the list of earlier conversations (Previous conversations, archiving), Coach mode over a
-taf's page, and attachments. Each is its own pull request; the ones
+archiving a conversation and the archived ones (Previous conversations' swipe and
+Archived), Coach mode over a taf's page, and attachments. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests
