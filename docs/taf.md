@@ -73,18 +73,24 @@ As the iPad's `RunsPanel` and `RetainedRuns` (`TafDetailView.swift:476-517`,
 order (`TafActivityList.parts`):
 
 - **Runs:** a taf that works from its chat says so (`taf.works_from_chat`). Any other says
-  Paused, else tafs cloud's `next_run_words`, else "Next run at 14:05", else On its schedule;
+  Paused (tafs cloud's `status`, as the iPad's `cloud.paused`: never Home's `state`, which
+  says `waiting` for a paused taf with a call held), else tafs cloud's `next_run_words`, else
+  "Next run at 14:05", else On its schedule;
   then **Run now** (`POST /v1/tafs/{id}/run`, unsigned: it acts within the taf's Card). One
   click sends one request ("Starting a run…" until it answers). A run it started reads the
   runs again; one it didn't start shows tafs cloud's words. A refusal for want of credits shows
   tafs cloud's words; any other says the run didn't start, and why. On the iPad that line is
-  the app-wide error; here it sits under the button.
+  the app-wide error; here it sits under the button. Run now is kept by taf for the whole app
+  (`RunNowModel`, the iPad's `runsInFlight` and `runNowWords`), so a page opened again still
+  knows a run is on its way, and what tafs cloud said.
 - **The runs it kept** (`GET /v1/tafs/{id}/work/runs?limit=3`): tafs cloud's heading, each run's
   line with what it used (`credits.words`) and where its result went (each delivery's line),
   and on the first page the firings that started no run, dim, each in its place by time.
   tafs cloud's "see all" line opens all of them in a sheet, twenty a page, each next page read
   as the list's end shows, and `end_words` under the last. The panel is asked again with its
   `ETag` (`If-None-Match`): a 304 keeps what was read. A read that fails says why, with Try again.
+  That read alone skips the network's cache (`NetworkTransport.exchange`), as the iPad's
+  `representation`; every other request keeps the session's own cache policy.
 - The page's `title` and `more_title` are needed, as are each run's `id` and `at`, and each
   skipped firing's `due`, `why` and `words`: without one the page doesn't read. A run's other
   fields that can't be read are none.

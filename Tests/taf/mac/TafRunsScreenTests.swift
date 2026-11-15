@@ -53,7 +53,10 @@ let tafRunsMacTests: [Test] = [
     }),
     Test("the runs panel says paused, tafs cloud's next run, the app's time, or its schedule; or that it works from its chat") {
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        try expectEqual(RunsPanel.next(try taf(#""state":"paused","next_run_words":"Next run Mon 09:00""#), words: words), "Paused")
+        // Paused is tafs cloud's status, as the iPad's `cloud.paused`: a paused taf with a call
+        // held is `waiting` in Home's state, and still paused.
+        try expectEqual(RunsPanel.next(try taf(#""state":"waiting","status":"paused","next_run_words":"Next run Mon 09:00""#), words: words), "Paused")
+        try expectEqual(RunsPanel.next(try taf(#""state":"paused","next_run_words":"Next run Mon 09:00""#), words: words), "Next run Mon 09:00")
         try expectEqual(RunsPanel.next(try taf(#""state":"idle","next_run_words":"Next run Mon 09:00""#), words: words), "Next run Mon 09:00")
         try expectEqual(RunsPanel.next(try taf(#""state":"idle","next_run":"2026-11-15T14:05:00Z""#), words: words).hasPrefix("Next run at "), true)
         try expectEqual(RunsPanel.shortTime(ISO8601DateFormatter().date(from: "2026-11-15T14:05:00Z")!, zone: TimeZone(identifier: "UTC")!), "14:05")
@@ -73,4 +76,25 @@ let tafRunsMacTests: [Test] = [
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
         try png.write(to: URL(fileURLWithPath: "build/screenshots/taf-runs-en.png"))
     }),
+    Test("Run now is kept by taf for the app: a page opened again still knows it's on its way, and what tafs cloud said", awaiting: { @MainActor in
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let transport = TaggedTransport([(200, #"{"session":null,"words":"It ran 2 minutes ago."}"#, nil)])
+        let cloud = CloudClient(transport: transport, session: session)
+        let runs = RunNowModel(cloud: cloud)
+        let first = TafPagesModel(cloud: cloud, taf: "taf-1", runs: runs)
+        _ = await first.runNow(words: words)
+        // The page is closed and opened again: a new page, the same app.
+        let again = TafPagesModel(cloud: cloud, taf: "taf-1", runs: runs)
+        try expectEqual(again.runNowWords, "It ran 2 minutes ago.")
+        try expectEqual(TafPagesModel(cloud: cloud, taf: "taf-2", runs: runs).runNowWords, nil)
+        try expectEqual(transport.sent.count, 1)
+    }),
+    Test("only a read asked again with If-None-Match skips the cache, as the iPad's representation") {
+        let transport = NetworkTransport(base: URL(string: CloudClient.base)!)
+        let read = HTTPRequest(method: "GET", path: "/v1/tafs/taf-1/work/runs?limit=3", headers: [:])
+        try expectEqual(try transport.urlRequest(read, ignoringCache: true).cachePolicy, .reloadIgnoringLocalCacheData)
+        try expectEqual(try transport.urlRequest(read, ignoringCache: false).cachePolicy, .useProtocolCachePolicy)
+        let elsewhere = HTTPRequest(method: "GET", path: "https://example.com/v1/x", headers: [:])
+        try expect((try? transport.urlRequest(elsewhere, ignoringCache: false)) == nil, "only tafs cloud's own host")
+    },
 ]

@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// A taf's Activity and Setup, read from tafs cloud when their tab opens. Both only read.
@@ -24,12 +25,15 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var query: String?
     /// The runs it kept: the panel's first few (`false`), and all of them (`true`).
     @Published private(set) var runPages: [Bool: TafRuns.Pages] = [:]
+    /// Run now, kept by taf for the whole app (`RunNowModel`), so it outlives this page.
+    let runs: RunNowModel
     /// Run now is on its way: a second click sends nothing.
-    @Published private(set) var runInFlight = false
+    var runInFlight: Bool { runs.inFlight.contains(taf) }
     /// tafs cloud's words when Run now started no run.
-    @Published private(set) var runNowWords: String?
+    var runNowWords: String? { runs.words[taf] }
     /// Why Run now didn't start a run, where the iPad says it in its error line.
-    @Published private(set) var runNotStarted: String?
+    var runNotStarted: String? { runs.notStarted[taf] }
+    private var following: AnyCancellable?
 
     private let cloud: CloudClient
     let taf: String
@@ -37,10 +41,13 @@ final class TafPagesModel: ObservableObject {
     let halt: HaltModel
     private var asked = 0
 
-    init(cloud: CloudClient, taf: String) {
+    init(cloud: CloudClient, taf: String, runs: RunNowModel? = nil) {
         self.cloud = cloud
         self.taf = taf
         halt = HaltModel(cloud: cloud, taf: taf)
+        self.runs = runs ?? RunNowModel(cloud: cloud)
+        // The page draws Run now from the app's model: it changes when that does.
+        following = self.runs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
@@ -110,26 +117,8 @@ final class TafPagesModel: ObservableObject {
     /// words; any other refusal says the run didn't start, and why.
     @discardableResult
     func runNow(words: Words) async -> String? {
-        guard !runInFlight else { return nil }
-        runInFlight = true
-        defer { runInFlight = false }
-        runNowWords = nil
-        runNotStarted = nil
-        do {
-            let run = try await cloud.runNow(taf)
-            if let words = run.words { runNowWords = words }
-            return run.session
-        } catch let refusal as CloudRefusal where refusal.status == 409 && refusal.code.map(Self.creditsCodes.contains) == true {
-            runNotStarted = refusal.why(words)
-            return nil
-        } catch {
-            runNotStarted = words("taf.run_not_started", ["why": NeedsYouModel.why(error)])
-            return nil
-        }
+        await runs.runNow(taf, words: words)
     }
-
-    /// tafs cloud's codes for a refusal because the tafs wait for credits, as the iPad's.
-    static let creditsCodes: Set<String> = ["credits_used_up", "limit_reached", "no_plan"]
 
     /// Reads the versions, as the iPad's `loadVersions` (AppModel.swift:3906-3922): what was read
     /// stays when a later read fails, with tafs cloud's why under it.

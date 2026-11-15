@@ -48,9 +48,10 @@ struct RunsPanel: View {
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
     }
 
-    /// Paused; else tafs cloud's next-run words; else "Next run at 14:05"; else On its schedule.
+    /// Paused (tafs cloud's `status`, as the iPad's `cloud.paused`); else tafs cloud's next-run
+    /// words; else "Next run at 14:05"; else On its schedule.
     static func next(_ taf: Home.Taf, words: Words) -> String {
-        if taf.state == "paused" { return words("taf.state.paused") }
+        if taf.paused { return words("taf.state.paused") }
         if let said = taf.nextRunWords { return said }
         if let at = taf.nextRun { return words("taf.next_run_at", ["time": shortTime(at)]) }
         return words("taf.on_its_schedule")

@@ -66,6 +66,12 @@ enum Home {
         let color: Int
         /// working, paused, waiting, idle or stopped, as tafs cloud names it.
         let state: String
+        /// tafs cloud's record of it: `active` or `paused`, as the iPad's `CloudTaf.status`
+        /// (`status ?? "active"`). Pausing is read from this, never from `state`, which says
+        /// `waiting` for a paused taf with a call held.
+        let status: String
+        /// Paused on tafs cloud, as the iPad's `CloudTaf.paused`.
+        var paused: Bool { status == "paused" }
         /// Its calls held for the person.
         let waiting: Int
         /// What it does, in words.
@@ -88,7 +94,7 @@ enum Home {
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
-            case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, waiting, jobSummary = "job_summary"
+            case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, status, waiting, jobSummary = "job_summary"
             case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
@@ -105,6 +111,7 @@ enum Home {
             cards = (summary.flatMap { (try? $0.decodeIfPresent([Lenient].self, forKey: .cards)) ?? nil } ?? []).compactMap(\.card)
             name = try c.decode(String.self, forKey: .name)
             state = try c.decode(String.self, forKey: .state)
+            status = try c.decodeIfPresent(String.self, forKey: .status) ?? "active"
             color = ((try? c.decodeIfPresent(Int.self, forKey: .color)) ?? nil) ?? 0
             waiting = ((try? c.decodeIfPresent(Int.self, forKey: .waiting)) ?? nil) ?? 0
             func text(_ value: String?) -> String? {
