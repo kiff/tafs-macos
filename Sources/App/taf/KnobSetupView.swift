@@ -9,10 +9,15 @@ final class TafKnobModel: ObservableObject {
     @Published private(set) var knob: Knob?
     /// The dial's last change, its next version, until the owner switches to it.
     @Published private(set) var change: Knob.Change?
-    /// What went wrong last, where the iPad says it in its error line.
-    @Published var lastError: String?
+    /// What went wrong last, where the iPad says it in its error line. Any error set clears
+    /// whose it was, as the iPad's `lastError`'s `didSet` (AppModel.swift:237-241): only `fail`
+    /// marks the dial read's own.
+    @Published var lastError: String? { didSet { errorFromKnob = false } }
     /// The error shown is the dial's own read's: a read that works clears it.
     private var errorFromKnob = false
+    /// The taf as tafs cloud last answered a change to it (`PUT …/results`, pause or resume),
+    /// as the iPad's `cloudTafs[agent] = updated`: drawn until Home's next read brings it.
+    @Published private(set) var updated: CloudTaf?
 
     private let cloud: CloudClient
     let taf: String
@@ -29,17 +34,29 @@ final class TafKnobModel: ObservableObject {
             var read = try await cloud.knob(of: taf)
             if let pending = read.pending {
                 do { read = try await cloud.knob(of: taf, version: pending.version) }
-                catch KIFFError.refused(let status, _) where status == 404 { read = try await cloud.knob(of: taf) }
+                catch let refusal as CloudRefusal where refusal.status == 404 {
+                    // It was installed or replaced while reading: its current state.
+                    read = try await cloud.knob(of: taf)
+                }
             }
             knob = read
             if errorFromKnob { lastError = nil; errorFromKnob = false }
             // Its change is live now: nothing left to switch to.
             if let made = change, let live = read.version, live >= made.version { change = nil }
         } catch {
-            lastError = words("knob.dial_could_not_read", ["why": NeedsYouModel.why(error)])
-            errorFromKnob = true
+            fail(words("knob.dial_could_not_read", ["why": NeedsYouModel.why(error)]))
         }
     }
+
+    /// The dial read's own error, as the iPad's `fail(_:from: .knob)`: the next read that works
+    /// clears it, and no other.
+    private func fail(_ said: String) {
+        lastError = said
+        errorFromKnob = true
+    }
+
+    /// Home was read again: its record of the taf is the newer one now.
+    func homeRead() { updated = nil }
 
     /// Whether a stop's size can move that way: the newest draft known here allows a choice.
     func canMove(_ item: Knob.Item, _ direction: Int) -> Bool {
@@ -75,14 +92,13 @@ final class TafKnobModel: ObservableObject {
         }
     }
 
-    /// tafs' own places for its results (`PUT …/results`), live at once; then the tafs and the
-    /// dial are read again.
+    /// tafs' own places for its results (`PUT …/results`), live at once: the taf it answers is
+    /// the one drawn, then the dial is read again, as the iPad's `setResultPlaces`.
     @discardableResult
-    func setResultPlaces(_ places: [String], manages: Bool, words: Words, refreshed: () async -> Void) async -> Bool {
+    func setResultPlaces(_ places: [String], manages: Bool, words: Words) async -> Bool {
         guard manages, !places.isEmpty else { return false }
         do {
-            try await cloud.putResults(of: taf, places: places)
-            await refreshed()
+            updated = try await cloud.putResults(of: taf, places: places)
             await load(words: words)
             return true
         } catch {
@@ -99,12 +115,14 @@ final class TafKnobModel: ObservableObject {
         await load(words: words)
     }
 
-    /// Pauses or resumes every start at tafs cloud; then the tafs are read again. A 502 while
-    /// pausing: its own schedule is paused, but a start may still come.
+    /// Pauses or resumes every start at tafs cloud, as the iPad's `setPaused`: the taf it answers
+    /// is the one drawn. A 502 while pausing: its own schedule is paused, but a start may still
+    /// come. The tafs are then read again, so the sidebar and the Overview say it too, where the
+    /// iPad sets its own list's state.
     func setPaused(_ paused: Bool, words: Words, refreshed: () async -> Void) async {
         lastError = nil
         do {
-            try await cloud.setPaused(taf, paused)
+            updated = try await cloud.setPaused(taf, paused)
             await refreshed()
         } catch let refusal as CloudRefusal where refusal.status == 502 && paused {
             lastError = words("setup.not_every_paused")
@@ -219,8 +237,10 @@ struct StartsWhenView: View {
                     }
                 }
             }
-            if let next = taf.nextRun, taf.state != "paused" {
-                Text(verbatim: (taf.nextRunWords ?? words("taf.next_run_at", ["time": Self.time(next, zone: timeZone)])) + " · " + (timeZone ?? "UTC"))
+            // tafs cloud's record of the taf: its answer to a change, until Home's next read.
+            let cloud = shown
+            if let next = cloud.nextRun, !cloud.paused {
+                Text(verbatim: (cloud.nextRunWords ?? words("taf.next_run_at", ["time": AccountTime(timeZone).zonedShortTime(next)])) + " · " + (timeZone ?? "UTC"))
                     .font(.system(size: 13)).foregroundColor(Theme.dim)
             }
             if !schedules.isEmpty {
@@ -240,13 +260,11 @@ struct StartsWhenView: View {
         }
     }
 
-    /// A time as the account's clock reads it, when KIFF names its zone.
-    static func time(_ date: Date, zone: String?) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        if let zone, let timeZone = TimeZone(identifier: zone) { formatter.timeZone = timeZone }
-        return formatter.string(from: date)
+    /// The taf as tafs cloud last said it: a change's answer while it's the newer, else Home's,
+    /// as the iPad reads `cloudTaf(for:)`.
+    private var shown: (nextRun: Date?, nextRunWords: String?, paused: Bool) {
+        if let updated = model.updated { return (updated.nextRun, updated.nextRunWords, updated.paused) }
+        return (taf.nextRun, taf.nextRunWords, taf.paused)
     }
 
     private func adjust(_ item: Knob.Item, _ direction: Int) {
@@ -317,7 +335,7 @@ struct StartsWhenView: View {
                             Text(verbatim: item.words.isEmpty ? item.label : item.words)
                                 .font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
                             if let at = item.expires.flatMap(Self.date) {
-                                Text(verbatim: Self.when(at, zone: timeZone)).font(.system(size: 12)).foregroundColor(Theme.dim)
+                                Text(verbatim: AccountTime(timeZone).zonedShown(at, date: .abbreviated, time: .shortened)).font(.system(size: 12)).foregroundColor(Theme.dim)
                             }
                         }
                         Spacer()
@@ -343,20 +361,12 @@ struct StartsWhenView: View {
         return f.date(from: s)
     }
 
-    /// A date and time as the account's clock reads it, when KIFF names its zone.
-    static func when(_ date: Date, zone: String?) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        if let zone, let timeZone = TimeZone(identifier: zone) { formatter.timeZone = timeZone }
-        return formatter.string(from: date)
-    }
 
     // MARK: Pause every start
 
     @ViewBuilder private func pause(_ knob: Knob) -> some View {
         if manages, knob.canPause {
-            let paused = taf.state == "paused"
+            let paused = shown.paused
             Button(words(paused ? "setup.resume_every" : "setup.pause_every")) {
                 busy = true
                 Task {
@@ -460,7 +470,8 @@ struct ResultsGoToView: View {
         KnobSheet(title: words("setup.results_go_to"), model: model, close: close) {
             if let knob = model.knob {
                 let actions = knob.results.filter { !Self.builtInPlaces.contains($0.place ?? "") }
-                let live = Self.liveBuiltIns(taf.results, knob: knob)
+                // The live taf's places: a change's answer while it's the newer, else Home's.
+                let live = Self.liveBuiltIns(model.updated != nil ? model.updated?.results : taf.results, knob: knob)
                 Text(words("setup.at_least_one")).font(.system(size: 13)).foregroundColor(Theme.dim)
                 KnobPendingPanel(knob: knob, manages: manages)
                 KnobPanel {
@@ -507,7 +518,7 @@ struct ResultsGoToView: View {
         guard let live, let places = Self.places(live, switching: place, on: on) else { return }
         busy = true
         Task {
-            await model.setResultPlaces(places, manages: manages, words: words, refreshed: refreshed)
+            await model.setResultPlaces(places, manages: manages, words: words)
             busy = false
         }
     }

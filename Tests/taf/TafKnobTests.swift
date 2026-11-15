@@ -2,6 +2,9 @@ import Foundation
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
+/// tafs cloud's answer to a change to the taf: the taf, as the iPad's `CloudTaf` reads it.
+let tafAnswer = #"{"taf":{"id":"taf-1","name":"Refunds","job":"refunds","status":"paused","results":["app"],"next_run":"2026-11-16T07:00:00Z"}}"#
+
 /// A dial as tafs cloud sends it: a schedule with sizes, an app event to approve, one
 /// listening, a follow-up, tafs' own places and one in an app, and its live setting.
 let knobAnswer = #"""
@@ -69,13 +72,15 @@ let tafKnobTests: [Test] = [
                         #"{"results":["app",{"page":"p1","place":"notion"}],"wakes":[{"cron":"0 8 * * 1-5"},{"event":"mail"}],"when":{"busy":"latest"}}"#)
     }),
     Test("the dial, its waiting version, tafs' own places, a follow-up and a pause each have their route", awaiting: {
-        let (cloud, transport) = client([(200, knobAnswer), (200, knobAnswer), (200, #"{"taf":{}}"#), (200, #"{"removed":"fu-1"}"#), (200, #"{"taf":{}}"#), (200, #"{"taf":{}}"#)])
+        let (cloud, transport) = client([(200, knobAnswer), (200, knobAnswer), (200, tafAnswer), (200, #"{"removed":"fu-1"}"#), (200, tafAnswer), (200, tafAnswer)])
         _ = try await cloud.knob(of: "taf-1")
         _ = try await cloud.knob(of: "taf-1", version: 4)
-        try await cloud.putResults(of: "taf-1", places: ["door_reply", "app"])
+        let placed = try await cloud.putResults(of: "taf-1", places: ["door_reply", "app"])
+        try expectEqual(placed.results, [.string("app")])
         try await cloud.removeFollowUp(of: "taf-1", "fu 1")
-        try await cloud.setPaused("taf-1", true)
-        try await cloud.setPaused("taf-1", false)
+        let paused = try await cloud.setPaused("taf-1", true)
+        try expectEqual(paused.paused, true)
+        _ = try await cloud.setPaused("taf-1", false)
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, [
             "GET /v1/tafs/taf-1/knob", "GET /v1/tafs/taf-1/knob?version=4", "PUT /v1/tafs/taf-1/results",
             "DELETE /v1/tafs/taf-1/follow-ups/fu%201", "POST /v1/tafs/taf-1/pause", "POST /v1/tafs/taf-1/resume",
@@ -83,6 +88,21 @@ let tafKnobTests: [Test] = [
         try expectEqual(String(decoding: transport.sent[2].body, as: UTF8.self), #"{"places":["door_reply","app"]}"#)
         try expectEqual(transport.sent[3].body, Data())
         try expectEqual(transport.sent[3].headers["Content-Type"], nil)
+    }),
+    Test("a change to the taf answers the taf as the iPad's CloudTaf, or it isn't a change; the dial read refuses with tafs cloud's words", awaiting: {
+        let (cloud, _) = client([(200, #"{"taf":{}}"#), (200, #"{"taf":{"id":"taf-1","name":"Refunds","job":"refunds"}}"#), (200, "{}"),
+                                 (403, #"{"error":"not_allowed","words":"Only whoever manages the taf can read its dial."}"#)])
+        for _ in 0..<2 {
+            do { _ = try await cloud.setPaused("taf-1", true); throw Failure(description: "read") } catch let error as KIFFError {
+                try expectEqual(error, .unreadable)
+            }
+        }
+        do { _ = try await cloud.putResults(of: "taf-1", places: ["app"]); throw Failure(description: "read") } catch let error as KIFFError {
+            try expectEqual(error, .unreadable)
+        }
+        do { _ = try await cloud.knob(of: "taf-1"); throw Failure(description: "read") } catch let refusal as CloudRefusal {
+            try expectEqual(refusal.words, "Only whoever manages the taf can read its dial.")
+        }
     }),
     Test("a removed follow-up must say so, and a refusal says tafs cloud's words", awaiting: {
         let (cloud, _) = client([(200, "{}"), (409, #"{"error":"not_found","words":"That follow-up already fired."}"#)])

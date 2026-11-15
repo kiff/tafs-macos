@@ -108,19 +108,30 @@ The iPad's knob API as its Setup draws it: `StartsWhenView`, `ResultsGoToView`,
 `setResultPlaces`, `removeFollowUp` and `setPaused` (`App/AppModel.swift`). The iPad's round
 dial (`TafKnobView`, `TafDialPanel`, `TafKnobRemote`) isn't drawn on its screens today, so it
 isn't here either. Both screens open from the taf's Setup, as sheets: Starts when after its
-workflow, Results go to after its apps.
+workflow, Results go to after its apps. As on the iPad (`TafDetailView.swift:302-317`), both
+rows are offered whenever the taf is tafs cloud's, while its Setup is read or couldn't be too.
 
 - **The dial** is read with `GET /v1/tafs/{id}/knob`. With a change waiting (`pending`), that
-  version's is read (`?version=`); one installed meanwhile (404) is read as it is now. Every
-  label and line is tafs cloud's. A stop must have its id, and anything tafs cloud sends must
+  version's is read (`?version=`); one installed meanwhile (404) is read as it is now. A read
+  that fails says tafs cloud's words, else its error, else its status (`CloudRefusal.why`, the
+  iPad's `CloudError`). Every label and line is tafs cloud's. A stop must have its id, and anything tafs cloud sends must
   be the iPad's type; what it doesn't send takes the iPad's defaults.
 - **Starts when:** its schedule (tafs cloud's words, − and + through the sizes it offers,
-  when it runs next in the account's zone, and what it does if still working: Skip it or Run
-  after), the app events it listens to (Stop, to take one out), the follow-ups it set itself
-  (Remove), then Pause or Resume every start.
+  when it runs next, and what it does if still working: Skip it or Run after), the app events
+  it listens to (Stop, to take one out), the follow-ups it set itself (Remove, with when they
+  end), then Pause or Resume every start. Paused is tafs cloud's `status` (the iPad's
+  `cloud.paused`), never Home's `state`, which says `waiting` for a paused taf with a call held.
+- **Times** are the account's, as the iPad's `AccountTime` (`Components.swift:196-247`): the
+  next run as 14:05, a follow-up's end as "16 Nov 2026, 08:00", each with the zone's short name
+  when the account's clock isn't this Mac's. A zone this Mac doesn't know is UTC.
 - **Results go to:** tafs' own places (Reply to the sender, Alert our phones, Email me), set at
   once (`PUT …/results`), at least one always on; then each place in a connected app, turned
   through the dial's next version.
+- **A change to the taf itself** (`PUT …/results`, pause and resume) answers the taf as tafs
+  cloud runs it (`{taf}`: its `id`, `name`, `job` and `status` must be there), as the iPad's
+  `CloudTaf`. An answer that doesn't read is no change, and says so. The taf it answers is the
+  one drawn until Home's next read brings it. After a pause or resume the tafs are also read
+  again, so the sidebar and the Overview say it: the iPad sets its own list's state instead.
 - **A change** copies the live `setting`, changes one thing and sends it whole
   (`PUT …/knob`): tafs cloud makes the next version, and nothing runs from it until it goes
   live. Only whoever manages the taf, as KIFF says, gets the controls.
@@ -131,7 +142,9 @@ workflow, Results go to after its apps.
   (`approval.device_can_not_approve_approve`).
 - **What went wrong** shows in red at the top of the screen, where the iPad says it in its
   error line: the dial that couldn't be read, a change that didn't go, a place or a pause
-  tafs cloud refused (its words), or not every start paused (a 502 while pausing).
+  tafs cloud refused (its words), or not every start paused (a 502 while pausing). Only the
+  dial's own read error is cleared by the next read that works; any other stays, as the
+  iPad's `lastErrorFrom`.
 
 Not here yet: its doors (the Doors screens), "Change when it starts with Coach" and "Add a
 place from a connected app" (Coach on the taf), and Not sent with Send again (the taf's work).

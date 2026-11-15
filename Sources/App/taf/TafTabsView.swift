@@ -293,10 +293,14 @@ struct TafSetupTab: View {
                 switch model.setup {
                 case .loading:
                     ProgressView().controlSize(.small)
+                    // Starts when and Results go to don't wait on the Setup read, as the iPad's
+                    // (TafDetailView.swift:302-317): only on the taf being tafs cloud's.
+                    dialLinks
                 case .unread(let why):
                     Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
+                    dialLinks
                 case .loaded(let setup):
                     // Halting is a job of its own: its row opens its screen, for whoever manages the taf.
                     if halts { HaltRow(model: model.halt, name: tafName, halted: halted) }
@@ -331,6 +335,10 @@ struct TafSetupTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadSetup() }
+        // A Home read after a change brings the taf's own record: it, not the change's answer, is
+        // the one drawn from then on, as the iPad's `cloudTafs` takes each newer read.
+        .onChange(of: taf?.status) { _ in model.knob.homeRead() }
+        .onChange(of: taf?.results) { _ in model.knob.homeRead() }
         .sheet(isPresented: $startsOpen) {
             if let taf {
                 StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted) { startsOpen = false }
@@ -353,6 +361,14 @@ struct TafSetupTab: View {
 
     /// A Setup screen's way in, as the iPad's `PanelLink`: its mark and name in amber, and the
     /// caret that says it opens.
+    /// Starts when and Results go to, while the Setup is read or couldn't be.
+    @ViewBuilder private var dialLinks: some View {
+        if taf != nil {
+            link(words("setup.starts_when"), symbol: "clock") { startsOpen = true }
+            link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true }
+        }
+    }
+
     private func link(_ title: String, symbol: String, _ open: @escaping () -> Void) -> some View {
         Button(action: open) {
             HStack {

@@ -328,10 +328,34 @@ struct Knob: Decodable, Equatable {
     }
 }
 
+/// A taf as tafs cloud runs it, as the iPad's `TafsCloud.CloudTaf` (TafsCloud.swift:64-100):
+/// what a change to it answers. `id`, `name`, `job` and `status` must be there.
+struct CloudTaf: Decodable, Equatable {
+    let id: String
+    let name: String
+    let job: String
+    let kiffAgent: String?
+    let status: String
+    let nextRun: Date?
+    let lastRun: Date?
+    var unscheduled: Bool?
+    /// Where its results go that tafs cloud delivers: `door_reply`, `app`, `owner_email`.
+    var results: [JSONValue]?
+    var nextRunWords: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, job, status, unscheduled, results
+        case kiffAgent = "kiff_agent", nextRun = "next_run", lastRun = "last_run", nextRunWords = "next_run_words"
+    }
+
+    var paused: Bool { status == "paused" }
+}
+
 extension CloudClient {
-    /// A taf's dial; with `version`, that version's (a change waiting to go live).
+    /// A taf's dial; with `version`, that version's (a change waiting to go live). A refusal
+    /// throws `CloudRefusal`, with tafs cloud's words, as the iPad's knob read (`CloudError`).
     func knob(of taf: String, version: Int? = nil) async throws -> Knob {
-        try await get("/v1/tafs/\(Self.escaped(taf))/knob" + (version.map { "?version=\($0)" } ?? ""))
+        try await get("/v1/tafs/\(Self.escaped(taf))/knob" + (version.map { "?version=\($0)" } ?? ""), saying: true)
     }
 
     /// Changes the taf's dial: its next version, made live only by the version switch.
@@ -343,9 +367,10 @@ extension CloudClient {
 
     /// Where its results go that tafs cloud delivers itself (`PUT …/results`): one or more of
     /// `door_reply`, `app` and `owner_email`. Live at once, no new version.
-    func putResults(of taf: String, places: [String]) async throws {
+    func putResults(of taf: String, places: [String]) async throws -> CloudTaf {
         struct Body: Encodable { let places: [String] }
-        _ = try await send("PUT", "/v1/tafs/\(Self.escaped(taf))/results", body: Body(places: places))
+        let body = try await send("PUT", "/v1/tafs/\(Self.escaped(taf))/results", body: Body(places: places))
+        return try Self.answeredTaf(body)
     }
 
     /// A follow-up the taf set itself, removed before it fires.
@@ -356,8 +381,17 @@ extension CloudClient {
     }
 
     /// Pauses or resumes every start of the taf at tafs cloud (`POST …/pause` or `…/resume`).
-    func setPaused(_ taf: String, _ paused: Bool) async throws {
-        _ = try await post("/v1/tafs/\(Self.escaped(taf))/\(paused ? "pause" : "resume")", [:])
+    func setPaused(_ taf: String, _ paused: Bool) async throws -> CloudTaf {
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/\(paused ? "pause" : "resume")", [:])
+        return try Self.answeredTaf(body)
+    }
+
+    /// The taf a change answers (`{taf}`), as the iPad's `Response { let taf: CloudTaf }`: an
+    /// answer that doesn't read is no change.
+    static func answeredTaf(_ body: Data) throws -> CloudTaf {
+        struct Answer: Decodable { let taf: CloudTaf }
+        guard let answer = try? AccountClient.decoder.decode(Answer.self, from: body) else { throw KIFFError.unreadable }
+        return answer.taf
     }
 
     /// One request that changes something, with its method, and its body when it has one. A
