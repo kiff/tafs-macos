@@ -9,9 +9,14 @@ private func near(_ got: UInt32?, _ want: UInt32) -> Bool {
 
 private let strings = URL(fileURLWithPath: ".shared/app/strings")
 
-private func shell(_ language: String, selection: Screen = .overview, needsYou: Int = 0) -> some View {
+private let sidebarTafs: [Home.Taf] = {
+    let json = #"{"tafs":[{"name":"Refunds","kiff_agent":"a1","color":1,"state":"working","work":{"line":"Working on 3 refunds"}},{"name":"Invoices","kiff_agent":"a2","color":4,"state":"idle","next_run_words":"Next run Mon 08:00"}]}"#
+    return (try? JSONDecoder().decode(Home.Page.self, from: Data(json.utf8)))?.tafs ?? []
+}()
+
+private func shell(_ language: String, selection: Screen = .overview, needsYou: Int = 0, tafs: [Home.Taf] = []) -> some View {
     Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
-    return ShellView(selection: .constant(selection), needsYou: needsYou).environment(\.words, Words.load(folder: strings, preferred: [language]))
+    return ShellView(selection: .constant(selection), needsYou: needsYou, tafs: tafs, noTafsLine: "Pick a job for your first taf.", accountLine: "you@example.com").environment(\.words, Words.load(folder: strings, preferred: [language]))
 }
 
 let shellMacTests: [Test] = [
@@ -36,7 +41,7 @@ let shellMacTests: [Test] = [
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for language in ["en", "fr", "pt"] {
             for dark in [false, true] {
-                guard let bitmap = Snapshot.bitmap(of: shell(language, selection: .needsYou, needsYou: 2), size: size, dark: dark),
+                guard let bitmap = Snapshot.bitmap(of: shell(language, selection: .needsYou, needsYou: 3, tafs: dark ? sidebarTafs : []), size: size, dark: dark),
                       let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for \(language)") }
                 try expect(png.starts(with: [0x89, 0x50, 0x4E, 0x47]), "the PNG signature")
                 try png.write(to: folder.appendingPathComponent("sidebar-\(language)\(dark ? "-dark" : "").png"))

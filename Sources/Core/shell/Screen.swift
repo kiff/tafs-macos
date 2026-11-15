@@ -36,6 +36,4 @@ enum Screen: String, CaseIterable, Identifiable {
 
     /// The items under the app's name. The name itself opens the Overview.
     static let list: [Screen] = [.needsYou, .record, .calendar, .usage, .connectApps]
-    /// The items at the sidebar's foot.
-    static let foot: [Screen] = [.coach, .account]
 }

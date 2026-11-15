@@ -40,7 +40,8 @@ struct SignedInView: View {
     }
 
     var body: some View {
-        ShellView(selection: $selection, needsYou: needsYou.count) { screen in
+        ShellView(selection: $selection, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou))
             case .overview: return AnyView(OverviewView(model: overview))
@@ -56,9 +57,12 @@ struct SignedInView: View {
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         .task {
-            // KIFF's list is read again while the window is open, so a new call shows by itself.
+            // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
                 await needsYou.load()
+                // The tafs, for the sidebar and the Overview: read once here, and again with each round,
+                // so a taf made in Coach shows without opening the Overview.
+                await overview.load()
                 if case .loaded(let calls) = needsYou.state {
                     notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
                 }
