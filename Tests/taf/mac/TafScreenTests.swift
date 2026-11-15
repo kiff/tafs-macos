@@ -69,11 +69,11 @@ let tafScreenTests: [Test] = [
         model.show(activityQuery: query)
         await model.loadActivity()
         try expectEqual(model.query, query)
-        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf%2D1/activity?" + query)
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-1/activity?" + query)
         transport.answers.append((200, try contract("taf-activity.json")))
         await model.loadActivity(filter: "held")
         try expectEqual(model.query, nil)
-        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf%2D1/activity?filter=held")
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-1/activity?filter=held")
     }),
     Test("every tab's name is a shared line, in the iPad's order") {
         try expectEqual(TafView.Tab.allCases, [.chat, .activity, .card, .setup])

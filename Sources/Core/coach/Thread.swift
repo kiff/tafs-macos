@@ -361,7 +361,7 @@ extension CloudClient {
     /// ever called for what the person typed and sent.
     func send(_ text: String, to taf: String) async throws -> Outgoing.Sent {
         guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
-        let body = try await post("/v1/tafs/\(Self.query(taf))/messages", ["text": text])
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", ["text": text])
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
     }
@@ -374,7 +374,7 @@ extension CloudClient {
         }
         var fields = ["answer": option.value]
         if let session = card.session { fields["session"] = session }
-        _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
+        _ = try await post("/v1/tafs/\(Self.escaped(taf))/components/\(Self.escaped(card.id))/answer", fields)
     }
 
     /// Says no to a card whose answer would be a signature: `declined` for an approval, `not now`
@@ -389,7 +389,7 @@ extension CloudClient {
         }
         var fields = ["answer": word]
         if let session = card.session { fields["session"] = session }
-        _ = try await post("/v1/tafs/\(Self.query(taf))/components/\(Self.query(card.id))/answer", fields)
+        _ = try await post("/v1/tafs/\(Self.escaped(taf))/components/\(Self.escaped(card.id))/answer", fields)
     }
 
     /// Allows AI use, for the version of the words the person read.
@@ -399,6 +399,6 @@ extension CloudClient {
 
     /// The thread of the person's chats with a taf, or with Coach.
     func thread(of taf: String) async throws -> Thread.Page {
-        try await get("/v1/tafs/\(Self.query(taf))/conversation")
+        try await get("/v1/tafs/\(Self.escaped(taf))/conversation")
     }
 }

@@ -43,7 +43,7 @@ let coachCardTests: [Test] = [
         let all = try cards()
         let (client, transport) = cloud([(200, "{}")])
         try await client.answer(all[0], with: all[0].options[0], in: "taf-coach")
-        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf%2Dcoach/components/plan%2D1/answer")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/tafs/taf-coach/components/plan-1/answer")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[0].body), ["answer": "agree", "session": "s1"])
     }),
     Test("nothing is sent for an option that isn't the card's, or for an approval or a sign-in", awaiting: {

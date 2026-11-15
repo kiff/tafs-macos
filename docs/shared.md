@@ -40,6 +40,15 @@ only decides what the app does (the AI-data consent, a halt). `CloudRefusal.why`
 every screen's line for a refusal goes through `NeedsYouModel.why`. A model has no view to
 hand it the words, so it reads `Words.app`, set once at launch.
 
+## Ids in a path
+
+An id in a tafs cloud path (`/v1/tafs/{id}/…`, a card's, a session's, what a case is about)
+is escaped as the iPad's `escaped` (`TafsCloud.swift:2825-2827`): what a path allows stays as
+it is (`taf-1`, `a.b`, `x_y`, `me@acme`), and only `/` and what a path can't carry are
+escaped. tafs cloud matches the path as it is sent, so `taf-1` must reach it as `taf-1`,
+never `taf%2D1`. `CloudClient.escaped` does it; `CloudClient.query` is for a query's values
+only.
+
 ## Contracts
 
 kiff/tafs keeps what tafs cloud answers the apps as fixtures in `contracts/`, written by tafs

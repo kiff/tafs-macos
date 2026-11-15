@@ -64,11 +64,11 @@ let coachSendMacTests: [Test] = [
         model.draft = "Connect Qonto"
         await model.send()
         try expectEqual(model.consent?.words.title, "Your data and the AI")
-        try expectEqual(transport.sent.filter { $0.method == "POST" }.map(\.path), ["/v1/tafs/taf%2Dcoach/messages"])
+        try expectEqual(transport.sent.filter { $0.method == "POST" }.map(\.path), ["/v1/tafs/taf-coach/messages"])
         await model.allowAI()
         try expectEqual(model.consent, nil)
         try expectEqual(transport.sent.filter { $0.method == "POST" }.map(\.path),
-                        ["/v1/tafs/taf%2Dcoach/messages", "/v1/me/ai-consent", "/v1/tafs/taf%2Dcoach/messages"])
+                        ["/v1/tafs/taf-coach/messages", "/v1/me/ai-consent", "/v1/tafs/taf-coach/messages"])
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["version": "3"])
         try expectEqual(model.pending, nil)
     }),

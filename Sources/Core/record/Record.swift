@@ -173,6 +173,6 @@ extension CloudClient {
 
     /// One case: every call about `about`. A 404 says no call of the person's is about it.
     func recordCase(_ about: String) async throws -> Record.Case {
-        try await get("/v1/record/cases/\(Self.query(about))", saying: true)
+        try await get("/v1/record/cases/\(Self.escaped(about))", saying: true)
     }
 }

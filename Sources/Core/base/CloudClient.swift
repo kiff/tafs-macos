@@ -47,6 +47,13 @@ struct CloudClient {
     static func query(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value
     }
+
+    /// An id as one segment of a path, as the iPad's `escaped`: what a path allows stays as it
+    /// is (`taf-1`, `a.b`, `x_y`, `me@acme`), and only `/` and what a path can't carry are
+    /// escaped. tafs cloud matches the path as sent, so an id must reach it as written.
+    static func escaped(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? value
+    }
 }
 
 /// tafs cloud didn't do what was asked, as the iPad's `CloudError` (TafsCloud.swift:9-49): its

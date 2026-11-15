@@ -3,13 +3,24 @@ import Foundation
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
 let tafTabsTests: [Test] = [
+    Test("a taf's id reaches tafs cloud as written in the path, as the iPad's escaped; only / and what a path can't carry are escaped", awaiting: {
+        let id = "taf_9f2c-41e8.a@acme~1"
+        try expectEqual(CloudClient.escaped(id), id)
+        try expectEqual(CloudClient.escaped("a/b c?d#e"), "a%2Fb%20c%3Fd%23e")
+        let transport = CannedTransport([(200, #"{"entries":[],"filters":[],"filter":"all"}"#), (200, #"{"items":[]}"#), (200, #"{"runs":[]}"#)])
+        let client = CloudClient(transport: transport, session: session)
+        _ = try await client.activity(of: id, filter: "all")
+        _ = try await client.thread(of: id)
+        _ = try? await client.runs(of: id)
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/\(id)/activity?filter=all", "/v1/tafs/\(id)/conversation", "/v1/tafs/\(id)/runs"])
+    }),
     Test("a taf's Activity and Setup are read only, by the taf's id, with the filter asked for", awaiting: {
         let transport = CannedTransport([(200, #"{"entries":[],"filters":[],"filter":"held"}"#), (200, #"{"workflow":{"title":"Workflow"}}"#)])
         let client = CloudClient(transport: transport, session: session)
         let activity = try await client.activity(of: "taf-1", filter: "held")
         _ = try await client.setup(of: "taf-1")
         try expectEqual(transport.sent.map(\.method), ["GET", "GET"])
-        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf%2D1/activity?filter=held", "/v1/tafs/taf%2D1/setup"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-1/activity?filter=held", "/v1/tafs/taf-1/setup"])
         try expectEqual(activity.groups, [])
     }),
     Test("a call that doesn't read is left out, never the day; a list that isn't one is unreadable") {
@@ -31,7 +42,7 @@ let tafTabsTests: [Test] = [
         try expectEqual(page.endWords, nil)
         let cursor = page.nextCursor
         let next = try await client.activity(of: "taf-1", filter: "held", cursor: cursor)
-        try expectEqual(transport.sent[1].path, "/v1/tafs/taf%2D1/activity?filter=held&cursor=c%202")
+        try expectEqual(transport.sent[1].path, "/v1/tafs/taf-1/activity?filter=held&cursor=c%202")
         page.append(next)
         // The untitled first day is the last day carried on; a call already listed isn't twice.
         try expectEqual(page.groups.map(\.title), ["Today", "Yesterday"])
@@ -68,8 +79,8 @@ let tafTabsTests: [Test] = [
         let client = CloudClient(transport: transport, session: session)
         _ = try await client.activity(of: "taf-1", query: "tools=fetch_emails&from=2026-10-22T10%3A00%3A00.000Z")
         _ = try await client.activity(of: "taf-1", query: "x=1#frag/../../v1/other")
-        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf%2D1/activity?tools=fetch_emails&from=2026-10-22T10%3A00%3A00.000Z",
-                                                     "/v1/tafs/taf%2D1/activity?filter=all"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-1/activity?tools=fetch_emails&from=2026-10-22T10%3A00%3A00.000Z",
+                                                     "/v1/tafs/taf-1/activity?filter=all"])
     }),
     Test("a halt reads as tafs cloud sends it, with the iPad's words for where it stands", awaiting: {
         let halting = #"{"halt":{"state":"halting","runtime":true,"kiff":true,"planque":false}}"#
@@ -79,7 +90,7 @@ let tafTabsTests: [Test] = [
         let first = try await client.halt("taf-1")
         let second = try await client.halted("taf-1")
         let all = try await client.halt(nil)
-        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/tafs/taf%2D1/halt", "GET /v1/tafs/taf%2D1/halt", "POST /v1/halt"])
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/tafs/taf-1/halt", "GET /v1/tafs/taf-1/halt", "POST /v1/halt"])
         try expectEqual(first, Halt(state: .halting, runtime: true, kiff: true, planque: false))
         try expectEqual(second.account, true)
         try expect(second.haltedAt != nil, "since when")

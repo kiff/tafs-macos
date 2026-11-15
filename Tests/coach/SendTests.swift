@@ -23,7 +23,7 @@ let coachSendTests: [Test] = [
         try expectEqual(sent.message?.id, "m9")
         try expectEqual(sent.session, "s1")
         let request = transport.sent[0]
-        try expectEqual(request.method + " " + request.path, "POST /v1/tafs/taf%2Dcoach/messages")
+        try expectEqual(request.method + " " + request.path, "POST /v1/tafs/taf-coach/messages")
         try expectEqual(request.headers["Authorization"], "Bearer tok")
         try expectEqual(request.headers["Accept-Language"], "fr")
         try expectEqual(try JSONDecoder().decode([String: String].self, from: request.body), ["text": "Connect \"Qonto\" & co"])

@@ -34,7 +34,7 @@ let coachThreadTests: [Test] = [
     Test("the thread is drawn in tafs cloud's order, and what doesn't read is left out", awaiting: {
         let (client, transport) = cloud([(200, threadAnswer)])
         let page = try await client.thread(of: "taf-coach")
-        try expectEqual(transport.sent[0].path, "/v1/tafs/taf%2Dcoach/conversation")
+        try expectEqual(transport.sent[0].path, "/v1/tafs/taf-coach/conversation")
         try expectEqual(page.working, true)
         try expectEqual(page.items.count, 6)
         guard case .message(let first, _) = page.items[0], case .message(let second, _) = page.items[1] else { throw Failure(description: "two messages first") }

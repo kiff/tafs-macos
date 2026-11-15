@@ -57,7 +57,7 @@ struct Halt: Decodable, Equatable {
 }
 
 extension CloudClient {
-    private static func haltPath(_ taf: String?) -> String { taf.map { "/v1/tafs/\(query($0))/halt" } ?? "/v1/halt" }
+    private static func haltPath(_ taf: String?) -> String { taf.map { "/v1/tafs/\(escaped($0))/halt" } ?? "/v1/halt" }
 
     /// Where a taf's halt, or the account's with none, stands.
     func halted(_ taf: String?) async throws -> Halt {

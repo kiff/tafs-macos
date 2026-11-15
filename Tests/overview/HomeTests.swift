@@ -82,6 +82,6 @@ let overviewTests: [Test] = [
         try expectEqual(Runs.latest(page.runs)?.session, "s2")
         let transport = CannedTransport([(200, #"{"runs":[]}"#)])
         _ = try await CloudClient(transport: transport, session: Session(accessToken: "t", expiresIn: 60, tenant: "t1", subject: "u", deviceID: nil)).runs(of: "taf-1")
-        try expectEqual(transport.sent.map { "\($0.method) \($0.path)" }, ["GET /v1/tafs/taf%2D1/runs"])
+        try expectEqual(transport.sent.map { "\($0.method) \($0.path)" }, ["GET /v1/tafs/taf-1/runs"])
     }),
 ]
