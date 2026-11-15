@@ -93,12 +93,14 @@ enum Home {
         /// Where its results go that tafs cloud delivers (`door_reply`, `app`, `owner_email`),
         /// as sent; nil when tafs cloud doesn't say (Setup's Results go to then reads the dial).
         let results: [JSONValue]?
+        /// Its doors, for Needs you's knocks; absent when it has none.
+        let doors: [TafDoors.Light]?
 
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, status, waiting, jobSummary = "job_summary"
-            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results
+            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results, doors
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
         enum FinishKeys: String, CodingKey { case taf, session, words }
@@ -135,6 +137,8 @@ enum Home {
             func part(_ key: FinishKeys) -> String? { text(finish.flatMap { (try? $0.decodeIfPresent(String.self, forKey: key)) ?? nil })?.trimmingCharacters(in: .whitespacesAndNewlines) }
             finishWords = part(.taf) != nil && part(.session) != nil ? part(.words) : nil
             results = (try? c.decodeIfPresent([JSONValue].self, forKey: .results)) ?? nil
+            // As the iPad's `HomeTaf.doors`: a list, or none; each door reads what it can.
+            doors = try c.decodeIfPresent([TafDoors.Light].self, forKey: .doors)
         }
 
         /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the
@@ -172,10 +176,13 @@ enum Home {
         /// What waits for the person, counted once by tafs cloud so every screen agrees.
         let needsYouCount: Int?
         let needsYouWords: String?
+        /// The doors tafs cloud offers here (docs/doors.md); absent when none, and the app shows
+        /// no knocks.
+        let doorsOffered: [String]?
         /// The steps the tafs handed their owner (`your_steps`), each read strictly, as the iPad's `Home`.
         let yourSteps: [YourStep]
 
-        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", yourSteps = "your_steps" }
+        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps" }
         enum WordsKeys: String, CodingKey { case words, count }
 
         init(from decoder: Decoder) throws {
@@ -188,6 +195,7 @@ enum Home {
             let needs = try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .needsYou)
             needsYouCount = needs.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .count)) ?? nil }
             needsYouWords = needs.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+            doorsOffered = try c.decodeIfPresent([String].self, forKey: .doorsOffered)
             yourSteps = try c.decodeIfPresent([YourStep].self, forKey: .yourSteps) ?? []
         }
     }

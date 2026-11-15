@@ -18,6 +18,8 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var gallery: Gallery?
     /// Each taf's Last result, by its id at tafs cloud, once read.
     @Published private(set) var lastResults: [String: String] = [:]
+    /// The doors tafs cloud offers here, as Home last said; a read that fails keeps them.
+    @Published private(set) var doorsOffered: [String] = []
     private let cloud: CloudClient
     /// Where the list last read is kept for the next launch's first frame; nil keeps none.
     private let remembered: UserDefaults?
@@ -55,6 +57,7 @@ final class OverviewModel: ObservableObject {
         do {
             let read = try await cloud.homeRead()
             state = .loaded(read.page)
+            doorsOffered = read.page.doorsOffered ?? []
             readNow = true
             // Kept for the next launch's first frame, as the iPad's `rememberList` after `show`;
             // never once the session ends or this read was given up.

@@ -171,12 +171,18 @@ struct TafActivityTab: View {
     var openUsage: () -> Void = {}
     /// Opens the Card tab, from the Card's line.
     let openCard: () -> Void
+    /// The taf's doors, for whoever manages it: their knocks come first, as the iPad's
+    /// `TafActivityList.parts`; nil for anyone else.
+    var doors: DoorsModel? = nil
+    /// tafs cloud offers doors here: only then are they read.
+    var doorsOffered = false
 
     var body: some View {
         ScrollView {
             // Lazy, so the list's end shows only when it's scrolled to, and the next page is
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
+                if let doors { TafKnocksPanel(taf: taf, doors: doors, offered: doorsOffered) }
                 if let card = taf.cards.first { cardLine(card) }
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
@@ -336,6 +342,9 @@ struct TafSetupTab: View {
     /// Reads the list again after a halt tafs cloud answered, or a pause or a change of where
     /// its results go.
     var halted: () async -> Void = {}
+    /// The taf's doors, for whoever manages it, as the iPad's Setup › Starts when › Doors;
+    /// nil for anyone else.
+    var doors: DoorsModel? = nil
     /// The taf, for Starts when and Results go to; nil leaves them out.
     var taf: Home.Taf? = nil
     /// Whether this person manages the taf, as KIFF says: changing what starts it and where
@@ -343,12 +352,15 @@ struct TafSetupTab: View {
     var manages = false
     /// Who is signed in: the account's time zone, and their email for Email me.
     var me: Me? = nil
+    /// This person's sign-in email: their own key reads "You".
+    var myEmail: String? = nil
     @State private var startsOpen = false
     @State private var resultsOpen = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if let doors, let taf { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
                 switch model.setup {
                 case .loading:
                     ProgressView().controlSize(.small)

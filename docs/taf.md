@@ -181,6 +181,30 @@ rows are offered whenever the taf is tafs cloud's, while its Setup is read or co
 Not here yet: its doors (the Doors screens), "Change when it starts with Coach" and "Add a
 place from a connected app" (Coach on the taf), and Not sent with Send again (the taf's work).
 
+## Doors (`TafDoors`, `DoorsModel`, `TafDoorsViews`)
+
+Ported from the iPad's `DoorsView.swift`, `DoorsModel.swift`, `TafsCloud+Doors.swift`,
+`TafSetupViews.swift` (`DoorsList`), `TafPresentationViews.swift` (`TafKnocksPanel`) and
+`NeedsYouView.swift` (its knocked rows). A door is where work reaches a taf from outside the
+app (an email address, a WhatsApp number), with the answer going back the same way.
+**Nothing here is signed:** tafs cloud takes each change with the person's session.
+
+| Where | What |
+|---|---|
+| Setup, for whoever manages the taf | Its doors (`GET /v1/tafs/{id}/doors`), each with its badge, label and tafs cloud's state words, and **Edit**, which opens the door's own screen; then **Add a door…**, disabled until the doors are read or while none can be added. On the iPad this list is in Setup › Starts when, which comes with the dial. |
+| A door's own screen | tafs cloud's settings line; its address (Copy address for email), Open as a switch (`PATCH …/doors/{door}` `{"open":…}`), and its day as a meter; who may give it work, each paired key ("You" only on this person's own), **Unpair** (`DELETE …/keys/{sender}`) and **Pair someone** (`POST …/keys`, `{"id", "name"?}`); **Remove door**, confirmed (`DELETE …/doors/{door}`); then the knocks waiting and the paired senders' messages; its footer. |
+| Add a door | tafs cloud's apps not yet used, those that can tell who's writing first, searched by name (`POST …/doors` `{"app"}`). WhatsApp's signup runs on a phone, so its row says `door.whatsapp_elsewhere`; a Slack door is approved, so its row says to approve on a device that can. |
+| Activity, for whoever manages the taf | First, the knocks waiting (Do it, Pair them, Ignore) and the paired senders' messages, read when tafs cloud offers doors (`doors_offered` on Home). |
+| Needs you | A row per taf with knocks at its doors (Home's `doors[].knocks`), opening it on its Activity. |
+
+- **A knock's answer** is `POST …/doors/knocks/{knock}` with `action` (`do` with the person's
+  words, `pair` or `ignore`). Pair reads the doors again; Ignore and Do it take the knock away.
+  Too many at once says the app's line (`door.knock.too_many`), not tafs cloud's.
+- **A read that fails is tried twice more**, after 1 and 3 seconds; only then does it say so.
+- **A Slack door with its channel's subscription isn't removed here:** the iPad stops planque's
+  subscription first, signed; without planque it says to start from Connected apps first
+  (`door.start_connected_tools_first_slack`), and so does this Mac.
+
 ## Tests
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card
