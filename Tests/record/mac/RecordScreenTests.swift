@@ -35,9 +35,24 @@ let recordMacTests: [Test] = [
         await unread.load()
         try expectEqual(unread.state, .unread(why: "500"))
         let (none, _) = model([(200, #"{"entries":[],"none_words":"Nothing matched."}"#)])
-        none.search = "zzz"
-        await none.load()
-        try expectEqual(none.noneWords, "Nothing matched.")
+        await none.find("zzz")
+        try expectEqual(none.found?.pages.last?.noneWords, "Nothing matched.")
+        try expectEqual(none.found?.pages.allSatisfy(\.isEmpty), true)
+    }),
+    Test("a search reads its next page only on More, and keeps each page as tafs cloud sent it", awaiting: { @MainActor in
+        let (model, transport) = model([(200, recordPage), (200, second)])
+        await model.find("refund")
+        try expectEqual(transport.sent.count, 1)
+        try expectEqual(model.found?.nextCursor, "c2")
+        await model.find("refund", more: true)
+        try expectEqual(transport.sent[1].path, "/v1/record?q=refund&cursor=c2")
+        // "today" on both pages stays two groups, each as sent.
+        try expectEqual(model.found?.pages.map { $0.shown.map(\.id) }, [["today"], ["today"]])
+        try expectEqual(model.found?.pages[1].shown[0].entries.map(\.id), ["e3"])
+        try expectEqual(model.found?.nextCursor, nil)
+        try expectEqual(model.found?.pages.last?.endWords, "That's everything.")
+        await model.find("refund", more: true)
+        try expectEqual(transport.sent.count, 2)
     }),
     Test("a taf's chip keeps that taf's calls, and All tafs every taf's", awaiting: { @MainActor in
         let (model, _) = model([(200, recordPage)])
@@ -49,6 +64,92 @@ let recordMacTests: [Test] = [
         try expectEqual(model.shown, [])
         model.taf = nil
         try expectEqual(model.shown.flatMap(\.entries).count, all)
+    }),
+    Test("what's typed is searched once the person pauses, once; Return searches at once", awaiting: { @MainActor in
+        let (model, transport) = model([(200, recordPage), (200, recordPage), (200, recordPage)])
+        model.typingPause = 50_000_000
+        await model.load()
+        try expectEqual(model.searched, "")
+        model.search = "o"; model.typed()
+        model.search = "or"; model.typed()
+        model.search = "order 4471"; model.typed()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try expectEqual(transport.sent.map(\.path), ["/v1/record?q=", "/v1/record?q=order%204471"])
+        try expectEqual(model.searched, "order 4471")
+        // The same words again aren't searched again; Return searches at once.
+        model.typed()
+        try await Task.sleep(nanoseconds: 150_000_000)
+        try expectEqual(transport.sent.count, 2)
+        await model.submitted()
+        try expectEqual(transport.sent.count, 3)
+    }),
+    Test("an emptied box shows the list already read at once, with nothing read", awaiting: { @MainActor in
+        let (model, transport) = model([(200, recordPage), (200, recordPage)])
+        await model.load()
+        await model.find("order")
+        try expect(model.found != nil, "a search shown")
+        model.search = "  "
+        model.typed()
+        try expectEqual(model.found, nil)
+        try expectEqual(transport.sent.count, 2)
+    }),
+    Test("a search shows what tafs cloud found, never narrowed by a taf or a filter chosen in the list", awaiting: { @MainActor in
+        let (model, _) = model([(200, recordPage), (200, recordPage)])
+        await model.load()
+        model.taf = "nobody"
+        model.filter = .stopped
+        try expectEqual(model.shown, [])
+        await model.find("refund")
+        try expectEqual(model.found?.pages.flatMap(\.shown).flatMap(\.entries).map(\.id), ["e1", "e2"])
+    }),
+    Test("the same words typed while they're being searched aren't asked for twice", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, recordPage)])
+        let model = RecordModel(cloud: CloudClient(transport: transport, session: session))
+        model.typingPause = 10_000_000
+        model.search = "refund"
+        async let first: Void = model.submitted()
+        await Task.yield()
+        // The search has started: its words are the search's at once.
+        try expectEqual(model.found?.q, "refund")
+        model.typed()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await first
+        try expectEqual(transport.sent.count, 1)
+    }),
+    Test("a search or a case that tafs cloud refuses says its words first, else its code", awaiting: { @MainActor in
+        let (model, _) = model([(503, #"{"error":"busy","words":"The Record is busy. Try again in a moment."}"#), (404, #"{"error":"not_found"}"#)])
+        await model.find("refund")
+        try expectEqual(model.found?.error, "The Record is busy. Try again in a moment.")
+        await model.open(case: "Order 9")
+        try expectEqual(model.caseError, "not_found")
+    }),
+    Test("a case opens from a search with its calls and the step that failed, and closes", awaiting: { @MainActor in
+        let found = #"{"about":"Order 4471","steps":[\#(recordEntry("e1"))],"failed":{"id":"e1","words":"The refund didn't go through"}}"#
+        let (model, transport) = model([(200, found), (404, #"{"error":"not_found"}"#)])
+        await model.open(case: "Order 4471")
+        try expectEqual(transport.sent.last?.path, "/v1/record/cases/Order%204471")
+        try expectEqual(model.caseAbout, "Order 4471")
+        try expectEqual(model.openCase?.steps.map(\.id), ["e1"])
+        try expectEqual(model.openCase?.failed?.words, "The refund didn't go through")
+        await model.open(case: "Order 9")
+        try expectEqual(model.openCase, nil)
+        try expect(model.caseError != nil, "why it couldn't be read")
+        model.closeCase()
+        try expectEqual(model.caseAbout, nil)
+        await model.open(case: "  ")
+        try expectEqual(transport.sent.count, 2)
+    }),
+    Test("the screenshots: a search shown in the list's place", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let (model, _) = model([(200, recordPage), (200, recordPage)])
+        await model.load()
+        model.search = "refund"
+        await model.find("refund")
+        let view = RecordView(model: model).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("record-search-en.png"))
     }),
     Test("the screenshots: the Record in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

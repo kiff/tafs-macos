@@ -20,7 +20,10 @@ struct TafActivity: Decodable, Equatable {
         /// Its dot's colour, as the iPad's `RecordEntry.Kind.color`: done and approved green;
         /// refused, not done and revoked red; held, sending, and any other kind (read as
         /// unknown) amber.
-        var tone: Tone {
+        var tone: Tone { Self.tone(of: kind) }
+
+        /// A kind's colour, for any of tafs cloud's calls: a taf's Activity and the Record.
+        static func tone(of kind: String) -> Tone {
             switch kind {
             case "done", "approved": return .ok
             case "refused", "not_done", "revoked": return .no
