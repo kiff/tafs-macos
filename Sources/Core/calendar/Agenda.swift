@@ -69,6 +69,16 @@ enum Agenda {
         func events(on day: String) -> [Event] {
             events.filter { $0.day == day }.sorted { ($0.minute, $0.name) < ($1.minute, $1.name) }
         }
+
+        /// A day's events in one hour of its grid, stacked in that hour's cell as the iPad
+        /// does, so two at the same time both stay readable.
+        func events(on day: String, hour: Int) -> [Event] {
+            events(on: day).filter { $0.minute / 60 == hour }
+        }
+
+        /// Whether tafs cloud's line goes under the top line: when it halted, or when it cut
+        /// the read at its most (`more`), as on the iPad.
+        var saysWhy: Bool { (halted || more) && !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 }
 
@@ -114,6 +124,28 @@ enum Days {
         let months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
         guard let y = c.year, let m = c.month, let d = c.day, let w = c.weekday, (1...12).contains(m), (1...7).contains(w) else { return nil }
         return (y, m, d, weekdays[w - 1], months[m - 1])
+    }
+
+    /// The six weeks a month's card shows, Monday first: 42 days around the month `day` is in.
+    static func monthGrid(of day: String) -> [String] {
+        guard let p = parts(day) else { return [] }
+        let first = String(format: "%04d-%02d-01", p.year, p.month)
+        guard let start = week(of: first).first else { return [] }
+        return (0..<42).compactMap { adding($0, to: start) }
+    }
+
+    /// The first day of the month before or after the one `day` is in.
+    static func month(_ offset: Int, from day: String) -> String? {
+        guard let p = parts(day) else { return nil }
+        let index = p.year * 12 + (p.month - 1) + offset
+        return String(format: "%04d-%02d-01", index / 12, index % 12 + 1)
+    }
+
+    /// The hours a day's grid shows: 08:00 to 18:00, wider when an event falls outside.
+    static func hours(covering minutes: [Int]) -> ClosedRange<Int> {
+        let first = min(8, (minutes.min() ?? 480) / 60)
+        let last = max(18, (minutes.max() ?? 1080) / 60)
+        return max(0, first)...min(23, last)
     }
 
     /// Today's date in a zone tafs cloud named, else in the Mac's own.

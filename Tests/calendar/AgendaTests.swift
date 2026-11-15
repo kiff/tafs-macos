@@ -43,6 +43,34 @@ let calendarTests: [Test] = [
         try expectEqual(Days.adding(7, to: "2026-02-23"), "2026-03-02")
         try expectEqual(Days.adding(-7, to: "2024-03-04"), "2024-02-26")
     },
+    Test("a month's card is six weeks from a Monday, and months step across a year") {
+        let grid = Days.monthGrid(of: "2026-11-15")
+        try expectEqual(grid.count, 42)
+        try expectEqual(grid.first, "2026-10-26")
+        try expectEqual(grid.last, "2026-12-06")
+        try expectEqual(Days.monthGrid(of: "2027-02-10").first, "2027-02-01")
+        try expectEqual(Days.month(1, from: "2026-12-31"), "2027-01-01")
+        try expectEqual(Days.month(-1, from: "2026-01-15"), "2025-12-01")
+        try expectEqual(Days.month(-12, from: "2026-11-15"), "2025-11-01")
+        try expectEqual(Days.monthGrid(of: "nope"), [])
+    },
+    Test("the hour grid is 08:00 to 18:00, and widens for an event outside it") {
+        try expectEqual(Days.hours(covering: []), 8...18)
+        try expectEqual(Days.hours(covering: [540, 600]), 8...18)
+        try expectEqual(Days.hours(covering: [390, 1380]), 6...23)
+        try expectEqual(Days.hours(covering: [0, 1439]), 0...23)
+    },
+    Test("events in the same hour, even at the same minute, are all in that hour's cell") {
+        let json = #"{"time_zone":"UTC","events":[{"taf":"a","name":"Refunds","color":1,"kind":"schedule","at":"x","day":"2026-11-16","time":"09:00","minute":540,"words":""},{"taf":"b","name":"Invoices","color":2,"kind":"schedule","at":"y","day":"2026-11-16","time":"09:00","minute":540,"words":""},{"taf":"c","name":"Bills","color":3,"kind":"schedule","at":"z","day":"2026-11-16","time":"09:20","minute":560,"words":""},{"taf":"d","name":"Later","color":3,"kind":"schedule","at":"w","day":"2026-11-16","time":"10:00","minute":600,"words":""}],"more":true,"halted":false,"words":"Some work was left out."}"#
+        let page = try JSONDecoder().decode(Agenda.Page.self, from: Data(json.utf8))
+        try expectEqual(page.events(on: "2026-11-16", hour: 9).map(\.name), ["Invoices", "Refunds", "Bills"])
+        try expectEqual(page.events(on: "2026-11-16", hour: 10).map(\.name), ["Later"])
+        try expectEqual(page.events(on: "2026-11-16", hour: 8), [])
+        // tafs cloud cut the read: its line is shown; with neither a halt nor a cut, it isn't.
+        try expect(page.saysWhy, "more")
+        let calm = try JSONDecoder().decode(Agenda.Page.self, from: Data(json.replacingOccurrences(of: #""more":true"#, with: #""more":false"#).utf8))
+        try expect(!calm.saysWhy, "no halt, no cut")
+    },
     Test("a date that isn't one is refused, never rolled over") {
         for bad in ["2026-02-30", "2026-13-01", "20261114", "2026-1-4", "today", ""] {
             try expect(Days.date(bad) == nil, bad)
@@ -55,10 +83,13 @@ let calendarTests: [Test] = [
         try expectEqual(parts?.monthKey, "november")
         try expectEqual(parts?.day, 14)
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
-        for day in Days.week(of: "2026-11-14") + ["2026-01-01", "2026-06-30"] {
+        let months = (1...12).map { String(format: "2026-%02d-01", $0) }
+        for day in Days.week(of: "2026-11-14") + months {
             guard let p = Days.parts(day) else { throw Failure(description: day) }
             try expect(words("calendar.weekday.\(p.weekdayKey)") != "calendar.weekday.\(p.weekdayKey)", p.weekdayKey)
             try expect(words("calendar.month_name.\(p.monthKey)") != "calendar.month_name.\(p.monthKey)", p.monthKey)
+            // The month card's title.
+            try expect(words("calendar.month_title.\(p.monthKey)") != "calendar.month_title.\(p.monthKey)", p.monthKey)
         }
     },
     Test("today is the date in the account's zone, not the Mac's") {

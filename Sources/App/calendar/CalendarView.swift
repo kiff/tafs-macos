@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One week of what is to come, for the Calendar screen.
+/// What is to come on the days shown, for the Calendar screen: a week, or one day.
 @MainActor
 final class CalendarModel: ObservableObject {
     enum State: Equatable {
@@ -9,9 +9,18 @@ final class CalendarModel: ObservableObject {
         case unread(why: String)
     }
 
+    enum Mode: String, CaseIterable, Identifiable {
+        case day, week
+        var id: String { rawValue }
+        var titleKey: String { self == .day ? "calendar.mode.day" : "calendar.mode.week" }
+    }
+
     @Published private(set) var state: State = .loading
-    /// The seven days shown, Monday first.
-    @Published private(set) var week: [String]
+    @Published private(set) var mode: Mode = .week
+    /// The day the screen is on: the one shown in Day, and the one whose week is shown in Week.
+    @Published private(set) var day: String
+    /// The month the small month card shows.
+    @Published private(set) var monthShown: String
     /// Today in the account's zone, once tafs cloud has named it; in the Mac's zone until then.
     @Published private(set) var today: String
 
@@ -22,18 +31,35 @@ final class CalendarModel: ObservableObject {
     init(cloud: CloudClient, now: @escaping () -> Date = Date.init) {
         self.cloud = cloud
         self.now = now
-        today = Days.today(in: TimeZone.current.identifier, now: now())
-        week = Days.week(of: Days.today(in: TimeZone.current.identifier, now: now()))
+        let start = Days.today(in: TimeZone.current.identifier, now: now())
+        today = start
+        day = start
+        monthShown = start
     }
 
+    /// The seven days of the week the screen is on, Monday first.
+    var week: [String] { Days.week(of: day) }
+    /// The days the grid shows.
+    var days: [String] { mode == .week ? week : [day] }
+    var showsToday: Bool { days.contains(today) }
+
     func load() async {
-        guard let from = week.first, let to = week.last else { return }
+        guard let from = days.first, let to = days.last else { return }
         asked += 1
         let mine = asked
         do {
             let page = try await cloud.calendar(from: from, to: to)
             guard mine == asked else { return }
+            let first = today
             today = Days.today(in: page.timeZone, now: now())
+            // The first read names the account's zone: if its today is another day, go there.
+            if first != today, day == first {
+                day = today
+                monthShown = today
+                state = .loaded(page)
+                await load()
+                return
+            }
             state = .loaded(page)
         } catch {
             guard mine == asked else { return }
@@ -41,128 +67,313 @@ final class CalendarModel: ObservableObject {
         }
     }
 
-    /// Moves by whole weeks. A slower answer for a week left behind is dropped.
-    func move(weeks: Int) async {
-        guard let first = week.first, let start = Days.adding(7 * weeks, to: first) else { return }
-        week = Days.week(of: start)
+    /// Moves by a week in Week, by a day in Day. A slower answer for days left behind is dropped.
+    func move(_ steps: Int) async {
+        guard let next = Days.adding(steps * (mode == .week ? 7 : 1), to: day) else { return }
+        await go(to: next)
+    }
+
+    func go(to next: String) async {
+        guard Days.date(next) != nil else { return }
+        day = next
+        monthShown = next
         state = .loading
         await load()
     }
 
-    func goToToday() async {
-        week = Days.week(of: today)
+    func goToToday() async { await go(to: today) }
+
+    func show(_ mode: Mode) async {
+        guard mode != self.mode else { return }
+        self.mode = mode
         state = .loading
         await load()
     }
 
-    var showsToday: Bool { week.contains(today) }
+    /// Turns the month card's page, without changing the days shown.
+    func turnMonth(_ offset: Int) {
+        if let next = Days.month(offset, from: monthShown) { monthShown = next }
+    }
 }
 
-/// Calendar: the tafs' scheduled work to come, a week at a time, Monday to Sunday.
+/// Calendar, to the iPad's layout: the month's card and the agenda on the left, and the
+/// days' hour grid on the right.
 struct CalendarView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CalendarModel
 
+    private static let hourHeight: CGFloat = 44
+    private static let hoursWidth: CGFloat = 52
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(words("calendar.heading")).font(Theme.display(28)).foregroundColor(Theme.ink)
-                    Spacer()
-                    arrow("chevron.left", "calendar.previous_week") { await model.move(weeks: -1) }
-                    Button(words("calendar.today")) { Task { await model.goToToday() } }
-                        .buttonStyle(.plain).font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(model.showsToday ? Theme.onFill : Theme.ink)
-                        .padding(.horizontal, 12).padding(.vertical, 5)
-                        .background(Capsule().fill(model.showsToday ? Theme.ink : Theme.raised))
-                    arrow("chevron.right", "calendar.next_week") { await model.move(weeks: 1) }
-                }
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.soft)
-                switch model.state {
-                case .loading:
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text(words("calendar.reading")).font(.system(size: 14)).foregroundColor(Theme.dim)
+            VStack(alignment: .leading, spacing: 16) {
+                Text(words("calendar.heading")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    .frame(maxWidth: .infinity).padding(.top, 18)
+                    .accessibilityAddTraits(.isHeader)
+                HStack(alignment: .top, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        monthCard
+                        agenda
                     }
-                case .unread(let why):
-                    Text(words("home.calendar_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
-                    Button(words("common.try_again")) { Task { await model.load() } }
-                case .loaded(let page):
-                    if !page.words.isEmpty {
-                        Text(page.words).font(.system(size: 14, weight: page.halted ? .semibold : .regular))
-                            .foregroundColor(page.halted ? Theme.no : Theme.dim)
+                    .frame(width: 268)
+                    VStack(alignment: .leading, spacing: 12) {
+                        header
+                        why
+                        modes
+                        grid
                     }
-                    if page.events.isEmpty, !page.halted, page.words.isEmpty {
-                        Text(words("calendar.nothing_this_week")).font(.system(size: 14)).foregroundColor(Theme.dim)
-                    }
-                    ForEach(model.week, id: \.self) { day in dayCard(day, page.events(on: day)) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Look.inset - 8)
+            .padding(.bottom, Look.inset)
         }
         .background(Theme.background)
         .task { await model.load() }
     }
 
+    // MARK: The top line
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            // Today, as the iPad's pill: quiet while today is shown, inked when it would move.
+            Button(words("calendar.today")) { Task { await model.goToToday() } }
+                .buttonStyle(.plain).font(.system(size: 15, weight: .medium))
+                .foregroundColor(model.showsToday ? Theme.soft : Theme.ink)
+                .padding(.horizontal, 16).frame(minHeight: 40)
+                .overlay(Capsule().stroke(Theme.ink.opacity(model.showsToday ? 0.2 : 0.4)))
+            arrow("chevron.left", model.mode == .week ? "calendar.previous_week" : "calendar.previous_day") { await model.move(-1) }
+            arrow("chevron.right", model.mode == .week ? "calendar.next_week" : "calendar.next_day") { await model.move(1) }
+            Text(title).font(.system(size: 20, weight: .bold)).foregroundColor(Theme.ink).lineLimit(1).minimumScaleFactor(0.7)
+            Spacer(minLength: 8)
+            // The day shown, as the iPad's date picker: in the app's language, and choosing a
+            // date goes there. Days are dates with no zone, so the picker reads them in UTC.
+            DatePicker(words("calendar.heading"), selection: chosenDay, displayedComponents: .date)
+                .datePickerStyle(.field)
+                .labelsHidden()
+                .environment(\.locale, Locale(identifier: words.language))
+                .environment(\.timeZone, TimeZone(identifier: "UTC") ?? .current)
+                .fixedSize()
+        }
+    }
+
+    private var chosenDay: Binding<Date> {
+        Binding(get: { Days.date(model.day) ?? Date() },
+                set: { date in Task { await model.go(to: Days.string(date)) } })
+    }
+
+    /// tafs cloud's line when it halted, or cut the read at its most: under the top line, as
+    /// on the iPad; red for a halt.
+    @ViewBuilder private var why: some View {
+        if case .loaded(let page) = model.state, page.saysWhy {
+            Text(verbatim: page.words).font(.system(size: 13, weight: .semibold)).foregroundColor(page.halted ? Theme.no : Theme.soft)
+        }
+    }
+
     private func arrow(_ symbol: String, _ key: String, _ action: @escaping () async -> Void) -> some View {
         Button { Task { await action() } } label: {
-            Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink)
-                .frame(width: 28, height: 28).background(Circle().fill(Theme.raised))
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                .frame(width: 22, height: 28).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(words(key))
     }
 
-    /// "9 – 15 November 2026", or across two months or two years, in the shared lines.
+    /// "9 – 15 November 2026", across two months or years too; a day's own date in Day.
     private var title: String {
-        guard let first = model.week.first.flatMap(Days.parts), let last = model.week.last.flatMap(Days.parts) else { return "" }
-        let values = [
-            "from_day": String(first.day), "to_day": String(last.day),
-            "from_month": words("calendar.month_title.\(first.monthKey)"), "to_month": words("calendar.month_title.\(last.monthKey)"),
-            "month": words("calendar.month_title.\(last.monthKey)"),
-            "from_year": String(first.year), "to_year": String(last.year), "year": String(last.year),
-        ]
+        guard let first = model.days.first.flatMap(Days.parts), let last = model.days.last.flatMap(Days.parts) else { return "" }
+        func month(_ key: String) -> String { words("calendar.month_title.\(key)") }
+        if model.mode == .day {
+            return words("calendar.title.day", ["weekday": words("calendar.weekday.\(first.weekdayKey)"), "day": String(first.day),
+                                                "month": month(first.monthKey), "year": String(first.year)])
+        }
+        let values = ["from_day": String(first.day), "to_day": String(last.day), "from_month": month(first.monthKey),
+                      "to_month": month(last.monthKey), "month": month(last.monthKey),
+                      "from_year": String(first.year), "to_year": String(last.year), "year": String(last.year)]
         if first.year != last.year { return words("calendar.title.week_across_years", values) }
         if first.month != last.month { return words("calendar.title.week_across_months", values) }
         return words("calendar.title.week", values)
     }
 
-    private func dayCard(_ day: String, _ events: [Agenda.Event]) -> some View {
-        let isToday = day == model.today
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(heading(day)).font(.system(size: 13, weight: .bold)).foregroundColor(isToday ? Theme.ink : Theme.soft)
-                if isToday {
-                    Text(words("calendar.today")).font(.system(size: 11, weight: .bold)).foregroundColor(Theme.onFill)
-                        .padding(.horizontal, 8).padding(.vertical, 2).background(Capsule().fill(Theme.ink))
+    private var modes: some View {
+        HStack(spacing: 0) {
+            ForEach(CalendarModel.Mode.allCases) { mode in
+                let chosen = model.mode == mode
+                Button { Task { await model.show(mode) } } label: {
+                    Text(words(mode.titleKey)).font(.system(size: 13, weight: chosen ? .semibold : .regular)).foregroundColor(Theme.ink)
+                        .frame(width: 96).padding(.vertical, 6)
+                        .background(Capsule().fill(chosen ? Theme.panel : Color.clear)).contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(chosen ? .isSelected : [])
             }
-            if events.isEmpty {
-                Text(words("calendar.nothing_on_day")).font(.system(size: 13)).foregroundColor(Theme.dim)
+        }
+        .padding(2)
+        .background(Capsule().fill(Theme.raised))
+        .accessibilityLabel(words("calendar.view_picker"))
+    }
+
+    // MARK: The hour grid
+
+    @ViewBuilder private var grid: some View {
+        switch model.state {
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(words("calendar.reading")).font(.system(size: 14)).foregroundColor(Theme.soft)
             }
-            ForEach(events) { event in
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(verbatim: event.time).font(Theme.mono(13, weight: .semibold)).foregroundColor(Theme.ink).frame(width: 52, alignment: .leading)
-                    Circle().fill(Theme.tafColor(event.color)).frame(width: 8, height: 8).accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(verbatim: event.name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
-                            if event.count > 1 {
-                                Text(words.count("calendar.times", event.count)).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+        case .unread(let why):
+            Text(words("home.calendar_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
+            Button(words("common.try_again")) { Task { await model.load() } }
+        case .loaded(let page):
+            let hours = Days.hours(covering: page.events.map(\.minute))
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: Self.hoursWidth, height: 1)
+                    ForEach(model.days, id: \.self) { day in dayHeading(day).frame(maxWidth: .infinity) }
+                }
+                .padding(.bottom, 8)
+                // One row an hour: its label, then each day's events in that hour, stacked so
+                // that two at the same time both stay readable. A busy hour grows its row.
+                VStack(spacing: 0) {
+                    ForEach(Array(hours), id: \.self) { hour in
+                        HStack(alignment: .top, spacing: 0) {
+                            Text(verbatim: String(format: "%02d:00", hour)).font(Theme.mono(11)).foregroundColor(Theme.soft)
+                                .frame(width: Self.hoursWidth, alignment: .leading).padding(.top, 3)
+                            ForEach(model.days, id: \.self) { day in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    ForEach(page.events(on: day, hour: hour)) { block($0) }
+                                }
+                                .padding(.vertical, 3)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
                             }
                         }
-                        if !event.words.isEmpty { Text(event.words).font(.system(size: 12)).foregroundColor(Theme.dim) }
+                        .frame(minHeight: Self.hourHeight, alignment: .top)
+                        .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .top)
                     }
                 }
-                .accessibilityElement(children: .combine)
+                .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .bottom)
+                // The app's line for an empty range, centred under the grid as on the iPad.
+                if page.events.isEmpty, !page.halted {
+                    Text(words(model.mode == .week ? "calendar.nothing_this_week" : "calendar.nothing_on_day"))
+                        .font(.system(size: 13)).foregroundColor(Theme.dim).padding(.top, 12)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+    }
+
+    private func dayHeading(_ day: String) -> some View {
+        let isToday = day == model.today
+        let p = Days.parts(day)
+        return VStack(spacing: 2) {
+            Text(p.map { words("calendar.weekday.\($0.weekdayKey)") } ?? "").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.soft)
+            Text(verbatim: p.map { String($0.day) } ?? "").font(.system(size: 15, weight: isToday ? .bold : .regular))
+                .foregroundColor(isToday ? Theme.amberText : Theme.ink)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isToday ? .isSelected : [])
+    }
+
+    /// One event in its hour's cell, as the iPad's chip: its taf's dot and name on its colour,
+    /// lightly; in Day, "09:00 · Name".
+    private func block(_ event: Agenda.Event) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7)
+            Text(verbatim: model.mode == .day ? "\(event.time) · \(event.name)" : event.name)
+                .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+            if event.count > 1 { Text(words.count("calendar.times", event.count)).font(.system(size: 11)).foregroundColor(Theme.soft) }
+        }
+        .padding(.horizontal, 6).padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.tafColor(event.color).opacity(0.16)))
+        .padding(.horizontal, 2)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(event.count > 1 ? words.count("calendar.slot_times", event.count, ["name": event.name, "first": event.time])
+                                            : words("calendar.slot_at", ["name": event.name, "first": event.time]))
+    }
+
+    // MARK: The month card and the agenda
+
+    private var monthCard: some View {
+        let grid = Days.monthGrid(of: model.monthShown)
+        let shown = Days.parts(model.monthShown)
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(shown.map { words("calendar.title.month", ["month": words("calendar.month_title.\($0.monthKey)"), "year": String($0.year)]) } ?? "")
+                    .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Spacer()
+                monthArrow("chevron.left", "calendar.previous_month", -1)
+                monthArrow("chevron.right", "calendar.next_month", 1)
+            }
+            HStack(spacing: 0) {
+                ForEach(["mon", "tue", "wed", "thu", "fri", "sat", "sun"], id: \.self) { key in
+                    Text(words("calendar.weekday.\(key)")).font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.soft).frame(maxWidth: .infinity)
+                }
+            }
+            ForEach(0..<6, id: \.self) { week in
+                HStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { column in
+                        if grid.count == 42 { monthDay(grid[week * 7 + column], inMonth: shown?.month) }
+                    }
+                }
             }
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isToday ? Theme.ink.opacity(0.35) : Theme.line))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+    }
+
+    private func monthArrow(_ symbol: String, _ key: String, _ offset: Int) -> some View {
+        Button { model.turnMonth(offset) } label: {
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.amberText).frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(words(key))
+    }
+
+    private func monthDay(_ day: String, inMonth month: Int?) -> some View {
+        let p = Days.parts(day)
+        let isToday = day == model.today
+        let shown = model.days.contains(day)
+        return Button { Task { await model.go(to: day) } } label: {
+            Text(verbatim: p.map { String($0.day) } ?? "")
+                .font(.system(size: 12, weight: isToday ? .bold : .regular))
+                .foregroundColor(p?.month == month ? Theme.ink : Theme.soft.opacity(0.6))
+                .frame(maxWidth: .infinity).frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: 7).fill(isToday ? Theme.amber.opacity(0.18) : (shown ? Theme.raised.opacity(0.6) : Color.clear)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(isToday ? Theme.amber : Color.clear, lineWidth: 1.5))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(heading(day))
+    }
+
+    @ViewBuilder private var agenda: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: words("calendar.agenda"))
+            if case .loaded(let page) = model.state {
+                if page.events.isEmpty {
+                    // tafs cloud's own line for the range; the app's when it sent none.
+                    Text(verbatim: page.words.isEmpty ? words("calendar.nothing_these_days") : page.words).font(.system(size: 13)).foregroundColor(Theme.soft)
+                }
+                ForEach(model.days.filter { !page.events(on: $0).isEmpty }, id: \.self) { day in
+                    Text(heading(day)).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.soft)
+                    ForEach(page.events(on: day)) { event in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(verbatim: event.time).font(Theme.mono(12, weight: .semibold)).foregroundColor(Theme.ink)
+                            Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(verbatim: event.name).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink)
+                                if !event.words.isEmpty { Text(verbatim: event.words).font(.system(size: 11)).foregroundColor(Theme.soft) }
+                            }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+        }
+        .padding(.leading, 4)
     }
 
     private func heading(_ day: String) -> String {
