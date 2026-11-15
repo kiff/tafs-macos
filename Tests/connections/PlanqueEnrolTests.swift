@@ -18,21 +18,25 @@ private final class Stubs {
     let kiff: CannedTransport
     let account: AccountClient
     var signed: [String] = []
+    /// The account check, as the iPad's `gen != accountGeneration`: true once the session ended.
+    var ended = false
 
-    init(planque answers: [(Int, String)], kiff: [(Int, String)] = [], transport: Transport? = nil, cancelOnMint: Bool = false) {
+    init(planque answers: [(Int, String)], kiff: [(Int, String)] = [], transport: Transport? = nil, endOnMint: Bool = false) {
         planqueSent = CannedTransport(answers)
         self.kiff = CannedTransport(kiff)
-        account = AccountClient(transport: cancelOnMint ? CancelOnMint(self.kiff) : self.kiff, session: session, sign: { _ in "t=x,v1=SIG" })
+        let kiffSide: Transport = endOnMint ? EndOnMint(self.kiff) : self.kiff
+        account = AccountClient(transport: kiffSide, session: session, sign: { _ in "t=x,v1=SIG" })
         planque = PlanqueClient(baseURL: "https://planque.test/")
         planque.tenant = "t_01"
         planque.deviceID = "dev_9"
         planque.transport = transport ?? planqueSent
         planque.bodyHash = { "hash(\(String(decoding: $0, as: UTF8.self)))" }
         planque.signer = { [unowned self] message in signed.append(message); return "SIG" }
+        (kiffSide as? EndOnMint)?.onMint = { [unowned self] in ended = true }
     }
 
     func enrol() async -> PlanqueEnrolment.Stop? {
-        await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: deviceKey)
+        await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: deviceKey, ended: { [unowned self] in ended })
     }
 
     /// The connector keys handed to planque, one per enrolment sent: nil asks only.
@@ -43,13 +47,25 @@ private final class Stubs {
     var mints: Int { kiff.sent.filter { $0.path == "/v1/keys" }.count }
 }
 
-/// KIFF, which cancels the task that minted, right after the mint: as a sign-out at that moment.
-private final class CancelOnMint: Transport, @unchecked Sendable {
+/// KIFF, after whose mint the session ends: as a sign-out at that moment.
+private final class EndOnMint: Transport, @unchecked Sendable {
+    let inner: CannedTransport
+    var onMint: () -> Void = {}
+    init(_ inner: CannedTransport) { self.inner = inner }
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        let answer = try await inner.send(request)
+        if request.path == "/v1/keys" { onMint() }
+        return answer
+    }
+}
+
+/// planque, which answers its first request and then throws the system's cancellation.
+private final class CancelledAfterFirst: Transport, @unchecked Sendable {
     let inner: CannedTransport
     init(_ inner: CannedTransport) { self.inner = inner }
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
         let answer = try await inner.send(request)
-        if request.path == "/v1/keys" { withUnsafeCurrentTask { $0?.cancel() } }
+        if inner.sent.count > 1 { throw URLError(.cancelled) }
         return answer
     }
 }
@@ -95,10 +111,10 @@ let planqueEnrolTests: [Test] = [
         try expectEqual(stubs.mints, 0)
         try expectEqual(stubs.keysHanded, [nil])
     }),
-    Test("a key once minted is handed to planque even when the task ends right after the mint, then it ends", awaiting: {
+    Test("a key once minted is handed to planque even when the session ends right after the mint, then it ends", awaiting: {
         let stubs = Stubs(planque: [(409, #"{"error":"needs a key","code":"needs_key"}"#), (201, #"{"tenant":"t_01","device":"ab12","kept":true}"#)],
-                          kiff: [(201, minted)], cancelOnMint: true)
-        let stop = await Task { await stubs.enrol() }.value
+                          kiff: [(201, minted)], endOnMint: true)
+        let stop = await stubs.enrol()
         try expectEqual(stubs.mints, 1)
         try expectEqual(stubs.keysHanded, [nil, "kiff_live_connector"])
         try expectEqual(stop, .ended)
@@ -143,7 +159,7 @@ let planqueEnrolTests: [Test] = [
         try expectEqual(got5, .notSetUp(why: .kiff(status: 503)))
         let keyless = Stubs(planque: [(409, #"{"code":"needs_key"}"#)])
         let noKey = AccountClient(transport: keyless.kiff, session: session)
-        let got6 = await PlanqueEnrolment.enrol(planque: keyless.planque, account: noKey, deviceKey: deviceKey)
+        let got6 = await PlanqueEnrolment.enrol(planque: keyless.planque, account: noKey, deviceKey: deviceKey, ended: { false })
         try expectEqual(got6, .notSetUp(why: .notSigning))
         try expectEqual(keyless.kiff.sent.count, 0)
     }),
@@ -158,13 +174,30 @@ let planqueEnrolTests: [Test] = [
         try expectEqual(got8, .notSetUp(why: .notSigning))
         try expectEqual(stubs.planqueSent.sent.count + unsigned.planqueSent.sent.count, 0)
     }),
-    Test("a session that ends while it runs does nothing more and says nothing, as the iPad's accountGeneration", awaiting: {
+    Test("a session that ends during the first enrolment mints nothing and says nothing, as the iPad's accountGeneration", awaiting: {
+        // Ended while planque answered needs_key: the iPad's check at :6290.
         let stubs = Stubs(planque: [(409, #"{"code":"needs_key"}"#), (201, "{}")], kiff: [(201, minted)])
-        let run = Task { await stubs.enrol() }
-        run.cancel()
-        let got9 = await run.value
+        stubs.planque.signer = { [unowned stubs] _ in stubs.ended = true; return "SIG" }
+        let got9 = await stubs.enrol()
         try expectEqual(got9, .ended)
         try expectEqual(stubs.mints, 0)
+        // Ended while a kept enrolment answered (:6275), and on a refusal: first in the catch.
+        let kept = Stubs(planque: [(200, #"{"tenant":"t_01","device":"ab12","kept":true}"#)])
+        kept.planque.signer = { [unowned kept] _ in kept.ended = true; return "SIG" }
+        let gotKept = await kept.enrol()
+        try expectEqual(gotKept, .ended)
+        let refused = Stubs(planque: [(503, #"{"error":"unavailable"}"#)])
+        refused.planque.signer = { [unowned refused] _ in refused.ended = true; return "SIG" }
+        let gotRefused = await refused.enrol()
+        try expectEqual(gotRefused, .ended)
+    }),
+    Test("the system's cancellation of the hand-over is an ended session, never 'not set up'", awaiting: {
+        let planqueSide = CannedTransport([(409, #"{"code":"needs_key"}"#), (201, "{}")])
+        let stubs = Stubs(planque: [], kiff: [(201, minted)], transport: CancelledAfterFirst(planqueSide))
+        let got = await stubs.enrol()
+        try expectEqual(got, .ended)
+        try expectEqual(stubs.mints, 1)
+        try expectEqual(planqueSide.sent.count, 2)
     }),
     Test("each stop says the shared words, the why as the iPad's localizedDescription, never a code") {
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))

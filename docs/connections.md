@@ -80,11 +80,27 @@ KIFF. It gets this device's key, and a KIFF key that connects tools and does not
 - **Anything else:** "Connecting apps isn't set up. {why}" (`coach.connecting_not_set_up`),
   with planque's own words, else the app's plain line for the status; never a code.
 - **A session that ends while it runs** does nothing more and says nothing, as the iPad's
-  `accountGeneration`.
-- **Keys:** both the enrolment and the mint are signed by this Mac's device key, which asks no
-  one, as the iPad's `signConfirmed`. Neither uses the approval key. Who may set planque up, and
-  behind what confirmation (the iPad's `setUpPlanque`, a Face ID over
-  `tafs.planque.v1|{tenant}`), comes with Start in the next part, with the calls that run it.
+  `gen != accountGeneration`: the caller passes the account check (`ended`), read where the
+  iPad reads it (`AppModel.swift:6275`, `:6290`, `:6307`) and first in each refusal. A request
+  the system cancelled is the same. A sign-out doesn't cancel the task, so a key minted just
+  before is still handed over.
+- **Keys:** the enrolments are signed by this Mac's device key, which asks no one, as the
+  iPad's `signConfirmed`; so is the mint, at `SigningTime.next()` (milliseconds, never the same
+  twice, as `KIFFClient.swift:1625`). Neither uses the approval key.
+- **Who may run it (the gate)**, as the iPad's `setUpPlanque` and `startSetup`
+  (`AppModel.swift:6230-6249`, `:7556-7575`):
+  - only after the person confirmed the step, with Touch ID or the Mac's password over
+    `tafs.planque.v1|{tenant}`, or inside Start's own Touch ID (`:7567`);
+  - never in a view-only session, or one without a device key (`:6231`);
+  - the account is checked after the prompt (`:6241`, `:7569`);
+  - planque's `signer` is set only after the prompt, and cleared when the step ends (`defer`,
+    `:6246-6247`, `:7574-7575`).
+  Nothing calls it before that gate: Start brings the first caller (#106).
+- **Where this Mac differs from the iPad:**
+  - a 2xx without `kept` mints nothing (the iPad's `AppModel.swift:6276-6279` falls through to
+    the mint), as its own comment (`:6270-6271`), Windows and Android;
+  - a key minted just before the session ended is handed over, then it ends (the iPad returns
+    at `:6293` and drops the key, which stays live in KIFF).
 
 ## Not yet
 
@@ -99,6 +115,7 @@ two lists, a search's escaping and limit, paging without repeats, an unreadable 
 logo paths kept and dropped, each row's end, `by_key`, and **that nothing but `GET` is ever
 sent**. It writes `build/screenshots/connect-apps-*.png`. Setting planque up: kept, `needs_key`
 then one key minted and handed over, a 2xx without `kept` minting nothing, a key handed over
-when the task ends right after its mint, every stop that mints nothing, the
-code-less 409, KIFF's 403, no device or signer, a session that ends, each stop's words, and (on a
-Mac) both signatures checked as planque and KIFF check them.
+when the session ends right after its mint, every stop that mints nothing, the code-less 409,
+KIFF's 403, no device or signer, a session that ends during the first enrolment (no mint), the
+system's cancellation of the hand-over (ended, never "not set up"), each stop's words, and (on a
+Mac) the three signatures checked as planque and KIFF check them, at three different times.
