@@ -24,18 +24,23 @@ final class HaltModel: ObservableObject {
         if let read = try? await cloud.halted(taf) { halt = read }
     }
 
-    /// One click, no key: it only takes authority away. Then read again while it is halting.
-    func halt(words: Words) async {
-        guard !busy else { return }
+    /// One click, no key: it only takes authority away. True when tafs cloud answered: then the
+    /// list is read again at once, and the halt followed while it is halting.
+    @discardableResult
+    func halt(words: Words) async -> Bool {
+        guard !busy else { return false }
         busy = true
         notHalted = nil
         do {
             halt = try await cloud.halt(taf)
         } catch {
+            // tafs cloud's words first, then its code, as the iPad's.
             notHalted = words(taf == nil ? "taf.halt.not_halted_all" : "taf.halt.not_halted", ["why": NeedsYouModel.why(error)])
+            busy = false
+            return false
         }
         busy = false
-        await follow()
+        return true
     }
 
     /// While it is halting: read again every 2 seconds, at most 60 times.
@@ -57,6 +62,9 @@ struct HaltRow: View {
     /// Shown while every taf runs; else only once halted or halting, as the account's row is
     /// shown with no taf while the account is halted, where it is resumed from.
     var whileRunning = true
+    /// Reads the list again after a halt tafs cloud answered, so it reads halted at once, as
+    /// the iPad's `halt` refreshes (kiff/tafs#236, item 13).
+    var halted: () async -> Void = {}
 
     var body: some View {
         if whileRunning || model.halt.state != .running {
@@ -88,7 +96,7 @@ struct HaltRow: View {
         }
         .buttonStyle(.plain)
         .task { await model.refresh() }
-        .sheet(isPresented: $open) { HaltView(model: model, name: name) { open = false } }
+        .sheet(isPresented: $open) { HaltView(model: model, name: name, halted: halted) { open = false } }
     }
 }
 
@@ -98,6 +106,7 @@ struct HaltView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: HaltModel
     let name: String?
+    var halted: () async -> Void = {}
     let close: () -> Void
 
     private static let clock: DateFormatter = {
@@ -135,7 +144,7 @@ struct HaltView: View {
             switch h.state {
             case .running:
                 Button(model.busy ? words("taf.halt.halting") : words(model.taf == nil ? "halt.all_now" : "halt.now")) {
-                    Task { await model.halt(words: words) }
+                    Task { if await model.halt(words: words) { await halted(); await model.follow() } }
                 }
                 .buttonStyle(OutlineButtonStyle(color: Theme.no))
                 .disabled(model.busy)
@@ -145,7 +154,7 @@ struct HaltView: View {
                     Text(words("taf.halt.halting_wait")).font(.system(size: 14)).foregroundColor(Theme.dim)
                 }
                 // Halt again: a part that didn't take it the first time is asked again.
-                Button(words("halt.again")) { Task { await model.halt(words: words) } }
+                Button(words("halt.again")) { Task { if await model.halt(words: words) { await halted(); await model.follow() } } }
                     .buttonStyle(OutlineButtonStyle(color: Theme.no))
                     .disabled(model.busy)
             case .halted:

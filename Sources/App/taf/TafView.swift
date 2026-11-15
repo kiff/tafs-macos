@@ -90,6 +90,10 @@ struct TafView: View {
     @ObservedObject var chat: CoachModel
     /// Its Activity and Setup, read when their tab opens; nil where nothing reads them.
     var pages: TafPagesModel?
+    /// Whether this person manages the taf, as KIFF says: its halt is theirs.
+    var manages = false
+    /// Reads the list again after the taf was halted.
+    var halted: () async -> Void = {}
     @State var tab: Tab = .chat
 
     var body: some View {
@@ -124,11 +128,13 @@ struct TafView: View {
                 if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
             case .setup:
                 if let pages {
-                    // An app's week opens the taf's Activity of its calls, as on the iPad.
+                    // An app's week opens the taf's Activity of its calls, as on the iPad. Halt is not
+                    // for a taf whose Card is no longer active (a state Home doesn't name).
                     TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }, tafName: taf.name)
+                    }, tafName: taf.name,
+                                halts: manages && ["working", "waiting", "idle", "paused", "halted"].contains(taf.state), halted: halted)
                 }
             }
         }

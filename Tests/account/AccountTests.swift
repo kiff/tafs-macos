@@ -157,4 +157,20 @@ let accountTests: [Test] = [
             }
         }
     }),
+    Test("who manages the Cards and each taf, as KIFF says: no capabilities leaves it to KIFF, no access shows nothing", awaiting: {
+        func me(_ json: String) throws -> Me { try AccountClient.decoder.decode(Me.self, from: Data(json.utf8)) }
+        try expectEqual(try me(#"{"capabilities":["cards.manage","members.manage"]}"#).managesCards, true)
+        try expectEqual(try me(#"{"capabilities":["tafs.use"]}"#).managesCards, false)
+        try expectEqual(try me("{}").managesCards, true)
+        let (account, transport) = client([(200, #"{"agents":{"rae":{"use":true,"manage":true},"ben":{"use":true},"odd":7}}"#)])
+        let read = try? await account.myAccess()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/me/access")
+        // One agent that doesn't read fails the read, as the iPad's: then nothing is shown.
+        try expectEqual(read, nil)
+        let (fine, _) = client([(200, #"{"agents":{"rae":{"use":true,"manage":true},"ben":{"use":true}}}"#)])
+        let access = try await fine.myAccess()
+        try expectEqual(Access.manages(access["rae"]), true)
+        try expectEqual(Access.manages(access["ben"]), false)
+        try expectEqual(Access.manages(access["gone"]), false)
+    }),
 ]

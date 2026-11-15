@@ -71,9 +71,13 @@ Ported from the iPad's `HaltScreen.swift` (`HaltScreen`, `HoldRow`, `HaltRow`) a
 `TafsCloud.Halt`. There is no fixture for it in kiff/tafs's `contracts/` yet: the shape is the
 iPad's reader.
 
-- **Where:** a taf's own halt is the first row of its Setup, which tafs cloud answers only
-  to whoever manages the taf; every taf's is a row on the Overview while a taf runs, and also
-  with no taf while the account is halted, where it is resumed from.
+- **Where, and for whom,** as the iPad's: a taf's own halt is the first row of its Setup, only
+  for whoever manages the taf as KIFF says (`GET /v1/me/access`, `Access.manages`; nothing until
+  that is read) and not for a taf whose Card is no longer active. Every taf's is a row on the
+  Overview, only for whoever manages the account's Cards (`Me.managesCards`: `cards.manage`, or
+  KIFF doesn't say), while a taf runs, and also with no taf while the account is halted, where
+  it is resumed from. (tafs cloud's Setup answers anyone who uses or oversees the taf, so the
+  Setup alone says nothing about halting it.)
 - **Read:** `GET /v1/tafs/{id}/halt`, or `GET /v1/halt` for every taf, when the row shows.
 - **Halt now** (Halt all now): `POST`, one click with no key, since it only takes authority
   away. Then it is read again every 2 seconds while halting, for up to 2 minutes. Halt again
@@ -84,7 +88,10 @@ iPad's reader.
   Waiting. A taf halted with the whole account says so.
 - **Resuming gives authority back**, so it is signed with the device's key: on this Mac it
   says to approve on a device that can, until the approval key (#16).
-- A halt tafs cloud refuses says why, in the shared words, and stays as it was.
+- A halt tafs cloud refuses says why, in the shared words with tafs cloud's own words first
+  (else its code), and stays as it was. A halt it answers reads the list again at once, so
+  the taf reads halted there too, then is followed while halting.
+- The iPad's `stopped` (how many runs a halt stopped) isn't read: no screen shows it.
 
 ## Tests
 

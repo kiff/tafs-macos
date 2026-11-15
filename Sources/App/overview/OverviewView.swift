@@ -62,7 +62,8 @@ struct OverviewView: View {
     var openNeedsYou: () -> Void = {}
     /// Opens a taf's page from its line.
     var openTaf: ((Home.Taf) -> Void)?
-    /// Every taf's halt: offered while a taf runs, and whenever the account is halted.
+    /// Every taf's halt, for whoever manages the account's Cards: offered while a taf runs, and
+    /// whenever the account is halted.
     var halt: HaltModel?
 
     var body: some View {
@@ -86,7 +87,7 @@ struct OverviewView: View {
                     }
                     // Every taf at once, from its own screen, as the iPad's Home: also with no
                     // taf, while the account is halted.
-                    if let halt { HaltRow(model: halt, name: nil, whileRunning: !page.tafs.isEmpty) }
+                    if let halt { HaltRow(model: halt, name: nil, whileRunning: !page.tafs.isEmpty, halted: { await model.load() }) }
                 }
             }
             .padding(.horizontal, Look.inset)

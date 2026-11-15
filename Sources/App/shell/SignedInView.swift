@@ -19,6 +19,8 @@ struct SignedInView: View {
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
     @State private var tafPages: TafPagesModel?
+    /// What this person may do with each taf, as KIFF says, by KIFF agent.
+    @State private var access: [String: Access] = [:]
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -59,7 +61,7 @@ struct SignedInView: View {
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: accountHalt))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
@@ -75,6 +77,8 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // What this person may do with each taf: read once, as the iPad's `refreshAccess`.
+        .task { if let read = try? await account.myAccess() { access = read } }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
@@ -106,7 +110,8 @@ struct SignedInView: View {
 
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
-        return AnyView(TafView(taf: taf, chat: chat, pages: tafPages).id(taf.id))
+        return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
+                               halted: { await overview.load() }).id(taf.id))
     }
 
     private var accountScreen: some View {

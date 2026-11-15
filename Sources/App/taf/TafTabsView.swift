@@ -187,6 +187,11 @@ struct TafSetupTab: View {
     @State private var chosen: TafSetup.Node?
     /// The taf's name, for its halt.
     var tafName: String? = nil
+    /// Whether its halt is offered: to whoever manages the taf, as KIFF says, and not for a
+    /// taf whose Card is no longer active, as the iPad's `TafDetailView`.
+    var halts = false
+    /// Reads the list again after a halt tafs cloud answered.
+    var halted: () async -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -199,9 +204,8 @@ struct TafSetupTab: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.loadSetup() } }
                 case .loaded(let setup):
-                    // Halting is a job of its own: its row opens its screen, for whoever manages
-                    // the taf, which a Setup tafs cloud answered says.
-                    HaltRow(model: model.halt, name: tafName)
+                    // Halting is a job of its own: its row opens its screen, for whoever manages the taf.
+                    if halts { HaltRow(model: model.halt, name: tafName, halted: halted) }
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }

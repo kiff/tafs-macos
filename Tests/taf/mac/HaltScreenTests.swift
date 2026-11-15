@@ -12,18 +12,27 @@ let tafHaltTests: [Test] = [
         ])
         let model = HaltModel(cloud: CloudClient(transport: transport, session: session), taf: "taf-1", sleep: { _ in })
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        await model.halt(words: words)
+        let answered = await model.halt(words: words)
+        try expectEqual(answered, true)
+        // The POST answered: the list is read again at once (by the screen), then it's followed.
+        try expectEqual(transport.sent.map(\.method), ["POST"])
+        await model.follow()
         try expectEqual(transport.sent.map(\.method), ["POST", "GET", "GET"])
         try expectEqual(model.halt.state, .halted)
         try expectEqual(model.notHalted, nil)
     }),
-    Test("a halt tafs cloud refuses says why, in the shared words, and stays running", awaiting: { @MainActor in
-        let transport = CannedTransport([(403, #"{"error":"not_allowed"}"#)])
+    Test("a halt tafs cloud refuses says why, its words first, else its code, and stays running", awaiting: { @MainActor in
+        let transport = CannedTransport([(403, #"{"error":"not_allowed","words":"Only someone who manages Cards can halt every taf."}"#), (403, #"{"error":"not_allowed"}"#)])
         let model = HaltModel(cloud: CloudClient(transport: transport, session: session), taf: nil, sleep: { _ in })
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
-        await model.halt(words: words)
+        let answered = await model.halt(words: words)
+        try expectEqual(answered, false)
         try expectEqual(model.halt.state, .running)
-        try expect(model.notHalted?.hasPrefix("tafs couldn't halt your tafs.") == true, model.notHalted ?? "nothing said")
+        try expectEqual(model.notHalted, "tafs couldn't halt your tafs. Only someone who manages Cards can halt every taf.")
+        await model.halt(words: words)
+        try expectEqual(model.notHalted, "tafs couldn't halt your tafs. not_allowed")
+        // Nothing is followed after a refusal.
+        try expectEqual(transport.sent.map(\.method), ["POST", "POST"])
     }),
     Test("the screenshots: a halt running, and halted with who holds it", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
