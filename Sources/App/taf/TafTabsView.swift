@@ -79,6 +79,11 @@ struct TafActivityTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let taf: Home.Taf
+    /// Whether this person manages the taf: Coach's fix is theirs.
+    var manages = false
+    /// Coach with tafs cloud's words in its box; Plan & usage.
+    var askCoach: (String) -> Void = { _ in }
+    var openUsage: () -> Void = {}
     /// Opens the Card tab, from the Card's line.
     let openCard: () -> Void
 
@@ -87,6 +92,8 @@ struct TafActivityTab: View {
             // Lazy, so the list's end shows only when it's scrolled to, and the next page is
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
+                // Its health, as tafs cloud reads it, over its work, as the iPad's `WorkPanel`.
+                if let health = taf.health, health.needsAttention { healthLines(health) }
                 if let card = taf.cards.first { cardLine(card) }
                 switch model.activity {
                 case .loading:
@@ -122,6 +129,42 @@ struct TafActivityTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadActivity() }
+    }
+
+    /// A taf that isn't healthy, as the iPad's `HealthLines`: each line, amber when at risk and
+    /// red when failing, with the fixes tafs cloud decided for it. Coach's fix opens Coach with
+    /// tafs cloud's words in the box, nothing sent, for whoever manages the taf; the credits fix
+    /// opens Plan & usage. A fix of a kind the app doesn't know is no button.
+    private func healthLines(_ health: Home.Taf.Health) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(health.lines.enumerated()), id: \.offset) { index, line in
+                Text(verbatim: line).font(.system(size: 14)).foregroundColor(health.failing ? Theme.no : Theme.amberText)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(health.fixes(for: index).enumerated()), id: \.offset) { _, fix in
+                    if let act = action(fix) {
+                        Button(action: act) { Text(verbatim: fix.words).padding(.horizontal, 16) }
+                            .buttonStyle(OutlineButtonStyle())
+                            .fixedSize()
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+
+    /// What a fix does here; nil draws no button.
+    private func action(_ fix: Home.Taf.Health.Fix) -> (() -> Void)? {
+        switch fix.kind {
+        case "coach":
+            guard let say = fix.say, !say.isEmpty, manages else { return nil }
+            return { askCoach(say) }
+        case "credits":
+            return openUsage
+        default:
+            return nil
+        }
     }
 
     /// The taf's first Card in one line: what is left, and the Card's title. It opens the Card.

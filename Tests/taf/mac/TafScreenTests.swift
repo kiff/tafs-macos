@@ -75,6 +75,17 @@ let tafScreenTests: [Test] = [
         try expectEqual(model.query, nil)
         try expectEqual(transport.sent.last?.path, "/v1/tafs/taf-1/activity?filter=held")
     }),
+    Test("the Cards stack as the iPad's wallet: the chosen one in front, the furthest back on top, each a shade darker") {
+        let cards = try JSONDecoder().decode([TafCard].self, from: Data(#"[{"id":"c1","title":"Live","active":true,"rules":[]},{"id":"c2","title":"Test","active":true,"rules":[]},{"id":"c3","title":"Old","active":false,"rules":[]}]"#.utf8))
+        try expectEqual(CardStack.front(of: cards, nil)?.id, "c1")
+        try expectEqual(CardStack.front(of: cards, "c2")?.id, "c2")
+        try expectEqual(CardStack.front(of: cards, "gone")?.id, "c1")
+        try expectEqual(CardStack.ordered(cards, front: nil).map(\.id), ["c3", "c2", "c1"])
+        try expectEqual(CardStack.ordered(cards, front: "c2").map(\.id), ["c3", "c1", "c2"])
+        try expectEqual(CardStack.shade(depth: 0), 0)
+        try expectEqual(CardStack.shade(depth: 1), 0.12)
+        try expectEqual(CardStack.shade(depth: 9), 0.32)
+    },
     Test("every tab's name is a shared line, in the iPad's order") {
         try expectEqual(TafView.Tab.allCases, [.chat, .activity, .card, .setup])
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])

@@ -101,6 +101,11 @@ struct TafView: View {
     var manages = false
     /// Reads the list again after the taf was halted.
     var halted: () async -> Void = {}
+    /// Coach with tafs cloud's words in its box, from a health fix; Plan & usage, from another.
+    var askCoach: (String) -> Void = { _ in }
+    var openUsage: () -> Void = {}
+    /// The Card in front of the stack; nil for the first, the live one.
+    @State private var frontCard: String?
     @State var tab: Tab = .chat
 
     var body: some View {
@@ -132,7 +137,9 @@ struct TafView: View {
             case .chat: chatTab
             case .card: cardTab
             case .activity:
-                if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
+                if let pages {
+                    TafActivityTab(model: pages, taf: taf, manages: manages, askCoach: askCoach, openUsage: openUsage) { tab = .card }
+                }
             case .setup:
                 if let pages {
                     // An app's week opens the taf's Activity of its calls, as on the iPad.
@@ -153,10 +160,10 @@ struct TafView: View {
         HStack(alignment: .top, spacing: 20) {
             CoachView(model: chat, embedded: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let card = taf.cards.first {
+            if !taf.cards.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Eyebrow(text: words.count("card.heading", taf.cards.count))
-                    CardFace(card: card, color: Theme.tafColor(taf.color))
+                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
                     Button { tab = .card } label: {
                         Text(words.count("card.all_of", taf.cards.count)).font(.system(size: 14)).foregroundColor(Theme.ink)
                             .frame(maxWidth: .infinity).frame(height: 40)
@@ -190,10 +197,12 @@ struct TafView: View {
         ScrollView {
             VStack(spacing: 16) {
                 // No Card listed says nothing: tafs cloud sends no field that says one was revoked.
-                ForEach(taf.cards) { card in
-                    CardFace(card: card, color: Theme.tafColor(taf.color))
+                // The Cards as the iPad's wallet: a click brings one to the front, and the panel
+                // is the front Card's.
+                if !taf.cards.isEmpty {
+                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
                     // A Card with no rules has no panel under it, never an empty one.
-                    if !card.rules.isEmpty { rules(card) }
+                    if let shown = CardStack.front(of: taf.cards, frontCard), !shown.rules.isEmpty { rules(shown) }
                 }
             }
             .padding(.bottom, Look.inset)
@@ -232,5 +241,52 @@ struct TafView: View {
         case .hold: return words("card.outside_held")
         case .unknown: return nil
         }
+    }
+}
+
+/// A taf's Cards as the iPad's `CardStack`: as in a wallet, the furthest back on top, each a band
+/// of 26 points above the one in front, a shade darker so Cards of one colour read apart. A click
+/// brings one to the front. (The iPad's `WalletLayout` is a `Layout`, which macOS 12 hasn't: the
+/// bands are padding in a `ZStack` here.)
+struct CardStack: View {
+    @Environment(\.words) private var words
+    let cards: [TafCard]
+    let color: Color
+    /// The Card in front; nil for the first, the live one.
+    @Binding var front: String?
+
+    /// How much of a Card behind shows.
+    static let band: CGFloat = 26
+
+    /// The Card in front: the one chosen, else the first.
+    static func front(of cards: [TafCard], _ chosen: String?) -> TafCard? {
+        cards.first { $0.id == chosen } ?? cards.first
+    }
+
+    /// The Cards top to bottom: the furthest back first, the front one last, as in a wallet.
+    static func ordered(_ cards: [TafCard], front: String?) -> [TafCard] {
+        let shown = Self.front(of: cards, front)
+        return Array(cards.filter { $0.id != shown?.id }.reversed()) + (shown.map { [$0] } ?? [])
+    }
+
+    /// How much darker a Card `depth` places behind the front one is drawn, as the iPad's.
+    static func shade(depth: Int) -> Double { depth <= 0 ? 0 : min(0.12 + 0.08 * Double(depth - 1), 0.32) }
+
+    var body: some View {
+        let ordered = Self.ordered(cards, front: front)
+        ZStack(alignment: .top) {
+            ForEach(Array(ordered.enumerated()), id: \.element.id) { index, card in
+                Button { front = card.id } label: {
+                    CardFace(card: card, color: color)
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color.black.opacity(Self.shade(depth: ordered.count - 1 - index))))
+                        .shadow(color: .black.opacity(0.16), radius: 4, y: -2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(words("taf.show_card", ["title": card.title]))
+                .padding(.top, CGFloat(index) * Self.band)
+            }
+        }
+        .frame(maxWidth: CardFace.width)
     }
 }
