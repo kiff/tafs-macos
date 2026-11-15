@@ -109,12 +109,14 @@ struct KeychainStore: SecretStore {
         let added = add(secret, for: account)
         if added == errSecSuccess { return }
         guard added == errSecDuplicateItem else { throw Refused(status: added) }
-        let updated = SecItemUpdate(query(account) as CFDictionary, [kSecValueData: secret] as CFDictionary)
+        // The update keeps the item at the strength an add gives it, whatever kept it first.
+        let attributes: [CFString: Any] = [kSecValueData: secret, kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        let updated = SecItemUpdate(query(account) as CFDictionary, attributes as CFDictionary)
         if updated == errSecSuccess { return }
         // An item this build may not change, such as one an earlier unsigned build kept, is
-        // made anew if it may at least be deleted.
+        // made anew if it may at least be deleted. A refused delete is the number that ended it.
         let deleted = SecItemDelete(query(account) as CFDictionary)
-        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw Refused(status: updated) }
+        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw Refused(status: deleted) }
         let again = add(secret, for: account)
         guard again == errSecSuccess else { throw Refused(status: again) }
     }

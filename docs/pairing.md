@@ -108,6 +108,12 @@ by `KeychainStore`, in the login Keychain, under the service `bot.tafs.macos`.
 - **A pairing checks first.** Before it shows its code, it writes the device key and the
   session over themselves (`SecretStore.checkWritable`). If the Keychain refuses, the pairing
   stops there: no code, no claim, and nothing for the phone to approve.
+- **An item this build can't read is replaced by the check.** When the Keychain won't hand an
+  earlier build's session or key to this one, the check writes over it and deletes what it
+  wrote. Nothing usable is lost: this build couldn't use that item anyway.
+- **An update keeps the item's strength.** It sets the data and "when unlocked, this device
+  only" together, so an item an earlier build kept with a weaker setting is brought up to it.
+- **A refused delete is the number shown**, since it is the step that ended the save.
 - **A refusal carries the Keychain's status number only** (`KeychainStore.Refused`), never the
   item. The screen says "This Mac wasn't added: -25299. Show a new code and try again." and
   never the error's type.
