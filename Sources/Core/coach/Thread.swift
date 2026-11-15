@@ -53,6 +53,8 @@ enum Thread {
         }
         /// Unique in the thread: a card is known by it, never only by the name the model gave it.
         let key: String
+        /// When it was shown, as tafs cloud keeps it.
+        var at: Date?
         /// The name the model gave it: what an answer is sent to.
         let id: String
         /// `confirm`, `questions`, `approval`, `sign_in`, or a kind that only shows something.
@@ -125,6 +127,15 @@ enum Thread {
             case .message(_, let p), .card(_, let p), .held(_, let p), .other(_, let p): return p
             }
         }
+
+        /// When it was shown, when tafs cloud says.
+        var at: Date? {
+            switch self {
+            case .message(let message, _): return message.at
+            case .card(let card, _): return card.at
+            default: return nil
+            }
+        }
     }
 
     struct Page: Decodable, Equatable {
@@ -137,7 +148,7 @@ enum Thread {
         enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
-        enum CardKeys: String, CodingKey { case key, session, answer, component }
+        enum CardKeys: String, CodingKey { case key, session, answer, component, at }
         enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent }
@@ -221,6 +232,7 @@ enum Thread {
                             made.plan.append(Card.PlanStep(label: label, status: ((try? step.decodeIfPresent(String.self, forKey: .status)) ?? nil) ?? "pending"))
                         }
                     }
+                    made.at = outer(.at).flatMap(Thread.time)
                     made.planLine = text(.line)
                     made.tone = text(.tone)
                     if let taf = try? shown.nestedContainer(keyedBy: TafKeys.self, forKey: .taf) {
@@ -273,6 +285,14 @@ enum Thread {
                 return at >= since.addingTimeInterval(-60)
             }
             return false
+        }
+
+        /// Whether the item at this place shows its time, by the iPad's rule: the first one, and
+        /// any that comes an hour or more after the one before it. One with no time shows none.
+        func showsTime(at index: Int) -> Bool {
+            guard items.indices.contains(index), let at = items[index].at else { return false }
+            guard index > 0, let before = items[index - 1].at else { return true }
+            return at.timeIntervalSince(before) >= 3600
         }
 
         /// Whether something in this chat waits for the person.

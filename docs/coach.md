@@ -44,6 +44,13 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
 | A connection already made | an approval component's `connection`, when `done` | tafs cloud's line for it. |
 | The live steps | the stream's `activity {step, call_id}` and `step {call_id, status}` | Listed as they come, without the trailing "…", and each ended **by its call**: calls may overlap, and a step with no words ends without touching a listed one. `done`, `error` (failed) or `not_made` (its own state, not done). At most 200. |
 
+- **A run's steps are folded as the iPad's `WorkLog.rows`** (`WorkRows`): tries of the same
+  step after a failed or unmade one are one row, with the last try's outcome and how many
+  tries; a failed step is left out once something worked, or while the answer still runs;
+  when nothing worked, the failures stay; a step not made and not tried again stays. The live
+  steps fold the same way, and the step at work is the live line, never a row.
+- **A time shows** on the first item, and on one an hour or more after the one before it, as
+  the iPad's `gapTime` (`Thread.Page.showsTime`). A card's time is the card's `at`.
 - **Coach's words are read as the iPad's `MarkdownText` reads them**, so no mark shows as
   written (`Rich`): bold, italic, inline code, headings, bulleted and numbered items. **A link
   is drawn as its label only, and an image as its words: nothing leads anywhere.** HTML and a
