@@ -63,9 +63,11 @@ let accountScreenTests: [Test] = [
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
         // The screen is drawn from a model of its own: drawing reads the list again (its
         // `.task`), as often as the system draws, so the model under test sees only its own calls.
-        let (drawn, _) = model([(200, two), (200, two), (200, two), (200, two)], canRemoveOthers: false)
+        let (drawn, drawnTransport) = model([(200, two), (200, two), (200, two), (200, two)], canRemoveOthers: false)
         await drawn.load()
         try expect(!draws(Palette.no.light, in: DevicesView(model: drawn), words: words), "no red Sign out is drawn")
+        // Only reads, however many the drawing made: drawing never sends a removal.
+        try expectEqual(Set(drawnTransport.sent.map(\.method)), ["GET"])
         let (without, transport) = model([(200, two)], canRemoveOthers: false)
         await without.load()
         guard case .loaded(let devices) = without.state else { throw Failure(description: "not loaded") }
