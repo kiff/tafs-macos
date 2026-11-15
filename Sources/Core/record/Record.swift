@@ -123,6 +123,29 @@ enum Record {
         }
     }
 
+    /// One day of the Record: its start, in the account's calendar, and its calls, newest first.
+    struct Day: Identifiable, Equatable {
+        let start: Date
+        let entries: [Entry]
+        var id: Date { start }
+    }
+
+    /// The calls by day, newest first, as the iPad's `RecordView.days` (RecordView.swift:134-144):
+    /// every call shown, whichever group tafs cloud sent it in, under the day it was made in the
+    /// account's calendar.
+    static func days(_ groups: [Group], calendar: Calendar) -> [Day] {
+        var out: [Day] = []
+        for entry in groups.flatMap(\.entries).sorted(by: { $0.at > $1.at }) {
+            let start = calendar.startOfDay(for: entry.at)
+            if out.last?.start == start {
+                out[out.count - 1] = Day(start: start, entries: out[out.count - 1].entries + [entry])
+            } else {
+                out.append(Day(start: start, entries: [entry]))
+            }
+        }
+        return out
+    }
+
     /// The Record's filters, the iPad's: each keeps the calls of some kinds.
     enum Filter: String, CaseIterable, Identifiable {
         case all, moneyMoved, stopped, waiting
