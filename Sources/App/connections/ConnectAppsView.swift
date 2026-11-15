@@ -69,10 +69,12 @@ struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
 
-    /// The columns' widths, the same for the headings and every row.
-    private static let how: CGFloat = 170
-    private static let whose: CGFloat = 120
-    private static let status: CGFloat = 170
+    /// The columns' widths, the same for the headings and every row, as the iPad's
+    /// `ConnectColumns`: the app takes the rest, at least 200.
+    private static let how: CGFloat = 150
+    private static let whose: CGFloat = 130
+    private static let status: CGFloat = 230
+    private static let gap: CGFloat = 12
 
     var body: some View {
         ScrollView {
@@ -104,13 +106,7 @@ struct ConnectAppsView: View {
                     if !model.yours.isEmpty {
                         heading(words("connect.apps.yours"))
                         panel {
-                            HStack(spacing: 0) {
-                                column(words("connect.apps.column_app")).frame(maxWidth: .infinity, alignment: .leading)
-                                column(words("connect.apps.column_how")).frame(width: Self.how, alignment: .leading)
-                                column(words("connect.apps.column_whose")).frame(width: Self.whose, alignment: .leading)
-                                column(words("connect.apps.column_status")).frame(width: Self.status, alignment: .leading)
-                            }
-                            .padding(.vertical, 12)
+                            columns
                             ForEach(model.yours) { app in
                                 Rectangle().fill(Theme.line).frame(height: 1)
                                 row(app, yours: true)
@@ -120,8 +116,11 @@ struct ConnectAppsView: View {
                     if !model.discover.isEmpty {
                         heading(words("connect.apps.discover"))
                         panel {
+                            // The headings sit over Discover when there is no Yours above it.
+                            if model.yours.isEmpty { columns }
                             ForEach(model.discover) { app in
-                                if app.id != model.discover.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
+                                // A line between rows, and under the headings when they are here.
+                                if model.yours.isEmpty || app.id != model.discover.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
                                 row(app, yours: false)
                             }
                         }
@@ -146,7 +145,17 @@ struct ConnectAppsView: View {
     }
 
     private func column(_ text: String) -> some View {
-        Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+        Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+    }
+
+    private var columns: some View {
+        HStack(spacing: Self.gap) {
+            column(words("connect.apps.column_app")).frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+            column(words("connect.apps.column_how")).frame(width: Self.how, alignment: .leading)
+            column(words("connect.apps.column_whose")).frame(width: Self.whose, alignment: .leading)
+            column(words("connect.apps.column_status")).frame(width: Self.status, alignment: .leading)
+        }
+        .padding(.vertical, 12)
     }
 
     private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -158,36 +167,41 @@ struct ConnectAppsView: View {
 
     /// One app, in the iPad's columns: its name, how it connects, whose it is, its status.
     private func row(_ app: Apps.App, yours: Bool) -> some View {
-        HStack(spacing: 0) {
+        let setup = app.state == "needs_setup"
+        return HStack(alignment: .center, spacing: Self.gap) {
             HStack(spacing: 12) {
                 RoundedRectangle(cornerRadius: 6).fill(Theme.raised).frame(width: 24, height: 24)
                     .overlay(Text(verbatim: String(app.name.prefix(1)).uppercased()).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.soft))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    if let subtitle = app.subtitle { Text(verbatim: subtitle).font(.system(size: 12)).foregroundColor(Theme.soft) }
-                    // For an app an operator sets up first: tafs cloud's own line.
-                    if let words = app.words { Text(verbatim: words).font(.system(size: 12)).foregroundColor(Theme.soft) }
+                    // An app an operator sets up first is named in the soft colour, as on the iPad.
+                    Text(verbatim: app.name).font(.system(size: 16, weight: .semibold)).foregroundColor(setup ? Theme.soft : Theme.ink)
+                    if let subtitle = app.subtitle { Text(verbatim: subtitle).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(app.howKey.map { words($0) } ?? "").font(.system(size: 14)).foregroundColor(Theme.ink)
+            .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
+            Text(words(app.howKey)).font(.system(size: 14)).foregroundColor(Theme.soft)
                 .frame(width: Self.how, alignment: .leading)
-            Text(verbatim: yours ? (app.whose ?? "") : "").font(.system(size: 14)).foregroundColor(Theme.ink)
+            Text(verbatim: yours ? (app.whose ?? "") : "").font(.system(size: 14)).foregroundColor(Theme.soft)
                 .frame(width: Self.whose, alignment: .leading)
-            Group {
+            VStack(alignment: .leading, spacing: 2) {
                 if app.needsReconnect {
-                    Text(words("connect.sign_in_again")).foregroundColor(Theme.amberText)
+                    Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 } else if app.isYours {
-                    Text(words("connect.status.connected")).foregroundColor(Theme.ok)
-                } else {
-                    Text(verbatim: "")
+                    Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+                } else if setup, let line = app.words {
+                    // For an app an operator sets up first: tafs cloud's own line, in its status.
+                    Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
+                }
+                // Which tafs use one of the account's own connections, under its status.
+                if yours, !app.usedBy.isEmpty {
+                    Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
                 }
             }
-            .font(.system(size: 14, weight: .semibold))
             .frame(width: Self.status, alignment: .leading)
         }
-        .padding(.vertical, 14)
+        .frame(minHeight: 52)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 }

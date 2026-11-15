@@ -27,7 +27,8 @@ let connectionsTests: [Test] = [
         try expectEqual(page.apps[0].subtitle, "Invoicing: reads, and invoice drafts from quotes")
         try expectEqual(page.apps[0].line, "Sign in · Connected · Used by Refunds")
         try expectEqual(page.apps[0].whose, "Company")
-        try expectEqual(page.apps.map(\.howKey), ["connect.how.sign_in", "connect.how.sign_in", "connect.how.sign_in", nil])
+        try expectEqual(page.apps.map(\.howKey), ["connect.how.sign_in", "connect.how.sign_in", "connect.how.sign_in", "connect.how.sign_in"])
+        try expectEqual(page.apps.map(\.usedBy), [["Refunds"], [], [], []])
         try expectEqual(page.apps[3].words, "An operator sets this app up first.")
         try expectEqual(page.nextCursor, "c2")
         try expectEqual(page.partial, false)
@@ -50,13 +51,27 @@ let connectionsTests: [Test] = [
             do { _ = try await cloud([(200, body)]).0.apps(); throw Failure(description: "\(body) was read") } catch let error as KIFFError { try expectEqual(error, .unreadable) }
         }
     }),
-    Test("how an app connects is a shared line in every shipped language, and nothing for a way not known") {
+    Test("how an app connects is a shared line in every shipped language, by the iPad's rule") {
         let folder = URL(fileURLWithPath: ".shared/app/strings")
         for language in try Words.shipped(folder: folder) {
             let words = try Words(language: language, folder: folder)
-            for key in ["connect.how.sign_in", "connect.how.key"] { try expect(words(key) != key, "\(key) in \(language)") }
+            for key in ["connect.how.sign_in", "connect.how.key", "connect.apps.used_by"] { try expect(words(key) != key, "\(key) in \(language)") }
         }
-        let json = #"{"entry":"e","name":"N","state":"available","method":"carrier_pigeon"}"#
-        try expectEqual(try JSONDecoder().decode(Apps.App.self, from: Data(json.utf8)).howKey, nil)
+        func how(_ fields: String) throws -> String {
+            try JSONDecoder().decode(Apps.App.self, from: Data(#"{"entry":"e","name":"N","state":"available"\#(fields)}"#.utf8)).howKey
+        }
+        // method first; an older tafs cloud's how; anything else is Sign in, as on the iPad.
+        try expectEqual(try how(#","method":"key","how":"oauth""#), "connect.how.key")
+        try expectEqual(try how(#","how":"key""#), "connect.how.key")
+        try expectEqual(try how(#","method":"carrier_pigeon""#), "connect.how.sign_in")
+        try expectEqual(try how(""), "connect.how.sign_in")
+    },
+    Test("which tafs use a connection are its used_by names, and a user that doesn't read is left out") {
+        let json = #"{"entry":"e","name":"N","state":"connected","used_by":[{"taf":"t1","name":"Refunds"},{"taf":"t2"},7,{"taf":"t3","name":" "},{"taf":"t4","name":"Invoices"}]}"#
+        let app = try JSONDecoder().decode(Apps.App.self, from: Data(json.utf8))
+        try expectEqual(app.usedBy, ["Refunds", "Invoices"])
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(words("connect.apps.used_by", ["tafs": words.list(["Refunds"])]), "Used by Refunds")
+        try expect(words.list(["Refunds", "Invoices"]).contains("Invoices"), "both names")
     },
 ]

@@ -74,6 +74,18 @@ struct Words {
         return formatter.string(from: NSNumber(value: n)) ?? String(n)
     }
 
+    /// Names as this language lists them: "Refunds and Invoices", "Refunds et Invoices". Where
+    /// the system has no list formatter (Linux), joined with commas.
+    func list(_ names: [String]) -> String {
+        #if canImport(Darwin)
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: language)
+        return formatter.string(from: names) ?? names.joined(separator: ", ")
+        #else
+        return names.joined(separator: ", ")
+        #endif
+    }
+
     /// A name's possessive by the language's rule, the one in kiff/tafs's `generate.py`
     /// (`POSSESSIVE`): "Refunds'", "Rae's"; German "Klaus'", "Raes". A language with no rule
     /// keeps the name, and its lines word around it.
