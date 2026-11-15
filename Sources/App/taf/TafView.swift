@@ -15,21 +15,34 @@ struct CardFace: View {
                 switch figure {
                 case .calls(let left, let limit, let window):
                     Text(verbatim: words.number(left)).font(.system(size: 34, weight: .bold, design: .rounded))
-                    Text(words.count("card.hero.calls_left_of", left, ["window": window, "limit": words.number(limit)])
-                            .replacingOccurrences(of: words.number(left) + " ", with: ""))
+                    // The shared line as it is: the number is the figure above it.
+                    Text(words.count("card.hero.calls_left_of", left, ["window": window, "limit": words.number(limit)]))
                         .font(.system(size: 13))
                 case .money(let left, let limit, let window):
                     Text(verbatim: left.written(language: words.language)).font(.system(size: 34, weight: .bold, design: .rounded))
                     Text(words("card.hero.left_of", ["window": window, "limit": limit.written(language: words.language)])).font(.system(size: 13))
                 }
             }
-            Text(words.count("card.tools", card.rules.count)).font(Theme.mono(11))
+            // The iPad's facts: the first limit for each call, and how many tools past one.
+            if card.rules.isEmpty {
+                Text(words("card.no_actions_short")).font(Theme.mono(11))
+            } else if let fact = card.rules.lazy.compactMap({ $0.eachFact(words) }).first {
+                Text(verbatim: fact).font(Theme.mono(11)).lineLimit(1)
+            }
+            if card.rules.count > 1 { Text(words.count("card.tools", card.rules.count)).font(Theme.mono(11)) }
             Spacer(minLength: 8)
             HStack(alignment: .bottom) {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(words("card.ends")).font(.system(size: 10)).opacity(0.85)
-                    Text(verbatim: card.expires.map { Self.day.string(from: $0) } ?? words("card.no_end_date")).font(.system(size: 12, weight: .semibold))
+                    if !card.active {
+                        Text(words("card.ended")).font(.system(size: 12, weight: .semibold))
+                    } else if let expires = card.expires {
+                        Text(words("card.until")).font(.system(size: 10)).opacity(0.85)
+                        Text(verbatim: Self.day.string(from: expires)).font(.system(size: 12, weight: .semibold))
+                    } else {
+                        Text(words("card.ends")).font(.system(size: 10)).opacity(0.85)
+                        Text(words("card.no_end_date")).font(.system(size: 12, weight: .semibold))
+                    }
                 }
             }
         }
@@ -44,6 +57,8 @@ struct CardFace: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 18))
         )
+        // A Card that isn't active any more, faded as on the iPad.
+        .opacity(card.active ? 1 : 0.4)
         .accessibilityElement(children: .combine)
     }
 
@@ -127,9 +142,7 @@ struct TafView: View {
     private var cardTab: some View {
         ScrollView {
             VStack(spacing: 16) {
-                if taf.cards.isEmpty {
-                    Text(words("card.card_revoked")).font(.system(size: 14)).foregroundColor(Theme.soft)
-                }
+                // No Card listed says nothing: tafs cloud sends no field that says one was revoked.
                 ForEach(taf.cards) { card in
                     CardFace(card: card, color: Theme.tafColor(taf.color)).frame(maxWidth: 300)
                     // A Card with no rules has no panel under it, never an empty one.
@@ -150,9 +163,10 @@ struct TafView: View {
                         if let outside = outsideWords(rule.outside) { Text(outside).font(.system(size: 12)).foregroundColor(Theme.soft) }
                     }
                     Spacer()
-                    if let count = rule.countPerWindow, let each = rule.each {
-                        // The limit as KIFF counts it: the number, and tafs cloud's words for its window.
-                        Text(verbatim: "\(words.number(count)) · \(each)").font(Theme.mono(12)).foregroundColor(Theme.ink)
+                    // Its limits as the iPad's summary: held or refused above them.
+                    let summary = rule.summary(words)
+                    if !summary.isEmpty {
+                        Text(verbatim: summary).font(Theme.mono(12)).foregroundColor(Theme.ink).multilineTextAlignment(.trailing)
                     }
                 }
             }

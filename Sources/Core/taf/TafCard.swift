@@ -47,10 +47,21 @@ struct TafCard: Decodable, Identifiable, Equatable {
         let outside: Outside
         /// The most calls in its window, when the rule has such a limit.
         let countPerWindow: Int?
+        /// tafs cloud's words for the window: "a day", and "today".
         let each: String?
+        var now: String?
+        /// KIFF's limits: each call, and the total for the window with the room it has now.
+        var perAction: Amount?
+        var perWindow: Amount?
+        /// Of the total, the extra room given on a held call, and the Card's own limit.
+        var extraRoom: Amount?
+        var baseLimit: Amount?
 
-        enum CodingKeys: String, CodingKey { case label, outside, countPerWindow = "count_per_window", words = "window_words" }
-        enum WordsKeys: String, CodingKey { case each }
+        enum CodingKeys: String, CodingKey {
+            case label, outside, countPerWindow = "count_per_window", words = "window_words"
+            case perAction = "per_action", perWindow = "per_window", extraRoom = "extra_room", baseLimit = "base_limit"
+        }
+        enum WordsKeys: String, CodingKey { case each, now }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             label = try c.decode(String.self, forKey: .label)
@@ -60,7 +71,46 @@ struct TafCard: Decodable, Identifiable, Equatable {
             default: outside = .unknown
             }
             countPerWindow = (try? c.decodeIfPresent(Int.self, forKey: .countPerWindow)) ?? nil
-            each = (try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .words)).flatMap { (try? $0.decodeIfPresent(String.self, forKey: .each)) ?? nil }
+            let windowWords = try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .words)
+            each = windowWords.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .each)) ?? nil }
+            now = windowWords.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .now)) ?? nil }
+            perAction = (try? c.decodeIfPresent(Amount.self, forKey: .perAction)) ?? nil
+            perWindow = (try? c.decodeIfPresent(Amount.self, forKey: .perWindow)) ?? nil
+            extraRoom = (try? c.decodeIfPresent(Amount.self, forKey: .extraRoom)) ?? nil
+            baseLimit = (try? c.decodeIfPresent(Amount.self, forKey: .baseLimit)) ?? nil
+        }
+
+        /// The rule's limits in one line, as the iPad's `CardRule.summary`, in the shared words:
+        /// held above them ("up to €150 each; more asks you first · €2,000 in total a day, then
+        /// it asks you"), or refused above them ("≤ €150 each · €2,000 a day · 20 calls a day").
+        /// The Card's own total, with its extra room apart, never one sum.
+        func summary(_ words: Words) -> String {
+            let window = each ?? ""
+            let own = extraRoom != nil ? (baseLimit ?? perWindow) : perWindow
+            let room = extraRoom.map { words("card.extra_room", ["extra": $0.written(language: words.language), "window": now ?? ""]) }
+            var parts: [String] = []
+            switch outside {
+            case .hold:
+                if let each = perAction { parts.append(words("card.rule.up_to_each", ["amount": each.written(language: words.language)])) }
+                if let own { parts.append(words("card.rule.total_then_asks", ["amount": own.written(language: words.language), "window": window])) }
+                if let room { parts.append(room) }
+                if let count = countPerWindow {
+                    parts.append(count == 0 ? words("card.held.each_call_asks") : words.count("card.rule.calls_then_asks", count, ["window": window]))
+                }
+            case .refuse, .unknown:
+                if let each = perAction { parts.append(words("card.rule.at_most_each", ["amount": each.written(language: words.language)])) }
+                if let own { parts.append(own.written(language: words.language) + " " + window) }
+                if let room { parts.append(room) }
+                if let count = countPerWindow { parts.append(words.count("card.calls_window", count, ["window": window])) }
+            }
+            return parts.joined(separator: " · ")
+        }
+
+        /// The first of a rule's facts on the Card's face: its limit for each call.
+        func eachFact(_ words: Words) -> String? {
+            guard let each = perAction else { return nil }
+            let amount = each.written(language: words.language)
+            return outside == .hold ? words("card.rule.up_to_each", ["amount": amount]) : words("card.rule.at_most_each", ["amount": amount])
         }
     }
 

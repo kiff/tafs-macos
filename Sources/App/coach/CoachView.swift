@@ -312,12 +312,20 @@ struct CoachView: View {
         }
     }
 
+    /// A taf's chat says "Message {taf}", and "Write the next message" while the taf works;
+    /// Coach's says "Ask anything".
+    private var placeholder: String {
+        guard embedded else { return words("coach.ask_anything") }
+        guard case .loaded(let taf, let page) = model.state else { return words("chat.write_next") }
+        return page.working || model.live != nil ? words("chat.write_next") : words("chat.message_taf", ["taf": taf.name])
+    }
+
     /// The message box, to the iPad's: a rounded panel with the words, and the send circle at
     /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
             VStack(alignment: .leading, spacing: 10) {
-                TextField(words(embedded ? "chat.write_next" : "coach.ask_anything"), text: $model.draft)
+                TextField(placeholder, text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
                     .onSubmit { Task { await model.send() } }
                 HStack {

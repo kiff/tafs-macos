@@ -31,7 +31,7 @@ let tafMacTests: [Test] = [
     }),
     Test("a Card with no rules has no empty panel under it on the Card tab", awaiting: { @MainActor in
         // Whether a panel's white shows anywhere down the page's middle, under the Card's face.
-        func panelUnderCard(rules: String) throws -> Bool {
+        @MainActor func panelUnderCard(rules: String) throws -> Bool {
             let json = #"{"tafs":[{"id":"taf-2","name":"Refunds","kiff_agent":"a2","state":"idle","card":{"cards":[{"id":"c9","title":"Refunds","rules":\#(rules)}]}}]}"#
             let taf = try AccountClient.decoder.decode(Home.Page.self, from: Data(json.utf8)).tafs[0]
             let chat = CoachModel(cloud: CloudClient(transport: CannedTransport([]), session: session), taf: Coach(id: "taf-2", name: "Refunds"), sleep: { _ in })
