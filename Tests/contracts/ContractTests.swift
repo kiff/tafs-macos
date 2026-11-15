@@ -104,6 +104,10 @@ let contractsTests: [Test] = [
         try expectEqual(rae.healthNow, "Its last 2 checks found work too big for one run, so nothing ran")
         try expectEqual(rae.nextRunWords, "Next run Fri 12:30")
         try expect(rae.trouble?.hasPrefix("Its last 2 checks") == true, "its failing health's first line")
+        // Its fix is tafs cloud's: Coach, with its words to put in Coach's box.
+        try expectEqual(rae.health?.failing, true)
+        try expectEqual(rae.health?.fixes(for: 0).map(\.kind), ["coach"])
+        try expect(rae.health?.fixes(for: 0).first?.say?.isEmpty == false, "Coach's words")
         try expectEqual(rae.cards.map(\.title), ["Create refund"])
         try expectEqual(rae.cards.first?.rules.count, 1)
         // tafs cloud sends calls.used as null: no figure from calls, the money left is the figure.
