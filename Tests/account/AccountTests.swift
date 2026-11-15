@@ -32,11 +32,16 @@ let accountTests: [Test] = [
         try expectEqual(devices.map(\.id), ["dev_1", "dev_2", "dev_3"])
         try expectEqual(devices[0].name, "Mac")
         try expectEqual(devices[0].thisDevice, true)
-        try expectEqual(devices[0].keyFingerprint, "3f2a 91c0 7b1e 0d44")
         try expectEqual(devices[0].lastUsed, Date(timeIntervalSince1970: 1_794_681_000.25))
         try expectEqual(devices[1].name, "A phone")
         try expectEqual(devices[1].lastUsed, Date(timeIntervalSince1970: 1_794_560_400))
         try expectEqual(devices[2], Device(id: "dev_3", name: nil))
+    }),
+    Test("a key fingerprint isn't read: a device whose fingerprint isn't text still lists", awaiting: {
+        let body = #"{"devices":[{"id":"dev_1","display_name":"Mac","key_fingerprint":{"sha256":"3f2a"},"this_device":true}]}"#
+        let (account, _) = client([(200, body)])
+        let devices = try await account.devices()
+        try expectEqual(devices, [Device(id: "dev_1", name: "Mac", thisDevice: true)])
     }),
     Test("an answer that isn't the devices list is unreadable, never an empty list", awaiting: {
         for body in ["{}", "<html>", #"{"devices":[{"name":"no id"}]}"#] {

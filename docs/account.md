@@ -26,7 +26,7 @@ it is never shown as an empty list.
 
 | Call | Route | What |
 |---|---|---|
-| `devices()` | `GET /v1/me/devices` | Each device: KIFF's name for it, its platform, its key's fingerprint, when it was last used, and which one is this Mac. |
+| `devices()` | `GET /v1/me/devices` | Each device: KIFF's name for it, its platform, when it was last used, and which one is this Mac. Its key's fingerprint isn't read: no screen shows it. |
 | `removeDevice(_:)` | `DELETE /v1/me/devices/{id}` | Signs that device out. Its session and any approval window it opened end at once. |
 | `signOut()` | `POST /v1/auth/device/logout` | Ends this Mac's session. |
 
@@ -43,8 +43,9 @@ network.
 
 `DevicesView`, driven by `DevicesModel`, lists every device of the account (Account → Devices):
 
-- KIFF's name for it, when it was last used, and its key's fingerprint, which can be selected
-  to compare with another device's screen;
+- as the iPad's row: KIFF's name for it (15 semibold) and when it was last used (13 dim).
+  No key fingerprint, as on the iPad: keys are compared at pairing, through the 6-character
+  check code both screens show ([pairing.md](pairing.md));
 - "This device" on this Mac's own row, with no button.
 
 **Signing another device out is an approval**, since it can take away the account's power
