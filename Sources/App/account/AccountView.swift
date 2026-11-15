@@ -81,6 +81,8 @@ struct AccountView: View {
     @ObservedObject var devices: DevicesModel
     /// People & groups, read from KIFF; nil leaves its row out.
     var people: PeopleModel? = nil
+    /// Export my chats; nil leaves it out.
+    var exportChats: ExportChatsModel? = nil
     /// A taf's name by its KIFF agent, for what each group uses.
     var tafName: (String) -> String? = { _ in nil }
     /// Opens another screen of the sidebar from its row.
@@ -192,6 +194,12 @@ struct AccountView: View {
                     row(words("settings.language_title"), value: AppInfo.languageName(words.language))
                     divider
                     action(words("settings.change_language"), color: Theme.amberText) { Self.openLanguageSettings() }
+                }
+                // Their own copy, for their rights of access and portability, as the iPad's.
+                if let exportChats {
+                    group(nil) { ExportChatsRow(model: exportChats) }
+                    Text(words("export.own_chats_each_taf_coach")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                        .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 18)
                 }
                 group(words("sign_in.how_works")) {
                     Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))

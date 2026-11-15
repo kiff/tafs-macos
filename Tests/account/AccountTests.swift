@@ -184,4 +184,30 @@ let accountTests: [Test] = [
         try expectEqual(Access.manages(access["ben"]), false)
         try expectEqual(Access.manages(access["gone"]), false)
     }),
+    Test("Export my chats reads tafs cloud's export and splits it into its two files, as the iPad's", awaiting: {
+        let export = #"{"exported_at":"2026-11-15T10:00:00Z","readable":"Refunds\nYou: hello","chats":[{"taf":"Refunds"}],"url":"a/b"}"#
+        let transport = CannedTransport([(200, export), (200, "[1]"), (503, #"{"error":"down"}"#)])
+        let cloud = CloudClient(transport: transport, session: session, language: "fr")
+        let files = try await cloud.exportChats()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/me/chats/export")
+        try expectEqual(transport.sent[0].headers["Authorization"], "Bearer tok")
+        try expectEqual(files.text, "Refunds\nYou: hello")
+        // Pretty, sorted, slashes as they are, and no readable text in it.
+        try expectEqual(String(decoding: files.json, as: UTF8.self), "{\n  \"chats\" : [\n    {\n      \"taf\" : \"Refunds\"\n    }\n  ],\n  \"exported_at\" : \"2026-11-15T10:00:00Z\",\n  \"url\" : \"a/b\"\n}")
+        let notAnObject = try? await cloud.exportChats()
+        try expect(notAnObject == nil, "an answer that isn't an object isn't an export")
+        let refused = try? await cloud.exportChats()
+        try expect(refused == nil, "a refusal isn't an export")
+    }),
+    Test("the two files are tafs-chats.json and tafs-chats.txt, replacing the last export's, and removed at sign-out") {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("export-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: folder.appendingPathComponent("old.txt"))
+        let files = try ChatsExport.write((json: Data("{}".utf8), text: "hello"), in: folder)
+        try expectEqual(files.map(\.lastPathComponent), ["tafs-chats.json", "tafs-chats.txt"])
+        try expectEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted(), ["tafs-chats.json", "tafs-chats.txt"])
+        try expectEqual(try String(contentsOf: files[1]), "hello")
+        ChatsExport.removeFiles(in: folder)
+        try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
+    },
 ]
