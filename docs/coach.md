@@ -30,7 +30,9 @@ The app draws the list as it comes. It places and folds nothing itself.
 - **A run's steps** are tafs cloud's words for them, never a tool's name: a tick, a red mark
   for a failure, an arrow for one not made ("not made · read first"), and "{n} tries".
 - **Coach's words are drawn as the iPad's `MarkdownText`**: no Markdown mark shows, a link is
-  its label only, and every piece is `Text(verbatim:)`. The plan stays where it was shown.
+  its label only, and every piece is `Text(verbatim:)`. A ``` fenced block is its lines as
+  written, no mark read inside, in 14 mono on the raised ground (padding 10, radius 8); one
+  never closed is code to the end, as while an answer streams. The plan stays where it was shown.
 - **Approve is not on the Mac yet.** The card says where to approve. **Decline** and **Not
   now** answer it with `declined` or `not now`, and grant nothing.
 - **A decline** is known only by tafs cloud's words for the answer, which it writes in the
