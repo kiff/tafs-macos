@@ -102,4 +102,20 @@ let accountTests: [Test] = [
         try await account.signOut()
         try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/auth/device/logout")
     }),
+    Test("About's version is the version and its build; a language is named in its own words") {
+        try expectEqual(AppInfo.version(["CFBundleShortVersionString": "0.1", "CFBundleVersion": "1"]), "0.1 (1)")
+        try expectEqual(AppInfo.version(["CFBundleShortVersionString": "0.1"]), "0.1")
+        try expectEqual(AppInfo.version([:]), "–")
+        try expectEqual(AppInfo.languageName("fr"), "Français")
+        try expectEqual(AppInfo.languageName("pt"), "Português")
+        try expectEqual(AppInfo.languageName("en"), "English")
+    },
+    Test("the app declares every shipped language, so macOS offers each one as the app's own language") {
+        let plist = try Data(contentsOf: URL(fileURLWithPath: "App/Info.plist"))
+        let info = try PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any] ?? [:]
+        let declared = info["CFBundleLocalizations"] as? [String] ?? []
+        let shipped = try Words.shipped(folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(Set(declared), Set(shipped))
+        try expectEqual(AppInfo.version(info), "0.1 (1)")
+    },
 ]

@@ -12,6 +12,17 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>tafs</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>es</string>
+		<string>it</string>
+		<string>pt</string>
+		<string>nl</string>
+		<string>pl</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>tafs</string>
 	<key>CFBundlePackageType</key>
