@@ -15,6 +15,7 @@ struct SignedInView: View {
     @StateObject private var usage: UsageModel
     @StateObject private var connect: ConnectAppsModel
     @StateObject private var coach: CoachModel
+    @StateObject private var alerts: AlertsModel
     @State private var selection: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
@@ -65,6 +66,8 @@ struct SignedInView: View {
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
+        // Alerts are kept per account, as the iPad keys them by tenant.
+        _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
     }
 
     var body: some View {
@@ -87,7 +90,10 @@ struct SignedInView: View {
             case .account: return AnyView(accountScreen)
             }
         }
-        .onAppear { notifier.opened = { selection = .needsYou } }
+        .onAppear {
+            notifier.opened = { selection = .needsYou }
+            notifier.account = account.session.tenant
+        }
         // A screen chosen from elsewhere (a notification) closes it too.
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
@@ -153,19 +159,31 @@ struct SignedInView: View {
         selection = .coach
     }
 
+    /// Plan & usage in place of the taf's page, as the iPad's `usageRequested` from a health fix.
+    static func showUsage(openTaf: inout String?, selection: inout Screen) {
+        openTaf = nil
+        selection = .usage
+    }
+
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
-                               halted: { await readTafs() }).id(taf.id))
+                               halted: { await readTafs() },
+                               // Plan & usage in place of the taf's page.
+                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) },
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email)).id(taf.id))
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, signOut: {
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()
+                // What's still on its way in a chat is the session before's.
+                coach.signedOut()
+                tafChat?.signedOut()
                 signedOut()
             }
         })
