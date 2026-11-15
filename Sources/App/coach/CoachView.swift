@@ -598,6 +598,10 @@ struct CoachView: View {
     @State private var reporting: ReportedAnswer?
     /// Previous conversations is open.
     @State private var showingChats = false
+    /// Speaking a message instead of typing it, into this chat's box (`MicButton`).
+    @StateObject private var dictation = Dictation()
+    /// The words the person is likely to say, so dictation spells them right (`Dictating.hints`).
+    var hints: [String] = []
     @State private var planOpen = false
 
     var body: some View {
@@ -746,10 +750,12 @@ struct CoachView: View {
                 TextField(placeholder, text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .onSubmit { Task { await model.send() } }
+                    .onSubmit { send() }
                 HStack {
                     Spacer()
-                    Button { Task { await model.send() } } label: {
+                    // Speak instead of typing, as the iPad's: the words wait in the box, unsent.
+                    MicButton(dictation: dictation, text: $model.draft, hints: hints.isEmpty ? Dictating.hints(tafs: []) : hints)
+                    Button { send() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundColor(Theme.onFill)
                             .frame(width: 40, height: 40)
                             .background(Circle().fill(Theme.coach.opacity(model.canSend ? 1 : 0.4)))
@@ -765,7 +771,17 @@ struct CoachView: View {
             .padding(.horizontal, 12).padding(.vertical, 10)
             // The iPad's bar: the background with a faint shadow upward, apart from the wash.
             .background(Theme.background.shadow(color: Theme.ink.opacity(0.06), radius: 6, x: 0, y: -2))
+            // Leaving the chat stops dictating, so its words never land in another chat's box.
+            .onDisappear { dictation.stop() }
+            DictationBar(dictation: dictation)
         }
+    }
+
+    /// Sending stops dictating, as the iPad's `send()`: what was heard goes with it, as it
+    /// stands in the box.
+    private func send() {
+        dictation.stop()
+        Task { await model.send() }
     }
 
     /// The answer as it is written, as on the iPad: the live line, the steps done under it,
