@@ -45,8 +45,33 @@ stopped, from the runs list (a report never says); else "Last ran at {time}"; el
 yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's contracts,
 `taf-runs.json` and `taf-run-report*.json`, read by `scripts/test.sh contracts`.
 
+## With no taf: the recipes (`Recipes`, `HomeRecipesView`, `RecipeSheet`)
+
+Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `RecipeRow`,
+`AppMarks`, `RecipeSheet`), `TafsCloud.Recipes` and Home's no-taf branch in `HomeView.swift`.
+
+- **Read** with each list read that has no taf, never with tafs; a read that fails keeps what
+  was read. As strict as the iPad: a category or recipe that doesn't read, a recipe's
+  `category`, `line` or `say` that isn't words, or a `shown` that isn't a flag fails the read.
+  An app that doesn't read is left out, a label that isn't words is "". Only `proved` and
+  `sample` are trimmed, so `say` goes in Coach's box as sent.
+- **Listed** (`home.shown`, the sheet's `labels`, a category with a recipe): tafs cloud's line
+  (also in the sidebar), **Say it in your own words**, a chip per category in its colour, and
+  each recipe led by the problem it ends, its line and its apps (one mark each), on an edge in
+  its category's colour. Its sheet: what it ends, what that costs today, its Card in zones,
+  where its proof run passed and what it reported, and **Hand it to Coach**, which puts `say`
+  in Coach's box. Nothing is sent until the person sends it.
+- **Not listed:** tafs cloud's `home.words`, else the app's own line ("No tafs yet." and, by
+  who may use Coach, `home.empty.coach` or `home.empty.shared`), then Own words.
+- **Who may use Coach** (`mayUseCoach`): KIFF's `use` for the Setup agent, else
+  `members.manage`. Without it, no Own words and no Hand it to Coach.
+
 ## Not yet
 
+- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`), and Own
+  words opening one (`startNewTaf`): Coach on the Mac has one conversation, so the words go in
+  its box and Own words opens it as it is.
+- The apps' logos beside their names, and `RecipeGallery` with its sample's label.
 - Who uses a taf, under its name, for someone who manages it.
 - Reading the list again by itself. It is read when the screen opens, and with each round.
 

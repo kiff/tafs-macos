@@ -61,7 +61,8 @@ struct SignedInView: View {
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() }))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
+                                                        mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
@@ -113,6 +114,20 @@ struct SignedInView: View {
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
         tafPages = TafPagesModel(cloud: cloud, taf: id)
         openTaf = taf.id
+    }
+
+    /// Whether this person may use Coach, as the iPad's `mayUseCoach`: KIFF's answer for Setup,
+    /// else an account admin.
+    private var mayUseCoach: Bool {
+        Access.mayUseCoach(setup: access["setup"], capabilities: accountModel.me?.capabilities)
+    }
+
+    /// A recipe handed to Coach from the Overview, as the iPad's `handRecipeToCoach`
+    /// (AppModel.swift:7274-7280): its words in Coach's box, to edit and send. Nothing is sent.
+    private func handToCoach(_ recipe: Recipes.Recipe) {
+        guard mayUseCoach else { return }
+        coach.draft = recipe.say
+        selection = .coach
     }
 
     private var tafPage: AnyView? {
