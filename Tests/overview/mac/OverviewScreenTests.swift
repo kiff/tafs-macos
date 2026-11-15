@@ -17,17 +17,24 @@ private let listedRecipes = #"""
 """#
 
 let overviewMacTests: [Test] = [
-    Test("with no taf, tafs cloud's recipes are read for the Overview, and Home's line for the sidebar", awaiting: { @MainActor in
-        let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes)])
+    Test("with no taf, tafs cloud's recipes are read with each list read, and a read that fails keeps them, as the iPad's", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, #"{"tafs":[]}"#), (200, listedRecipes), (200, #"{"tafs":[]}"#), (500, "")])
+        let none = OverviewModel(cloud: CloudClient(transport: transport, session: session))
         await none.load()
-        try expectEqual(none.recipes?.listed, true)
+        try expectEqual(none.recipes?.homeListsRecipes, true)
         try expectEqual(none.recipes?.byCategory.count, 2)
         try expectEqual(none.noTafsLine, "Pick a job for your first taf.")
-        // Recipes that can't be read: nothing shows, never an empty list.
-        let unread = model([(200, #"{"tafs":[]}"#), (500, "")])
-        await unread.load()
-        try expectEqual(unread.recipes, nil)
-        try expectEqual(unread.noTafsLine, nil)
+        // The next read fails: what was read stays, on Home and in the sidebar.
+        await none.load()
+        try expectEqual(none.recipes?.homeListsRecipes, true)
+        try expectEqual(none.noTafsLine, "Pick a job for your first taf.")
+        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes", "/v1/home", "/v1/recipes"])
+        // With a taf, they aren't read at all.
+        let busy = CannedTransport([(200, homePage)])
+        let withTafs = OverviewModel(cloud: CloudClient(transport: busy, session: session))
+        await withTafs.load()
+        try expectEqual(withTafs.recipes, nil)
+        try expectEqual(busy.sent.map(\.path), ["/v1/home"])
     }),
     Test("the screenshots: the Overview with no taf, listing tafs cloud's recipes", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
@@ -35,7 +42,7 @@ let overviewMacTests: [Test] = [
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes)])
         await none.load()
-        let view = OverviewView(model: none, handToCoach: { _ in }).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        let view = OverviewView(model: none, mayUseCoach: true).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try png.write(to: folder.appendingPathComponent("overview-recipes-en.png"))
     }),
@@ -54,7 +61,8 @@ let overviewMacTests: [Test] = [
         let unread = model([(503, ""), (200, recipes)])
         await unread.load()
         try expectEqual(unread.hasNoTafs, false)
-        try expectEqual(unread.noTafsLine, "Pick a job for your first taf.")
+        // As the iPad's `refresh`: the recipes are read only once the list is read and empty.
+        try expectEqual(unread.noTafsLine, nil)
         let withTafs = model([(200, homePage), (200, recipes)])
         try expectEqual(withTafs.hasNoTafs, false)
         await withTafs.load()

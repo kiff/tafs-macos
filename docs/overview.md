@@ -48,26 +48,30 @@ yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's co
 ## With no taf: the recipes (`Recipes`, `HomeRecipesView`, `RecipeSheet`)
 
 Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `RecipeRow`,
-`RecipeSheet`) and `TafsCloud.Recipes`. `GET /v1/recipes` is read with the list; while the
-account has no taf and tafs cloud lists them (`home.shown`, its sheet's words, a category with
-a recipe), they stand in the table's place:
+`AppMarks`, `RecipeSheet`), `TafsCloud.Recipes` and Home's no-taf branch in `HomeView.swift`.
 
-- tafs cloud's line ("Pick a job for your first taf."), which the sidebar shows too;
-- **Say it in your own words** (`home.own_words`): Coach with nothing in its box;
-- a chip per category, in its colour (`#RRGGBB` for light and dark, else none), to narrow
-  the list; picked again, every recipe shows;
-- each recipe led by the problem it ends (`headline`, else its title), its line and the apps it
-  uses, on an edge in its category's colour.
-
-A click opens its sheet: what it ends, what that costs today, its Card in plain zones (does on
-its own, asks first, never does, titled by tafs cloud's `labels`; an empty zone is left out),
-where its proof run passed and what it reported, and **Hand it to Coach**, which puts the
-recipe's `say` in Coach's box to edit and send, as the iPad's `handRecipeToCoach`. Nothing is
-sent until the person sends it. The contract (`recipes-home.json`) carries Home's part; the
-recipes themselves are read with the iPad's shape.
+- **Read** with each list read that has no taf, never with tafs; a read that fails keeps what
+  was read. As strict as the iPad: a category or recipe that doesn't read, a recipe's
+  `category`, `line` or `say` that isn't words, or a `shown` that isn't a flag fails the read.
+  An app that doesn't read is left out, a label that isn't words is "". Only `proved` and
+  `sample` are trimmed, so `say` goes in Coach's box as sent.
+- **Listed** (`home.shown`, the sheet's `labels`, a category with a recipe): tafs cloud's line
+  (also in the sidebar), **Say it in your own words**, a chip per category in its colour, and
+  each recipe led by the problem it ends, its line and its apps (one mark each), on an edge in
+  its category's colour. Its sheet: what it ends, what that costs today, its Card in zones,
+  where its proof run passed and what it reported, and **Hand it to Coach**, which puts `say`
+  in Coach's box. Nothing is sent until the person sends it.
+- **Not listed:** tafs cloud's `home.words`, else the app's own line ("No tafs yet." and, by
+  who may use Coach, `home.empty.coach` or `home.empty.shared`), then Own words.
+- **Who may use Coach** (`mayUseCoach`): KIFF's `use` for the Setup agent, else
+  `members.manage`. Without it, no Own words and no Hand it to Coach.
 
 ## Not yet
 
+- Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`), and Own
+  words opening one (`startNewTaf`): Coach on the Mac has one conversation, so the words go in
+  its box and Own words opens it as it is.
+- The apps' logos beside their names, and `RecipeGallery` with its sample's label.
 - Who uses a taf, under its name, for someone who manages it.
 - Reading the list again by itself. It is read when the screen opens, and with each round.
 

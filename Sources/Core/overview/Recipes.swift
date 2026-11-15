@@ -45,12 +45,15 @@ struct Recipes: Decodable, Equatable {
         }
     }
 
+    /// One recipe, read as the iPad's `Recipe` (TafsCloud.swift:1892-1941): `category`, `line`
+    /// and `say` fail the read when they aren't words; the rest read leniently. Nothing is
+    /// trimmed but `proved` and `sample`.
     struct Recipe: Decodable, Equatable, Identifiable {
         let id: String
         let title: String
         let category: String
         let line: String
-        /// What handing it to Coach puts in Coach's box.
+        /// What handing it to Coach puts in Coach's box, as sent.
         let say: String
         /// The problem it ends: it leads the recipe on Home and on its sheet.
         let headline: String
@@ -67,15 +70,57 @@ struct Recipes: Decodable, Equatable {
             let c = try decoder.container(keyedBy: Keys.self)
             id = try c.decode(String.self, forKey: .id)
             title = try c.decode(String.self, forKey: .title)
-            func text(_ key: Keys) -> String { (((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-            category = text(.category); line = text(.line); say = text(.say); headline = text(.headline)
-            today = text(.today); proved = text(.proved); sample = text(.sample)
+            category = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+            line = try c.decodeIfPresent(String.self, forKey: .line) ?? ""
+            say = try c.decodeIfPresent(String.self, forKey: .say) ?? ""
+            headline = ((try? c.decodeIfPresent(String.self, forKey: .headline)) ?? nil) ?? ""
+            today = ((try? c.decodeIfPresent(String.self, forKey: .today)) ?? nil) ?? ""
             card = ((try? c.decodeIfPresent(Card.self, forKey: .card)) ?? nil) ?? Card()
             apps = ((try? c.decodeIfPresent([Lenient<App>].self, forKey: .apps)) ?? nil)?.compactMap(\.value) ?? []
+            // Anything but words (a flag, a list) is no line: the sheet draws only what reads.
+            proved = (((try? c.decodeIfPresent(String.self, forKey: .proved)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            sample = (((try? c.decodeIfPresent(String.self, forKey: .sample)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        /// What leads it: the problem it ends; its title from a tafs cloud from before headlines.
-        var lead: String { headline.isEmpty ? title : headline }
+        /// What leads it: the problem it ends, as sent; else its title.
+        var lead: String { headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? title : headline }
+    }
+
+    /// Home with no taf, as the iPad's `Home`: `shown`, the recipes are listed under `words`;
+    /// not shown, `words` is Home's empty line. `ownWords` leads Home's list; nil when none came.
+    struct Home: Decodable, Equatable {
+        /// "Say it in your own words" and its line, trimmed.
+        struct OwnWords: Decodable, Equatable {
+            let title: String, line: String
+            enum Keys: String, CodingKey { case title, line }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: Keys.self)
+                title = (((try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                line = (((try? c.decodeIfPresent(String.self, forKey: .line)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        let shown: Bool, words: String, ownWords: OwnWords?
+
+        enum Keys: String, CodingKey { case shown, words, ownWords = "own_words" }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            shown = ((try? c.decodeIfPresent(Bool.self, forKey: .shown)) ?? nil) ?? false
+            words = ((try? c.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ""
+            // A row with no title isn't one.
+            ownWords = ((try? c.decodeIfPresent(OwnWords.self, forKey: .ownWords)) ?? nil).flatMap { $0.title.isEmpty ? nil : $0 }
+        }
+    }
+
+    /// The sheet's words, as the iPad's `Labels`: each one that isn't words is "".
+    struct Labels: Decodable, Equatable {
+        let allows: String, holds: String, never: String, hand: String
+
+        enum Keys: String, CodingKey { case allows, holds, never, hand }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            func text(_ key: Keys) -> String { ((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "" }
+            allows = text(.allows); holds = text(.holds); never = text(.never); hand = text(.hand)
+        }
     }
 
     /// One zone of a recipe's Card on its sheet: its title and its lines.
@@ -87,45 +132,35 @@ struct Recipes: Decodable, Equatable {
 
     let categories: [Category]
     let recipes: [Recipe]
-    /// Home with no taf: `shown`, the recipes are listed under `words`.
-    let homeShown: Bool
-    let homeWordsLine: String?
-    /// "Say it in your own words", leading Home's list, with its line; nil when none came.
-    let ownWords: (title: String, line: String)?
-    /// The sheet's words: its three zones' titles and its button's.
-    let labels: [String: String]?
+    /// Whether tafs cloud shows them now.
+    let shown: Bool
+    /// What Home shows with no taf; nil from a tafs cloud from before it.
+    let home: Home?
+    /// The sheet's words; nil from a tafs cloud from before them.
+    let labels: Labels?
 
-    enum Keys: String, CodingKey { case categories, recipes, home, labels }
-    enum HomeKeys: String, CodingKey { case shown, words, ownWords = "own_words" }
-    enum OwnKeys: String, CodingKey { case title, line }
+    enum Keys: String, CodingKey { case categories, recipes, shown, home, labels }
 
+    /// As the iPad's `Recipes.init(from:)` (TafsCloud.swift:2013-2021): a category or recipe
+    /// that doesn't read fails the whole read, and so does a `shown` that isn't a flag.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
-        categories = ((try? c.decodeIfPresent([Lenient<Category>].self, forKey: .categories)) ?? nil)?.compactMap(\.value) ?? []
-        recipes = ((try? c.decodeIfPresent([Lenient<Recipe>].self, forKey: .recipes)) ?? nil)?.compactMap(\.value) ?? []
-        let home = try? c.nestedContainer(keyedBy: HomeKeys.self, forKey: .home)
-        homeShown = ((try? home?.decodeIfPresent(Bool.self, forKey: .shown)) ?? nil) ?? false
-        homeWordsLine = ((try? home?.decodeIfPresent(String.self, forKey: .words)) ?? nil)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
-        let own = try? home?.nestedContainer(keyedBy: OwnKeys.self, forKey: .ownWords)
-        func ownText(_ key: OwnKeys) -> String { (((try? own?.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
-        // A row with no title isn't one.
-        ownWords = ownText(.title).isEmpty ? nil : (ownText(.title), ownText(.line))
-        labels = (try? c.decodeIfPresent([String: String].self, forKey: .labels)) ?? nil
+        categories = try c.decodeIfPresent([Category].self, forKey: .categories) ?? []
+        recipes = try c.decodeIfPresent([Recipe].self, forKey: .recipes) ?? []
+        shown = try c.decodeIfPresent(Bool.self, forKey: .shown) ?? true
+        home = (try? c.decodeIfPresent(Home.self, forKey: .home)) ?? nil
+        labels = (try? c.decodeIfPresent(Labels.self, forKey: .labels)) ?? nil
     }
 
-    static func == (a: Recipes, b: Recipes) -> Bool {
-        a.categories == b.categories && a.recipes == b.recipes && a.homeShown == b.homeShown && a.homeWordsLine == b.homeWordsLine
-            && a.ownWords?.title == b.ownWords?.title && a.ownWords?.line == b.ownWords?.line && a.labels == b.labels
+    /// Home with no taf lists them: tafs cloud says so (`home.shown`), and the sheet's words came.
+    var homeListsRecipes: Bool { home?.shown == true && labels != nil && !byCategory.isEmpty }
+    /// "Say it in your own words", leading Home's list; nil when tafs cloud sent none.
+    var homeOwnWords: Home.OwnWords? { home?.ownWords }
+    /// tafs cloud's line for Home with no taf; nil when it sent none.
+    var homeWords: String? {
+        guard let words = home?.words.trimmingCharacters(in: .whitespacesAndNewlines), !words.isEmpty else { return nil }
+        return words
     }
-
-    /// The categories with their recipes, in tafs cloud's order; a category with none is left out.
-    var byCategory: [(category: Category, recipes: [Recipe])] {
-        categories.map { c in (c, recipes.filter { $0.category == c.id }) }.filter { !$0.recipes.isEmpty }
-    }
-
-    /// Whether Home with no taf lists the recipes: tafs cloud says so, and the sheet's words came.
-    var listed: Bool { homeShown && labels != nil && !byCategory.isEmpty }
 
     /// The categories listed, narrowed to `picked` when one is: nothing picked is all of them,
     /// and a category no longer listed narrows nothing.
@@ -138,16 +173,21 @@ struct Recipes: Decodable, Equatable {
     /// The zones a recipe's sheet draws, in order (does on its own, asks first, never does),
     /// titled by the labels: a zone its Card leaves empty isn't one.
     func zones(of recipe: Recipe) -> [Zone] {
-        [Zone(id: "allows", title: labels?["allows"] ?? "", lines: recipe.card.allows),
-         Zone(id: "holds", title: labels?["holds"] ?? "", lines: recipe.card.holds),
-         Zone(id: "never", title: labels?["never"] ?? "", lines: recipe.card.never)]
+        [Zone(id: "allows", title: labels?.allows ?? "", lines: recipe.card.allows),
+         Zone(id: "holds", title: labels?.holds ?? "", lines: recipe.card.holds),
+         Zone(id: "never", title: labels?.never ?? "", lines: recipe.card.never)]
             .filter { !$0.lines.isEmpty }
     }
 
     /// The words of the sheet's button that hands the recipe to Coach; nil when none came.
     var handWords: String? {
-        guard let words = labels?["hand"]?.trimmingCharacters(in: .whitespacesAndNewlines), !words.isEmpty else { return nil }
+        guard let words = labels?.hand.trimmingCharacters(in: .whitespacesAndNewlines), !words.isEmpty else { return nil }
         return words
+    }
+
+    /// Each category in tafs cloud's order, with its recipes; a category with none isn't shown.
+    var byCategory: [(category: Category, recipes: [Recipe])] {
+        categories.map { c in (c, recipes.filter { $0.category == c.id }) }.filter { !$0.recipes.isEmpty }
     }
 
     /// `#RRGGBB`, and only that.
@@ -156,6 +196,14 @@ struct Recipes: Decodable, Equatable {
         let digits = s.dropFirst()
         guard digits.allSatisfy(\.isHexDigit) else { return nil }
         return UInt32(digits, radix: 16)
+    }
+}
+
+extension Access {
+    /// Whether this person may use Coach, as the iPad's `AppModel.mayUseCoach`
+    /// (AppModel.swift:2885-2889): KIFF's answer for Setup, else an account admin.
+    static func mayUseCoach(setup: Access?, capabilities: [String]?) -> Bool {
+        setup?.use ?? (capabilities?.contains("members.manage") ?? false)
     }
 }
 

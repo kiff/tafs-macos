@@ -6,8 +6,10 @@ import SwiftUI
 /// its sheet. Every word is tafs cloud's.
 struct HomeRecipesView: View {
     let recipes: Recipes
-    /// Coach with nothing in its box, from "Say it in your own words".
-    let ownWords: () -> Void
+    /// Coach with nothing in its box, from "Say it in your own words"; nil, the row isn't drawn.
+    let ownWords: (() -> Void)?
+    /// Whether this person may use Coach: without it, the sheet has no button.
+    let canHand: Bool
     /// Hands a recipe to Coach: its words in Coach's box, to edit and send.
     let hand: (Recipes.Recipe) -> Void
     /// A category picked narrows the list; picked again, every recipe shows.
@@ -16,22 +18,22 @@ struct HomeRecipesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let line = recipes.homeWordsLine {
+            if let line = recipes.homeWords {
                 Text(verbatim: line).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let own = recipes.ownWords { ownWordsRow(own.title, own.line) }
+            if let ownWords, let own = recipes.homeOwnWords { OwnWordsRow(title: own.title, line: own.line, action: ownWords) }
             let all = recipes.byCategory
             if all.count > 1 {
                 WrapRow(count: all.count, spacing: 8) { index in chip(all[index].category) }
             }
             ForEach(recipes.groups(picked: picked), id: \.category.id) { group in
-                Eyebrow(text: group.category.title).padding(.top, 6)
+                Eyebrow(text: group.category.title)
                 ForEach(group.recipes) { recipe in row(recipe, tint: group.category.color) }
             }
         }
         .sheet(item: $open) { recipe in
-            RecipeSheet(recipe: recipe, recipes: recipes, close: { open = nil }) {
+            RecipeSheet(recipe: recipe, recipes: recipes, canHand: canHand, close: { open = nil }) {
                 open = nil
                 hand(recipe)
             }
@@ -56,25 +58,6 @@ struct HomeRecipesView: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// "Say it in your own words": Coach, with nothing in its box.
-    private func ownWordsRow(_ title: String, _ line: String) -> some View {
-        Button(action: ownWords) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(verbatim: title).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
-                    if !line.isEmpty { Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft) }
-                }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.dim)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     /// One recipe, as the iPad's `RecipeRow`: the problem it ends, its line, the apps it uses,
     /// on an edge in its category's colour.
     private func row(_ recipe: Recipes.Recipe, tint: Shade?) -> some View {
@@ -86,8 +69,11 @@ struct HomeRecipesView: View {
                     Text(verbatim: recipe.line).font(.system(size: 14)).foregroundColor(Theme.soft)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 }
+                // As the iPad's `AppMarks`: each app its own mark, by name (the logos aren't here yet).
                 if !recipe.apps.isEmpty {
-                    Text(verbatim: recipe.apps.map(\.name).joined(separator: " · ")).font(.system(size: 12)).foregroundColor(Theme.dim)
+                    WrapRow(count: recipe.apps.count, spacing: 8) { index in
+                        Text(verbatim: recipe.apps[index].name).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize()
+                    }
                 }
             }
             .padding(16)
@@ -101,6 +87,36 @@ struct HomeRecipesView: View {
     }
 }
 
+/// "Say it in your own words": Coach, with nothing in its box, as the iPad's `OwnWordsRow`.
+/// Home's list leads with it, and Home with no job listed still draws it.
+struct OwnWordsRow: View {
+    let title: String
+    let line: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: title).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                        .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                    if !line.isEmpty {
+                        Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft)
+                            .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.dim).accessibilityHidden(true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// A recipe's sheet, as the iPad's `RecipeSheet`: what it ends and what that costs today, then
 /// its Card in plain zones, where its proof run passed and what it reported, and one button that
 /// hands it to Coach with the recipe's words, to edit and send.
@@ -108,6 +124,8 @@ struct RecipeSheet: View {
     @Environment(\.words) private var words
     let recipe: Recipes.Recipe
     let recipes: Recipes
+    /// Whether this person may use Coach: without it, the sheet has no button.
+    let canHand: Bool
     let close: () -> Void
     let hand: () -> Void
 
@@ -146,7 +164,7 @@ struct RecipeSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
                     }
-                    if let handWords = recipes.handWords, !recipe.say.isEmpty {
+                    if canHand, let handWords = recipes.handWords {
                         Button(action: hand) {
                             Text(verbatim: handWords).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
                                 .frame(maxWidth: .infinity, minHeight: 44)

@@ -87,8 +87,8 @@ let overviewTests: [Test] = [
     Test("the recipes read as the iPad reads them: by category, each led by the problem it ends, its Card in zones") {
         let json = #"""
         {"categories":[{"id":"money","title":"Money","color":{"light":"#1F7A4D","dark":"#4CC38A"}},{"id":"support","title":"Support","color":{"light":"green","dark":"#000000"}},{"id":"empty","title":"Empty"}],
-         "recipes":[{"id":"r1","title":"Refunds","category":"money","headline":"Refunds wait days","line":"Refunds within its limit","say":"Refund orders under €150","today":"About 2 hours a week","card":{"allows":["Refund up to €150"],"holds":["Refunds over €150"],"never":[]},"apps":[{"name":"Stripe"},{"logo":"x"}],"proved":" Proved on a test shop. "},
-                    {"id":"r2","title":"Replies","category":"support","say":"Answer tickets"},{"title":"no id"}],
+         "recipes":[{"id":"r1","title":"Refunds","category":"money","headline":"Refunds wait days","line":"Refunds within its limit","say":" Refund orders under €150 ","today":"About 2 hours a week","card":{"allows":["Refund up to €150"],"holds":["Refunds over €150"],"never":[]},"apps":[{"name":"Stripe"},{"logo":"x"}],"proved":" Proved on a test shop. "},
+                    {"id":"r2","title":"Replies","category":"support","say":"Answer tickets","headline":7}],
          "home":{"shown":true,"words":"Pick a job for your first taf.","own_words":{"title":"Say it in your own words","line":"Coach builds the taf with you."}},
          "labels":{"allows":"Does on its own","holds":"Asks you first","never":"Never does","hand":"Hand it to Coach"}}
         """#
@@ -96,7 +96,7 @@ let overviewTests: [Test] = [
         try expectEqual(recipes.byCategory.map(\.category.id), ["money", "support"])
         try expectEqual(recipes.categories[0].color, Shade(light: 0x1F7A4D, dark: 0x4CC38A))
         try expectEqual(recipes.categories[1].color, nil)
-        try expectEqual(recipes.listed, true)
+        try expectEqual(recipes.homeListsRecipes, true)
         try expectEqual(recipes.groups(picked: "support").map(\.category.id), ["support"])
         try expectEqual(recipes.groups(picked: "gone").count, 2)
         let refunds = recipes.recipes[0]
@@ -104,20 +104,47 @@ let overviewTests: [Test] = [
         try expectEqual(recipes.recipes[1].lead, "Replies")
         try expectEqual(refunds.apps.map(\.name), ["Stripe"])
         try expectEqual(refunds.proved, "Proved on a test shop.")
+        // `say` goes in Coach's box as sent: only `proved` and `sample` are trimmed.
+        try expectEqual(refunds.say, " Refund orders under €150 ")
         try expectEqual(recipes.zones(of: refunds).map(\.title), ["Does on its own", "Asks you first"])
         try expectEqual(recipes.handWords, "Hand it to Coach")
-        try expectEqual(recipes.ownWords?.title, "Say it in your own words")
-        try expectEqual(recipes.homeWordsLine, "Pick a job for your first taf.")
+        try expectEqual(recipes.homeOwnWords?.title, "Say it in your own words")
+        try expectEqual(recipes.homeWords, "Pick a job for your first taf.")
+    },
+    Test("the recipes are as strict as the iPad's: a category or recipe that doesn't read fails the whole read") {
+        func reads(_ json: String) -> Recipes? { try? JSONDecoder().decode(Recipes.self, from: Data(json.utf8)) }
+        let ok = #"{"id":"r1","title":"Refunds","category":"money"}"#
+        try expect(reads(#"{"categories":[{"id":"money","title":"Money"}],"recipes":[\#(ok)]}"#) != nil, "the plain answer reads")
+        for broken in [#"{"recipes":[\#(ok),{"title":"no id"}]}"#, #"{"recipes":[{"id":"r1","title":"Refunds","category":7}]}"#,
+                       #"{"recipes":[{"id":"r1","title":"Refunds","say":["x"]}]}"#, #"{"recipes":[{"id":"r1","title":"Refunds","line":false}]}"#,
+                       #"{"categories":[{"id":"money"}]}"#, #"{"shown":"yes"}"#] {
+            try expect(reads(broken) == nil, "\(broken) fails the read")
+        }
+        // The rest reads leniently, as the iPad's: a label that isn't words is "", and Home's own
+        // words with no title isn't a row.
+        let lenient = reads(#"{"categories":[{"id":"money","title":"Money","color":"green"}],"recipes":[\#(ok)],"labels":{"allows":"Does on its own","hand":7},"home":{"shown":true,"words":7,"own_words":{"title":" ","line":"x"}}}"#)
+        try expectEqual(lenient?.labels?.allows, "Does on its own")
+        try expectEqual(lenient?.handWords, nil)
+        try expectEqual(lenient?.homeListsRecipes, true)
+        try expectEqual(lenient?.homeWords, nil)
+        try expect(lenient?.homeOwnWords == nil, "no own-words row without a title")
+    },
+    Test("who may use Coach, as the iPad's mayUseCoach: KIFF's answer for Setup, else an account admin") {
+        try expectEqual(Access.mayUseCoach(setup: Access(use: true), capabilities: nil), true)
+        try expectEqual(Access.mayUseCoach(setup: Access(use: false), capabilities: ["members.manage"]), false)
+        try expectEqual(Access.mayUseCoach(setup: nil, capabilities: ["members.manage"]), true)
+        try expectEqual(Access.mayUseCoach(setup: nil, capabilities: ["cards.manage"]), false)
+        try expectEqual(Access.mayUseCoach(setup: nil, capabilities: nil), false)
     },
     Test("tafs cloud's recipes contract reads: Home's line, its own-words row and the sheet's words") {
         let root = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/recipes-home.json"))) as? [String: Any]
         guard let answer = root?["answer"] else { throw Failure(description: "no answer") }
         let recipes = try JSONDecoder().decode(Recipes.self, from: try JSONSerialization.data(withJSONObject: answer))
-        try expectEqual(recipes.homeShown, true)
-        try expect(recipes.homeWordsLine?.isEmpty == false, "Home's line")
-        try expect(recipes.ownWords?.title.isEmpty == false, "own words")
+        try expectEqual(recipes.home?.shown, true)
+        try expect(recipes.homeWords?.isEmpty == false, "Home's line")
+        try expect(recipes.homeOwnWords?.title.isEmpty == false, "own words")
         try expect(recipes.handWords?.isEmpty == false, "the sheet's button")
         // The contract leaves the recipes out: nothing listed, never an empty list drawn.
-        try expectEqual(recipes.listed, false)
+        try expectEqual(recipes.homeListsRecipes, false)
     },
 ]

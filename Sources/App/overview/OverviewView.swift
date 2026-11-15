@@ -33,9 +33,10 @@ final class OverviewModel: ObservableObject {
 
     func load() async {
         do { state = .loaded(try await cloud.home()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
-        // The line and the recipes are only an invitation: if they can't be read, nothing shows.
-        recipes = try? await cloud.recipes()
-        noTafsLine = recipes?.homeShown == true ? recipes?.homeWordsLine : nil
+        // As the iPad's `refresh` and `loadRecipes` (AppModel.swift:1852-1857, 7210-7215): read
+        // with each list read that has no taf, and a read that fails keeps what was read.
+        if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
+        noTafsLine = recipes?.home?.shown == true ? recipes?.homeWords : nil
     }
 
     /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
@@ -70,8 +71,13 @@ struct OverviewView: View {
     var halt: HaltModel?
     /// Reads the list again after a halt tafs cloud answered; the Overview's own read without one.
     var halted: (() async -> Void)?
-    /// Hands a recipe's words to Coach's box, or with none opens Coach empty.
-    var handToCoach: ((String?) -> Void)?
+    /// Whether this person may use Coach, as the iPad's `mayUseCoach`: without it, no Own words
+    /// row and no button that hands a recipe to Coach.
+    var mayUseCoach = false
+    /// "Say it in your own words": Coach, as the iPad's `startNewTaf`.
+    var ownWords: () -> Void = {}
+    /// Hands a recipe to Coach, as the iPad's `handRecipeToCoach`.
+    var hand: (Recipes.Recipe) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -88,12 +94,7 @@ struct OverviewView: View {
                 case .loaded(let page):
                     let count = page.needsYouCount ?? 0
                     if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
-                    // With no taf, tafs cloud's recipes in the table's place, as the iPad's Home.
-                    if page.tafs.isEmpty, let recipes = model.recipes, recipes.listed, let handToCoach {
-                        HomeRecipesView(recipes: recipes, ownWords: { handToCoach(nil) }, hand: { handToCoach($0.say) })
-                    } else {
-                        table(page.tafs)
-                    }
+                    if page.tafs.isEmpty { noTaf } else { table(page.tafs) }
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
@@ -109,6 +110,34 @@ struct OverviewView: View {
         }
         .background(Theme.background)
         .task { await model.loadLastResults(words: words) }
+    }
+
+    /// With no taf, as the iPad's Home (HomeView.swift:104-125): tafs cloud's recipes under its
+    /// line where it lists them; else its empty line, or the app's own when it sent none, and
+    /// "Say it in your own words" still leading to Coach.
+    @ViewBuilder private var noTaf: some View {
+        if let recipes = model.recipes, recipes.homeListsRecipes {
+            HomeRecipesView(recipes: recipes, ownWords: mayUseCoach ? ownWords : nil, canHand: mayUseCoach, hand: hand)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                if let line = model.recipes?.homeWords {
+                    // tafs cloud's empty line, whoever reads it: no words of the app's.
+                    Text(verbatim: line).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                } else {
+                    // Not read yet, or a tafs cloud from before the line: the app's own.
+                    Text(words("home.no_tafs")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    // Setting one up is Coach's: someone who may not use it reads where shared tafs show.
+                    Text(mayUseCoach ? words("home.empty.coach") : words("home.empty.shared")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+            // No job listed: "Say it in your own words" still leads to Coach.
+            if mayUseCoach, let own = model.recipes?.homeOwnWords {
+                OwnWordsRow(title: own.title, line: own.line, action: ownWords)
+            }
+        }
     }
 
     /// NEEDS YOU, as the iPad's: one row per held call, then a row for the rest tafs cloud
@@ -160,9 +189,6 @@ struct OverviewView: View {
                 ForEach(["home.overview.column_taf", "home.overview.column_now", "home.overview.column_card", "home.overview.column_last_result"], id: \.self) { key in
                     Text(words(key)).font(.system(size: 11, weight: .bold)).foregroundColor(Theme.dim).frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-            if tafs.isEmpty {
-                Text(words("home.no_tafs")).font(.system(size: 14)).foregroundColor(Theme.dim)
             }
             ForEach(tafs) { taf in
                 Rectangle().fill(Theme.line).frame(height: 1)
