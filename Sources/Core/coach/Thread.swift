@@ -86,6 +86,13 @@ enum Thread {
         var tools: [String] = []
         /// On an approval whose connection is already made: tafs cloud's line for it.
         var connectionWords: String?
+        /// A sign-in's app, as tafs cloud names it ("Google Sheets"); nil when it names none.
+        var service: String?
+        /// A card's note under its words, as Coach wrote it.
+        var note: String?
+        /// A card's own words for its yes and its no, as tafs cloud sends them.
+        var yes: String?
+        var no: String?
 
         /// A hand-over's outcome (`answer.outcome`): the taf made, the version it became, why it
         /// failed, or the plan it needs.
@@ -149,7 +156,7 @@ enum Thread {
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
@@ -235,6 +242,10 @@ enum Thread {
                     made.at = outer(.at).flatMap(Thread.time)
                     made.planLine = text(.line)
                     made.tone = text(.tone)
+                    made.service = text(.service)
+                    made.note = text(.note)
+                    made.yes = text(.yes)
+                    made.no = text(.no)
                     if let taf = try? shown.nestedContainer(keyedBy: TafKeys.self, forKey: .taf) {
                         func named(_ key: TafKeys) -> String? { ((try? taf.decodeIfPresent(String.self, forKey: key)) ?? nil).flatMap { $0.isEmpty ? nil : $0 } }
                         made.tafName = named(.name)

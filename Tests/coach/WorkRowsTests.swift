@@ -42,4 +42,9 @@ let coachWorkRowsTests: [Test] = [
         let page = try JSONDecoder().decode(Thread.Page.self, from: Data(json.utf8))
         try expectEqual((0..<6).map { page.showsTime(at: $0) }, [true, false, true, false, true, false])
     },
+    Test("a sign-in card carries its app, its note, and tafs cloud's words for its yes and no") {
+        let json = #"{"items":[{"type":"card","card":{"key":"k","component":{"id":"s","type":"sign_in","waits":"owner","service":"Sheets","note":"The vendor's page opens.","yes":"Sign in","no":"Not now"}}}]}"#
+        guard case .card(let card, _) = try JSONDecoder().decode(Thread.Page.self, from: Data(json.utf8)).items[0] else { throw Failure(description: "no card") }
+        try expectEqual([card.service, card.note, card.yes, card.no], ["Sheets", "The vendor's page opens.", "Sign in", "Not now"])
+    },
 ]
