@@ -145,6 +145,8 @@ struct SignedInView: View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, signOut: {
+            // No answer outlives the session it was started in.
+            needsYou.cancelAnswers()
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()

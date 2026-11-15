@@ -165,6 +165,23 @@ let approvalsTests: [Test] = [
         try expectEqual(try link(#"{"handoff":"h","link":"https://evil.example/t/1","link_host":"app.qonto.com","words":{"open":"Open Qonto"}}"#), nil)
         try expectEqual(try link(#"{"handoff":"h","link":"https://app.qonto.com/t/1","link_host":"app.qonto.com"}"#), nil)
     },
+    Test("a step's refusal keeps KIFF's error and reason, and the app's own line is by its status", awaiting: {
+        let (account, transport) = client([(403, #"{"error":"forbidden","reason":"role_forbidden"}"#), (409, "<html>")])
+        do { _ = try await account.handoff("h/1"); throw Failure(description: "read") } catch let refusal as StepRefusal {
+            try expectEqual(refusal, StepRefusal(status: 403, body: Data(#"{"error":"forbidden","reason":"role_forbidden"}"#.utf8)))
+            try expectEqual(refusal.reason, "role_forbidden")
+        }
+        try expectEqual(transport.sent[0].path, "/v1/me/handoffs/h%2F1")
+        do { try await account.answerHandoff("h1", answer: "done", signedAt: "T", signature: "SIG"); throw Failure(description: "sent") } catch let refusal as StepRefusal {
+            try expectEqual(refusal.status, 409)
+            try expectEqual(refusal.error, nil)
+        }
+        let keys = [0, 401, 403, 409, 429, 503, 418].map(StepRefusal.plainKey)
+        try expectEqual(keys, ["error.offline", "error.youre_signed_out", "error.not_allowed", "error.changed", "error.busy", "error.down", "error.ours"])
+        // KIFF's vector, byte for byte (its signature is checked on a Mac).
+        try expectEqual(KIFFMessage.handoff(tenant: "t_vector", handoffID: "ho_0123456789abcdef01234567", answer: "done", signedAt: "2026-11-11T17:00:00Z"),
+                        "kiff.handoff.v1\nt_vector\nho_0123456789abcdef01234567\ndone\n1\n2026-11-11T17:00:00Z")
+    }),
     Test("a step's answer signs kiff.handoff.v1 line by line, at a time never the same twice") {
         try expectEqual(KIFFMessage.handoff(tenant: "t1", handoffID: "h1", answer: "done", version: 2, signedAt: "2026-11-15T12:00:00.000Z"),
                         "kiff.handoff.v1\nt1\nh1\ndone\n2\n2026-11-15T12:00:00.000Z")

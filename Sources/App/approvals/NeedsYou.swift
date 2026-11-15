@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 
 /// The calls waiting for the person, and their answers, for the Needs you screen.
@@ -25,14 +26,40 @@ final class NeedsYouModel: ObservableObject {
     @Published private(set) var stepNotAnswered: String?
     /// Steps answered or ended here that Home may still list.
     private var answeredSteps: Set<String> = []
+    /// The answers on their way: cancelled at sign-out, so none outlives its session.
+    private var stepAnswers: [String: Task<Void, Never>] = [:]
 
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
     let route: ApprovalRoute
+    /// The person confirms before the device key signs a step, as the iPad's `sign(_:reason:)`
+    /// does: Touch ID, or the Mac's login password, which every Mac has. Throws when not
+    /// confirmed; the prompt's words are tafs cloud's for the answer and the step.
+    let confirm: (String) async throws -> Void
 
-    init(account: AccountClient, route: ApprovalRoute) {
+    init(account: AccountClient, route: ApprovalRoute, confirm: @escaping (String) async throws -> Void = NeedsYouModel.confirmOwner) {
         self.account = account
         self.route = route
+        self.confirm = confirm
+    }
+
+    /// The owner's presence, as the iPad's `authenticate(reason:)` with `.deviceOwnerAuthentication`.
+    nonisolated static func confirmOwner(_ reason: String) async throws {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { throw error ?? LAError(.authenticationFailed) }
+        guard try await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) else { throw LAError(.authenticationFailed) }
+    }
+
+    /// The words for a prompt the person closed, as the iPad's `ApprovalReadiness.cancelled`; nil
+    /// for any other failure.
+    static func cancelled(_ error: Error) -> String? {
+        switch (error as? LAError)?.code {
+        case .userCancel?, .systemCancel?, .appCancel?, .userFallback?:
+            return Words.app("approval.cancelled_nothing_approved_request_kept")
+        default:
+            return nil
+        }
     }
 
     var count: Int {
@@ -52,27 +79,48 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// Whether this Mac can answer a step, as the iPad's `canAnswerSteps`: KIFF checks the device
-    /// key's signature, so the session must hold it.
-    var canAnswerSteps: Bool { account.signMessage != nil }
+    /// key's signature, so the session must hold it, and the person must answer the account's
+    /// holds (KIFF's `holds.answer`).
+    func canAnswerSteps(answersHolds: Bool) -> Bool { answersHolds && account.signMessage != nil }
+
+    /// Starts an answer that sign-out can stop (`cancelAnswers`).
+    func startAnswer(_ step: YourStep, done: Bool, answersHolds: Bool, answered: @escaping () async -> Void = {}) {
+        guard stepAnswers[step.handoff] == nil else { return }
+        stepAnswers[step.handoff] = Task { [weak self] in
+            await self?.answer(step, done: done, answersHolds: answersHolds, answered: answered)
+            self?.stepAnswers[step.handoff] = nil
+        }
+    }
+
+    /// Stops every answer on its way: the session is ending, as the iPad's `accountGeneration`.
+    func cancelAnswers() {
+        stepAnswers.values.forEach { $0.cancel() }
+        stepAnswers = [:]
+    }
 
     /// Answers a step a taf handed its owner, "done" or "skipped", as the iPad's `answerYourStep`:
     /// the hand-off is read from KIFF first, for the version signed; one KIFF no longer waits on
-    /// isn't sent. The answer is signed with the device key over `kiff.handoff.v1`: it grants
-    /// nothing, so no approval key is asked for. `answered` reads the lists again after.
-    func answer(_ step: YourStep, done: Bool, now: Date = Date(), answered: () async -> Void = {}) async {
+    /// isn't sent. The person confirms (Touch ID or the Mac's password), then the device key
+    /// signs `kiff.handoff.v1`: never the approval key. An answer whose session ended stops after
+    /// each step. `answered` reads the lists again after.
+    func answer(_ step: YourStep, done: Bool, answersHolds: Bool = true, now: Date = Date(), answered: () async -> Void = {}) async {
         guard !answeringSteps.contains(step.handoff), !answeredSteps.contains(step.handoff) else { return }
-        guard canAnswerSteps, let signMessage = account.signMessage else { return }
+        guard canAnswerSteps(answersHolds: answersHolds), let signMessage = account.signMessage else {
+            stepNotAnswered = Words.app(account.signMessage == nil ? "needs_you.sign_in_again_to_answer" : "needs_you.answer_in_kiff")
+            return
+        }
         answeringSteps.insert(step.handoff)
-        defer { answeringSteps.remove(step.handoff) }
+        defer { if !Task.isCancelled { answeringSteps.remove(step.handoff) } }
         stepNotAnswered = nil
         let answer = done ? "done" : "skipped"
         let current: Handoff
         do {
             current = try await account.handoff(step.handoff)
         } catch {
-            stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)])
+            if !Task.isCancelled { stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)]) }
             return
         }
+        guard !Task.isCancelled else { return }
         guard current.status.isEmpty || current.status == "waiting" else {
             stepNotAnswered = Words.app("needs_you.your_step.ended")
             drop(step)
@@ -82,22 +130,27 @@ final class NeedsYouModel: ObservableObject {
         let message = KIFFMessage.handoff(tenant: account.session.tenant, handoffID: current.id, answer: answer, version: current.version, signedAt: at)
         let value: String
         do {
+            // The prompt is tafs cloud's words for the answer and the step: "Done · Approve the transfer to Acme".
+            try await confirm([done ? step.words.done : step.words.skip, step.what].filter { !$0.isEmpty }.joined(separator: " · "))
+            guard !Task.isCancelled else { return }
             value = try signMessage(message)
         } catch {
-            stepNotAnswered = Words.app("needs_you.your_step.not_answered_unconfirmed")
+            guard !Task.isCancelled else { return }
+            stepNotAnswered = Self.cancelled(error) ?? Words.app("needs_you.your_step.not_answered_unconfirmed")
             return
         }
+        guard !Task.isCancelled else { return }
         do {
             try await account.answerHandoff(current.id, answer: answer, signedAt: at, signature: value)
-        } catch KIFFError.refused(409, _) {
+        } catch let refusal as StepRefusal where refusal.status == 409 {
             // Answered meanwhile, on another device, or ended: nothing more to do here.
-            stepNotAnswered = Words.app("needs_you.your_step.ended")
-            drop(step)
+            if !Task.isCancelled { stepNotAnswered = Words.app("needs_you.your_step.ended"); drop(step) }
             return
         } catch {
-            stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)])
+            if !Task.isCancelled { stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)]) }
             return
         }
+        guard !Task.isCancelled else { return }
         drop(step)
         await answered()
     }
@@ -108,9 +161,14 @@ final class NeedsYouModel: ObservableObject {
         steps.removeAll { $0.handoff == step.handoff }
     }
 
-    /// KIFF's reason it didn't take an answer, in the iPad's words (`answerRefusedWords`,
-    /// `refusalWords`); else "KIFF didn't take the answer", with why.
+    /// Why KIFF didn't take an answer, in words, never its code, as the iPad's
+    /// `answerRefusedWords`: KIFF's `error`, else its `reason`, in the iPad's words; else "KIFF
+    /// didn't take the answer" with the app's own line for the status (`PlainError.words`).
     static func answerRefusedWords(_ error: Error) -> String {
+        if let refusal = error as? StepRefusal {
+            if let key = refusal.error.flatMap({ refusalKeys[$0] }) ?? refusal.reason.flatMap({ refusalKeys[$0] }) { return Words.app(key) }
+            return Words.app("needs_you.refused.other", ["why": Words.app(StepRefusal.plainKey(status: refusal.status))])
+        }
         if case KIFFError.refused(_, let code) = error, let key = refusalKeys[code] { return Words.app(key) }
         return Words.app("needs_you.refused.other", ["why": why(error)])
     }
@@ -239,13 +297,13 @@ struct NeedsYouView: View {
                     Text(verbatim: link.host).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
                 }
             }
-            if model.canAnswerSteps {
+            if model.canAnswerSteps(answersHolds: answersHolds) {
                 HStack(spacing: 8) {
-                    Button { Task { await model.answer(step, done: true, answered: answered) } } label: {
+                    Button { model.startAnswer(step, done: true, answersHolds: answersHolds, answered: answered) } label: {
                         Text(verbatim: step.words.done).padding(.horizontal, 16)
                     }
                     .buttonStyle(PrimaryButtonStyle())
-                    Button { Task { await model.answer(step, done: false, answered: answered) } } label: {
+                    Button { model.startAnswer(step, done: false, answersHolds: answersHolds, answered: answered) } label: {
                         Text(verbatim: step.words.skip).padding(.horizontal, 16)
                     }
                     .buttonStyle(OutlineButtonStyle())

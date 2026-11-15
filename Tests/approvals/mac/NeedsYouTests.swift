@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import LocalAuthentication
 import SwiftUI
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
@@ -6,11 +8,14 @@ private let one = #"{"exceptions":[{"id":"exc_1","subject":"a","action":"stripe.
 private let none = #"{"exceptions":[]}"#
 
 @MainActor
-private func model(_ answers: [(Int, String)], route: ApprovalRoute = .phoneOrPasskey) -> (NeedsYouModel, CannedTransport) {
+private func model(_ answers: [(Int, String)], route: ApprovalRoute = .phoneOrPasskey,
+                   confirm: @escaping (String) async throws -> Void = { _ in }) -> (NeedsYouModel, CannedTransport) {
     let transport = CannedTransport(answers)
     let account = AccountClient(transport: transport, session: session, signMessage: { _ in "SIG" })
-    return (NeedsYouModel(account: account, route: route), transport)
+    return (NeedsYouModel(account: account, route: route, confirm: confirm), transport)
 }
+
+private let stepJSON = #"{"handoff":"h1","what":"Approve the transfer","words":{"done":"Done","skip":"Skip it"}}"#
 
 let approvalsScreenTests: [Test] = [
     Test("a call's time left counts down as a clock, m:ss or h:mm:ss, in the shared words, and says when it expired") {
@@ -67,13 +72,16 @@ let approvalsScreenTests: [Test] = [
         var signed: [String] = []
         let transport = CannedTransport([(200, #"{"id":"h1","version":2,"status":"waiting"}"#), (200, "{}")])
         let account = AccountClient(transport: transport, session: session, signMessage: { signed.append($0); return "SIG" })
-        let model = NeedsYouModel(account: account, route: .phoneOrPasskey)
+        var asked: [String] = []
+        let model = NeedsYouModel(account: account, route: .phoneOrPasskey, confirm: { asked.append($0) })
         model.showSteps([step])
-        try expectEqual(model.canAnswerSteps, true)
+        try expectEqual(model.canAnswerSteps(answersHolds: true), true)
         var reread = 0
         await model.answer(step, done: true, now: Date(timeIntervalSince1970: 1_894_000_000), answered: { reread += 1 })
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/handoffs/h1", "POST /v1/me/handoffs/h1/answer"])
         try expectEqual(signed.count, 1)
+        // The person confirmed first, in tafs cloud's words for the answer and the step.
+        try expectEqual(asked, ["Done · Approve the transfer"])
         try expect(signed[0].hasPrefix("kiff.handoff.v1\nt1\nh1\ndone\n2\n"), signed[0])
         try expectEqual(model.steps, [])
         try expectEqual(reread, 1)
@@ -142,5 +150,74 @@ let approvalsScreenTests: [Test] = [
                 try png.write(to: folder.appendingPathComponent("needs-you-\(name)-\(language).png"))
             }
         }
+    }),
+    Test("a step isn't signed until the person confirms: a closed prompt keeps it, with the iPad's words", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(stepJSON.utf8))
+        let (cancelled, cancelledTransport) = model([(200, #"{"id":"h1"}"#)], confirm: { _ in throw LAError(.userCancel) })
+        cancelled.showSteps([step])
+        await cancelled.answer(step, done: true)
+        try expectEqual(cancelledTransport.sent.map(\.method), ["GET"])
+        try expectEqual(cancelled.stepNotAnswered, "Cancelled, so nothing was approved. The request is kept.")
+        try expectEqual(cancelled.steps.map(\.handoff), ["h1"])
+        let (failed, failedTransport) = model([(200, #"{"id":"h1"}"#)], confirm: { _ in throw LAError(.authenticationFailed) })
+        failed.showSteps([step])
+        await failed.answer(step, done: false)
+        try expectEqual(failedTransport.sent.map(\.method), ["GET"])
+        try expectEqual(failed.stepNotAnswered, "Not answered: it wasn't confirmed.")
+        try expectEqual(failed.steps.map(\.handoff), ["h1"])
+    }),
+    Test("someone who doesn't answer held calls has no Done or Skip, and an answer sends nothing", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(stepJSON.utf8))
+        let viewer = try AccountClient.decoder.decode(Me.self, from: Data(#"{"capabilities":["taf.use"]}"#.utf8))
+        let (model, transport) = model([])
+        model.showSteps([step])
+        try expectEqual(model.canAnswerSteps(answersHolds: viewer.answersHolds), false)
+        await model.answer(step, done: true, answersHolds: viewer.answersHolds)
+        try expectEqual(transport.sent.count, 0)
+        try expectEqual(model.stepNotAnswered, Words.app("needs_you.answer_in_kiff"))
+        let keyless = NeedsYouModel(account: AccountClient(transport: CannedTransport([]), session: session), route: .phoneOrPasskey, confirm: { _ in })
+        try expectEqual(keyless.canAnswerSteps(answersHolds: true), false)
+        await keyless.answer(step, done: true)
+        try expectEqual(keyless.stepNotAnswered, Words.app("needs_you.sign_in_again_to_answer"))
+    }),
+    Test("an answer started before sign-out stops there: nothing is signed or posted after", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(stepJSON.utf8))
+        var holder: NeedsYouModel?
+        var confirmed = false
+        let (model, transport) = model([(200, #"{"id":"h1"}"#), (200, "{}")], confirm: { _ in confirmed = true; await holder?.cancelAnswers() })
+        holder = model
+        model.showSteps([step])
+        model.startAnswer(step, done: true, answersHolds: true)
+        for _ in 0..<200 where !confirmed { await Task.yield() }
+        for _ in 0..<50 { await Task.yield() }
+        try expectEqual(confirmed, true)
+        try expectEqual(transport.sent.map(\.method), ["GET"])
+        try expectEqual(model.steps.map(\.handoff), ["h1"])
+    }),
+    Test("KIFF's code is never the why: its error, else its reason, in the iPad's words, else the status's line", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(stepJSON.utf8))
+        let (expired, _) = model([(200, #"{"id":"h1"}"#), (403, #"{"error":"handoff_expired"}"#)])
+        expired.showSteps([step])
+        await expired.answer(step, done: true)
+        try expectEqual(expired.stepNotAnswered, "Your answer didn't go through. KIFF didn't take the answer: Your role on this account doesn't allow this.")
+        let (reasoned, _) = model([(200, #"{"id":"h1"}"#), (403, #"{"error":"forbidden","reason":"role_forbidden"}"#)])
+        reasoned.showSteps([step])
+        await reasoned.answer(step, done: true)
+        try expectEqual(reasoned.stepNotAnswered, "Your answer didn't go through. Your role on this account doesn't answer held calls. Someone who approves on it does.")
+    }),
+    Test("the answer's message is KIFF's vector byte for byte, and KIFF's signature over it verifies; never for skipped", {
+        let message = KIFFMessage.handoff(tenant: "t_vector", handoffID: "ho_0123456789abcdef01234567", answer: "done", signedAt: "2026-11-11T17:00:00Z")
+        try expectEqual(message, "kiff.handoff.v1\nt_vector\nho_0123456789abcdef01234567\ndone\n1\n2026-11-11T17:00:00Z")
+        try expectEqual(Signing.sha256Hex(Data(message.utf8)), "1b9f7f923489891b736af1fbc494c9348690494d4ae4901844aeb9a0b6df3b6f")
+        let key = try P256.Signing.PrivateKey(rawRepresentation: Data(SHA256.hash(data: Data("kiff.handoff.v1 test vector".utf8))))
+        try expectEqual(Signing.sha256Hex(key.publicKey.derRepresentation), "85c559569edf864d4b3186426f3541f8bbf8c424d96de17f707b919b2c593970")
+        let theirs = "MEUCIQDJLYymcVMzMDhv+kRXK1BS2DhZvJROyBCjJLzzTy5NDgIgXe7a2OeeShmHHI5HazLS+/BzMjLVBYpjX7JT0Uy67RA="
+        try expect(Signing.verifies(theirs, over: message, publicKeyDER: key.publicKey.derRepresentation), "KIFF's signature verifies over the app's message")
+        let ours = try key.signature(for: Data(message.utf8)).derRepresentation.base64EncodedString()
+        try expect(Signing.verifies(ours, over: message, publicKeyDER: key.publicKey.derRepresentation), "one the app makes verifies too")
+        let skipped = KIFFMessage.handoff(tenant: "t_vector", handoffID: "ho_0123456789abcdef01234567", answer: "skipped", signedAt: "2026-11-11T17:00:00Z")
+        try expect(!Signing.verifies(theirs, over: skipped, publicKeyDER: key.publicKey.derRepresentation), "a signed done never stands for skipped")
+        let hold = KIFFMessage.answer(tenant: "t_vector", callID: "ho_0123456789abcdef01234567", answer: .approveOnce, nextStep: nil, accountingVersion: 1, signedAt: "2026-11-11T17:00:00Z")
+        try expect(hold != message, "a hold's answer is never a hand-off's")
     }),
 ]

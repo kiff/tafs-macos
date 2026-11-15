@@ -111,10 +111,40 @@ extension KIFFMessage {
     }
 }
 
+/// KIFF didn't take a step's read or answer, as the iPad's `KIFFError.server`: its status, its
+/// `error`, and its `reason`, which say why in a code the app turns into words.
+struct StepRefusal: Error, Equatable {
+    let status: Int
+    let error: String?
+    let reason: String?
+
+    init(status: Int, body: Data) {
+        struct Body: Decodable { let error: String?; let reason: String? }
+        let read = try? JSONDecoder().decode(Body.self, from: body)
+        self.status = status
+        error = read?.error
+        reason = read?.reason
+    }
+
+    /// The app's own line for what happened, by its status, as the iPad's `PlainError.words`:
+    /// never KIFF's code.
+    static func plainKey(status: Int) -> String {
+        switch status {
+        case 0: return "error.offline"
+        case 401: return "error.youre_signed_out"
+        case 403: return "error.not_allowed"
+        case 409: return "error.changed"
+        case 429: return "error.busy"
+        case 500...599: return "error.down"
+        default: return "error.ours"
+        }
+    }
+}
+
 extension AccountClient {
     /// The step as KIFF keeps it now.
     func handoff(_ id: String) async throws -> Handoff {
-        try read(try await send("GET", "/v1/me/handoffs/\(Self.pathPart(id))"))
+        try read(try await stepSend("GET", "/v1/me/handoffs/\(Self.pathPart(id))"))
     }
 
     /// Answers a step handed to the owner, "done" or "skipped", signed with the device key.
@@ -125,7 +155,20 @@ extension AccountClient {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let body = try encoder.encode(Body(answer: answer, signature: Signature(signed_at: signedAt, value: signature)))
-        _ = try await send("POST", "/v1/me/handoffs/\(Self.pathPart(id))/answer", body: body)
+        _ = try await stepSend("POST", "/v1/me/handoffs/\(Self.pathPart(id))/answer", body: body)
+    }
+
+    /// One request about a step, with the session; a refusal throws `StepRefusal`, with KIFF's
+    /// `error` and `reason` both kept.
+    private func stepSend(_ method: String, _ path: String, body: Data = Data()) async throws -> Data {
+        var request = HTTPRequest(method: method, path: path, headers: [
+            "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
+            "Accept-Language": language, "User-Agent": "tafs-macos",
+        ], body: body)
+        if !body.isEmpty { request.headers["Content-Type"] = "application/json" }
+        let (status, answer) = try await transport.send(request)
+        guard (200..<300).contains(status) else { throw StepRefusal(status: status, body: answer) }
+        return answer
     }
 
     /// One part of a path: everything but what a path segment may hold is escaped, `/` too.
