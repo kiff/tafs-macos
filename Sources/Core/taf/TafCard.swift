@@ -33,9 +33,18 @@ struct TafCard: Decodable, Identifiable, Equatable {
 
     /// One thing the Card lets the taf do, in KIFF's words, and what happens outside it.
     struct Rule: Decodable, Equatable {
+        /// What KIFF does with a call outside the Card, as tafs cloud names it.
+        enum Outside: Equatable {
+            /// `hold`: held for the person.
+            case hold
+            /// `refuse`: refused.
+            case refuse
+            /// A word this app doesn't know: nothing is said about it.
+            case unknown
+        }
+
         let label: String
-        /// `refused` or `held`: what KIFF does with a call outside the Card.
-        let outside: String
+        let outside: Outside
         /// The most calls in its window, when the rule has such a limit.
         let countPerWindow: Int?
         let each: String?
@@ -45,7 +54,11 @@ struct TafCard: Decodable, Identifiable, Equatable {
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             label = try c.decode(String.self, forKey: .label)
-            outside = ((try? c.decodeIfPresent(String.self, forKey: .outside)) ?? nil) ?? ""
+            switch (try? c.decodeIfPresent(String.self, forKey: .outside)) ?? nil {
+            case "hold": outside = .hold
+            case "refuse": outside = .refuse
+            default: outside = .unknown
+            }
             countPerWindow = (try? c.decodeIfPresent(Int.self, forKey: .countPerWindow)) ?? nil
             each = (try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .words)).flatMap { (try? $0.decodeIfPresent(String.self, forKey: .each)) ?? nil }
         }
@@ -79,7 +92,10 @@ struct TafCard: Decodable, Identifiable, Equatable {
     }
 
     var figure: Figure? {
-        if let total, let used = total.used, total.limit.unit == used.unit, total.limit.scale == used.scale {
+        // A Card with a money total says what is left of its money, or nothing: never its
+        // calls in place of money it couldn't read.
+        if let total {
+            guard let used = total.used, total.limit.unit == used.unit, total.limit.scale == used.scale else { return nil }
             let left = Amount(minor: max(0, total.limit.minor - used.minor), unit: total.limit.unit, scale: total.limit.scale)
             return .money(left: left, limit: total.limit, window: total.now ?? "")
         }

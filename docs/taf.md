@@ -13,12 +13,13 @@ and works out one thing only: what is left, as KIFF's limit less what KIFF says 
 |---|---|---|
 | Its id at tafs cloud | `tafs[].id` | Nil for an agent tafs doesn't run. |
 | Each Card | `id`, `title`, `active`, `expires` | A Card with no id or title is left out, never the taf. |
-| Each thing it lets the taf do | `rules[]`: `label`, `outside`, `count_per_window`, `window_words.each` | KIFF's words for it; `refused` or `held` for a call outside it; its limit and tafs cloud's words for the window. A Card may have no rules. |
+| Each thing it lets the taf do | `rules[]`: `label`, `outside`, `count_per_window`, `window_words.each` | KIFF's words for it; `refuse` or `hold` for a call outside it (any other word is unknown, and nothing is said about it); its limit and tafs cloud's words for the window. A Card may have no rules. |
 | Its money | `total`: `limit` and `used`, each `{minor, unit, scale}`, and `window_words.now` | |
 | Its calls | `calls`: `limit`, `used`, and `window_words.now` | |
 
-- **The figure** (`TafCard.figure`) is what is left: of the money when the Card has a total,
-  else of its calls. Never below zero.
+- **The figure** (`TafCard.figure`) is what is left: of the money when the Card has a money
+  total, of its calls only when it has none. Never below zero. A money Card whose money use
+  can't be read has no figure, never its calls in its place.
 - **No figure is ever a guess.** With no `used` (KIFF couldn't read it), or a limit and a
   used in different units or scales, there is no figure.
 - **Money** is written as the app's language writes it (`Amount.written`): "€1,960",
