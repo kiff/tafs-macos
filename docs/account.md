@@ -112,6 +112,8 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
 - Read when it opens and every 20 seconds while open (the two lists one after the other, where
   the iPad reads them together). A read that fails after one that worked keeps what is shown,
   with "People and groups couldn't be read" over it until a read works; a first one says why.
+- "No groups" shows only for lists that read with none and no read failed since, as the
+  iPad's `loaded && groups.isEmpty && peopleError == nil` (`PeopleViews.swift:42`).
 - Decoded as the iPad's: a group's members and agents, and a person's role and status, must
   be there; one that doesn't read fails the read, which says why.
 - **It only reads.** Making, renaming or deleting a group and changing its people are each

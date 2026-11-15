@@ -37,6 +37,13 @@ final class PeopleModel: ObservableObject {
         }
     }
 
+    /// "No groups" only for lists that read, with no read failed since, as the iPad's
+    /// `loaded && groups.isEmpty && peopleError == nil` (PeopleViews.swift:42).
+    var showsNoGroups: Bool {
+        guard case .loaded(let groups, _) = state else { return false }
+        return groups.isEmpty && notRead == nil
+    }
+
     static let readEvery: TimeInterval = 20
 }
 
@@ -66,7 +73,7 @@ struct PeopleView: View {
                     }
                     Text(People.accountLine(account: me?.account, signedInAs: me?.signedInAs, email: me?.email, count: people.count, words: words))
                         .font(.system(size: 14)).foregroundColor(Theme.soft)
-                    if groups.isEmpty {
+                    if model.showsNoGroups {
                         Text(words("people.no_groups")).font(.system(size: 14)).foregroundColor(Theme.dim)
                     }
                     ForEach(groups) { group($0, people: people) }

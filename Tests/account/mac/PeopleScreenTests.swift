@@ -27,6 +27,19 @@ let accountPeopleTests: [Test] = [
         await unread.load()
         if case .loaded = unread.state { throw Failure(description: "a failed read was shown as loaded") }
     }),
+    Test("\"No groups\" shows for lists that read with none, and not while a later read has failed", awaiting: { @MainActor in
+        let (model, _) = make([(500, ""), (200, #"{"groups":[]}"#), (200, people), (500, ""), (200, #"{"groups":[]}"#), (200, people)])
+        await model.load()
+        try expectEqual(model.showsNoGroups, false)
+        await model.load()
+        try expectEqual(model.showsNoGroups, true)
+        await model.load()
+        try expectEqual(model.notRead, "500")
+        try expectEqual(model.showsNoGroups, false)
+        await model.load()
+        try expectEqual(model.notRead, nil)
+        try expectEqual(model.showsNoGroups, true)
+    }),
     Test("the screenshots: People & groups in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
