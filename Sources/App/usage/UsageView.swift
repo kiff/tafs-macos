@@ -26,6 +26,8 @@ final class UsageModel: ObservableObject {
     /// `signer.sign(_:reason:)`: Touch ID, or the Mac's password. Throws when not confirmed.
     private let confirm: (String) async throws -> Void
     private var asked = 0
+    /// The decline on its way: cancelled at sign-out, so none outlives its session.
+    private var declining: Task<Void, Never>?
 
     init(cloud: CloudClient, account: AccountClient? = nil,
          confirm: @escaping (String) async throws -> Void = NeedsYouModel.confirmOwner) {
@@ -49,7 +51,7 @@ final class UsageModel: ObservableObject {
             usage = try await account.usage()
             usageError = nil
         } catch {
-            usageError = Words.app("billing.plan_could_not_read_kiff", ["why": NeedsYouModel.why(error)])
+            usageError = Words.app("billing.plan_could_not_read_kiff", ["why": Self.plainWhy(error)])
         }
     }
 
@@ -72,7 +74,7 @@ final class UsageModel: ObservableObject {
             await load()
             return true
         } catch {
-            planMessage = Words.app("billing.request.not_sent", ["why": NeedsYouModel.why(error)])
+            planMessage = Words.app("billing.request.not_sent", ["why": Self.plainWhy(error)])
             return false
         }
     }
@@ -84,15 +86,33 @@ final class UsageModel: ObservableObject {
         do {
             _ = try await account.withdrawRequest(request.id)
         } catch {
-            planMessage = Words.app("billing.request.not_withdrawn", ["why": NeedsYouModel.why(error)])
+            planMessage = Words.app("billing.request.not_withdrawn", ["why": Self.plainWhy(error)])
         }
         await load()
+    }
+
+    /// Starts a decline that sign-out can stop (`cancelAnswers`); `done` hears whether it went.
+    func startDecline(_ request: PackRequest, note: String, done: @escaping (Bool) -> Void) {
+        guard declining == nil else { return }
+        declining = Task { [weak self] in
+            let went = await self?.declineRequest(request, note: note) ?? false
+            self?.declining = nil
+            if !Task.isCancelled { done(went) }
+        }
+    }
+
+    /// Stops the decline on its way: the session is ending, as the iPad's `accountGeneration`.
+    func cancelAnswers() {
+        declining?.cancel()
+        declining = nil
     }
 
     /// Declines a member's request, with a note, as the iPad's `declineRequest`
     /// (AppModel.swift:3672-3696): the admin's answer, confirmed with Touch ID or the Mac's
     /// password, then signed by the device key. A prompt closed or failed sends nothing and says
-    /// nothing, as the iPad's.
+    /// nothing, as the iPad's. A decline whose session ended while the prompt was up sends
+    /// nothing, and one that ended while it went says nothing (`gen == accountGeneration`,
+    /// :3681 and :3689).
     func declineRequest(_ request: PackRequest, note: String) async -> Bool {
         planMessage = nil
         guard let account else { return false }
@@ -101,15 +121,30 @@ final class UsageModel: ObservableObject {
             return false
         }
         do { try await confirm(Words.app("billing.request.decline_prompt")) } catch { return false }
+        guard !Task.isCancelled else { return false }
         do {
             _ = try await account.declineRequest(request.id, note: note.trimmingCharacters(in: .whitespacesAndNewlines))
         } catch {
-            planMessage = Words.app("billing.request.not_declined", ["why": NeedsYouModel.why(error)])
+            guard !Task.isCancelled else { return false }
+            planMessage = Words.app("billing.request.not_declined", ["why": Self.plainWhy(error)])
             await load()
             return false
         }
+        guard !Task.isCancelled else { return false }
         await load()
         return true
+    }
+
+    /// Why KIFF didn't take a request or a read, in the app's plain words, never KIFF's code, as
+    /// the iPad's `KIFFError.errorDescription` (KIFFClient.swift:34-36) and `PlainError.words`:
+    /// a 401 is signed out; any other refusal is its status's line (`StepRefusal.plainKey`).
+    static func plainWhy(_ error: Error) -> String {
+        switch error {
+        case KIFFError.refused(401, _): return Words.app("error.signed_out")
+        case KIFFError.refused(let status, _): return Words.app(StepRefusal.plainKey(status: status))
+        case KIFFError.unreadable: return Words.app("error.ours")
+        default: return error.localizedDescription
+        }
     }
 
     func show(previous: Bool) async {

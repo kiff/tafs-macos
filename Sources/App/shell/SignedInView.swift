@@ -183,6 +183,7 @@ struct SignedInView: View {
                     open: { selection = $0 }, addThisMac: addThisMac, signOut: {
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
+            usage.cancelAnswers()
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()

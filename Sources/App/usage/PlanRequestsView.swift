@@ -168,8 +168,8 @@ struct DeclineRequestView: View {
 
     private func decline() {
         sending = true
-        Task {
-            let done = await model.declineRequest(request, note: String(note.prefix(500)))
+        // The model owns the decline, so sign-out stops it (`cancelAnswers`).
+        model.startDecline(request, note: String(note.prefix(500))) { done in
             sending = false
             if done { dismiss() }
         }

@@ -23,7 +23,7 @@ let usageRequestScreenTests: [Test] = [
         try expectEqual(model.usageError, nil)
         await model.load()
         try expectEqual(model.usage?.plan, "solo")
-        try expectEqual(model.usageError, Words.app("billing.plan_could_not_read_kiff", ["why": "503"]))
+        try expectEqual(model.usageError, Words.app("billing.plan_could_not_read_kiff", ["why": Words.app("error.down")]))
         try expectEqual(transport.sent.map(\.path), ["/v1/me/usage", "/v1/me/usage"])
         // The First month pack isn't ready in this balance: Rayo alone is offered.
         try expectEqual(model.offeredPacks.map(\.id), ["rayo"])
@@ -37,14 +37,14 @@ let usageRequestScreenTests: [Test] = [
         try expectEqual(model.usage?.plan, "team")
         let got2 = await model.askAdmin(raise: true, reason: "")
         try expectEqual(got2, false)
-        try expectEqual(model.planMessage, Words.app("billing.request.not_sent", ["why": "request_open"]))
+        try expectEqual(model.planMessage, Words.app("billing.request.not_sent", ["why": Words.app("error.changed")]))
     }),
     Test("withdrawing reads everything again, taken or not, as the iPad's withdrawRequest", awaiting: { @MainActor in
         let (model, transport) = model([(200, teamUsage), (404, #"{"error":"not_found"}"#), (200, teamUsage)])
         await model.load()
         guard let mine = model.usage?.requests?.first else { throw Failure(description: "no request") }
         await model.withdrawRequest(mine)
-        try expectEqual(model.planMessage, Words.app("billing.request.not_withdrawn", ["why": "not_found"]))
+        try expectEqual(model.planMessage, Words.app("billing.request.not_withdrawn", ["why": Words.app("error.ours")]))
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/usage", "POST /v1/me/pack-requests/req_5/withdraw", "GET /v1/me/usage"])
     }),
     Test("a decline asks for Touch ID or the Mac's password, then is signed; closed, nothing is sent or said", awaiting: { @MainActor in
@@ -79,8 +79,32 @@ let usageRequestScreenTests: [Test] = [
         await refused.load()
         let got6 = await refused.declineRequest(request, note: "")
         try expectEqual(got6, false)
-        try expectEqual(refused.planMessage, Words.app("billing.request.not_declined", ["why": "request_closed"]))
+        try expectEqual(refused.planMessage, Words.app("billing.request.not_declined", ["why": Words.app("error.changed")]))
         try expectEqual(transport.sent.map(\.method), ["GET", "POST", "GET"])
+    }),
+    Test("KIFF's refusal reads as the app's plain line, never its code; a 401 is signed out, as the iPad's KIFFError", awaiting: { @MainActor in
+        try expectEqual(UsageModel.plainWhy(KIFFError.refused(status: 409, code: "request_open")), Words.app("error.changed"))
+        try expectEqual(UsageModel.plainWhy(KIFFError.refused(status: 401, code: "token_expired")), Words.app("error.signed_out"))
+        try expectEqual(UsageModel.plainWhy(KIFFError.refused(status: 503, code: "")), Words.app("error.down"))
+        try expectEqual(UsageModel.plainWhy(KIFFError.unreadable), Words.app("error.ours"))
+    }),
+    Test("a decline whose session ends while the prompt is up sends nothing and says nothing, as the iPad's accountGeneration", awaiting: { @MainActor in
+        var release: CheckedContinuation<Void, Never>?
+        let (admin, transport) = model([(200, teamUsage), (200, packRequestAnswer), (200, teamUsage)], confirm: { _ in
+            await withCheckedContinuation { release = $0 }
+        })
+        await admin.load()
+        guard let request = admin.usage?.requests?.first else { throw Failure(description: "no request") }
+        var heard: Bool?
+        admin.startDecline(request, note: "") { heard = $0 }
+        for _ in 0..<1_000 where release == nil { await Task.yield() }
+        // Signed out while the prompt is up; then the person confirms.
+        admin.cancelAnswers()
+        release?.resume()
+        for _ in 0..<1_000 { await Task.yield() }
+        try expectEqual(transport.sent.map(\.method), ["GET"])
+        try expectEqual(admin.planMessage, nil)
+        try expectEqual(heard, nil)
     }),
     Test("who asks what, and the lines both apps share, as the iPad's UsageView helpers", awaiting: { @MainActor in
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])

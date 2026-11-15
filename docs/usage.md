@@ -45,10 +45,16 @@ its routes (`:768-799`), and `askAdmin`, `withdrawRequest` and `declineRequest`
   Rayo.") and reason, with **Decline**. Its sheet asks the question and takes a note. The person
   confirms with Touch ID or the Mac's password (`billing.request.decline_prompt`), then the
   device key signs, as the iPad's `signer.sign`. A prompt closed or failed sends nothing and
-  says nothing; without a device key it says to sign in again.
+  says nothing; without a device key it says to sign in again. The model owns the decline, and
+  sign-out cancels it (`cancelAnswers`): one whose session ended while the prompt was up sends
+  nothing, and one that ended while it went says nothing, as the iPad's `accountGeneration`
+  (`AppModel.swift:3681`, `:3689`).
 - After an ask, a withdrawal or a decline, everything is read again. One KIFF doesn't take says
   why over the screen (`planMessage`), in the shared words (`billing.request.not_sent`,
-  `not_withdrawn`, `not_declined`).
+  `not_withdrawn`, `not_declined`), with the app's plain line for why, never KIFF's code, as the
+  iPad's `KIFFError.errorDescription` and `PlainError.words`: a 401 is "Signed out of KIFF",
+  any other refusal is its status's line (`error.changed`, `error.down`, `error.ours`…). The
+  usage read that fails says the same.
 - **KIFF's read failing** keeps what was read and says so once, under the credits.
 
 ## The screen (`UsageView`, `UsageModel`)
