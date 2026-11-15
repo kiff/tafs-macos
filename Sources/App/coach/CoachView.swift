@@ -403,6 +403,26 @@ final class CoachModel: ObservableObject {
         }
     }
 
+    enum ReportOutcome: Equatable { case sent, already, failed(String) }
+
+    /// Reports an answer in this chat to tafs cloud, with its chat's session, as the iPad's
+    /// `reportAnswer`: tafs cloud's words when it refuses with some; a gone answer says so; any
+    /// other failure is the app's own line, since tafs cloud's codes are for developers.
+    func report(_ message: Thread.Message, reason: AnswerReport.Reason, note: String) async -> ReportOutcome {
+        let note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case .loaded(let coach, _) = state, let id = message.id else { return .failed(Words.app("report.cant_from_here")) }
+        do {
+            let kept = try await cloud.report(id, of: coach.id, reason: reason, note: note.isEmpty ? nil : note, session: message.session)
+            return kept.new ? .sent : .already
+        } catch let refusal as CloudRefusal where refusal.words != nil {
+            return .failed(refusal.words!)
+        } catch let refusal as CloudRefusal where refusal.status == 404 {
+            return .failed(Words.app("needs_you.answer_gone"))
+        } catch {
+            return .failed(Words.app("kiff.did_not_reach_kiff_try"))
+        }
+    }
+
     /// tafs cloud's words for a refusal, as the iPad's `CloudError`; else the network's own words.
     static func why(_ error: Error) -> String { NeedsYouModel.why(error) }
 
@@ -447,6 +467,8 @@ struct CoachView: View {
     var embedded = false
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
+    /// The answer being reported, in its sheet.
+    @State private var reporting: ReportedAnswer?
     @State private var planOpen = false
 
     var body: some View {
@@ -489,6 +511,7 @@ struct CoachView: View {
         .sheet(item: Binding(get: { model.consent }, set: { if $0 == nil { model.declineAI() } })) { consent in
             consentSheet(consent)
         }
+        .sheet(item: $reporting) { ReportAnswerSheet(model: model, answer: $0).environment(\.words, words) }
     }
 
     private var thread: some View {
@@ -809,6 +832,12 @@ struct CoachView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         if let work = message.work { workFold(work, id: item.id) }
                         rich(message.text)
+                    }
+                    // Report this answer, on an answer that can be reported, as the iPad's `reportable`.
+                    .contextMenu {
+                        if AnswerReport.can(message) {
+                            Button(words("report.menu")) { reporting = ReportedAnswer(message: message) }
+                        }
                     }
                 }
             }

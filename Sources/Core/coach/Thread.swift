@@ -15,6 +15,8 @@ enum Thread {
         let text: String
         /// What the run did before these words: how long it worked, and its steps.
         var work: Work?
+        /// The chat it's in, as tafs cloud names it: a report of it names the chat too.
+        var session: String? = nil
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
@@ -156,7 +158,7 @@ enum Thread {
         /// A new conversation, before its first message: nothing to read yet.
         static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
@@ -204,7 +206,8 @@ enum Thread {
                         work = Work(ms: ms, steps: steps)
                     }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
-                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work), position: position))
+                                                  kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work,
+                                                  session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil), position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
                           let shown = try? card.nestedContainer(keyedBy: ComponentKeys.self, forKey: .component) else { continue }

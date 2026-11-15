@@ -221,4 +221,24 @@ let coachSendMacTests: [Test] = [
         try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["text": "How is it going?"])
         try expectEqual(model.draft, "kept")
     }),
+    Test("a report says sent or already, tafs cloud's words, a gone answer, or the app's own line", awaiting: { @MainActor in
+        let kept = { (new: Bool) in #"{"report":{"id":"r1","at":"2026-11-15T10:00:00Z","new":\#(new)}}"# }
+        let (model, transport, _) = await make([(200, kept(true)), (200, kept(false)), (429, #"{"error":"too_many","words":"Too many reports just now."}"#),
+                                                (404, #"{"error":"not_found"}"#), (500, #"{"error":"internal"}"#)])
+        let answer = Thread.Message(id: "m10", at: nil, from: "taf", kind: "message", text: "Done.", session: "s1")
+        let r1 = await model.report(answer, reason: .wrong, note: "  ")
+        try expectEqual(r1, .sent)
+        try expectEqual(try JSONDecoder().decode([String: String].self, from: transport.sent[3].body), ["reason": "wrong", "session": "s1"])
+        let r2 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r2, .already)
+        let r3 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r3, .failed("Too many reports just now."))
+        let r4 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r4, .failed("This answer isn't on tafs cloud any more."))
+        let r5 = await model.report(answer, reason: .wrong, note: "")
+        try expectEqual(r5, .failed("It didn't reach KIFF. Try again."))
+        let unsent = Thread.Message(id: nil, at: nil, from: "taf", kind: "message", text: "Done.")
+        let r6 = await model.report(unsent, reason: .wrong, note: "")
+        try expectEqual(r6, .failed("This answer can't be reported from here."))
+    }),
 ]
