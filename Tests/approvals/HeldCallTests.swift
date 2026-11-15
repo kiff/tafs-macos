@@ -144,4 +144,44 @@ let approvalsTests: [Test] = [
         try expectEqual(try me(#"{"capabilities":["taf.use"]}"#).answersHolds, false)
         try expectEqual(try me("{}").answersHolds, true)
     },
+    Test("a step is read as the iPad reads it: its hand-off is needed, the rest has defaults, and Home's steps are strict") {
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1","taf":{"id":"t1","name":"Refunds"},"what":"Approve the transfer in Qonto","why":7,"words":{"title":"Your step","done":"Done","skip":"Skip it"}}"#.utf8))
+        try expectEqual(step.handoff, "h1")
+        try expectEqual(step.taf?.name, "Refunds")
+        try expectEqual(step.why, "")
+        try expectEqual(step.words.done, "Done")
+        try expect((try? JSONDecoder().decode(YourStep.self, from: Data(#"{"what":"no hand-off"}"#.utf8))) == nil, "no hand-off doesn't read")
+        let page = { (steps: String) in try AccountClient.decoder.decode(Home.Page.self, from: Data(("{\"tafs\":[],\"your_steps\":" + steps + "}").utf8)) }
+        try expectEqual(try page(#"[{"handoff":"h1"},{"handoff":"h2"}]"#).yourSteps.map(\.handoff), ["h1", "h2"])
+        try expect((try? page(#"[{"handoff":"h1"},{"what":"x"}]"#)) == nil, "a step that doesn't read makes Home unreadable, as on the iPad")
+        try expectEqual(try AccountClient.decoder.decode(Home.Page.self, from: Data(#"{"tafs":[]}"#.utf8)).yourSteps, [])
+    },
+    Test("a step's link is a button only as tafs cloud vouched for it: https, its host apart and its own, and the button's words") {
+        func link(_ json: String) throws -> String? {
+            try JSONDecoder().decode(YourStep.self, from: Data(json.utf8)).openLink.map { "\($0.url.absoluteString) \($0.host) \($0.words)" }
+        }
+        try expectEqual(try link(#"{"handoff":"h","link":"https://app.qonto.com/t/1","link_host":"app.qonto.com","words":{"open":"Open Qonto"}}"#), "https://app.qonto.com/t/1 app.qonto.com Open Qonto")
+        try expectEqual(try link(#"{"handoff":"h","link":"http://app.qonto.com/t/1","link_host":"app.qonto.com","words":{"open":"Open Qonto"}}"#), nil)
+        try expectEqual(try link(#"{"handoff":"h","link":"https://evil.example/t/1","link_host":"app.qonto.com","words":{"open":"Open Qonto"}}"#), nil)
+        try expectEqual(try link(#"{"handoff":"h","link":"https://app.qonto.com/t/1","link_host":"app.qonto.com"}"#), nil)
+    },
+    Test("a step's answer signs kiff.handoff.v1 line by line, at a time never the same twice") {
+        try expectEqual(KIFFMessage.handoff(tenant: "t1", handoffID: "h1", answer: "done", version: 2, signedAt: "2026-11-15T12:00:00.000Z"),
+                        "kiff.handoff.v1\nt1\nh1\ndone\n2\n2026-11-15T12:00:00.000Z")
+        let now = Date(timeIntervalSince1970: 1_894_000_000)
+        let first = SigningTime.next(now: now), second = SigningTime.next(now: now)
+        try expect(first != second, "two answers at the same moment sign different times")
+        try expect(first.hasSuffix("Z") && first.contains("."), "RFC 3339 with milliseconds: \(first)")
+    },
+    Test("a step's hand-off is read, then answered with its signature, by its escaped id", awaiting: {
+        let (account, transport) = client([(200, #"{"id":"h/1","version":2,"status":"waiting"}"#), (200, "{}"), (200, #"{"id":"h2"}"#)])
+        let handoff = try await account.handoff("h/1")
+        try expectEqual(handoff.version, 2)
+        try await account.answerHandoff("h/1", answer: "skipped", signedAt: "2026-11-15T12:00:00.000Z", signature: "SIG")
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/handoffs/h%2F1", "POST /v1/me/handoffs/h%2F1/answer"])
+        try expectEqual(String(decoding: transport.sent[1].body, as: UTF8.self), #"{"answer":"skipped","signature":{"signed_at":"2026-11-15T12:00:00.000Z","value":"SIG"}}"#)
+        let bare = try await account.handoff("h2")
+        try expectEqual(bare.version, 1)
+        try expectEqual(bare.status, "")
+    }),
 ]

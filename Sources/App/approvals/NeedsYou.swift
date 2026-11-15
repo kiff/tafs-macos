@@ -17,6 +17,14 @@ final class NeedsYouModel: ObservableObject {
     @Published private(set) var answering: String?
     /// "Did this happen?": the money calls whose outcome KIFF can't prove, newest first.
     @Published private(set) var unproven: [Unproven] = []
+    /// The steps the tafs handed their owner, as Home last listed them, less those answered here.
+    @Published private(set) var steps: [YourStep] = []
+    /// The steps being answered now: their buttons wait.
+    @Published private(set) var answeringSteps: Set<String> = []
+    /// Why the last step wasn't answered, in the iPad's words.
+    @Published private(set) var stepNotAnswered: String?
+    /// Steps answered or ended here that Home may still list.
+    private var answeredSteps: Set<String> = []
 
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
@@ -35,6 +43,83 @@ final class NeedsYouModel: ObservableObject {
     func load() async {
         do { state = .loaded(try await account.heldCalls()) } catch { state = .unread(why: Self.why(error)) }
     }
+
+    /// Home's steps, less those answered here that it still lists, as the iPad's `showSteps`;
+    /// an answered step Home no longer lists is forgotten.
+    func showSteps(_ listed: [YourStep]) {
+        answeredSteps.formIntersection(listed.map(\.handoff))
+        steps = listed.filter { !answeredSteps.contains($0.handoff) }
+    }
+
+    /// Whether this Mac can answer a step, as the iPad's `canAnswerSteps`: KIFF checks the device
+    /// key's signature, so the session must hold it.
+    var canAnswerSteps: Bool { account.signMessage != nil }
+
+    /// Answers a step a taf handed its owner, "done" or "skipped", as the iPad's `answerYourStep`:
+    /// the hand-off is read from KIFF first, for the version signed; one KIFF no longer waits on
+    /// isn't sent. The answer is signed with the device key over `kiff.handoff.v1`: it grants
+    /// nothing, so no approval key is asked for. `answered` reads the lists again after.
+    func answer(_ step: YourStep, done: Bool, now: Date = Date(), answered: () async -> Void = {}) async {
+        guard !answeringSteps.contains(step.handoff), !answeredSteps.contains(step.handoff) else { return }
+        guard canAnswerSteps, let signMessage = account.signMessage else { return }
+        answeringSteps.insert(step.handoff)
+        defer { answeringSteps.remove(step.handoff) }
+        stepNotAnswered = nil
+        let answer = done ? "done" : "skipped"
+        let current: Handoff
+        do {
+            current = try await account.handoff(step.handoff)
+        } catch {
+            stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)])
+            return
+        }
+        guard current.status.isEmpty || current.status == "waiting" else {
+            stepNotAnswered = Words.app("needs_you.your_step.ended")
+            drop(step)
+            return
+        }
+        let at = SigningTime.next(now: now)
+        let message = KIFFMessage.handoff(tenant: account.session.tenant, handoffID: current.id, answer: answer, version: current.version, signedAt: at)
+        let value: String
+        do {
+            value = try signMessage(message)
+        } catch {
+            stepNotAnswered = Words.app("needs_you.your_step.not_answered_unconfirmed")
+            return
+        }
+        do {
+            try await account.answerHandoff(current.id, answer: answer, signedAt: at, signature: value)
+        } catch KIFFError.refused(409, _) {
+            // Answered meanwhile, on another device, or ended: nothing more to do here.
+            stepNotAnswered = Words.app("needs_you.your_step.ended")
+            drop(step)
+            return
+        } catch {
+            stepNotAnswered = Words.app("needs_you.your_step.not_answered", ["why": Self.answerRefusedWords(error)])
+            return
+        }
+        drop(step)
+        await answered()
+    }
+
+    /// Takes an answered or ended step off Needs you at once, while Home still lists it.
+    private func drop(_ step: YourStep) {
+        answeredSteps.insert(step.handoff)
+        steps.removeAll { $0.handoff == step.handoff }
+    }
+
+    /// KIFF's reason it didn't take an answer, in the iPad's words (`answerRefusedWords`,
+    /// `refusalWords`); else "KIFF didn't take the answer", with why.
+    static func answerRefusedWords(_ error: Error) -> String {
+        if case KIFFError.refused(_, let code) = error, let key = refusalKeys[code] { return Words.app(key) }
+        return Words.app("needs_you.refused.other", ["why": why(error)])
+    }
+
+    static let refusalKeys = [
+        "self_review": "needs_you.refused.self_review", "separation_of_duties_role": "needs_you.refused.approver_only",
+        "separation_of_duties_key": "needs_you.refused.signed_in_approver", "card_changer": "needs_you.refused.card_changer",
+        "hold_check_unavailable": "needs_you.refused.check_unavailable", "role_forbidden": "needs_you.refused.role",
+    ]
 
     /// Reads "Did this happen?" from KIFF, for someone who answers held calls, as the iPad's
     /// `loadUnproven`. A read that fails keeps the list: it's read again next time.
@@ -80,12 +165,20 @@ struct NeedsYouView: View {
     var now: Date?
     /// Whether this person answers the account's held calls (KIFF's `holds.answer`).
     var answersHolds = true
+    /// Reads the lists again once a step is answered: the taf's run goes on.
+    var answered: () async -> Void = {}
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(words("needs_you.title")).font(Theme.display(34)).foregroundColor(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
+                if let why = model.stepNotAnswered {
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                }
+                // A step a taf handed its owner comes first, oldest first, as the iPad's.
+                ForEach(model.steps) { step($0) }
                 // A money call whose outcome KIFF can't prove: the owner says whether it happened.
                 ForEach(model.unproven) { happened($0) }
                 switch model.state {
@@ -94,7 +187,7 @@ struct NeedsYouView: View {
                 case .unread(let why):
                     Text(words("needs_you.request_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                 case .loaded(let calls) where calls.isEmpty:
-                    if model.unproven.isEmpty { nothing }
+                    if model.unproven.isEmpty, model.steps.isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
                 }
@@ -119,6 +212,53 @@ struct NeedsYouView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+
+    /// A step a taf handed its owner, as the iPad's `YourStepCard`: tafs cloud's title, the taf,
+    /// what to do and why, the vendor's page only as tafs cloud vouched for it, and Done or Skip
+    /// when this Mac can answer.
+    private func step(_ step: YourStep) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !step.words.title.isEmpty { Eyebrow(text: step.words.title) }
+            if let name = step.taf?.name, !name.isEmpty {
+                Text(verbatim: name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+            }
+            Text(verbatim: step.what).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if !step.why.isEmpty {
+                Text(verbatim: step.why).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+            if let link = step.openLink {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button { openURL(link.url) } label: {
+                        Label(link.words, systemImage: "arrow.up.right.square").padding(.horizontal, 16)
+                    }
+                    .buttonStyle(OutlineButtonStyle())
+                    .fixedSize()
+                    // Where it really goes, as tafs cloud read the link.
+                    Text(verbatim: link.host).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
+                }
+            }
+            if model.canAnswerSteps {
+                HStack(spacing: 8) {
+                    Button { Task { await model.answer(step, done: true, answered: answered) } } label: {
+                        Text(verbatim: step.words.done).padding(.horizontal, 16)
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    Button { Task { await model.answer(step, done: false, answered: answered) } } label: {
+                        Text(verbatim: step.words.skip).padding(.horizontal, 16)
+                    }
+                    .buttonStyle(OutlineButtonStyle())
+                }
+                .fixedSize()
+                .disabled(model.answeringSteps.contains(step.handoff))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
+        .accessibilityElement(children: .contain)
     }
 
     /// "Did this happen?", as the iPad's `DidThisHappenCard`: KIFF's words for the call (else its

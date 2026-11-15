@@ -62,6 +62,58 @@ let approvalsScreenTests: [Test] = [
         await model.loadUnproven(answersHolds: true)
         try expectEqual(model.unproven.map(\.proposal), ["p1"])
     }),
+    Test("a step is answered as the iPad's: its hand-off read first, the device key signs kiff.handoff.v1, then it leaves the list", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1","what":"Approve the transfer","words":{"done":"Done","skip":"Skip it"}}"#.utf8))
+        var signed: [String] = []
+        let transport = CannedTransport([(200, #"{"id":"h1","version":2,"status":"waiting"}"#), (200, "{}")])
+        let account = AccountClient(transport: transport, session: session, signMessage: { signed.append($0); return "SIG" })
+        let model = NeedsYouModel(account: account, route: .phoneOrPasskey)
+        model.showSteps([step])
+        try expectEqual(model.canAnswerSteps, true)
+        var reread = 0
+        await model.answer(step, done: true, now: Date(timeIntervalSince1970: 1_894_000_000), answered: { reread += 1 })
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/handoffs/h1", "POST /v1/me/handoffs/h1/answer"])
+        try expectEqual(signed.count, 1)
+        try expect(signed[0].hasPrefix("kiff.handoff.v1\nt1\nh1\ndone\n2\n"), signed[0])
+        try expectEqual(model.steps, [])
+        try expectEqual(reread, 1)
+        // Home still lists it until its run hears the answer: it stays off; once Home drops it, it's forgotten.
+        model.showSteps([step])
+        try expectEqual(model.steps, [])
+        model.showSteps([])
+        model.showSteps([step])
+        try expectEqual(model.steps.map(\.handoff), ["h1"])
+    }),
+    Test("a step KIFF no longer waits on is never sent, and a 409 says it ended; both leave the list", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1"}"#.utf8))
+        let (ended, endedTransport) = model([(200, #"{"id":"h1","status":"answered"}"#)])
+        ended.showSteps([step])
+        await ended.answer(step, done: false)
+        try expectEqual(endedTransport.sent.map(\.method), ["GET"])
+        try expectEqual(ended.stepNotAnswered, "This step was already answered or has ended.")
+        try expectEqual(ended.steps, [])
+        let (late, _) = model([(200, #"{"id":"h1"}"#), (409, #"{"error":"handoff_answered"}"#)])
+        late.showSteps([step])
+        await late.answer(step, done: true)
+        try expectEqual(late.stepNotAnswered, "This step was already answered or has ended.")
+        try expectEqual(late.steps, [])
+        let (refused, _) = model([(200, #"{"id":"h1"}"#), (403, #"{"error":"role_forbidden"}"#)])
+        refused.showSteps([step])
+        await refused.answer(step, done: true)
+        try expectEqual(refused.stepNotAnswered, "Your answer didn't go through. Your role on this account doesn't answer held calls. Someone who approves on it does.")
+        try expectEqual(refused.steps.map(\.handoff), ["h1"])
+    }),
+    Test("the screenshot: a taf's step first on Needs you", awaiting: { @MainActor in
+        let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1","taf":{"id":"t1","name":"Refunds"},"what":"Approve the transfer to Acme in Qonto","why":"Qonto asks the account's owner to approve transfers over €1,000.","link":"https://app.qonto.com/transfers/1","link_host":"app.qonto.com","words":{"title":"Your step","done":"Done","skip":"Skip it","open":"Open Qonto"}}"#.utf8))
+        let (model, _) = model([(200, none)])
+        await model.load()
+        model.showSteps([step])
+        let view = NeedsYouView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800))
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-step-en.png"))
+    }),
     Test("the screenshot: Did this happen? above the calls, said to be answered on the phone", awaiting: { @MainActor in
         let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","words":"Refund a payment: 40.00 EUR.","status_words":"Its answer was lost, so KIFF can't tell whether it went through."}]}"#
         let (model, _) = model([(200, none), (200, list)])

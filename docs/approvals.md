@@ -55,6 +55,27 @@ read that fails keeps the list.
 - An amount with no unit is drawn whole, "725 (no currency)", as the iPad's `Money` keeps it.
 - "Nothing waiting" shows only when there's nothing to say about either.
 
+## Your step
+
+As the iPad's `YourStepCard`, `answerYourStep`, `showSteps` and `drop`
+(`YourStepCard.swift:6-46`, `AppModel.swift:6809-6896`, `TafsCloud+YourStep.swift`,
+`KIFFClient.swift:933-967`): the steps the tafs handed their owner, from Home's `your_steps`
+(each read strictly: one that doesn't read makes Home unreadable, as on the iPad), drawn
+first on Needs you, oldest first.
+
+- Each card: tafs cloud's title, the taf, what to do (16 semibold) and why; the vendor's page
+  as an outlined button only as tafs cloud vouched for it (https, its host apart and the
+  link's own, and the button's words), with the host under it; then Done and Skip, in tafs
+  cloud's words.
+- **Answering** reads the hand-off from KIFF first (`GET /v1/me/handoffs/{id}`); one KIFF no
+  longer waits on isn't sent ("This step was already answered or has ended."). The answer,
+  `done` or `skipped`, is signed with the device key over `kiff.handoff.v1` (tenant, hand-off,
+  answer, version, the time to the millisecond, never the same twice): it grants nothing, so
+  no approval key is asked for, and any signed-in Mac may answer. A 409 says it ended. A
+  refusal says KIFF's reason in the iPad's words, else "KIFF didn't take the answer", with why.
+- An answered or ended step leaves the list at once, and stays off while Home still lists it;
+  the lists are then read again.
+
 ## Tests
 
 `scripts/test.sh approvals`: the hold as KIFF sends it, the answer's message line by line,
