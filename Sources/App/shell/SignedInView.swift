@@ -104,7 +104,7 @@ struct SignedInView: View {
                                                         answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
-            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
+            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))

@@ -15,6 +15,23 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let recordTests: [Test] = [
+    Test("the calls are by day in the account's calendar, newest first, whichever group they came in, as the iPad's days") {
+        func entry(_ id: String, _ at: String) -> String {
+            #"{"id":"\#(id)","at":"\#(at)","kind":"done","title":"T","detail":"","time":"","taf":{"id":"taf_1","name":"Refunds"}}"#
+        }
+        // Two groups as tafs cloud might send them, one call each side of Paris's midnight.
+        let json = #"{"hint":"","entries":[],"groups":[{"id":"a","title":"Earlier","entries":[\#(entry("e1", "2026-11-14T22:30:00Z")),\#(entry("e2", "2026-11-14T10:00:00Z"))]},{"id":"b","title":"Later","entries":[\#(entry("e3", "2026-11-14T23:30:00Z"))]}]}"#
+        let page = try AccountClient.decoder.decode(Record.Page.self, from: Data(json.utf8))
+        var paris = Calendar(identifier: .gregorian)
+        paris.timeZone = TimeZone(identifier: "Europe/Paris")!
+        let days = Record.days(page.shown, calendar: paris)
+        try expectEqual(days.map { $0.entries.map(\.id) }, [["e3"], ["e1", "e2"]])
+        try expectEqual(days.map { ISO8601DateFormatter().string(from: $0.start) }, ["2026-11-14T23:00:00Z", "2026-11-13T23:00:00Z"])
+        // In UTC the same calls fall on one day.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        try expectEqual(Record.days(page.shown, calendar: utc).map { $0.entries.map(\.id) }, [["e3", "e1", "e2"]])
+    },
     Test("the Record is read as tafs cloud sends it, with its own words", awaiting: {
         let (client, transport) = cloud([(200, recordPage)])
         let page = try await client.record()
