@@ -14,19 +14,8 @@ struct AccountTime {
     /// clock from this Mac's at that moment; nothing when the clocks agree.
     func label(at date: Date, here: TimeZone = .current) -> String {
         guard zone.secondsFromGMT(for: date) != here.secondsFromGMT(for: date) else { return "" }
-        return " " + (name(at: date) ?? "")
+        return zone.abbreviation(for: date).map { " " + $0 } ?? ""
     }
-
-    /// The zone's short name at a moment. KIFF's default, the zone an unknown identifier falls
-    /// back to, is the iPad's word for it, "UTC", whatever this Mac calls it: newer macOS names
-    /// it "GMT". Any other zone is named as macOS names it ("CET", and "GMT" for London in winter).
-    func name(at date: Date) -> String? {
-        if AccountTime.utc.contains(zone.identifier) { return "UTC" }
-        return zone.abbreviation(for: date)
-    }
-
-    /// The identifiers macOS gives KIFF's default zone, by version.
-    private static let utc: Set<String> = ["UTC", "GMT", "Etc/UTC", "Etc/GMT"]
 
     /// The time of day, as 14:05, in the account's zone (the iPad's `shortTime`).
     func shortTime(_ date: Date) -> String {
