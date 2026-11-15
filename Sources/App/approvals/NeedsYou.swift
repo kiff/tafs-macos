@@ -192,15 +192,25 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// Refuses a call, then reads the list again: KIFF's list is the truth, not this screen's.
+    /// The person confirms first, Touch ID or the Mac's password, as the iPad's `answer(_:with:)`
+    /// signs with `signer.sign(_:reason:)`: "Answer {summary}". A prompt the person closed keeps
+    /// the call ("Cancelled. Nothing was approved"); any other failure says it wasn't sent for
+    /// want of a confirmation. Neither signs nor sends.
     func refuse(_ call: HeldCall, nextStep: String? = nil) async {
         answering = call.id
         defer { answering = nil }
         do {
-            try await account.refuse(call, nextStep: nextStep)
+            try await account.refuse(call, nextStep: nextStep) {
+                try await self.confirm(Words.app("needs_you.prompt.answer", ["summary": call.title ?? call.action]))
+            }
             notTaken[call.id] = nil
             await load()
+        } catch let unconfirmed as Unconfirmed {
+            notTaken[call.id] = Self.cancelled(unconfirmed.error) ?? Words.app("common.not_sent_unconfirmed")
         } catch {
-            notTaken[call.id] = Self.why(error)
+            // Only KIFF's refusal reads "KIFF didn't take the answer", as the iPad's
+            // `answerRefusedWords` (AppModel.swift:2994); a prompt's words are its own (:2972-2979).
+            notTaken[call.id] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
         }
     }
 
@@ -458,8 +468,8 @@ struct NeedsYouView: View {
             }
             .buttonStyle(.plain)
             .disabled(model.answering != nil)
-            if let why = model.notTaken[call.id] {
-                Text(words("needs_you.refused.other", ["why": why])).font(.system(size: 13)).foregroundColor(Theme.no)
+            if let line = Self.notTakenLine(model, call) {
+                Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.no)
             }
         }
         .padding(16)
@@ -473,6 +483,10 @@ struct NeedsYouView: View {
         Text(verbatim: Self.left(until: expires, at: date, words: words))
             .font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.amberText)
     }
+
+    /// The line under a call's answers when the last one wasn't taken, as it is: KIFF's refusal
+    /// in "KIFF didn't take the answer" words, a prompt's in its own.
+    @MainActor static func notTakenLine(_ model: NeedsYouModel, _ call: HeldCall) -> String? { model.notTaken[call.id] }
 
     /// "8:06 left", as a clock counts down: m:ss, or h:mm:ss past an hour; "expired" at the end.
     static func left(until expires: Date, at date: Date, words: Words) -> String {
