@@ -1,7 +1,8 @@
 # Plan & usage
 
-The balance now and the period's credits, in tafs cloud's words. **This screen only reads.**
-Nothing is bought, raised or changed from the Mac.
+The balance now and the period's credits, in tafs cloud's words, then members' requests to the
+account's admins. Nothing is bought or raised from the Mac: a member asks an admin, takes the
+request back, and an admin declines one.
 
 ## What is read (`Usage`, `CloudClient`)
 
@@ -13,8 +14,42 @@ Nothing is bought, raised or changed from the Mac.
 - Every amount and every line is tafs cloud's. The app works out nothing.
 - **The meter is how much is used**, as tafs cloud's own page says, kept within 0 to 100 as
   the phones keep it. With no number there is no bar.
+- The balance also says whether the First month pack can be bought now
+  (`buy.first_month.ready`): the packs a member may ask for list it first only then.
 - A balance without its state or its words is unreadable. A credits row that doesn't read is
   left out; the period is still drawn.
+
+## Members' requests (`KIFFUsage`, `PackRequest`, `AccountClient`)
+
+Ported from the iPad's `KIFFClient.Usage` and `PackRequest` (`KIFF/KIFFClient.swift:629-755`),
+its routes (`:768-799`), and `askAdmin`, `withdrawRequest` and `declineRequest`
+(`App/AppModel.swift:3581-3605`, `3672-3696`).
+
+| Call | Route | What |
+|---|---|---|
+| `usage()` | `GET /v1/me/usage` | KIFF's plan (`team` is Company), the packs it sells, and the requests: every open one for someone who manages billing, the person's own otherwise. |
+| `askAdmin(raise:pack:reason:)` | `POST /v1/me/pack-requests` | `{"kind": "raise", "reason"}`, no pack, or `{"pack", "reason"}`, where no `kind` means a pack. |
+| `withdrawRequest(_:)` | `POST /v1/me/pack-requests/{id}/withdraw` | `{}`. |
+| `declineRequest(_:note:)` | `POST /v1/me/pack-requests/{id}/decline` | `{"note"}`, **signed** by the device key (`KIFF-Device-Signature`). |
+
+- A pack or a request that doesn't read is left out, never the list. A request from a KIFF
+  that doesn't say its kind is for a pack.
+- **Who manages billing** is KIFF's `billing.manage` (`Me.managesBilling`); a KIFF that lists no
+  capabilities leaves it on.
+- **Asking**, for someone who doesn't manage billing, where the plan lets them (`asks`): a raise
+  of the spend limit on Company, a pack on Solo while packs are on sale. Their request waiting
+  shows with Withdraw; else the last answer (raised, a pack added, declined with its note,
+  ended), then **Ask an admin**, filled while the tafs wait. The sheet takes a pack, for a pack,
+  and a reason of at most 500 characters.
+- **Declining**, for someone who manages billing: each open request's line ("Someone asks for
+  Rayo.") and reason, with **Decline**. Its sheet asks the question and takes a note. The person
+  confirms with Touch ID or the Mac's password (`billing.request.decline_prompt`), then the
+  device key signs, as the iPad's `signer.sign`. A prompt closed or failed sends nothing and
+  says nothing; without a device key it says to sign in again.
+- After an ask, a withdrawal or a decline, everything is read again. One KIFF doesn't take says
+  why over the screen (`planMessage`), in the shared words (`billing.request.not_sent`,
+  `not_withdrawn`, `not_declined`).
+- **KIFF's read failing** keeps what was read and says so once, under the credits.
 
 ## The screen (`UsageView`, `UsageModel`)
 
@@ -39,11 +74,17 @@ amber with a warning, and the warning takes the same colour.
 ## Not on the Mac
 
 Buying credits or a plan, restoring purchases and raising the spend limit. The phones do
-these through their stores; the Mac has no store. A request to an admin, a taf's runs behind
-its line, and Manage are not built.
+these through their stores; the Mac has no store. So an admin answers a request here only by
+declining it: the iPad's Raise the limit (signed with the approval key) and Approve (buying the
+pack) aren't on the Mac. Who bills the plan (`billingPanel`), Manage, and a taf's runs behind its
+line are not built.
 
 ## Tests
 
 `scripts/test.sh usage`: the balance and the credits as tafs cloud sends them, a meter out of
 range, unreadable answers, a 503's code, each half failing alone, the period asked for, and
-**that nothing but `GET` is ever sent**. It writes `build/screenshots/usage-*.png`.
+that tafs cloud is only ever read (`GET`). For the requests: KIFF's usage as sent, the packs
+offered, each route's path, body and signature (only a decline is signed), a decline without
+a key, the prompt closed, KIFF's refusals, the reads after, and the lines both apps share. It
+writes `build/screenshots/usage-*.png`, a member's and an admin's requests and both sheets
+among them.

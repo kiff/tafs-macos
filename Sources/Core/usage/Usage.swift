@@ -15,9 +15,14 @@ enum Usage {
         /// The plan's line, and whether it needs the person: `ok`, `warning` or `waiting`.
         let planLine: String?
         let planTone: String
+        /// The First month pack can be bought now (`buy.first_month.ready`), as the iPad's
+        /// `firstMonthReady`: the packs a member may ask for list it first only then.
+        let firstMonthReady: Bool
 
         enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone" }
-        enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning }
+        enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy }
+        enum BuyKeys: String, CodingKey { case firstMonth = "first_month" }
+        enum FirstMonthKeys: String, CodingKey { case ready }
 
         init(from decoder: Decoder) throws {
             let root = try decoder.container(keyedBy: Keys.self)
@@ -31,6 +36,9 @@ enum Usage {
             warning = Usage.text((try? c.decodeIfPresent(String.self, forKey: .warning)) ?? nil)
             planLine = Usage.text((try? root.decodeIfPresent(String.self, forKey: .planLine)) ?? nil)
             planTone = ((try? root.decodeIfPresent(String.self, forKey: .planTone)) ?? nil) ?? "ok"
+            let buy = try? c.nestedContainer(keyedBy: BuyKeys.self, forKey: .buy)
+            let first = buy.flatMap { try? $0.nestedContainer(keyedBy: FirstMonthKeys.self, forKey: .firstMonth) }
+            firstMonthReady = first.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .ready)) ?? nil } == true
         }
 
         var waiting: Bool { state == "waiting" }

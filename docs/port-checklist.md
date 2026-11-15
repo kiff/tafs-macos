@@ -38,6 +38,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | NotificationSettingsView.swift | 138 | Account › Alerts | What an alert looks like (`LockScreenAlert`), Alerts on this Mac, Sound, kept per account (`account/AlertsView.swift`, `approvals/Notifier.swift`, `Core/approvals/AlertPrefs.swift`) | `AlertingTafsView` (which tafs alert); alerts with tafs closed, which need a signed build |
 | OnboardingView.swift | 63 | The welcome: what tafs is, Sign in with KIFF, Try it with sample data | The welcome and Sign in with KIFF (`pairing/SignInView.swift`) | Try it with sample data |
 | PeopleViews.swift | 291 | People and groups | The groups and the people, read every 20 seconds, in the iPad's order (`account/PeopleView.swift`, `Core/account/People.swift`) | Making, renaming or deleting a group and changing its people (each signed) |
+| PlanViews.swift | 268 | Asking an admin and declining a member's request; buying credits and Solo | `AskAdminView` (raise or pack, with a reason) and `DeclineRequestView` (with a note, confirmed and signed), as sheets (`usage/PlanRequestsView.swift`, `Core/usage/KIFFUsage.swift`) | Nothing to port: `BuyCreditsView` and `SoloView` are the App Store's, not for macOS 12 |
 | RecordSearchViews.swift | 192 | The Record's search | The search as the person pauses, its pages on More, `RecordHitRow`, `RecordCaseSheet` (`record/RecordView.swift`, `Core/record/Record.swift`) | A case's steps as `SourceActivityRow`, with each step's next step |
 | RecordView.swift | 689 | The Record, its rows, filters and receipts | The list, the taf chips, the filters, days and rows, paging (`record/RecordView.swift`, `Core/record/Record.swift`) | A day's spend; a day's reads folded into one line; `ReceiptView`: an entry's sheet with KIFF's receipt checked on this device; exporting receipts; a taf's detail |
 | SetupChatView.swift | 1957 | Coach's conversation | The thread, the answer as it's written, cards answered, Decline, the AI-data consent, New conversation, Improve a taf, Report this answer (`coach/CoachView.swift`, `Core/coach/Thread.swift`, `Stream.swift`, `Rich.swift`, `Chats.swift`) | Approving a connection or a Card; Previous conversations and archiving; attachments; dictation; `SetupShapePanel`, `CoachToolsStep`, `QuestionsCard`, `DriveCard` |
@@ -46,7 +47,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | TafChatView.swift | 826 | A taf's chat | The taf's conversation drawn as Coach's, its box, its Cards beside it (`taf/TafView.swift`, `coach/CoachView.swift`) | What Coach's conversation also misses (attachments, dictation, questions); `SteadyMarkdown` |
 | TafDetailView.swift | 1474 | A taf's page: head, tabs, Card, Activity, Setup, panels | The head and its state chip, the version line and Versions, the share line, the four tabs, the Card wallet (`CardStack`), the halt row (`taf/TafView.swift`, `TafTabsView.swift`, `Core/taf/TafCard.swift`, `TafTabs.swift`, `TafVersions.swift`) | Starts when and Results go to; the Doors tab; `RunsPanel`; the rest of `WorkPanel`; Pause; Forget a note; the workflow steps' rows; Connect again |
 | TafPresentationViews.swift | 492 | A taf's Activity list and Setup panels | `CardUnitExceptionPanel`; `ConnectedToolsRing` as a list, with `ConnectedAppSheet`; `TafActivityList`'s filters, groups and pages; `MemorySummaryPanel`'s notes (`taf/TafTabsView.swift`, `Core/taf/TafTabs.swift`) | `NextStepRow`'s buttons; `TafKnocksPanel`; `RetainedRuns`; opening an app's week in Activity |
-| UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | The balance and its meter, the credits, each half read on its own (`usage/UsageView.swift`, `Core/usage/Usage.swift`) | Raise the limit (an approval); Ask an admin and Withdraw; members' requests and Decline; Manage. Buying credits and Solo are not for macOS 12 (`PlanViews.swift`'s store views) |
+| UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | The balance and its meter, the credits, each half read on its own; KIFF's usage read; `askPanel` (a member's request waiting with Withdraw, the last answer, Ask an admin) and `requestsPanel` (members' requests with Decline) (`usage/UsageView.swift`, `PlanRequestsView.swift`, `Core/usage/Usage.swift`, `KIFFUsage.swift`) | Raise the limit (an approval), also as a raise request's answer; who bills the plan (`billingPanel`) and Manage. Buying credits and Solo are not for macOS 12 (`PlanViews.swift`'s store views) |
 | WorkLog.swift | 181 | What a taf does while it answers | `WorkLog.rows`, the live line with its steps, `StepList`, "Worked for" opening the steps (`Core/coach/WorkRows.swift`, `coach/CoachView.swift`) | `SteadyMarkdown` |
 
 ## Not started
@@ -62,7 +63,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
 | MicButton.swift | 122 | The mic in a chat's message bar | |
-| PlanViews.swift | 268 | Asking an admin (`AskAdminView`) and declining a member's request (`DeclineRequestView`), opened from Plan & usage; buying credits and Solo (`BuyCreditsView`, `SoloView`), which are the App Store's and not for macOS 12 | |
 | QuestionsCard.swift | 121 | Several questions at once | QuestionAnswers |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
@@ -99,5 +99,5 @@ merges.
 
 ## Counts
 
-Ported 4, partial 25, not started 17, not for macOS 12 4: the 50 view files at the pin
+Ported 4, partial 26, not started 16, not for macOS 12 4: the 50 view files at the pin
 (`da55768`).

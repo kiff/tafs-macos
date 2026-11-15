@@ -63,7 +63,7 @@ struct SignedInView: View {
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
-        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
+        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
         // Alerts are kept per account, as the iPad keys them by tenant.
@@ -83,7 +83,7 @@ struct SignedInView: View {
                                                         mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
-            case .usage: return AnyView(UsageView(model: usage))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
