@@ -115,21 +115,33 @@ As the iPad's `setupChat`, `setupFresh` and `setupTarget` (`AppModel.swift:6716-
 ## Coach's title row, Previous conversations, and Start a new taf
 
 As the iPad's Coach mode (`CoachMode.swift:13-31`), its toolbar (`SetupChatView.swift:105-110,
-136-141`), `SetupChatsList` (`:803-857`), `openSetupChat` and `loadSetupChats`
-(`AppModel.swift:7095-7114`) and `startNewTaf` (`:6772-6775`):
+136-141`), `SetupChatsList` (`:803-857`), `openCoach` (`AppModel.swift:6767-6778`),
+`startNewTaf` (`:6801-6804`), `openSetupChat` (`:7124-7135`), `loadSetupChats` (`:7138-7143`)
+and `loadSetupThread` (`:7328-7375`):
 
 - **Coach's title row:** Back on the left, which closes Coach (Esc too), back to the screen
   it opened over; on the right, New conversation (the pencil, which does nothing on an empty
   chat) and the conversations' menu, with Previous conversations.
-- **The sidebar's Coach** opens Coach, and closes it when it's the screen shown, as Coach
-  mode's own button does.
+- **The sidebar's Coach** only opens Coach, as `openCoach`. Coach closes from its own Back.
 - **Previous conversations** lists Coach's chats (`GET /v1/tafs/{id}/chats`) as tafs cloud
   lists them: each by its title and when it was last written to, the one shown marked. One
-  click reopens it: what was on its way belonged to the chat before, and the chat is read by
-  its session. A list read that fails keeps the list as it was. Done (Esc) closes it.
-- **Start a new taf** opens a new conversation in Coach, so Coach mode's start shows, whether
-  Coach was open or not. Asked before Coach is read, Coach opens on a new conversation once
-  it is.
+  click reopens it: what was on its way belonged to the chat before (a consent ask with it),
+  and the chat is read by its session. A list read that fails keeps the list as it was. A
+  reopen whose read fails keeps the page shown, with "The conversation couldn't be loaded: …" and
+  Try again under it, as `loadSetupThread`'s `setupError`. Done (Esc) closes it.
+- **After sign-out**, a chats list or a reopened chat that comes back late is dropped, as the
+  iPad's `accountGeneration` guard.
+- **Start a new taf**, from the sidebar's + and from Home's Own words, opens a new conversation
+  in Coach, so Coach mode's start shows, whether Coach was open or not. Asked before Coach is
+  read, Coach opens on a new conversation once it is.
+
+### Mac differences
+
+- **+ goes straight to Coach.** The iPad's + opens every ready-made job when tafs cloud sends
+  the gallery, and starts Coach only without one (`HomeSplitView.swift:434-438`). The gallery
+  isn't on the Mac yet, so + always starts Coach.
+- **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
+  Coach closes a taf's page first, so Back from there lands on the screen under it.
 
 ## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
 

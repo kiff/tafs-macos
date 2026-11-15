@@ -71,7 +71,7 @@ struct SignedInView: View {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
                                                         answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
-                                                        mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
+                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
@@ -81,7 +81,7 @@ struct SignedInView: View {
                                                   listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, close: closeCoach))
             case .account: return AnyView(accountScreen)
             }
-        }, startNewTaf: startNewTaf, toggleCoach: toggleCoach)
+        }, startNewTaf: startNewTaf, openCoach: openCoach)
         .onAppear {
             notifier.opened = { selection = .needsYou }
             notifier.account = account.session.tenant
@@ -141,13 +141,16 @@ struct SignedInView: View {
         selection = beforeCoach == .coach ? .overview : beforeCoach
     }
 
-    /// The sidebar's Coach: Coach opens, or closes when it's the screen shown.
-    private func toggleCoach() {
-        if selection == .coach && openTaf == nil { closeCoach() } else { openTaf = nil; selection = .coach }
+    /// The sidebar's Coach, as the iPad's `openCoach` (AppModel.swift:6767-6778): it only opens
+    /// Coach. Coach closes from its own Back (Esc too).
+    private func openCoach() {
+        openTaf = nil
+        selection = .coach
     }
 
-    /// Start a new taf, as the iPad's `startNewTaf`: a new conversation in Coach, so Coach
-    /// mode's start shows, whether Coach was open or not.
+    /// Start a new taf, as the iPad's `startNewTaf` (AppModel.swift:6801-6804): a new
+    /// conversation in Coach, so Coach mode's start shows, whether Coach was open or not. The
+    /// sidebar's + and Own words both come here.
     private func startNewTaf() {
         coach.startNewTaf()
         openTaf = nil

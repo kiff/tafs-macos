@@ -14,10 +14,13 @@ private let sendTime = Date(timeIntervalSince1970: 1_794_679_200)
 private final class SigningOutTransport: Transport, @unchecked Sendable {
     let canned: CannedTransport
     var whileReporting: () async -> Void = {}
+    /// Runs while any request is on its way, by its path.
+    var whileSending: (String) async -> Void = { _ in }
     init(_ answers: [(Int, String)]) { canned = CannedTransport(answers) }
 
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
         if request.path.hasSuffix("/report") { await whileReporting() }
+        await whileSending(request.path)
         return try await canned.send(request)
     }
 }
@@ -263,6 +266,33 @@ let coachSendMacTests: [Test] = [
         let answer = Thread.Message(id: "m1", at: nil, from: "taf", kind: "message", text: "What should your taf do?")
         let outcome = await model.report(answer, reason: .wrong, note: "")
         try expectEqual(outcome, .failed("You signed out."))
+    }),
+    Test("Previous conversations' reads answered after sign-out are dropped, as the iPad's accountGeneration guard", awaiting: { @MainActor in
+        let chats = #"{"chats":[{"session":"s1","started":"2026-11-13T09:00:00Z","updated":"2026-11-13T10:00:00Z","title":"Refunds"}]}"#
+        let transport = SigningOutTransport([(200, setupAnswer), (200, noChats), (200, before), (200, chats), (200, answered)])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, now: { sendTime })
+        await model.load()
+        transport.whileSending = { _ in await MainActor.run { model.signedOut() } }
+        await model.loadChats()
+        try expectEqual(model.chats, [])
+        await model.open(chat: "s1")
+        guard case .loaded(_, let page) = model.state else { throw Failure(description: "not loaded") }
+        try expectEqual(page.items.count, 1)
+        try expectEqual(model.notReopened, nil)
+        try expectEqual(transport.canned.sent.map(\.path).suffix(2), ["/v1/tafs/taf-coach/chats", "/v1/tafs/taf-coach/conversation/s1"])
+    }),
+    Test("a past chat that can't be reopened keeps the page shown and says why, as the iPad's loadSetupThread", awaiting: { @MainActor in
+        let (model, _, _) = await make([(500, #"{"error":"busy"}"#), (200, answered)])
+        await model.open(chat: "s1")
+        try expectEqual(model.chat, "s1")
+        guard case .loaded(_, let page) = model.state else { throw Failure(description: "not loaded") }
+        try expectEqual(page.items.count, 1)
+        try expectEqual(model.notReopened, "busy")
+        // Try again reads it, and the why goes.
+        await model.open(chat: "s1")
+        guard case .loaded(_, let read) = model.state else { throw Failure(description: "not loaded") }
+        try expectEqual(read.items.count, 3)
+        try expectEqual(model.notReopened, nil)
     }),
     Test("Start a new taf opens a new conversation, Coach open or not yet read, as the iPad's startNewTaf", awaiting: { @MainActor in
         let (open, transport, _) = await make([])

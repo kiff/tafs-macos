@@ -26,8 +26,8 @@ struct ShellView: View {
     var screen: (Screen) -> AnyView? = { _ in nil }
     /// Start a new taf: a new conversation in Coach, Coach open or not.
     var startNewTaf: () -> Void = {}
-    /// The sidebar's Coach: opens Coach, or closes it when it's open.
-    var toggleCoach: () -> Void = {}
+    /// The sidebar's Coach: opens Coach, as the iPad's `openCoach`.
+    var openCoach: () -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -180,10 +180,12 @@ struct ShellView: View {
 
     private var foot: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // A new taf in Coach, as the iPad's `startNewTaf`, Coach open or not.
+            // A new taf in Coach, as the iPad's `startNewTaf`, Coach open or not. The iPad's +
+            // opens the gallery when tafs cloud sends one (HomeSplitView.swift:434-438); the
+            // gallery isn't on the Mac yet, so + goes straight to Coach.
             footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { startNewTaf() }
-            // Coach opens, and closes again from here, as Coach mode's own button does.
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { toggleCoach() }
+            // Coach opens, as the iPad's `openCoach`; it closes from its own Back.
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { openCoach() }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     // As the iPad's: soft, and filled amber while Account is chosen.
