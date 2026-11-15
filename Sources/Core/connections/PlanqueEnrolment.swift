@@ -77,7 +77,8 @@ enum PlanqueEnrolment {
     ///
     /// planque's enrolled connector key, while KIFF still takes it, is kept: asked first with no
     /// key, it answers `kept`, and no key is minted that would only be left live in KIFF (a device
-    /// can't revoke a connector key). A key is minted only on `409 needs_key`. Any other answer
+    /// can't revoke a connector key). A key is minted only on `409 needs_key`; a 2xx without
+    /// `kept` mints nothing either. Any other answer
     /// (not reached, a 5xx, a refused signature, a 400 for a body it couldn't read) mints nothing:
     /// a second enrolment would likely fail too and leave the key live. It says why, and the next
     /// try asks again.
@@ -86,6 +87,10 @@ enum PlanqueEnrolment {
             let standing = try await planque.enrol(deviceKey: deviceKey, connectorKey: nil)
             guard !Task.isCancelled else { return .ended }
             if standing.kept == true { return nil }
+            // A 2xx that didn't keep mints nothing (Windows #63, Android): planque answered
+            // oddly, and a key minted now could be left live in KIFF, where no device can
+            // revoke it. The next try asks again.
+            return .notSetUp(why: .unreadable)
         } catch PlanqueClient.PlanqueError.needsKey {
         } catch PlanqueClient.PlanqueError.server(409, _, _) where planque.lastRefusalCode == nil {
             // A code-less 409 is an older planque's other device; a coded one (a replayed signature,
@@ -97,7 +102,8 @@ enum PlanqueEnrolment {
         guard !Task.isCancelled else { return .ended }
         do {
             let key = try await account.mintConnectorKey()
-            guard !Task.isCancelled else { return .ended }
+            // Once minted, the key is handed to planque whatever happens: KIFF already holds it
+            // live, and dropping it here would leave it orphaned. Cancellation is checked after.
             _ = try await planque.enrol(deviceKey: deviceKey, connectorKey: key)
         } catch KIFFError.refused(403, _) {
             return .adminOnly
