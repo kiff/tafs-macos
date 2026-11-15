@@ -12,6 +12,13 @@ private let notYet = [
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
+    "setup-coach.json": "Coach's own read, with the Coach screens",
+    "coach-chats.json": "Coach's conversations, with the pull request that reads them",
+    "coach-conversation.json": "Coach's conversations, with the pull request that reads them",
+    "connect-apps.json": "Connect apps' pages and search, read against these with that screen",
+    "connect-apps-search.json": "Connect apps' pages and search, read against these with that screen",
+    "connect-apps-next.json": "Connect apps' pages and search, read against these with that screen",
+    "connect-apps-removed.json": "Connect apps' pages and search, read against these with that screen",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
