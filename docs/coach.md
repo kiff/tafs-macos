@@ -14,14 +14,25 @@ The app draws the list as it comes. It places and folds nothing itself.
 
 | Item | Drawn as |
 |---|---|
-| A message from the person | Their words, on the brand's gradient, at the right, as on the iPad |
-| A message from Coach | Its words as text on the page, with no bubble. Plain text: the model's words are never read as formatting or as a line of the app's. |
+| A message from the person | When it was sent, small and centred; then their words on the brand's gradient, at the right |
+| A message from Coach | "Worked for 32 s", which opens the run's steps; then its words as text on the page, with no bubble |
 | A job's instruction (`kickoff`) | A small note |
-| A card that waits for the person (`waits: owner`) | "Needs you · a question" |
-| A card tafs cloud answers itself (`waits: service`) | Nothing |
+| The plan (`steps`) | A strip: "Plan · 1 of 3" and the step in hand; it opens to every step |
+| A choice (`confirm`) | What it asks, then a white pill for each answer |
+| An approval or a sign-in that waits | A card edged in amber: "Needs you · approve", what it asks, **Decline**, and where to approve |
+| An approval already answered | One folded line: what was answered and what it was, with tafs cloud's line for the connection |
+| A note (`notice`) | A line with a small arrow |
+| The hand-over (`result`) | A card edged in green: "Set up · the taf's name", what it does, its tools, and **Open** it |
 | A call KIFF held | "Needs you · approve". It is answered in Needs you. |
 | Anything else (a drive's end, a kind this app doesn't know) | Nothing |
 
+- **A run's steps** are tafs cloud's words for them. A step with no words isn't shown, and a
+  tool's name never is. A failed step is red, with tafs cloud's one line of why under it.
+- **Coach's words are drawn with bold and list items, and nothing else** (`Rich`). Every
+  piece of them is drawn with `Text(verbatim:)`.
+- **Approve is not on the Mac yet.** A Mac that can't sign an approval says so on the card;
+  the phone has the same card. **Decline** answers it, and grants nothing.
+- **Open** on a hand-over goes to the Overview until a taf's own page is built.
 - A card is known by its `key`, which is unique in the thread, never only by the name the
   model gave it: the model may reuse a name.
 - An item that doesn't read is left out. An answer with no ordered list is unreadable, never
