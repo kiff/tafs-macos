@@ -39,8 +39,9 @@ struct QuestionsCard: View {
                 }
                 Divider()
                 actions
-                if let why = model.notAnswered[model.refKey(card)] {
-                    Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
+                // The card's note, as the iPad's `CardNote`: "Your answer didn't reach Setup."
+                if let note = model.notAnswered[model.refKey(card)] {
+                    Text(verbatim: note).font(.system(size: 12)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .padding(16)

@@ -45,16 +45,21 @@ let coachQuestionsMacTests: [Test] = [
         try expectEqual(shown(model)[0].answered, "Test mode · Stripe")
         try expectEqual(model.answering, nil)
     }),
-    Test("a questions card that no longer waits is read again as it is; a refusal stays on the card with why", awaiting: { @MainActor in
+    Test("a questions card that no longer waits is read again; one refused for the AI consent stays quiet; any other refusal didn't reach Setup", awaiting: { @MainActor in
         let (gone, _) = await coach([(409, #"{"error":"not_waiting"}"#), (200, answeredQuestions)])
         let card = shown(gone)[0]
         await gone.answer(card, questions: both, mayUseCoach: true)
         try expectEqual(gone.notAnswered[card.key], nil)
         try expectEqual(shown(gone)[0].answered, "Test mode · Stripe")
-        let (refused, _) = await coach([(400, #"{"error":"bad_answer","words":"That isn't one of this card's answers."}"#)])
+        // As the iPad's `answer(_:_:)` (AppModel.swift:8377-8381): a refusal is no why of tafs cloud's here.
+        let (refused, _) = await coach([(403, #"{"error":"forbidden","words":"You can't answer this card."}"#)])
         await refused.answer(card, questions: both, mayUseCoach: true)
-        try expectEqual(refused.notAnswered[card.key], "That isn't one of this card's answers.")
+        try expectEqual(refused.notAnswered[card.key], Words.app("coach.answer_did_not_reach_setup"))
         try expectEqual(shown(refused)[0].waitsForPerson, true)
+        let (consent, _) = await coach([(403, #"{"error":"ai_consent_required"}"#)])
+        await consent.answer(card, questions: both, mayUseCoach: true)
+        try expectEqual(consent.notAnswered[card.key], nil)
+        try expectEqual(consent.answering, nil)
     }),
     Test("an answer tafs cloud sends that doesn't read, or a failure that isn't a refusal, says the answer didn't reach Setup", awaiting: { @MainActor in
         let (model, _) = await coach([(200, "{}")])
@@ -100,7 +105,7 @@ let coachQuestionsMacTests: [Test] = [
         try expectEqual(model.refKey(older), "s1:q-1")
         await model.answer(older, questions: ["mode": .choice("test")], mayUseCoach: true)
         try expectEqual(try JSONDecoder().decode([String: AnyDecodable].self, from: posts(transport)[0].body)["session"]?.text, "s1")
-        try expectEqual(model.notAnswered["s1:q-1"], "No.")
+        try expectEqual(model.notAnswered["s1:q-1"], Words.app("coach.answer_did_not_reach_setup"))
         try expectEqual(model.notAnswered["s0:q-1"], nil)
     }),
     Test("a questions card with no answer is answered whatever its waits says, as the iPad's QuestionsCard", awaiting: { @MainActor in

@@ -95,8 +95,8 @@ enum Thread {
         /// A card's own words for its yes and its no, as tafs cloud sends them.
         var yes: String?
         var no: String?
-        /// A questions card's questions, each Coach's own (`Question`). A card with one that
-        /// doesn't read keeps none, so it's never answered in part.
+        /// A questions card's questions, each Coach's own (`Question`). A card whose questions, or
+        /// any one of them, don't read isn't read at all, as the iPad's `LenientShown`.
         var questions: [Question] = []
 
         /// A hand-over's outcome (`answer.outcome`): the taf made, the version it became, why it

@@ -293,7 +293,7 @@ final class CoachModel: ObservableObject {
         }
     }
 
-    /// The card an answer for `id` is for, as the iPad's `cardRef` (AppModel.swift:6576-6579): the
+    /// The card an answer for `id` is for, as the iPad's `cardRef` (AppModel.swift:6708-6711): the
     /// one waiting under that id, since Coach can use an id again, else the latest.
     func cardRef(_ id: String) -> Thread.Card? {
         guard case .loaded(_, let page) = state else { return nil }
@@ -305,13 +305,14 @@ final class CoachModel: ObservableObject {
     func refKey(_ card: Thread.Card) -> String { cardRef(card.id)?.key ?? card.key }
 
     /// Answers a questions card with every one of its questions answered, as the iPad's
-    /// `answer(_:_:)` (AppModel.swift:8223-8250): only in Coach's chat (`setupTaf`), for someone
+    /// `answer(_:_:)` (AppModel.swift:8355-8385): only in Coach's chat (`setupTaf`), for someone
     /// who may use Coach (`mayUseCoach`, Keyboard.swift:70), to the card its id names now
     /// (`cardRef`), in that card's chat. Whatever `waits` says, a card with no answer is answered,
     /// as the iPad's `QuestionsCard`. The run that waited goes on in the chat tafs cloud names
     /// (`settleSetupChat`), and it's followed. A card that no longer waits is read again as it is;
-    /// a refusal stays on the card with why; anything else says the answer didn't reach Setup. An
-    /// answer that comes back after sign-out is the session before's: it's dropped.
+    /// one refused for want of the AI-data consent stays quiet; anything else, a refusal too, says
+    /// the answer didn't reach Setup. An answer that comes back after sign-out is the session
+    /// before's: it's dropped.
     func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer], mayUseCoach: Bool) async {
         guard isCoach, mayUseCoach, case .loaded(let coach, _) = state, answering == nil else { return }
         guard let ref = cardRef(card.id), ref.answerState != "answered", ref.isQuestions,
@@ -329,10 +330,13 @@ final class CoachModel: ObservableObject {
             guard gen == accountGeneration else { return }
             notAnswered[ref.key] = nil
             await reload(coach)
-        } catch let refusal as CloudRefusal {
+        } catch let refusal as CloudRefusal where refusal.code == TafsCloud.aiConsentRequired {
+            // Refused for want of the AI-data consent: the card stays as it was, its answers as
+            // chosen, with nothing said, as the iPad's (AppModel.swift:8372-8376).
             guard gen == accountGeneration else { return }
-            notAnswered[ref.key] = Self.why(refusal)
+            notAnswered[ref.key] = nil
         } catch {
+            // Anything else, a refusal too, as the iPad's `answerDidNotReachSetup` (:8377-8381).
             guard gen == accountGeneration else { return }
             notAnswered[ref.key] = Words.app("coach.answer_did_not_reach_setup")
         }
