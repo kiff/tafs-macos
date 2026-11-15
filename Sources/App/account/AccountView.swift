@@ -88,6 +88,9 @@ struct AccountView: View {
     /// Opens another screen of the sidebar from its row.
     let open: (Screen) -> Void
     let addThisMac: () -> Void
+    /// This Mac's device key is a software key (no Secure Enclave): adding it with the phone
+    /// still leaves it view-only, so it isn't offered, and the line says where approvals go.
+    var softwareKey = false
     let signOut: () -> Void
     @State private var showingDevices = false
     @State private var showingPeople = false
@@ -136,10 +139,17 @@ struct AccountView: View {
                 if model.me?.viewOnly == true {
                     // Exactly when KIFF says this session is view-only.
                     group(words("pair.view_only.title")) {
-                        Text(words("pair.view_only.lead", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
-                            .padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
-                        divider
-                        action(words("pair.view_only.add", ["device": words("device.mac")]), color: Theme.amberText, addThisMac)
+                        if softwareKey {
+                            // The shared line for a computer with a software key, as the phone
+                            // says when it pairs one: approvals go to the phone or a passkey.
+                            Text(words("settings.devices.pair_software_key")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                                .padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(words("pair.view_only.lead", ["device": words("device.mac")])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                                .padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
+                            divider
+                            action(words("pair.view_only.add", ["device": words("device.mac")]), color: Theme.amberText, addThisMac)
+                        }
                     }
                 }
                 group(words("settings.people_apps")) {

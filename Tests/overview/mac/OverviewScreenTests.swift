@@ -17,6 +17,29 @@ private let listedRecipes = #"""
 """#
 
 let overviewMacTests: [Test] = [
+    Test("the list last read for this account shows in the first frame, and is read again and kept with the first read", awaiting: { @MainActor in
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let first = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, homePage)]), session: session), remembered: defaults)
+        try expectEqual(first.state, .loading)
+        await first.load()
+        guard case .loaded(let page) = first.state else { throw Failure(description: "not read") }
+        // The next launch draws it before any read.
+        let next = OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: session), remembered: defaults)
+        try expectEqual(next.state, .loaded(page))
+        // Another account's list doesn't show.
+        let other = Session(accessToken: "tok", expiresIn: 60, tenant: "t2", subject: "u9", deviceID: nil)
+        try expectEqual(OverviewModel(cloud: CloudClient(transport: CannedTransport([]), session: other), remembered: defaults).state, .loading)
+    }),
+    Test("the screenshot: the Overview's rows, each cell centred on the row", awaiting: { @MainActor in
+        let loaded = model([(200, homePage)])
+        await loaded.load()
+        let view = OverviewView(model: loaded).environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/overview-rows-en.png"))
+    }),
     Test("with no taf, tafs cloud's recipes are read with each list read, and a read that fails keeps them, as the iPad's", awaiting: { @MainActor in
         let transport = CannedTransport([(200, #"{"tafs":[]}"#), (200, listedRecipes), (200, #"{"tafs":[]}"#), (500, "")])
         let none = OverviewModel(cloud: CloudClient(transport: transport, session: session))

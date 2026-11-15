@@ -78,7 +78,7 @@ size on the iPad; each group's heading is 17 semibold in the soft colour.
 | Group | Rows |
 |---|---|
 | Your account | Mode ("Signed in with KIFF"); **KIFF account**, the account's name (else its slug); and **Signed in as**, the email, left out when it is the account's own name. From `GET /v1/me`. |
-| View only | **Only when KIFF says this session is `view`** (`approval_mode`): what a view-only Mac does, and **Add this Mac**. A KIFF that doesn't say, and a session it calls `passkey` or `key`, show no such group. |
+| View only | **Only when KIFF says this session is `view`** (`approval_mode`). On a Mac with a Secure Enclave: what a view-only Mac does, and **Add this Mac**. On a Mac whose device key is a software key, adding it with the phone still leaves it view-only, so there's no Add: the shared line for such a computer, "This computer approves only through your phone or a passkey." (`settings.devices.pair_software_key`). A KIFF that doesn't say, and a session it calls `passkey` or `key`, show no such group. |
 | People & apps | Devices (opens the list), Connect apps. |
 | Plan | Always there. tafs cloud's `plan_line` at 16 semibold in `plan_tone`'s colour (red waiting, amber warning), then "Plan & usage"; just "Plan & usage" when the balance can't be read. It opens Plan & usage. |
 | Theme | Light, Dark, or System. Kept for the next launch and applied to the whole app. |

@@ -147,4 +147,19 @@ let overviewTests: [Test] = [
         // The contract leaves the recipes out: nothing listed, never an empty list drawn.
         try expectEqual(recipes.homeListsRecipes, false)
     },
+    Test("the list last read is kept for its account alone, as the iPad's remembered list, and forgotten at sign-out", awaiting: {
+        let name = "tafs.tests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: name) else { throw Failure(description: "no defaults") }
+        defer { defaults.removePersistentDomain(forName: name) }
+        let (client, transport) = cloud([(200, homePage)])
+        let read = try await client.homeRead()
+        try expectEqual(transport.sent.map(\.path), ["/v1/home"])
+        try expectEqual(read.page, try AccountClient.decoder.decode(Home.Page.self, from: Data(homePage.utf8)))
+        RememberedHome.remember(read.body, tenant: "t1", in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), read.page)
+        // Another account's list never shows.
+        try expectEqual(RememberedHome.shown(tenant: "t2", in: defaults), nil)
+        RememberedHome.forget(in: defaults)
+        try expectEqual(RememberedHome.shown(tenant: "t1", in: defaults), nil)
+    }),
 ]
