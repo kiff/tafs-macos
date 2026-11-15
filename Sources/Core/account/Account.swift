@@ -63,6 +63,11 @@ struct Me: Decodable, Equatable {
     /// `managesCards`: halting every taf is theirs. A KIFF that doesn't say leaves it to KIFF.
     var managesCards: Bool { capabilities.map { $0.contains("cards.manage") } ?? true }
 
+    /// Whether this person manages the account's billing (KIFF's `billing.manage`), as the iPad's
+    /// `managesBilling` (AppModel.swift:1089-1091): they answer members' requests; anyone else
+    /// asks an admin. A KIFF that doesn't say lists no capabilities, and may.
+    var managesBilling: Bool { capabilities.map { $0.contains("billing.manage") } ?? true }
+
     /// The session reads everything and approves nothing here: exactly when KIFF says `view`.
     var viewOnly: Bool { approvalMode == "view" }
 

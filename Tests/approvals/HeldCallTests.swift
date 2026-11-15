@@ -28,6 +28,31 @@ private func refusal(_ body: @autoclosure () async throws -> Void, is code: Stri
 }
 
 let approvalsTests: [Test] = [
+    Test("a held call says which tool even under a vendor's label, as the iPad's KIFFMapping.says") {
+        try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Write Stripe API data"), "Write Stripe API data · refund payment")
+        try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Refund a payment"), "Refund a payment")
+        try expectEqual(CallNames.says("create_refund", title: "Create refund"), "Create refund")
+        try expectEqual(CallNames.says("create_refund", title: "Refund a payment"), "Refund a payment")
+        try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: nil), "refund payment")
+        // The vendor's own word in both isn't the action.
+        try expectEqual(CallNames.says("stripe_create_refund", title: "Write Stripe API data"), "Write Stripe API data · stripe create refund")
+        // planque's four letters of the grant at the end are never shown under a title.
+        try expectEqual(CallNames.says("create_refund_repg", title: "Write Stripe API data"), "Write Stripe API data · create refund")
+    },
+    Test("a tool's name in words is past a server's prefix and the grant's own, as the iPad's toolWords") {
+        try expectEqual(CallNames.toolWords("bxkwf7vi_list_accounts"), "list accounts")
+        try expectEqual(CallNames.toolWords("bxkwf7vi_refund_payment"), "refund payment")
+        // A word is not a prefix.
+        try expectEqual(CallNames.toolWords("create_refund"), "create refund")
+        try expectEqual(CallNames.toolWords("stripe.create_refund"), "create refund")
+        try expectEqual(CallNames.toolWords("kiff__issue-credit"), "issue credit")
+    },
+    Test("a call without arguments is named with what it's on, a gateway call without it, as the iPad's held mapping", awaiting: {
+        struct Held: Decodable { let exceptions: [HeldCall] }
+        let json = #"{"exceptions":[{"id":"e1","subject":"a","action":"stripe.create_refund","title":"Refund a payment","entity_id":"ch_42","created_at":"2026-11-15T00:17:00Z"},{"id":"e2","subject":"a","action":"stripe.create_refund","title":"Refund a payment","entity_id":"call_9","arguments":{"amount":"40"},"created_at":"2026-11-15T00:17:00Z"},{"id":"e3","subject":"a","action":"stripe.create_refund","entity_id":"ch_7","arguments":null,"created_at":"2026-11-15T00:17:00Z"},{"id":"e4","subject":"a","action":"pay.send","created_at":"2026-11-15T00:17:00Z"}]}"#
+        let calls = try AccountClient.decoder.decode(Held.self, from: Data(json.utf8)).exceptions
+        try expectEqual(calls.map(\.summary), ["Refund a payment ch_42", "Refund a payment", "create refund ch_7", "send"])
+    }),
     Test("a held call's amount is the first parameter KIFF names a unit for, and none without one") {
         func call(_ fields: String) throws -> HeldCall {
             try AccountClient.decoder.decode(HeldCall.self, from: Data(#"{"id":"e","subject":"a","action":"refund","created_at":"2026-11-14T18:00:00Z"\#(fields)}"#.utf8))

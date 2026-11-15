@@ -81,7 +81,7 @@ struct SignedInView: View {
         // The list last read shows in the first frame, as the iPad's remembered list.
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
-        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
+        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _runs = StateObject(wrappedValue: RunNowModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
@@ -104,7 +104,7 @@ struct SignedInView: View {
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
-            case .usage: return AnyView(UsageView(model: usage))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
@@ -276,6 +276,7 @@ struct SignedInView: View {
             overview.endSession()
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
+            usage.cancelAnswers()
             Task {
                 // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
                 // either way.

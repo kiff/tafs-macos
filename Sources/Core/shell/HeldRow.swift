@@ -16,7 +16,8 @@ struct HeldRow: Equatable, Identifiable {
 
     init(_ call: HeldCall, tafs: [Home.Taf]) {
         id = call.id
-        let asks = call.title ?? call.action
+        // The call as the iPad names it (`proposed.summary`, HomeSplitView.swift:510).
+        let asks = call.summary
         let name = tafs.first(where: { $0.kiffAgent == call.subject })?.name
         self.asks = asks
         taf = name

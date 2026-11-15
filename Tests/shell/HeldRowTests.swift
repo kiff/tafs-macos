@@ -21,7 +21,9 @@ let shellHeldTests: [Test] = [
         let rows = held.map { HeldRow($0, tafs: tafs) }
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
         let time: (Date) -> String = { _ in "00:27" }
-        try expectEqual(rows.map(\.title), ["Deploys: Run migration 0042", "pay.send", "Deploys: deploy.run", "Deploys: deploy.run"])
+        // Each call as the iPad names it (`summary`): the title, with the action in words when
+        // the title doesn't say it; the action in words without a title.
+        try expectEqual(rows.map(\.title), ["Deploys: Run migration 0042 · migrate", "send", "Deploys: run", "Deploys: run"])
         try expectEqual(rows[0].line(words, time: time), "Schema migrations: always asks you · answer by 00:27")
         // A taf that isn't listed: the call alone, never a name made up.
         try expectEqual(rows[1].line(words, time: time), nil)
@@ -29,6 +31,6 @@ let shellHeldTests: [Test] = [
         try expectEqual(rows[3].line(words, time: time), "answer by 00:27")
         try expectEqual(rows.map(\.id), ["exc_1", "exc_2", "exc_3", "exc_4"])
         try expectEqual(rows.map(\.taf), ["Deploys", nil, "Deploys", "Deploys"])
-        try expectEqual(rows[0].asks, "Run migration 0042")
+        try expectEqual(rows[0].asks, "Run migration 0042 · migrate")
     },
 ]

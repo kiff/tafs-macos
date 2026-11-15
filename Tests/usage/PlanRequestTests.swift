@@ -1,0 +1,76 @@
+import Foundation
+
+private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+
+/// KIFF's usage as it sends it: a plan, its packs (the First month one first), and requests.
+let kiffUsageAnswer = #"""
+{"plan":"solo",
+ "store":{"solo_product":"solo.monthly","packs":[
+   {"id":"first","name":"First month","line":"First month · 2,000 credits","apple_product":"pack.first","once":true},
+   {"id":"rayo","name":"Rayo","line":"Rayo · 5,000 credits","credits":5000,"apple_product":"pack.rayo"},
+   {"id":"broken","line":"No name"}]},
+ "requests":[
+   {"id":"req_1","asked_by":"u2","kind":"pack","pack":"rayo","reason":"Refunds run out on the 24th.","status":"open","created_at":"2026-11-15T10:00:00Z","expires_at":"2026-11-30T23:59:59Z"},
+   {"id":"req_2","asked_by":"u3","status":"declined","note":"Not this month.","created_at":"2026-11-14T10:00:00Z","expires_at":"2026-11-30T23:59:59Z"},
+   {"id":"req_3"}]}
+"""#
+
+let packRequestAnswer = #"{"id":"req_9","asked_by":"u1","kind":"raise","reason":"","status":"open","created_at":"2026-11-15T10:00:00Z","expires_at":"2026-11-30T23:59:59Z"}"#
+
+private func account(_ answers: [(Int, String)], signed: Bool = true) -> (AccountClient, CannedTransport) {
+    let transport = CannedTransport(answers)
+    return (AccountClient(transport: transport, session: session, sign: signed ? { _ in "t=2026-11-15T10:00:00.000Z,v1=SIG" } : nil), transport)
+}
+
+let usageRequestTests: [Test] = [
+    Test("KIFF's usage reads as the iPad's: the plan, the packs that read, and the requests that read", awaiting: {
+        let (client, transport) = account([(200, kiffUsageAnswer)])
+        let usage = try await client.usage()
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/usage"])
+        try expectEqual(usage.plan, "solo")
+        // A pack without its name or product is left out, never the store.
+        try expectEqual(usage.store?.packs.map(\.id), ["first", "rayo"])
+        try expectEqual(usage.requests?.map(\.id), ["req_1", "req_2"])
+        // A request from a KIFF that doesn't say its kind is for a pack.
+        try expectEqual(usage.requests?[1].kind, "pack")
+        try expectEqual(usage.requests?[1].reason, "")
+        try expectEqual(usage.requests?[1].note, "Not this month.")
+    }),
+    Test("the packs listed put the First month pack first, and only while tafs cloud says it can be bought", awaiting: {
+        let usage = try await account([(200, kiffUsageAnswer)]).0.usage()
+        try expectEqual(usage.store?.offered(firstMonth: true).map(\.id), ["first", "rayo"])
+        try expectEqual(usage.store?.offered(firstMonth: false).map(\.id), ["rayo"])
+        let ready = try JSONDecoder().decode(Usage.Balance.self, from: Data(#"{"balance":{"state":"ok","words":"Fine","buy":{"packs":true,"first_month":{"ready":true}}}}"#.utf8))
+        try expectEqual(ready.firstMonthReady, true)
+        try expectEqual(try JSONDecoder().decode(Usage.Balance.self, from: Data(balanceAnswer.utf8)).firstMonthReady, false)
+    }),
+    Test("asking an admin sends a raise with no pack, or a pack, with the reason, as the iPad's askAdmin", awaiting: {
+        let (client, transport) = account([(200, packRequestAnswer), (200, packRequestAnswer)])
+        let asked = try await client.askAdmin(raise: true, pack: "rayo", reason: "Refunds")
+        try expectEqual(asked.kind, "raise")
+        _ = try await client.askAdmin(raise: false, pack: "rayo", reason: "")
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/me/pack-requests", "POST /v1/me/pack-requests"])
+        try expectEqual(transport.sent.map { String(decoding: $0.body, as: UTF8.self) }, [#"{"kind":"raise","reason":"Refunds"}"#, #"{"pack":"rayo","reason":""}"#])
+        // Neither is signed: asking grants nothing.
+        try expectEqual(transport.sent.map { $0.headers["KIFF-Device-Signature"] }, [nil, nil])
+    }),
+    Test("withdrawing and declining go to the request's own path, escaped; only a decline is signed", awaiting: {
+        let (client, transport) = account([(200, packRequestAnswer), (200, packRequestAnswer)])
+        _ = try await client.withdrawRequest("req/1")
+        _ = try await client.declineRequest("req 2", note: "Not now")
+        try expectEqual(transport.sent.map(\.path), ["/v1/me/pack-requests/req%2F1/withdraw", "/v1/me/pack-requests/req%202/decline"])
+        try expectEqual(transport.sent.map { String(decoding: $0.body, as: UTF8.self) }, ["{}", #"{"note":"Not now"}"#])
+        try expectEqual(transport.sent.map { $0.headers["KIFF-Device-Signature"] }, [nil, "t=2026-11-15T10:00:00.000Z,v1=SIG"])
+    }),
+    Test("a decline without a device key isn't sent, and KIFF's refusal says its code", awaiting: {
+        let (keyless, quiet) = account([(200, packRequestAnswer)], signed: false)
+        do { _ = try await keyless.declineRequest("req_1", note: ""); throw Failure(description: "sent") } catch let error as KIFFError {
+            try expectEqual(error, .refused(status: 0, code: "no_device_key"))
+        }
+        try expectEqual(quiet.sent.count, 0)
+        let (client, _) = account([(409, #"{"error":"request_closed"}"#)])
+        do { _ = try await client.askAdmin(raise: true, pack: nil, reason: ""); throw Failure(description: "taken") } catch let error as KIFFError {
+            try expectEqual(error, .refused(status: 409, code: "request_closed"))
+        }
+    }),
+]
