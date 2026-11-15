@@ -10,7 +10,7 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
     return (CloudClient(transport: transport, session: session), transport)
 }
 
-let usageTests: [Test] = [
+let usageReadTests: [Test] = [
     Test("the balance is tafs cloud's words and meter, as sent", awaiting: {
         let (client, transport) = cloud([(200, balanceAnswer)])
         let balance = try await client.balance()

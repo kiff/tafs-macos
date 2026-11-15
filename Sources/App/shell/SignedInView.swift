@@ -34,9 +34,21 @@ struct SignedInView: View {
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
+    /// planque, for the Setup read's proof: kept for this session, with this device's id once
+    /// read, as the iPad's `planque` (its `deviceID` and `deviceLoader`).
+    @State private var planque: PlanqueClient
+
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
          addThisMac: @escaping () -> Void = {}) {
         self.account = account
+        let planque = PlanqueClient()
+        // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
+        // KIFF's `this_device`.
+        planque.deviceLoader = { [account] in
+            guard account.signMessage != nil else { return nil }
+            return try? await account.thisDeviceID()
+        }
+        _planque = State(initialValue: planque)
         self.cloud = cloud
         self.streamer = streamer
         self.signedOut = signedOut
@@ -51,7 +63,7 @@ struct SignedInView: View {
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
-        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud))
+        _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
         // Alerts are kept per account, as the iPad keys them by tenant.
@@ -71,7 +83,7 @@ struct SignedInView: View {
                                                         mayUseCoach: mayUseCoach, ownWords: { selection = .coach }, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
-            case .usage: return AnyView(UsageView(model: usage))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
@@ -119,11 +131,20 @@ struct SignedInView: View {
         return calls.map { HeldRow($0, tafs: overview.tafs) }
     }
 
+    /// This device's planque proof for a taf's Setup, as the iPad's `loadTafSetup`: the account's
+    /// tenant, signed with the device key and no prompt (`signConfirmed`: it reads, it grants
+    /// nothing); nil when it can't be made.
+    private func setupProof() async -> String? {
+        guard let sign = account.signMessage else { return nil }
+        planque.tenant = account.session.tenant
+        return try? await planque.grantsReadProof(signedBy: sign)
+    }
+
     /// Opens a taf's page, with its own chat. An agent tafs doesn't run has no page.
     private func open(_ taf: Home.Taf) {
         guard let id = taf.tafID else { return }
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id)
+        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() })
         openTaf = taf.id
     }
 
@@ -162,6 +183,7 @@ struct SignedInView: View {
                     open: { selection = $0 }, addThisMac: addThisMac, signOut: {
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
+            usage.cancelAnswers()
             Task {
                 // Ended at KIFF first; this Mac forgets its session either way.
                 try? await account.signOut()

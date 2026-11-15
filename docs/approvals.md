@@ -13,6 +13,13 @@ drawn as sent. The app never words a hold itself.
   and never decide anything.
 - Words that aren't text are left out. A hold without its id or its time makes the whole
   answer unreadable: a hold is never dropped silently.
+- **A call's name** (`HeldCall.summary`), on its card and in the sidebar, is the iPad's
+  `proposed.summary` (`KIFFMapping.held`, `KIFFMapping.swift:283-285`): KIFF's title, with the
+  action in words when the title doesn't say it (`CallNames.says`: "Write Stripe API data ·
+  refund payment", while "Refund a payment" stays alone); the action in words without a title
+  ("refund payment", past a server's prefix and the grant's own, `CallNames.toolWords`); then
+  what the call is on (`entity_id`) for a call KIFF keeps no arguments for. A gateway call is
+  filed under its tool call's id, which says nothing, so it has none.
 - **The amount** is KIFF's own number: the first of the call's `parameters` that KIFF names a
   unit for in `parameter_units`, written in the app's language ("€640"). A number KIFF names
   no unit for is never shown as money, and a call without one shows none.

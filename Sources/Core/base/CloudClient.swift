@@ -15,11 +15,13 @@ struct CloudClient {
     /// expected shape is unreadable, never an empty page.
     /// With `saying`, a refusal throws `CloudRefusal` instead, with tafs cloud's own words for
     /// the person, for a screen that says them (the iPad's `CloudError`, kiff/tafs#397).
-    func get<Answer: Decodable>(_ path: String, saying: Bool = false) async throws -> Answer {
-        let request = HTTPRequest(method: "GET", path: path, headers: [
+    func get<Answer: Decodable>(_ path: String, saying: Bool = false, headers extra: [String: String] = [:]) async throws -> Answer {
+        var headers = [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
-        ])
+        ]
+        headers.merge(extra) { _, new in new }
+        let request = HTTPRequest(method: "GET", path: path, headers: headers)
         let (status, body) = try await transport.send(request)
         guard (200..<300).contains(status) else {
             if saying { throw CloudRefusal(status: status, body: body) }
