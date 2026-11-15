@@ -32,6 +32,27 @@ private func filled(_ bitmap: NSBitmapImageRep, from top: Int, to bottom: Int, d
 }
 
 let shellMacTests: [Test] = [
+    Test("every date and time is in the app's language, never this Mac's: English words, English dates, on a Spanish Mac too") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        let english = Words.load(folder: folder, preferred: ["en"])
+        let spanish = Words.load(folder: folder, preferred: ["es"])
+        let utc = TimeZone(identifier: "UTC")!
+        let at = ISO8601DateFormatter().date(from: "2026-11-15T14:05:00Z")!
+        // A day and a time as the app shows them, in the words' language whatever this Mac's.
+        try expectEqual(AppDates.formatter(english, date: .medium, zone: utc).string(from: at), "Nov 15, 2026")
+        let reference = DateFormatter()
+        reference.locale = Locale(identifier: "es")
+        reference.dateStyle = .medium
+        reference.timeZone = utc
+        try expectEqual(AppDates.formatter(spanish, date: .medium, zone: utc).string(from: at), reference.string(from: at))
+        try expect(reference.string(from: at) != "Nov 15, 2026", "a Spanish date")
+        // The dial's times, in the account's zone and the app's language.
+        let london = AccountTime("Europe/London")
+        try expectEqual(london.zonedShown(at, date: .abbreviated, time: .omitted, words: english, here: utc), "Nov 15, 2026")
+        // A fixed clock stays 24-hour whatever the language.
+        try expectEqual(AppDates.fixed("HH:mm", zone: utc).string(from: at), "14:05")
+        try expectEqual(london.shortTime(at), "14:05")
+    },
     Test("the shell draws the sidebar on the raised ground and the rest on the background") {
         for dark in [false, true] {
             let size = ShellView.minimumSize

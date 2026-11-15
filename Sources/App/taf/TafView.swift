@@ -38,7 +38,7 @@ struct CardFace: View {
                         Text(words("card.ended")).font(.system(size: 12, weight: .semibold))
                     } else if let expires = card.expires {
                         Text(words("card.until")).font(.system(size: 10)).opacity(0.85)
-                        Text(verbatim: Self.day.string(from: expires)).font(.system(size: 12, weight: .semibold))
+                        Text(verbatim: day.string(from: expires)).font(.system(size: 12, weight: .semibold))
                     } else {
                         Text(words("card.ends")).font(.system(size: 10)).opacity(0.85)
                         Text(words("card.no_end_date")).font(.system(size: 12, weight: .semibold))
@@ -69,11 +69,8 @@ struct CardFace: View {
     /// A payment card's proportions, 85.6 by 54 mm.
     static let ratio: CGFloat = 85.6 / 54
 
-    private static let day: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter
-    }()
+    /// A day as the app shows it, in its language.
+    private var day: DateFormatter { AppDates.formatter(words, date: .medium) }
 }
 
 /// A taf's page, to the iPad's: its mark and name, its tabs, and the tab's content.
@@ -351,18 +348,9 @@ struct VersionsView: View {
     @ObservedObject var model: TafPagesModel
     let close: () -> Void
 
-    private static let when: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-    private static let day: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
+    /// A version's time and a trial's day, as the app shows them, in its language.
+    private var when: DateFormatter { AppDates.formatter(words, date: .medium, time: .short) }
+    private var day: DateFormatter { AppDates.formatter(words, date: .medium) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -425,9 +413,9 @@ struct VersionsView: View {
             if let note = v.note, !note.isEmpty {
                 Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
             }
-            Text(verbatim: TafVersions.byline(v, words, when: { Self.when.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.dim)
+            Text(verbatim: TafVersions.byline(v, words, when: { when.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.dim)
             ForEach(Array(v.trials.enumerated()), id: \.offset) { _, trial in
-                Text(verbatim: TafVersions.tried(trial, words, day: { Self.day.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.soft)
+                Text(verbatim: TafVersions.tried(trial, words, day: { day.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.soft)
             }
         }
         .padding(14)

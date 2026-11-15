@@ -59,10 +59,7 @@ struct RunsPanel: View {
 
     /// The time of day, as 14:05, as the iPad's `shortTime`.
     static func shortTime(_ date: Date, zone: TimeZone = .current) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        formatter.timeZone = zone
-        return formatter.string(from: date)
+        AppDates.fixed("HH:mm", zone: zone).string(from: date)
     }
 }
 

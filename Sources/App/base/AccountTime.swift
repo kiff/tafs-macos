@@ -19,10 +19,7 @@ struct AccountTime {
 
     /// The time of day, as 14:05, in the account's zone (the iPad's `shortTime`).
     func shortTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.timeZone = zone
-        return f.string(from: date)
+        AppDates.fixed("HH:mm", zone: zone).string(from: date)
     }
 
     /// `shortTime`, with the zone's short name when it isn't this Mac's (`zonedShortTime`).
@@ -61,8 +58,8 @@ struct AccountTime {
     /// A date in a style, in the account's zone, with its short name when it isn't this
     /// Mac's (`zonedShown(date:time:)`).
     func zonedShown(_ date: Date, date dateStyle: Date.FormatStyle.DateStyle, time timeStyle: Date.FormatStyle.TimeStyle,
-                    here: TimeZone = .current) -> String {
-        var style = Date.FormatStyle(date: dateStyle, time: timeStyle)
+                    words: Words, here: TimeZone = .current) -> String {
+        var style = Date.FormatStyle(date: dateStyle, time: timeStyle, locale: Locale(identifier: words.language))
         style.timeZone = zone
         return date.formatted(style) + label(at: date, here: here)
     }
