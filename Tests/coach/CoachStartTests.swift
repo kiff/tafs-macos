@@ -117,6 +117,14 @@ let coachStartTests: [Test] = [
         try expectEqual(outcome, .stopped(try words()("coach.connect_admin_only")))
         try expectEqual(ready, false)
         try expectEqual([start.cloud.sent.count, start.approvalKIFF.sent.count], [0, 0])
+        // Enrolment that isn't set up (an answer that didn't keep it, or not reached) stops it too.
+        let notSetUp = Start(cloud: [(200, none)])
+        notSetUp.enrolStop = .notSetUp(why: .unreadable)
+        let (stopped, stillNot) = try await notSetUp.run()
+        let w = try words()
+        try expectEqual(stopped, .stopped(w("coach.connecting_not_set_up", ["why": w("error.ours")])))
+        try expectEqual(stillNot, false)
+        try expectEqual([notSetUp.cloud.sent.count, notSetUp.approvalKIFF.sent.count], [0, 0])
     }),
     Test("tafs cloud's first start, signed once with Coach's tools, isn't on this Mac yet: nothing is sent", awaiting: { @MainActor in
         let first = #"{"setup":null,"start":{"state":"to_give","scheme":"kiff.request.v1","requests":[{"id":"draft","method":"POST","path":"/v1/me/agent-drafts","gateway":false,"body":{"agent_id":"setup"},"cards":[{"title":"Setup's Card","lines":["Reads your apps"]}]}]}}"#
