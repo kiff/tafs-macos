@@ -14,15 +14,20 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         Bundle.main.bundleIdentifier == nil ? nil : UNUserNotificationCenter.current()
     }
 
+    /// Where the person's Alerts choices are kept (Account › Alerts).
+    var defaults = UserDefaults.standard
+
     func announce(_ announcements: [Announcement]) {
-        guard !announcements.isEmpty, let center else { return }
+        // Alerts off on this Mac: nothing is announced.
+        let prefs = AlertPrefs(defaults: defaults)
+        guard prefs.on, !announcements.isEmpty, let center else { return }
         center.delegate = self
         let post = {
             for announcement in announcements {
                 let content = UNMutableNotificationContent()
                 content.title = announcement.title
                 content.body = announcement.body
-                content.sound = .default
+                content.sound = prefs.plays ? .default : nil
                 center.add(UNNotificationRequest(identifier: announcement.id, content: content, trigger: nil))
             }
         }
@@ -43,6 +48,6 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Shown even with the window in front: the call may be on another screen.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
-        done([.banner, .sound])
+        done(AlertPrefs(defaults: defaults).plays ? [.banner, .sound] : [.banner])
     }
 }

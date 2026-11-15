@@ -126,7 +126,22 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
   the person's act behind their device's key on the iPad, so on the Mac they come with
   approvals (#16).
 
-Not on the Mac yet: Coach's suggestions, Alerts, AI use, Time zone, and Export my chats.
+## Alerts (`AlertPrefs`, `AlertsView`)
+
+Ported from the iPad's `NotificationSettingsView`: Account › Alerts, a row on its own.
+
+- What an alert looks like: a loud one and a silent one, in the shared words, with the
+  app's mark (the iPad's `LockScreenAlert`).
+- **Alerts on this Mac**, and **Sound** ("For a hold or a halt only"), both on until turned
+  off and kept for the next launch (`AlertPrefs`). Sound is off and greyed while alerts are
+  off, its choice kept for when they're back. `Notifier` honours both: no alert when off, no
+  sound when Sound is off.
+- On the Mac an alert comes while tafs is open: a push with the app closed needs a signed
+  build, so this screen never says alerts come with tafs closed. What alerts the account's
+  phones is kept per phone by tafs cloud (`GET /v1/push`, by the phone's token), so it isn't
+  listed here. Haptics are the phone's.
+
+Not on the Mac yet: Coach's suggestions, AI use, Time zone, and Export my chats.
 Their rows come with their screens: a row that opens nothing isn't drawn.
 
 ## Export my chats

@@ -91,10 +91,17 @@ struct AccountView: View {
     let signOut: () -> Void
     @State private var showingDevices = false
     @State private var showingPeople = false
+    @State private var showingAlerts = false
     @State private var confirmingSignOut = false
 
     var body: some View {
-        if showingPeople, let people {
+        if showingAlerts {
+            VStack(alignment: .leading, spacing: 0) {
+                back { showingAlerts = false }
+                AlertsView()
+            }
+            .background(Theme.background)
+        } else if showingPeople, let people {
             VStack(alignment: .leading, spacing: 0) {
                 back { showingPeople = false }
                 PeopleView(model: people, me: model.me, tafName: tafName)
@@ -172,6 +179,10 @@ struct AccountView: View {
                         .padding(.vertical, 12).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                }
+                // Alerts, a row on its own, as the iPad's list has it.
+                group(nil) {
+                    link(words("settings.alerts")) { showingAlerts = true }
                 }
                 group(words("settings.theme_title")) {
                     HStack(spacing: 0) {
