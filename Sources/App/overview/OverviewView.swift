@@ -13,6 +13,9 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var noTafsLine: String?
     /// The ready-made jobs tafs cloud lists while the account has no live taf.
     @Published private(set) var recipes: Recipes?
+    /// Every ready-made job: Start a new taf's gallery and the strip under the tafs list. Nil
+    /// before it's read, or from a tafs cloud without it, where Start a new taf opens Coach.
+    @Published private(set) var gallery: Gallery?
     /// Each taf's Last result, by its id at tafs cloud, once read.
     @Published private(set) var lastResults: [String: String] = [:]
     private let cloud: CloudClient
@@ -37,6 +40,29 @@ final class OverviewModel: ObservableObject {
         // with each list read that has no taf, and a read that fails keeps what was read.
         if hasNoTafs, let read = try? await cloud.recipes() { recipes = read }
         noTafsLine = recipes?.home?.shown == true ? recipes?.homeWords : nil
+        // The gallery, with each list read that worked, as the iPad's `refresh`: reached only
+        // after `try await home` (AppModel.swift:1823-1824, 1867), so a failed read asks nothing
+        // and keeps the gallery read before.
+        guard case .loaded = state else { return }
+        await loadGallery()
+    }
+
+    /// Reads the gallery of ready-made jobs, as the iPad's `loadGallery` (AppModel.swift:7217-7228):
+    /// a read that fails keeps what was read; a tafs cloud without the route (404) leaves none.
+    func loadGallery() async {
+        do {
+            gallery = try await cloud.recipesGallery()
+        } catch KIFFError.refused(404, _) {
+            gallery = nil
+        } catch {}
+    }
+
+    /// The recipes a job's sheet draws from, as the iPad's `sheetRecipes(for:)`
+    /// (HomeSplitView.swift:434-438): Home's list when the job is on it, else the gallery's, with
+    /// `/v1/recipes`' sheet words where the gallery sends none.
+    func sheetRecipes(for recipe: Recipes.Recipe) -> Recipes {
+        if let recipes, recipes.recipes.contains(where: { $0.id == recipe.id }) { return recipes }
+        return gallery?.asRecipes(labels: recipes?.labels) ?? recipes ?? Recipes(categories: [], recipes: [], labels: nil)
     }
 
     /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
@@ -117,7 +143,7 @@ struct OverviewView: View {
     /// "Say it in your own words" still leading to Coach.
     @ViewBuilder private var noTaf: some View {
         if let recipes = model.recipes, recipes.homeListsRecipes {
-            HomeRecipesView(recipes: recipes, ownWords: mayUseCoach ? ownWords : nil, canHand: mayUseCoach, hand: hand)
+            HomeRecipesView(recipes: recipes, ownWords: mayUseCoach ? ownWords : nil, canHand: mayUseCoach, hand: hand, sampleLabel: model.gallery?.sampleLabel)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 if let line = model.recipes?.homeWords {

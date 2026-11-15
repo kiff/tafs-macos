@@ -16,9 +16,56 @@ private let listedRecipes = #"""
  "labels":{"allows":"Does on its own","holds":"Asks you first","never":"Never does","hand":"Hand it to Coach"}}
 """#
 
+private let galleryAnswer = #"""
+{"categories":[{"id":"money","title":"Money","color":{"light":"#1F7A4D","dark":"#4CC38A"}},{"id":"support","title":"Support"}],
+ "recipes":[{"id":"r1","title":"Refunds","category":"money","headline":"Refunds wait days for someone to click","line":"Refunds orders within its limit","say":"Refund orders under €150","apps":[{"name":"Stripe"}],"sample":"Refunded 3 orders, €212 in all."},
+            {"id":"r9","title":"Invoices","category":"money","headline":"Invoices chased by hand","line":"Sends the reminders","say":"Chase unpaid invoices"},
+            {"id":"r2","title":"Replies","category":"support","headline":"Tickets wait overnight","line":"Answers the easy ones","say":"Answer tickets"}],
+ "strip":{"shown":true,"title":"Jobs to try","ids":["r9"]},
+ "words":{"title":"Start a new taf","all":"All jobs","own_words":"Say it in your own words","own_words_line":"Coach builds the taf with you.","explore":"Explore jobs","see_all":"See all jobs","try":"Try it with Coach","sample":"What it reported after its test run"}}
+"""#
+
 let overviewMacTests: [Test] = [
+    Test("the gallery is read with each list read: a failed read keeps it, and a tafs cloud without it leaves none", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, homePage), (200, galleryAnswer), (200, homePage), (500, ""), (200, homePage), (404, #"{"error":"not_found"}"#)])
+        let overview = OverviewModel(cloud: CloudClient(transport: transport, session: session))
+        await overview.load()
+        try expectEqual(overview.gallery?.recipes.map(\.id), ["r1", "r9", "r2"])
+        await overview.load()
+        try expectEqual(overview.gallery?.recipes.count, 3)
+        await overview.load()
+        try expectEqual(overview.gallery, nil)
+        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery", "/v1/home", "/v1/recipes/gallery", "/v1/home", "/v1/recipes/gallery"])
+    }),
+    Test("a list read that fails asks no gallery and keeps the one read, as the iPad's refresh", awaiting: { @MainActor in
+        let transport = CannedTransport([(200, homePage), (200, galleryAnswer), (503, "")])
+        let overview = OverviewModel(cloud: CloudClient(transport: transport, session: session))
+        await overview.load()
+        await overview.load()
+        try expectEqual(overview.state, .unread(why: "503"))
+        try expectEqual(overview.gallery?.recipes.map(\.id), ["r1", "r9", "r2"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery", "/v1/home"])
+    }),
+    Test("a job's sheet draws from Home's list when the job is on it, else the gallery's, with Home's sheet words", awaiting: { @MainActor in
+        let none = model([(200, #"{"tafs":[]}"#), (200, listedRecipes), (200, galleryAnswer)])
+        await none.load()
+        guard let gallery = none.gallery else { throw Failure(description: "no gallery") }
+        let listed = gallery.recipes[0], galleryOnly = gallery.recipes[1]
+        try expectEqual(none.sheetRecipes(for: listed), none.recipes)
+        let drawn = none.sheetRecipes(for: galleryOnly)
+        try expectEqual(drawn.recipes.map(\.id), ["r1", "r9", "r2"])
+        try expectEqual(drawn.labels?.hand, "Hand it to Coach")
+    }),
+    Test("the screenshot: the gallery, from Start a new taf", awaiting: { @MainActor in
+        let gallery = try JSONDecoder().decode(Gallery.self, from: Data(galleryAnswer.utf8))
+        let view = RecipeGallerySheet(gallery: gallery, mode: .create, labels: nil, canHand: true, choose: { _ in }, close: {})
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 680, height: 640)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/gallery-en.png"))
+    }),
     Test("with no taf, tafs cloud's recipes are read with each list read, and a read that fails keeps them, as the iPad's", awaiting: { @MainActor in
-        let transport = CannedTransport([(200, #"{"tafs":[]}"#), (200, listedRecipes), (200, #"{"tafs":[]}"#), (500, "")])
+        let transport = CannedTransport([(200, #"{"tafs":[]}"#), (200, listedRecipes), (404, ""), (200, #"{"tafs":[]}"#), (500, ""), (404, "")])
         let none = OverviewModel(cloud: CloudClient(transport: transport, session: session))
         await none.load()
         try expectEqual(none.recipes?.homeListsRecipes, true)
@@ -28,13 +75,13 @@ let overviewMacTests: [Test] = [
         await none.load()
         try expectEqual(none.recipes?.homeListsRecipes, true)
         try expectEqual(none.noTafsLine, "Pick a job for your first taf.")
-        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes", "/v1/home", "/v1/recipes"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/home", "/v1/recipes", "/v1/recipes/gallery", "/v1/home", "/v1/recipes", "/v1/recipes/gallery"])
         // With a taf, they aren't read at all.
         let busy = CannedTransport([(200, homePage)])
         let withTafs = OverviewModel(cloud: CloudClient(transport: busy, session: session))
         await withTafs.load()
         try expectEqual(withTafs.recipes, nil)
-        try expectEqual(busy.sent.map(\.path), ["/v1/home"])
+        try expectEqual(busy.sent.map(\.path), ["/v1/home", "/v1/recipes/gallery"])
     }),
     Test("the screenshots: the Overview with no taf, listing tafs cloud's recipes", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

@@ -25,6 +25,11 @@ struct SignedInView: View {
     @State private var tafPages: TafPagesModel?
     /// What this person may do with each taf, as KIFF says, by KIFF agent.
     @State private var access: [String: Access] = [:]
+    /// A job's sheet, from the strip; the gallery, and what was chosen in it, acted on once it
+    /// has closed (HomeSplitView.swift:86-90).
+    @State private var openRecipe: Recipes.Recipe?
+    @State private var showingGallery: GalleryMode?
+    @State private var galleryChoice: GalleryChoice?
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -78,7 +83,8 @@ struct SignedInView: View {
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
         ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
-                  accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account,
+                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: startNewTaf) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
                                                         answered: { await needsYou.load(); await readTafs() }))
@@ -92,6 +98,21 @@ struct SignedInView: View {
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
                                                   listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))
             case .account: return AnyView(accountScreen)
+            }
+        }
+        .sheet(item: $openRecipe) { recipe in
+            RecipeSheet(recipe: recipe, recipes: overview.sheetRecipes(for: recipe), canHand: mayUseCoach,
+                        sampleLabel: overview.gallery?.sampleLabel, close: { openRecipe = nil }) {
+                openRecipe = nil
+                handToCoach(recipe)
+            }
+            .environment(\.words, words)
+        }
+        .sheet(item: $showingGallery, onDismiss: actOnGalleryChoice) { mode in
+            if let gallery = overview.gallery {
+                RecipeGallerySheet(gallery: gallery, mode: mode, labels: overview.recipes?.labels, canHand: mayUseCoach,
+                                   choose: { galleryChoice = $0; showingGallery = nil }, close: { showingGallery = nil })
+                    .environment(\.words, words)
             }
         }
         .onAppear {
@@ -155,6 +176,23 @@ struct SignedInView: View {
     /// else an account admin.
     private var mayUseCoach: Bool {
         Access.mayUseCoach(setup: access["setup"], capabilities: accountModel.me?.capabilities)
+    }
+
+    /// Start a new taf, as the iPad's + New (HomeSplitView.swift:426-431): every ready-made job
+    /// where tafs cloud sends the gallery; without it, Coach as before.
+    private func startNewTaf() {
+        if overview.gallery != nil { showingGallery = .create } else { selection = .coach }
+    }
+
+    /// What was chosen in the gallery, once it has closed, as the iPad's `actOnGalleryChoice`
+    /// (HomeSplitView.swift:440-448): Coach opens over the Overview.
+    private func actOnGalleryChoice() {
+        guard let choice = galleryChoice else { return }
+        galleryChoice = nil
+        switch choice {
+        case .recipe(let recipe): handToCoach(recipe)
+        case .ownWords: selection = .coach
+        }
     }
 
     /// A recipe handed to Coach from the Overview, as the iPad's `handRecipeToCoach`
