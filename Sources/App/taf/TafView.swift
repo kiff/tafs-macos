@@ -123,7 +123,13 @@ struct TafView: View {
             case .activity:
                 if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
             case .setup:
-                if let pages { TafSetupTab(model: pages) }
+                if let pages {
+                    // An app's week opens the taf's Activity of its calls, as on the iPad.
+                    TafSetupTab(model: pages) { query in
+                        pages.show(activityQuery: query)
+                        tab = .activity
+                    }
+                }
             }
         }
         .padding(.horizontal, Look.inset - 8)

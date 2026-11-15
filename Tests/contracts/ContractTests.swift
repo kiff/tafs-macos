@@ -165,6 +165,11 @@ let contractsTests: [Test] = [
         try expect(app.actionWords?.isEmpty == false, "its actions in words")
         try expect(!app.actions.isEmpty && !app.actions[0].title.isEmpty, "each action's title")
         try expect(app.statsWords?.isEmpty == false, "its week in words")
+        try expectEqual(app.actionCount, 1)
+        try expectEqual(app.running, false)
+        // Its week opens the taf's Activity with tafs cloud's own query, kept as a query.
+        try expect(app.activityQuery.flatMap(CloudClient.activityQuery) != nil, "its Activity query")
+        try expectEqual(TafSetup.nodes(connected.connections).map(\.app.id), [app.id])
         try expectEqual(connected.connectAgain, nil)
         let expired = try AccountClient.decoder.decode(TafSetup.self, from: answer("taf-setup-reconnect.json"))
         try expectEqual(expired.connections.map(\.reconnect), [true])

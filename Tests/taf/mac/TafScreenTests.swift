@@ -62,6 +62,19 @@ let tafMacTests: [Test] = [
         try expectEqual(setup.connections.map(\.reconnect), [true])
         try expect(setup.connectAgain != nil, "Connect again's words")
     }),
+    Test("an app's week opens the Activity of its calls with tafs cloud's query; a filter chosen after leaves it", awaiting: { @MainActor in
+        let (model, transport) = try await pages(setup: "taf-setup-connected.json")
+        guard case .loaded(let setup) = model.setup, let query = TafSetup.nodes(setup.connections).first?.app.activityQuery else { throw Failure(description: "no app's query") }
+        transport.answers.append((200, try contract("taf-activity.json")))
+        model.show(activityQuery: query)
+        await model.loadActivity()
+        try expectEqual(model.query, query)
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf%2D1/activity?" + query)
+        transport.answers.append((200, try contract("taf-activity.json")))
+        await model.loadActivity(filter: "held")
+        try expectEqual(model.query, nil)
+        try expectEqual(transport.sent.last?.path, "/v1/tafs/taf%2D1/activity?filter=held")
+    }),
     Test("every tab's name is a shared line, in the iPad's order") {
         try expectEqual(TafView.Tab.allCases, [.chat, .activity, .card, .setup])
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])

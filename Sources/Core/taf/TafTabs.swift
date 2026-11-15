@@ -132,12 +132,15 @@ struct TafSetup: Decodable, Equatable {
         struct Action: Decodable, Equatable {
             let title: String
             let limits: [String]
+            /// Which steps of its workflow use it, in tafs cloud's words.
+            let stepWords: String?
 
-            enum Keys: String, CodingKey { case title, limits }
+            enum Keys: String, CodingKey { case title, limits, stepWords = "step_words" }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: Keys.self)
                 title = try c.decode(String.self, forKey: .title)
                 limits = (((try? c.decodeIfPresent([String].self, forKey: .limits)) ?? nil) ?? []).compactMap(Lines.line)
+                stepWords = Lines.line((try? c.decodeIfPresent(String.self, forKey: .stepWords)) ?? nil)
             }
         }
 
@@ -147,10 +150,19 @@ struct TafSetup: Decodable, Equatable {
         let reconnect: Bool
         let actionWords: String?
         let actions: [Action]
+        /// How many of its actions the taf may take: the app's node is the connection with some.
+        let actionCount: Int
+        /// The taf is using it now: its words are green.
+        let running: Bool
         let statsWords: String?
+        /// The taf's Activity for this app's calls, as tafs cloud writes the query.
+        let activityQuery: String?
 
-        enum Keys: String, CodingKey { case id, name, statusWords = "status_words", reconnect, actionWords = "action_words", actions, stats }
-        enum StatsKeys: String, CodingKey { case words }
+        enum Keys: String, CodingKey {
+            case id, name, statusWords = "status_words", reconnect, actionWords = "action_words", actions, stats
+            case actionCount = "action_count", running
+        }
+        enum StatsKeys: String, CodingKey { case words, activityQuery = "activity_query" }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
             id = try c.decode(String.self, forKey: .id)
@@ -159,8 +171,36 @@ struct TafSetup: Decodable, Equatable {
             reconnect = ((try? c.decodeIfPresent(Bool.self, forKey: .reconnect)) ?? nil) ?? false
             actionWords = Lines.line((try? c.decodeIfPresent(String.self, forKey: .actionWords)) ?? nil)
             actions = ((try? c.decodeIfPresent([Lenient<Action>].self, forKey: .actions)) ?? nil)?.compactMap(\.value) ?? []
+            actionCount = ((try? c.decodeIfPresent(Int.self, forKey: .actionCount)) ?? nil) ?? actions.count
+            running = ((try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? nil) ?? false
             let stats = try? c.nestedContainer(keyedBy: StatsKeys.self, forKey: .stats)
             statsWords = Lines.line(stats.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil })
+            activityQuery = Lines.line(stats.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .activityQuery)) ?? nil })
+        }
+    }
+
+    /// One app on the taf, as the iPad's `ConnectedToolsRing.Node`: the connection that does the
+    /// work, with any other sign-in to the same app inside its sheet.
+    struct Node: Identifiable, Equatable {
+        let app: Connection
+        let others: [Connection]
+        var id: String { app.id }
+    }
+
+    /// One node per app, in tafs cloud's order of each app's first connection, as the iPad's
+    /// `nodes`: the one shown is the first with actions, else one to sign in again, else the
+    /// first. Two "Stripe" rows would read as two Stripes.
+    static func nodes(_ apps: [Connection]) -> [Node] {
+        var order: [String] = []
+        var byName: [String: [Connection]] = [:]
+        for app in apps {
+            if byName[app.name] == nil { order.append(app.name) }
+            byName[app.name, default: []].append(app)
+        }
+        return order.compactMap { name in
+            guard let all = byName[name], let first = all.first else { return nil }
+            let main = all.first { $0.actionCount > 0 } ?? all.first { $0.reconnect } ?? first
+            return Node(app: main, others: all.filter { $0.id != main.id })
         }
     }
 
@@ -223,10 +263,20 @@ private enum Lines {
 }
 
 extension CloudClient {
-    /// A taf's Activity, for one of tafs cloud's filters; the next page with its cursor.
-    func activity(of taf: String, filter: String = "all", cursor: String? = nil) async throws -> TafActivity {
+    /// A taf's Activity, for one of tafs cloud's filters, or for tafs cloud's own query (an
+    /// app's calls, from its Setup); the next page with its cursor.
+    func activity(of taf: String, filter: String = "all", query: String? = nil, cursor: String? = nil) async throws -> TafActivity {
         let more = cursor.map { "&cursor=\(Self.query($0))" } ?? ""
-        return try await get("/v1/tafs/\(Self.query(taf))/activity?filter=\(Self.query(filter))\(more)")
+        let asked = query.flatMap(Self.activityQuery) ?? "filter=\(Self.query(filter))"
+        return try await get("/v1/tafs/\(Self.query(taf))/activity?\(asked)\(more)")
+    }
+
+    /// tafs cloud's query for an app's calls, sent as it wrote it, but only as a query: names
+    /// and values of letters, digits and `%._-:`, joined by `=` and `&`. Anything else is none.
+    static func activityQuery(_ query: String) -> String? {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "%._-:=&"))
+        guard !query.isEmpty, query.count <= 500, query.unicodeScalars.allSatisfy({ $0.isASCII && allowed.contains($0) }) else { return nil }
+        return query
     }
 
     /// A taf's Setup.

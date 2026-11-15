@@ -13,6 +13,8 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var setup: State<TafSetup> = .loading
     /// The Activity filter shown, as tafs cloud names it.
     @Published private(set) var filter = "all"
+    /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
+    @Published private(set) var query: String?
 
     private let cloud: CloudClient
     let taf: String
@@ -25,11 +27,14 @@ final class TafPagesModel: ObservableObject {
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
     func loadActivity(filter: String? = nil) async {
-        if let filter { self.filter = filter }
+        if let filter {
+            self.filter = filter
+            query = nil
+        }
         asked += 1
         let mine = asked
         do {
-            let page = try await cloud.activity(of: taf, filter: self.filter)
+            let page = try await cloud.activity(of: taf, filter: self.filter, query: query)
             guard mine == asked else { return }
             activity = .loaded(page)
         } catch {
@@ -44,13 +49,20 @@ final class TafPagesModel: ObservableObject {
         guard case .loaded(var page) = activity, let cursor = page.nextCursor else { return }
         let mine = asked
         do {
-            let next = try await cloud.activity(of: taf, filter: filter, cursor: cursor)
+            let next = try await cloud.activity(of: taf, filter: filter, query: query, cursor: cursor)
             guard mine == asked, case .loaded(let shown) = activity, shown.nextCursor == cursor else { return }
             page.append(next)
             activity = .loaded(page)
         } catch {
             // The calls shown stay; the end is tried again when it shows again.
         }
+    }
+
+    /// The Activity of one app's calls, from its sheet in the Setup, as the iPad opens it.
+    func show(activityQuery: String) {
+        query = activityQuery
+        filter = "all"
+        activity = .loading
     }
 
     func loadSetup() async {
@@ -166,6 +178,10 @@ struct TafActivityTab: View {
 struct TafSetupTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
+    /// Opens the taf's Activity with tafs cloud's query for one app's calls.
+    var openActivity: (String) -> Void = { _ in }
+    /// The app whose sheet is open.
+    @State private var chosen: TafSetup.Node?
 
     var body: some View {
         ScrollView {
@@ -181,7 +197,12 @@ struct TafSetupTab: View {
                     ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
                     if let again = setup.connectAgain { connectAgain(again) }
                     if let workflow = setup.workflow { part(workflow) }
-                    ForEach(setup.connections) { connection($0) }
+                    let nodes = TafSetup.nodes(setup.connections)
+                    if !nodes.isEmpty {
+                        // One row per app, as the iPad's `ConnectedToolsRing` has one node per app.
+                        Eyebrow(text: words("connect.connected_tools")).padding(.top, 6)
+                        ForEach(nodes) { node($0) }
+                    }
                     if let error = setup.connectionsError {
                         // In red with Try again, as the iPad says it.
                         HStack(spacing: 10) {
@@ -201,6 +222,37 @@ struct TafSetupTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadSetup() }
+        .sheet(item: $chosen) { node in
+            ConnectedAppSheet(node: node, close: { chosen = nil }, openActivity: { query in
+                chosen = nil
+                openActivity(query)
+            })
+        }
+    }
+
+    /// An app, as the iPad's node: its name, and its actions in words, green while the taf uses
+    /// it. It opens the app's sheet.
+    private func node(_ node: TafSetup.Node) -> some View {
+        Button { chosen = node } label: {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: node.app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    if let actions = node.app.actionWords {
+                        Text(verbatim: actions).font(.system(size: 13)).foregroundColor(node.app.running ? Theme.ok : Theme.soft)
+                    }
+                }
+                Spacer()
+                if let status = node.app.statusWords {
+                    Text(verbatim: status).font(.system(size: 13, weight: .semibold)).foregroundColor(node.app.reconnect ? Theme.amberText : Theme.soft)
+                }
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The taf's own sign-in expired: tafs cloud's words for it, edged in amber. Connecting again
@@ -214,35 +266,6 @@ struct TafSetupTab: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.7)))
-    }
-
-    /// One connected app: its name and status, its actions with their limits, and its week,
-    /// each in tafs cloud's words.
-    private func connection(_ app: TafSetup.Connection) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                Spacer()
-                if let status = app.statusWords {
-                    Text(verbatim: status).font(.system(size: 13, weight: .semibold)).foregroundColor(app.reconnect ? Theme.amberText : Theme.ok)
-                }
-            }
-            if let actions = app.actionWords { Text(verbatim: actions).font(.system(size: 13)).foregroundColor(Theme.soft) }
-            ForEach(Array(app.actions.enumerated()), id: \.offset) { _, action in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: action.title).font(.system(size: 14)).foregroundColor(Theme.ink)
-                    if !action.limits.isEmpty {
-                        Text(verbatim: action.limits.joined(separator: " · ")).font(.system(size: 12)).foregroundColor(Theme.soft)
-                    }
-                }
-                .padding(.leading, 10)
-            }
-            if let stats = app.statsWords { Text(verbatim: stats).font(.system(size: 12)).foregroundColor(Theme.dim) }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-        .accessibilityElement(children: .combine)
     }
 
     private func part(_ part: TafSetup.Part) -> some View {
@@ -271,5 +294,66 @@ struct CardUnitPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.7)))
+    }
+}
+
+/// One app on the taf, as the iPad's `ConnectedAppSheet`: its status (amber when it must sign in
+/// again), what it may do with each action's limits, its week, which opens the taf's Activity of
+/// its calls, and the other sign-ins to the same app. Sign in again and Disconnect change what
+/// the taf may do, so they come with approvals: none here.
+struct ConnectedAppSheet: View {
+    @Environment(\.words) private var words
+    let node: TafSetup.Node
+    let close: () -> Void
+    let openActivity: (String) -> Void
+
+    var body: some View {
+        let app = node.app
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(verbatim: app.name).font(Theme.display(22)).foregroundColor(Theme.ink)
+                Spacer()
+                Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
+            }
+            if let status = app.statusWords {
+                Text(verbatim: status).font(.system(size: 14)).foregroundColor(app.reconnect ? Theme.amberText : Theme.soft)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !app.actions.isEmpty {
+                        Eyebrow(text: words("taf.app.what_it_may_do"))
+                        ForEach(Array(app.actions.enumerated()), id: \.offset) { _, action in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(verbatim: action.title).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                                ForEach(Array(action.limits.enumerated()), id: \.offset) { _, line in
+                                    Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
+                                }
+                                if let steps = action.stepWords { Text(verbatim: steps).font(.system(size: 13)).foregroundColor(Theme.dim) }
+                            }
+                        }
+                    }
+                    // Its week: opens the taf's Activity of its calls; nothing to open with no actions.
+                    if let stats = app.statsWords {
+                        Button { if let query = app.activityQuery { openActivity(query) } } label: {
+                            Text(verbatim: stats).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(app.actions.isEmpty || app.activityQuery == nil)
+                        .padding(.top, 4)
+                    }
+                    if !node.others.isEmpty {
+                        Eyebrow(text: words("connect.other_connections")).padding(.top, 6)
+                        ForEach(node.others) { other in
+                            Text(verbatim: other.statusWords ?? other.name).font(.system(size: 14))
+                                .foregroundColor(other.reconnect ? Theme.amberText : Theme.soft)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 440)
+        .background(Theme.background)
     }
 }
