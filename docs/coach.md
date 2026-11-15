@@ -28,6 +28,26 @@ The app draws the list as it comes. It places and folds nothing itself.
   an empty chat.
 - With no Coach, or an empty chat: "Ask anything about your tafs".
 
+## What a conversation carries (`Thread`, `CoachStream`, `Rich`)
+
+Read now, for the screen that draws a conversation as the iPad does:
+
+| Read | From | What |
+|---|---|---|
+| A run's work | a message's `work`: `ms`, `steps[]` | How long it worked ("32 s", "4 min"), and each step by tafs cloud's `words`, failed or not, with its one line of `why`. A step with no words is left out; a tool's name is never kept. A step refused back unmade (`not_made`) isn't a failure. |
+| A plan | a `steps` card's `steps[]`: `label`, `status` | Each step and where it stands; how many are done. |
+| A notice | a card's `tone` | `info`, `success`, `warning` or `error`. |
+| A hand-over | a `result` card's `taf.name`, `taf_id`, `tools` | The taf it made, and its tools in KIFF's words. |
+| A connection already made | an approval's `connection`, when `done` | tafs cloud's line for it. |
+| The live steps | the stream's step events | Listed as they come, each checked when it ends, without the trailing "…". At most 200. |
+
+- **Coach's words are read for bold and list items, and nothing else** (`Rich`): no links, no
+  images, no headings, no HTML. A mark with no partner stays as written. Text over 20,000
+  characters is left plain.
+- **Declining** (`CloudClient.decline`) sends `declined` to an approval and `not now` to a
+  sign-in, and refuses any other card before anything is sent. Saying no grants nothing, so
+  it is never signed. Those two words are the only answers this app ever sends such a card.
+
 ## Writing to Coach (`CloudClient.send`, `CoachModel`)
 
 `POST /v1/tafs/{id}/messages` with the person's words. It starts a run, so it is only ever
@@ -123,4 +143,5 @@ that grant authority come with their approval.
 `scripts/test.sh coach`: Coach or none, no time zone sent, the thread in tafs cloud's order,
 items that don't read, a card's key, an unreadable answer; what is and isn't a message, the
 send's exact body, each refusal, the following's pace and its limit, Retry, and both answers
-to the consent. It writes `build/screenshots/coach-*.png`.
+to the consent; a run's work, each kind of card, declining, the live steps, and what `Rich`
+reads. It writes `build/screenshots/coach-*.png`.
