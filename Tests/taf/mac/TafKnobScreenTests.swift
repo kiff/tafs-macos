@@ -96,7 +96,8 @@ let tafKnobMacTests: [Test] = [
         try expectEqual(paris.shortTime(at), "08:00")
         try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "Europe/Paris")!), "08:00")
         try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "America/New_York")!).hasPrefix("08:00 "), true)
-        try expectEqual(AccountTime("Nowhere/Else").zone.identifier, "UTC")
+        // UTC, by its offset: macOS names that zone "GMT" as often as "UTC".
+        try expectEqual(AccountTime("Nowhere/Else").zone.secondsFromGMT(), 0)
         try expectEqual(AccountTime(nil).zone, TimeZone.current)
     },
     Test("the screenshot: Starts when and Results go to, with an approval made on another device", awaiting: { @MainActor in
