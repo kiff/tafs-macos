@@ -30,7 +30,26 @@ let coachScreenTests: [Test] = [
         await unread.load()
         try expectEqual(unread.state, .unread(why: "500"))
     }),
-    Test("the screenshots: Coach's chat in three languages", awaiting: { @MainActor in
+    Test("an empty chat is Coach mode's start; while Coach works the box asks for the next message", awaiting: { @MainActor in
+        let (none, _) = make([(200, #"{"setup":null}"#)])
+        await none.load()
+        try expectEqual(none.isEmpty, true)
+        let (empty, _) = make([(200, setupAnswer), (200, #"{"items":[]}"#)])
+        await empty.load()
+        try expectEqual(empty.isEmpty, true)
+        try expectEqual(empty.working, false)
+        // A run going on with nothing in the thread yet is not the start: Coach is at work.
+        let (busy, _) = make([(200, setupAnswer), (200, #"{"items":[],"working":true}"#)])
+        await busy.load()
+        try expectEqual(busy.isEmpty, false)
+        try expectEqual(busy.working, true)
+        let (full, _) = make([(200, setupAnswer), (200, threadAnswer)])
+        await full.load()
+        try expectEqual(full.isEmpty, false)
+        let (loading, _) = make([])
+        try expectEqual(loading.isEmpty, false)
+    }),
+    Test("the screenshots: Coach's chat in three languages, and its start", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -41,5 +60,10 @@ let coachScreenTests: [Test] = [
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("coach-\(language).png"))
         }
+        let (empty, _) = make([(200, setupAnswer), (200, #"{"items":[]}"#)])
+        await empty.load()
+        let start = CoachView(model: empty).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: start, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("coach-start-en.png"))
     }),
 ]

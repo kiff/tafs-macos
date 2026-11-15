@@ -41,7 +41,18 @@ The app draws the list as it comes. It places and folds nothing itself.
   model gave it: the model may reuse a name.
 - An item that doesn't read is left out. An answer with no ordered list is unreadable, never
   an empty chat.
-- With no Coach, or an empty chat: "Ask anything about your tafs".
+- **With no Coach, or an empty chat**, the screen is Coach mode's start, as the iPad's
+  `introBefore`: "Coach mode" in 30 rounded bold in Coach's colour, then a 16 soft lead,
+  centred in the height. The lead is the Mac's own shared line ("Set up a new taf, connect an
+  app, or change how one works."): the iPad's says the person approves with Face ID, which
+  this Mac can't do yet. A chat with a run going on and nothing in it yet is not the start.
+- **The message box** is the iPad's: the field 16 with padding 14/10, Send a 40 circle with a
+  16 bold arrow, on a 20-radius panel. **While Coach works** (a message on its way, an answer
+  being written, or tafs cloud's `working`), the box asks for "Write the next message".
+  Not on the Mac yet: the iPad's Stop in Send's place, which needs tafs cloud's route to stop
+  a run, and its mic, which needs dictation.
+- **The person's words** are on the brand's gradient, radius 18, keeping 48 free on the
+  left, sent or still going.
 
 ## What a conversation carries (`Thread`, `LiveAnswer`, `Rich`)
 

@@ -53,6 +53,23 @@ final class CoachModel: ObservableObject {
         self.now = now
     }
 
+    /// Coach is at work: a message on its way, an answer being written, or tafs cloud says a
+    /// run goes on. The box then asks for the next message, as on the iPad.
+    var working: Bool {
+        if live != nil || (pending != nil && pending?.failed == nil) { return true }
+        if case .loaded(_, let page) = state { return page.working }
+        return false
+    }
+
+    /// Nothing in the chat yet: the screen is Coach mode's start, as on the iPad.
+    var isEmpty: Bool {
+        switch state {
+        case .notStarted: return true
+        case .loaded(_, let page): return page.items.isEmpty && pending == nil && !working && stopped == nil
+        case .loading, .unread: return false
+        }
+    }
+
     var canSend: Bool {
         guard case .loaded = state else { return false }
         return Outgoing.text(draft) != nil && (pending == nil || pending?.failed != nil)
@@ -254,18 +271,44 @@ struct CoachView: View {
     @State private var planOpen = false
 
     var body: some View {
+        Group {
+            if model.isEmpty {
+                // Coach mode's start, centred in the height, as the iPad's.
+                VStack(alignment: .leading, spacing: 0) {
+                    Spacer(minLength: 18)
+                    intro
+                    Spacer(minLength: 18)
+                }
+                .padding(.horizontal, Look.inset)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                thread
+            }
+        }
+        .background(Theme.coachWash)
+        // The screen's name sits small and centred on the background's own colour, as on the iPad.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .task { await model.load() }
+        .sheet(item: Binding(get: { model.consent }, set: { if $0 == nil { model.declineAI() } })) { consent in
+            consentSheet(consent)
+        }
+    }
+
+    private var thread: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 switch model.state {
-                case .loading:
+                case .loading, .notStarted:
                     ProgressView().controlSize(.small)
-                case .notStarted:
-                    intro
                 case .unread(let why):
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
-                    if page.items.isEmpty { intro }
                     ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
                         // A time on the first item, and after an hour's gap, as on the iPad.
                         if page.showsTime(at: index), let at = item.at {
@@ -289,27 +332,17 @@ struct CoachView: View {
             .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Theme.coachWash)
-        // The screen's name sits small and centred on the background's own colour, as on the iPad.
-        .safeAreaInset(edge: .top, spacing: 0) {
-            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
-                .accessibilityAddTraits(.isHeader)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
-        .task { await model.load() }
-        .sheet(item: Binding(get: { model.consent }, set: { if $0 == nil { model.declineAI() } })) { consent in
-            consentSheet(consent)
-        }
     }
 
     /// The message box, to the iPad's: a rounded panel with the words, and the send circle at
     /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
-            VStack(alignment: .leading, spacing: 10) {
-                TextField(words("coach.ask_anything"), text: $model.draft)
+            VStack(alignment: .leading, spacing: 4) {
+                // While Coach works, the box asks for the next message, as on the iPad.
+                TextField(words(model.working ? "chat.write_next" : "coach.ask_anything"), text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
+                    .padding(.horizontal, 14).padding(.vertical, 10)
                     .onSubmit { Task { await model.send() } }
                 HStack {
                     Spacer()
@@ -322,8 +355,8 @@ struct CoachView: View {
                     .disabled(!model.canSend)
                     .accessibilityLabel(words("common.send"))
                 }
+                .padding(.horizontal, 8).padding(.bottom, 8)
             }
-            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.line))
             .padding(.horizontal, 12).padding(.vertical, 10)
@@ -411,7 +444,7 @@ struct CoachView: View {
     private func unsent(_ pending: CoachModel.Pending) -> some View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack {
-                Spacer(minLength: 80)
+                Spacer(minLength: 48)
                 // Still going: the whole bubble at 0.7, as on the iPad; one that didn't go, fainter.
                 Text(verbatim: pending.text).font(.system(size: 15)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 10)
@@ -450,10 +483,15 @@ struct CoachView: View {
         .frame(width: 460)
     }
 
+    /// Coach mode's start, as the iPad's `introBefore`: its name in 30 rounded bold in Coach's
+    /// colour, then the lead in 16 soft. The lead is the Mac's own shared line: the iPad's says
+    /// the person approves with Face ID, which this Mac can't do yet.
     private var intro: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(words("coach.ask_anything")).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
-            Text(words("coach.ask_anything_line")).font(.system(size: 14)).foregroundColor(Theme.soft)
+        VStack(alignment: .leading, spacing: 14) {
+            Text(words("coach.coach_mode")).font(Theme.display(30)).foregroundColor(Theme.coach)
+                .accessibilityAddTraits(.isHeader)
+            Text(words("coach.ask_anything_line")).font(.system(size: 16)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
