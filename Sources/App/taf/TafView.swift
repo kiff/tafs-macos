@@ -79,7 +79,8 @@ struct CardFace: View {
 /// A taf's page, to the iPad's: its mark and name, its tabs, and the tab's content.
 struct TafView: View {
     enum Tab: String, CaseIterable, Identifiable {
-        case chat, card
+        // The iPad's order.
+        case chat, activity, card, setup
         var id: String { rawValue }
         var titleKey: String { "taf.section.\(rawValue)" }
     }
@@ -87,6 +88,8 @@ struct TafView: View {
     @Environment(\.words) private var words
     let taf: Home.Taf
     @ObservedObject var chat: CoachModel
+    /// Its Activity and Setup, read when their tab opens; nil where nothing reads them.
+    var pages: TafPagesModel?
     @State var tab: Tab = .chat
 
     var body: some View {
@@ -117,6 +120,10 @@ struct TafView: View {
             switch tab {
             case .chat: chatTab
             case .card: cardTab
+            case .activity:
+                if let pages { TafActivityTab(model: pages, taf: taf) { tab = .card } }
+            case .setup:
+                if let pages { TafSetupTab(model: pages) }
             }
         }
         .padding(.horizontal, Look.inset - 8)

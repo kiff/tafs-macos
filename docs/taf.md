@@ -37,12 +37,32 @@ Overview.
 | Part | What |
 |---|---|
 | The head | As the iPad's: the taf's 34-point avatar (`TafAvatar`), its name in 20 rounded bold, and at the right **tafs cloud's state as the iPad's chip** (`TafState.chip`): Working (green), Waiting (amber), Ready for `idle`, Paused (soft), Stopped or Halted (red), each the shared `taf.state.*` line on its tone at 15%. No chip for a word this app doesn't know, nor for a working taf that needs the person: its Activity says what went wrong. |
-| The tabs | **Chat** and **Card**, as the iPad's two-part switch. Activity and Setup are still to come. |
+| The tabs | **Chat**, **Activity**, **Card** and **Setup**, in the iPad's order, as its switch. |
 | Chat | The taf's own conversation (`GET /v1/tafs/{id}/conversation`), drawn as Coach's is, with no title of its own. Its box says "Message {taf}", and "Write the next message" while the taf works. Its first Card is beside it in the iPad's 360-wide column, under "Card" or "Cards" (`card.heading`, by how many), with a button to all its Cards. tafs cloud is never asked which taf is Coach. |
 | Card | Each Card's face in the taf's colour, a payment card's shape (85.6 by 54) at most 300 wide, as the iPad's: its title, the figure, the first limit for each call ("up to €150 each; more asks you first"), how many tools past one ("no actions yet" with none), and "Until {date}", "Ends · No end date", or "Ended" for a Card no longer active, which is faded. Then a panel of what it lets the taf do: KIFF's label, what happens outside it, and **its limits as the iPad's `CardRule.summary`** (`TafCard.Rule.summary`): each call's, the Card's own total for its window (`base_limit`), the extra room apart, and its calls. The room is apart only beside `base_limit`: without it, `per_window` already holds the room and is said once. **A Card with no rules has no panel**, never an empty one. With no Card, nothing is said: tafs cloud sends no field that says one was revoked. |
 
 - Every word from KIFF or tafs cloud (a name, a title, a label, a window) is drawn as sent,
   with `Text(verbatim:)`.
+
+## Activity and Setup (`TafActivity`, `TafSetup`, `TafPagesModel`)
+
+Both are read when their tab opens, from tafs cloud's routes, and **only read**: nothing is
+changed from either tab. The shapes are tafs cloud's contracts, `contracts/taf-activity.json`
+and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
+
+| Tab | Route | Drawn |
+|---|---|---|
+| Activity | `GET /v1/tafs/{id}/activity?filter=` | The taf's first Card in one line ("€1,960 left today of €2,000", its title), which opens the Card tab; what waits on the Card for want of a unit; tafs cloud's `filters` as pills, each asked for again with its id; then its calls by day (`groups`, else `entries` as one list): each with its kind's dot (done green, held amber, refused red, any other kind plain), its `title`, `detail` and `time`; and tafs cloud's `end_words` under the last. |
+| Setup | `GET /v1/tafs/{id}/setup` | What waits on the Card for want of a unit (`card_unit_exceptions`: title, words, history, edged in amber), then the workflow, the line for connections that couldn't be read, the versions and the notes, each by tafs cloud's `title` and `summary`. Someone who doesn't manage the taf is refused: the tab says it couldn't be read. |
+
+- **Everything is drawn as sent**, with `Text(verbatim:)`. The app words no call, no part and
+  no filter.
+- A call, a day, a filter or an exception that doesn't read is left out, never the tab. An
+  Activity with neither `groups` nor `entries`, or a Setup with none of its parts, is
+  unreadable.
+- **Not yet:** the connections' and the workflow steps' rows (the contract has none to read
+  them by), the Card-unit exception's "Add a limit" (it goes through Coach, with its approval),
+  Forget a note, Pause, and asking again with the `revision` as `If-None-Match`.
 
 ## Tests
 
@@ -50,4 +70,7 @@ Overview.
 with no rules, the figure from money and from calls, no figure when used is unknown or the
 units differ, a used over the limit, money in its language, and each state's chip. On a Mac: a taf's chat reads
 that taf's conversation without asking which taf is Coach, a Card with no rules has no panel
-under it, and the screenshots `build/screenshots/taf-<tab>-<language>.png`.
+under it, and the screenshots `build/screenshots/taf-<tab>-<language>.png`, each tab in three languages.
+`scripts/test.sh contracts` reads both contracts; the Mac tests read the Activity and Setup
+from them, check every request is a `GET` of that taf, a filter asked for again, and a refused
+Setup.

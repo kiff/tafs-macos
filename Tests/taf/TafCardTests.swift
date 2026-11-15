@@ -17,7 +17,7 @@ private func cards() throws -> [TafCard] {
     try AccountClient.decoder.decode(Home.Page.self, from: Data(tafWithCards.utf8)).tafs[0].cards
 }
 
-let tafTests: [Test] = [
+let tafCardTests: [Test] = [
     Test("a taf's Cards are read with their rules and what is left, and a Card that doesn't read is left out") {
         let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(tafWithCards.utf8))
         try expectEqual(page.tafs[0].tafID, "taf-1")
