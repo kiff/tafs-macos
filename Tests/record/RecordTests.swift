@@ -55,6 +55,24 @@ let recordTests: [Test] = [
             try expectEqual(error, .refused(status: 409, code: "search_again"))
         }
     }),
+    Test("the filters keep the iPad's kinds, and a group left with nothing is left out") {
+        func entry(_ id: String, _ kind: String, amount: Bool) -> String {
+            recordEntry(id, about: nil, amount: amount ? "€10.00" : nil).replacingOccurrences(of: #""kind":"done""#, with: #""kind":"\#(kind)""#)
+        }
+        let entries = [entry("a", "done", amount: true), entry("b", "done", amount: false), entry("c", "approved", amount: true),
+                       entry("d", "refused", amount: true), entry("e", "not_done", amount: false), entry("f", "revoked", amount: false),
+                       entry("g", "held", amount: true), entry("h", "sending", amount: false), entry("i", "unknown", amount: false), entry("j", "new_kind", amount: true)]
+        let body = #"{"entries":[],"groups":[{"id":"today","title":"Today","entries":[\#(entries.joined(separator: ","))]},{"id":"old","title":"Earlier","entries":[\#(entry("k", "done", amount: false))]}]}"#
+        let page = try AccountClient.decoder.decode(Record.Page.self, from: Data(body.utf8))
+        func ids(_ filter: Record.Filter) -> [String] { filter.keeping(page.groups).flatMap { $0.entries.map(\.id) } }
+        try expectEqual(ids(.all).count, 11)
+        try expectEqual(ids(.moneyMoved), ["a", "c"])
+        try expectEqual(ids(.stopped), ["d", "e", "f"])
+        try expectEqual(ids(.waiting), ["g", "h", "i"])
+        try expectEqual(Record.Filter.moneyMoved.keeping(page.groups).map(\.id), ["today"])
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        for filter in Record.Filter.allCases { try expect(words(filter.titleKey) != filter.titleKey, filter.titleKey) }
+    },
     Test("a case is every call about one thing, with the step that failed in tafs cloud's words", awaiting: {
         let body = #"{"about":"Order 1042","steps":[\#(recordEntry("e1")),\#(recordEntry("e2"))],"failed":{"id":"e2","words":"The refund didn't go through."}}"#
         let (client, transport) = cloud([(200, body)])

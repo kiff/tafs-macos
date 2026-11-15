@@ -17,6 +17,10 @@ final class RecordModel: ObservableObject {
     @Published private(set) var endWords: String?
     @Published private(set) var canContinue = false
     @Published var search = ""
+    /// Which calls are shown, of those read.
+    @Published var filter: Record.Filter = .all
+
+    var shown: [Record.Group] { filter.keeping(groups) }
 
     private let cloud: CloudClient
     private var cursor: String?
@@ -80,41 +84,51 @@ struct RecordView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(words("record.title")).font(Theme.display(28)).foregroundColor(Theme.ink)
-                TextField(model.hint, text: $model.search)
-                    .textFieldStyle(.roundedBorder).font(.system(size: 14)).frame(maxWidth: 420)
-                    .onSubmit { Task { await model.load() } }
+                ScreenTitle(title: words("record.title"), lead: words("record.lead")).padding(.top, 56)
+                // The search box, across the screen, with tafs cloud's own hint in it.
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 15)).foregroundColor(Theme.soft)
+                    TextField(model.hint, text: $model.search).textFieldStyle(.plain).font(.system(size: 15))
+                        .onSubmit { Task { await model.load() } }
+                }
+                .padding(.horizontal, 14).frame(height: 40)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+                HStack(spacing: 8) {
+                    ForEach(Record.Filter.allCases) { filter in
+                        Chip(title: words(filter.titleKey), chosen: model.filter == filter) { model.filter = filter }
+                    }
+                }
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)
                 case .unread(let why):
                     Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded:
-                    if let none = model.noneWords { Text(none).font(.system(size: 14)).foregroundColor(Theme.dim) }
-                    ForEach(model.groups) { group in
-                        if !group.title.isEmpty {
-                            Text(group.title).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim).padding(.top, 6)
-                        }
-                        VStack(spacing: 0) {
+                    if model.shown.isEmpty {
+                        Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                    }
+                    ForEach(model.shown) { group in
+                        if !group.title.isEmpty { Eyebrow(text: group.title).padding(.top, 6) }
+                        VStack(spacing: 8) {
                             ForEach(group.entries) { entry in
                                 row(entry)
-                                if entry.id != group.entries.last?.id { Rectangle().fill(Theme.line).frame(height: 1) }
+                                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
+                                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
                             }
                         }
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
                     }
                     if model.canContinue {
                         ProgressView().controlSize(.small).task { await model.more() }
-                    } else if let end = model.endWords {
-                        Text(end).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    } else if let end = model.endWords, !model.shown.isEmpty {
+                        Text(end).font(.system(size: 13)).foregroundColor(Theme.soft)
                     }
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, Look.inset)
+            .padding(.bottom, Look.inset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
@@ -128,7 +142,7 @@ struct RecordView: View {
                 Text(entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 Text(entry.detail).font(.system(size: 13)).foregroundColor(Theme.soft)
                 Text(verbatim: [entry.taf.name, entry.about].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 12)).foregroundColor(Theme.dim)
+                    .font(.system(size: 12)).foregroundColor(Theme.soft)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 3) {

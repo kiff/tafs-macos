@@ -21,6 +21,12 @@ name, at the top of the sidebar.
 - A list whose tafs don't read is unreadable. It is never shown as "No tafs yet."
 - A headline or a count that isn't the expected shape is left out; the list is still drawn.
 
+## The layout
+
+The iPad's: a large title and its line, the four columns' headings, and plain rows with no
+panel behind them. A taf has its coloured rounded square. The Card and Last result columns
+keep their place and their headings, and stay empty until they are read.
+
 ## Not yet
 
 - **The Card and Last result columns** of the iPad's Overview. The iPad app works the Card's
