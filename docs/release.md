@@ -12,7 +12,8 @@ This page is about packaging only. The app's code is in the rest of the repo.
 2. imports the Developer ID certificate into a keychain of its own, which it deletes at the end;
 3. signs the app, packs the image and signs it (`scripts/dmg.sh`);
 4. sends it to Apple's notary service and waits for its answer, then staples the ticket. If Apple refuses it, the run prints Apple's log and stops;
-5. checks the image as Gatekeeper would, prints its SHA-256, and keeps it as the run's **`tafs-dmg`** artifact for 30 days.
+5. checks the image as Gatekeeper would, prints its SHA-256, and keeps it as the run's **`tafs-dmg`** artifact for 30 days;
+6. publishes it as a **GitHub pre-release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one.
 
 **On a pull request** that changes the packaging (`scripts/dmg.sh`, `scripts/build.sh`, `App/Info.plist` or the workflow), the `check` job builds the image signed ad hoc and opens it, with no secret and no Apple.
 
@@ -71,5 +72,5 @@ If anything readable ever reaches a log, revoke the certificate at once (develop
 | What | State |
 |---|---|
 | **The first signed, notarized image** | **owed:** after the secrets are stored. Then it's installed on a Mac on macOS 12 to check it opens with no warning. |
-| Where the image is downloaded from | the run's artifact for now. A public place for kiff.dev/tafs/download's link (a release, or kiff.dev itself) is the PM's call. |
+| Where the image is downloaded from | a GitHub pre-release here, for the team (the PM's call). Linking it from kiff.dev/tafs/download for everyone is the owner's yes, later. |
 | The version | `App/Info.plist`'s 0.1 (1), as the app has it. |

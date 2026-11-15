@@ -6,8 +6,10 @@ name: DMG
 #
 # - On a pull request that changes the packaging, `check` builds the image signed
 #   ad hoc and opens it: no secret, no Apple.
-# - By hand, from main, `release` makes the real one and keeps it as the run's
-#   `tafs-dmg` artifact. It reads the Developer ID certificate (DEVELOPER_ID_P12,
+# - By hand, from main, `release` makes the real one, keeps it as the run's
+#   `tafs-dmg` artifact, and publishes it as a GitHub pre-release of this repo,
+#   `v<version>-<build>`, for the team (the PM's call; a public link from
+#   kiff.dev/tafs/download is the owner's, later). It reads the Developer ID certificate (DEVELOPER_ID_P12,
 #   DEVELOPER_ID_P12_PASSWORD) and the App Store Connect key notarization uses
 #   (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8), all repository secrets. It never
 #   prints any of them.
@@ -42,6 +44,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: write
     env:
       KEYCHAIN: ${{ runner.temp }}/signing.keychain-db
     steps:
@@ -123,6 +127,23 @@ jobs:
           name: tafs-dmg
           path: build/tafs-*.dmg
           retention-days: 30
+
+      # A pre-release, so it's marked as not for everyone. A version already
+      # released stops the run: App/Info.plist's version or build goes up first.
+      - name: Publish it as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dmg=$(ls build/tafs-*.dmg)
+          name=$(basename "$dmg" .dmg)
+          tag="v${name#tafs-}"
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::$tag is already released. Raise the version or build in App/Info.plist."
+            exit 1
+          fi
+          gh release create "$tag" "$dmg" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "tafs for macOS $tag (pre-release)" \
+            --notes "For the team: signed with Developer ID, notarized and stapled. macOS 12 or later, Intel and Apple silicon. SHA-256: $(shasum -a 256 "$dmg" | cut -d' ' -f1)"
 
       - name: Remove the keychain and the key
         if: always()
