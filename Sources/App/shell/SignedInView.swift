@@ -46,6 +46,8 @@ struct SignedInView: View {
     private let addThisMac: () -> Void
     /// This Mac's device key is a software key: pairing it again with the phone gives no more.
     private let softwareKey: Bool
+    /// This Mac's device key, its public half (SPKI DER), for planque's enrolment.
+    private let deviceKey: Data
     private let route: ApprovalRoute
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
@@ -55,8 +57,9 @@ struct SignedInView: View {
     @State private var planque: PlanqueClient
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
-         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false) {
+         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data()) {
         self.account = account
+        self.deviceKey = deviceKey
         let planque = PlanqueClient()
         // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
         // KIFF's `this_device`.
@@ -108,7 +111,8 @@ struct SignedInView: View {
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach))
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach,
+                                                  start: coachStart, close: closeCoach))
             case .account: return AnyView(accountScreen)
             }
         }, startNewTaf: startNewTaf, openCoach: openCoach)
@@ -175,6 +179,33 @@ struct SignedInView: View {
     private var heldRows: [HeldRow] {
         guard case .loaded(let calls) = needsYou.state else { return [] }
         return calls.map { HeldRow($0, tafs: overview.tafs) }
+    }
+
+    /// The session signing with this Mac's approval key, for what grants authority (the iPad's
+    /// `kiff.approvalSigner`): none on any Mac yet, whose approvals go to the phone or a passkey.
+    /// Never the device key in its place.
+    private var approvalAccount: AccountClient? { nil }
+
+    /// Coach's Start, on a Mac that may start it (`CoachStart.mayStart`); nil on one that can't
+    /// approve, whose Coach says so and follows the start made on the phone.
+    private var coachStart: (() async -> Void)? {
+        guard CoachStart.mayStart(route: route, approval: approvalAccount) else { return nil }
+        return { await startCoach() }
+    }
+
+    /// Starts Coach, as the iPad's `startSetup`: one Touch ID first (`grants: true`, the approval
+    /// key signs under it), then planque's calls and KIFF's mint signed by the device key with no
+    /// prompt (`signConfirmed`), and Setup's draft by the approval key.
+    private func startCoach() async {
+        planque.tenant = account.session.tenant
+        planque.signer = account.signMessage
+        planque.bodyHash = Signing.sha256Hex
+        planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!)
+        defer { planque.signer = nil }
+        let key = deviceKey, reason = words("coach.prompt.connect_tools")
+        await coach.startSetup(account: account, approval: approvalAccount,
+                               enrol: { [planque, account] in await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key) },
+                               confirm: { try await CoachModel.confirmWithTouchID(reason) }, words: words)
     }
 
     /// This device's planque proof for a taf's Setup, as the iPad's `loadTafSetup`: the account's

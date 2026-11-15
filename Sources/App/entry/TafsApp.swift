@@ -20,7 +20,8 @@ struct TafsApp: App {
                     SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language),
                                  cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
                                  route: .phoneOrPasskey, streamer: NetworkLineStream(), signedOut: { signIn.signedOut() },
-                                 addThisMac: { Task { await signIn.pair() } }, softwareKey: signIn.key.keyStore == "software")
+                                 addThisMac: { Task { await signIn.pair() } }, softwareKey: signIn.key.keyStore == "software",
+                                 deviceKey: signIn.key.publicKeyDER)
                         .id(session.accessToken)
                 } else {
                     SignInView(model: signIn)

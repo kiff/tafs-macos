@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 
 @MainActor
@@ -520,6 +521,68 @@ final class CoachModel: ObservableObject {
     private(set) var accountGeneration = 0
     func signedOut() { accountGeneration += 1 }
 
+    // MARK: Start, as the iPad's `startSetup`
+
+    /// A start on its way: Start says "Starting…" and waits, as the iPad's `startingSetup`.
+    @Published private(set) var startingSetup = false
+    /// Why the last start didn't go, as the iPad's `setupError`.
+    @Published private(set) var setupError: String?
+    /// Whether this Mac is set up with planque for the account, as the iPad's `planqueReady`:
+    /// for this session.
+    private(set) var planqueReady = false
+
+    /// Touch ID, never the password, as the iPad's `sign(_:reason:grants: true)`: the approval key
+    /// signs under it. Throws when not confirmed.
+    nonisolated static func confirmWithTouchID(_ reason: String) async throws {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else { throw error ?? LAError(.biometryNotAvailable) }
+        guard try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) else { throw LAError(.authenticationFailed) }
+    }
+
+    /// Starts Coach, as the iPad's `startSetup` (`AppModel.swift:7556-7635`), in its order
+    /// (`CoachStart.start`); then reads Coach's thread. Only Coach's own chat starts.
+    @discardableResult
+    func startSetup(account: AccountClient, approval: AccountClient?, enrol: @escaping () async -> PlanqueEnrolment.Stop?,
+                    confirm: @escaping () async throws -> Void, words: Words) async -> Bool {
+        guard isCoach else { return false }
+        guard !startingSetup else { return false }
+        startingSetup = true
+        defer { startingSetup = false }
+        let gen = accountGeneration
+        let coach: Coach?
+        if case .loaded(let known, _) = state { coach = known } else { coach = nil }
+        let (outcome, ready) = await CoachStart.start(coach: coach, planqueReady: planqueReady, cloud: cloud, account: account, approval: approval,
+                                                     confirm: confirm, enrol: enrol, ended: { [weak self] in self?.accountGeneration != gen },
+                                                     words: words)
+        guard gen == accountGeneration else { return false }
+        planqueReady = ready
+        switch outcome {
+        case .started:
+            setupError = nil
+            await load()
+            return true
+        case .firstStart:
+            // tafs cloud's first start, signed once with Coach's tools: not on this Mac yet.
+            setupError = words("approval.device_can_not_approve_approve")
+            return false
+        case .stopped(let why):
+            if let why { setupError = why }
+            return false
+        }
+    }
+
+    /// While Coach isn't there and this Mac can't start it, Coach is started on a device that can
+    /// (the phone): Setup is read again until it's there, then its thread shows here.
+    func followStart(every seconds: TimeInterval = 10) async {
+        let gen = accountGeneration
+        while state == .notStarted, gen == accountGeneration, !Task.isCancelled {
+            do { try await sleep(seconds) } catch { return }
+            guard gen == accountGeneration, !Task.isCancelled else { return }
+            await load()
+        }
+    }
+
     /// Reports an answer in this chat to tafs cloud, with its chat's session, as the iPad's
     /// `reportAnswer`: tafs cloud's words when it refuses with some; a gone answer says so; any
     /// other failure is the app's own line, since tafs cloud's codes are for developers.
@@ -587,6 +650,9 @@ struct CoachView: View {
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
     /// answered here.
     var mayUseCoach = false
+    /// Starts Coach for the account, on a Mac that may (`CoachStart.mayStart`); nil on one that
+    /// can't approve, which says so and follows the start made on the phone.
+    var start: (() async -> Void)? = nil
     /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back; nil
     /// draws no Back.
     var close: (() -> Void)? = nil
@@ -905,7 +971,27 @@ struct CoachView: View {
                     .accessibilityAddTraits(.isHeader)
                 Text(words("coach.ask_anything_line")).font(.system(size: 16)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
+                if model.isCoach, model.state == .notStarted { startArea }
             }
+        }
+    }
+
+    /// Start, for an account with no Coach yet, as the iPad's `introBefore`: Start and what it
+    /// asks, on a Mac that may start Coach; else why it can't, in the words for a device that
+    /// can't approve, while Coach is started on the phone and read again here until it's there.
+    @ViewBuilder private var startArea: some View {
+        if let why = model.setupError {
+            Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+        }
+        if let start {
+            Button(words(model.startingSetup ? "common.starting" : "coach.start")) { Task { await start() } }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(model.startingSetup)
+            Text(words("coach.starting_asks", ["biometry": "Touch ID"])).font(.system(size: 12)).foregroundColor(Theme.dim)
+        } else {
+            Text(words("approval.device_can_not_approve_approve")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .task { await model.followStart() }
         }
     }
 
