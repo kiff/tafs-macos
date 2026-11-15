@@ -3,7 +3,7 @@ import Foundation
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
 let balanceAnswer = #"{"balance":{"state":"warning","why":null,"meter_pct":82,"words":"180 credits left","detail":"Of 1,000 this month.","warning":"At this pace they run out on the 24th.","raise":null,"buy":{"solo":false,"packs":true},"credits_panel":true},"plan_line":"Solo · renews 1 December","plan_tone":"ok","home_line":null}"#
-let creditsAnswer = #"{"period":{"start":"2026-11-01","end":"2026-11-30","current":true},"credits":820,"runs":412,"words":"820 credits this period","tafs":[{"taf":"taf-1","credits":600,"runs":300,"words":"Refunds · 600 credits","pace":"At this pace, about 640 this month"},{"taf":null,"credits":220,"runs":112,"words":"Removed tafs · 220 credits"},{"taf":"taf-3","words":"  "},7],"coach":null,"not_counted":{"runs":4,"words":"4 runs not counted","lines":[{"why":"coach","runs":3,"words":"Coach, included · 3 runs"},{"why":"failed","runs":1,"words":"Failed on our side · 1 run"},{"why":"x"}]},"note":"Credits renew on the 1st."}"#
+let creditsAnswer = #"{"period":{"start":"2026-11-01","end":"2026-11-30","current":true},"credits":820,"runs":412,"words":"820 credits this period","tafs":[{"taf":"taf-1","credits":600,"runs":300,"words":"Refunds · 600 credits","pace":"At this pace, about 640 this month"},{"taf":null,"credits":220,"runs":112,"words":"Removed tafs · 220 credits"},{"taf":"taf-3","words":"  "},7],"coach":null,"not_counted":{"runs":4,"words":"4 runs not counted","lines":[{"why":"coach","runs":3,"words":"Coach, included · 3 runs"},{"why":"failed","runs":1,"words":"Failed on our side · 1 run"},{"why":"x"},{"why":"y","words":7},"z",{"why":"trial","words":"Trials · 2 runs"}]},"note":"Credits renew on the 1st."}"#
 
 private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport) {
     let transport = CannedTransport(answers)
@@ -50,7 +50,7 @@ let usageTests: [Test] = [
         try expectEqual(credits.rows[1].taf, nil)
         try expectEqual(credits.coach, nil)
         try expectEqual(credits.notCounted, "4 runs not counted")
-        try expectEqual(credits.notCountedLines, ["Coach, included · 3 runs", "Failed on our side · 1 run"])
+        try expectEqual(credits.notCountedLines, ["Coach, included · 3 runs", "Failed on our side · 1 run", "Trials · 2 runs"])
         try expectEqual(credits.note, "Credits renew on the 1st.")
         _ = try await client.credits(previous: true)
         try expectEqual(transport.sent[1].path, "/v1/usage/credits?period=previous")

@@ -53,10 +53,10 @@ struct UsageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // The screen's name sits small and centred at the top, as on the iPad.
-                Text(words("usage.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(words("usage.title")).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
                     .frame(maxWidth: .infinity).padding(.top, 18).padding(.bottom, 8)
                     .accessibilityAddTraits(.isHeader)
-                panel { balance }
+                panel(stroke: balanceStroke) { balance }
                 panel {
                     Eyebrow(text: words("usage.credits"))
                     periods
@@ -72,12 +72,22 @@ struct UsageView: View {
         .task { await model.load() }
     }
 
-    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    /// A panel as the iPad's: radius 18, continuous.
+    private func panel<Content: View>(stroke: Color = Theme.line, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10, content: content)
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(stroke))
+    }
+
+    /// The balance's edge, by its tone as on the iPad: red while the tafs wait, amber with a
+    /// warning, else the plain line.
+    private var balanceStroke: Color {
+        guard case .loaded(let balance) = model.balance else { return Theme.line }
+        if balance.waiting { return Theme.no.opacity(0.5) }
+        if balance.warning != nil { return Theme.amber.opacity(0.5) }
+        return Theme.line
     }
 
     @ViewBuilder private var balance: some View {
@@ -87,7 +97,7 @@ struct UsageView: View {
         case .unread(let why):
             Text(words("usage.balance_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let balance):
-            Text(verbatim: balance.words).font(.system(size: 16, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
+            Text(verbatim: balance.words).font(.system(size: 17, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
             if let meter = balance.meter {
                 GeometryReader { space in
                     ZStack(alignment: .leading) {
@@ -101,7 +111,10 @@ struct UsageView: View {
                 .accessibilityValue(words.number(meter) + " %")
             }
             if let detail = balance.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
-            if let warning = balance.warning { Text(verbatim: warning).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText) }
+            if let warning = balance.warning {
+                // Its colour is its tone: red while the tafs wait, else amber.
+                Text(verbatim: warning).font(.system(size: 14, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.amberText)
+            }
             if let plan = balance.planLine { Text(verbatim: plan).font(.system(size: 13)).foregroundColor(Theme.soft) }
         }
     }
@@ -135,24 +148,27 @@ struct UsageView: View {
         case .unread(let why):
             Text(words("usage.credits_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
         case .loaded(let credits):
-            Text(verbatim: credits.words).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(verbatim: credits.words).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
         }
     }
 
-    /// Each taf's line as its own panel, then what wasn't counted, then tafs cloud's note.
+    /// Each taf's line as its own panel, then Coach's use past what's included in a panel of its
+    /// own (it is counted), then what wasn't counted, then tafs cloud's note.
     @ViewBuilder private var creditsRows: some View {
         if case .loaded(let credits) = model.credits {
             ForEach(credits.rows) { row in
                 panel {
-                    Text(verbatim: row.words).font(.system(size: 14)).foregroundColor(Theme.ink)
+                    Text(verbatim: row.words).font(.system(size: 15)).foregroundColor(Theme.ink)
                     if let pace = row.pace { Text(verbatim: pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
                 }
             }
-            if credits.coach != nil || credits.notCounted != nil {
+            if let coach = credits.coach {
+                panel { Text(verbatim: coach).font(.system(size: 15)).foregroundColor(Theme.ink) }
+            }
+            if credits.notCounted != nil || !credits.notCountedLines.isEmpty {
                 panel {
-                    if let not = credits.notCounted { Text(verbatim: not).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
+                    if let not = credits.notCounted { Text(verbatim: not).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
                     ForEach(Array(credits.notCountedLines.enumerated()), id: \.offset) { _, line in Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft) }
-                    if let coach = credits.coach { Text(verbatim: coach).font(.system(size: 14)).foregroundColor(Theme.soft) }
                 }
             }
             if let note = credits.note { Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.soft).padding(.leading, 4) }

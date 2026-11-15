@@ -50,7 +50,7 @@ enum Usage {
         /// The period's total, in tafs cloud's words.
         let words: String
         let rows: [Row]
-        /// Coach's own use, once past what's included.
+        /// Coach's own use past what's included: counted, so never under what wasn't.
         let coach: String?
         /// What wasn't counted (trials, failed runs), in words.
         let notCounted: String?
@@ -61,6 +61,7 @@ enum Usage {
         enum Keys: String, CodingKey { case words, tafs, coach, notCounted = "not_counted", note }
         enum RowKeys: String, CodingKey { case taf, words, pace }
         enum WordsKeys: String, CodingKey { case words }
+        enum LinesKeys: String, CodingKey { case lines }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
@@ -81,10 +82,16 @@ enum Usage {
             }
             coach = nested(.coach)
             notCounted = nested(.notCounted)
-            struct Line: Decodable { let words: String? }
-            struct Lines: Decodable { let lines: [Line]? }
-            let lines = ((try? c.decodeIfPresent(Lines.self, forKey: .notCounted)) ?? nil)?.lines ?? []
-            notCountedLines = lines.compactMap { Usage.text($0.words) }
+            // Line by line: one that doesn't read is left out, never the others.
+            var reasons: [String] = []
+            if let inner = try? c.nestedContainer(keyedBy: LinesKeys.self, forKey: .notCounted),
+               var list = try? inner.nestedUnkeyedContainer(forKey: .lines) {
+                while !list.isAtEnd {
+                    guard let line = try? list.nestedContainer(keyedBy: WordsKeys.self) else { _ = try? list.decode(Skipped.self); continue }
+                    if let words = Usage.text((try? line.decodeIfPresent(String.self, forKey: .words)) ?? nil) { reasons.append(words) }
+                }
+            }
+            notCountedLines = reasons
             note = Usage.text((try? c.decodeIfPresent(String.self, forKey: .note)) ?? nil)
         }
 
