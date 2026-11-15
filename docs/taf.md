@@ -100,6 +100,42 @@ iPad's reader.
   busy, so the taf reads halted there too, then is followed while halting.
 - The iPad's `stopped` (how many runs a halt stopped) isn't read: no screen shows it.
 
+## Starts when and Results go to: the taf's dial (`Knob`, `TafKnobModel`)
+
+The iPad's knob API as its Setup draws it: `StartsWhenView`, `ResultsGoToView`,
+`KnobPendingPanel` and `SizeStepper` (`ios/Tafs/Views/TafSetupViews.swift`), with
+`TafsCloud.Knob` (`KIFF/TafsCloud+Knob.swift`) and `loadKnob`, `adjustKnob`, `changeKnob`,
+`setResultPlaces`, `removeFollowUp` and `setPaused` (`App/AppModel.swift`). The iPad's round
+dial (`TafKnobView`, `TafDialPanel`, `TafKnobRemote`) isn't drawn on its screens today, so it
+isn't here either. Both screens open from the taf's Setup, as sheets: Starts when after its
+workflow, Results go to after its apps.
+
+- **The dial** is read with `GET /v1/tafs/{id}/knob`. With a change waiting (`pending`), that
+  version's is read (`?version=`); one installed meanwhile (404) is read as it is now. Every
+  label and line is tafs cloud's. A stop must have its id, and anything tafs cloud sends must
+  be the iPad's type; what it doesn't send takes the iPad's defaults.
+- **Starts when:** its schedule (tafs cloud's words, − and + through the sizes it offers,
+  when it runs next in the account's zone, and what it does if still working: Skip it or Run
+  after), the app events it listens to (Stop, to take one out), the follow-ups it set itself
+  (Remove), then Pause or Resume every start.
+- **Results go to:** tafs' own places (Reply to the sender, Alert our phones, Email me), set at
+  once (`PUT …/results`), at least one always on; then each place in a connected app, turned
+  through the dial's next version.
+- **A change** copies the live `setting`, changes one thing and sends it whole
+  (`PUT …/knob`): tafs cloud makes the next version, and nothing runs from it until it goes
+  live. Only whoever manages the taf, as KIFF says, gets the controls.
+- **Signed, so not on this Mac yet:** making the next version live (the iPad's Make it live
+  begins the version switch and signs the taf's Card) and approving an app event (signed with
+  the approval key, then subscribed at planque). Where the iPad has their buttons, this Mac
+  shows the line for an approval made on another device
+  (`approval.device_can_not_approve_approve`).
+- **What went wrong** shows in red at the top of the screen, where the iPad says it in its
+  error line: the dial that couldn't be read, a change that didn't go, a place or a pause
+  tafs cloud refused (its words), or not every start paused (a 502 while pausing).
+
+Not here yet: its doors (the Doors screens), "Change when it starts with Coach" and "Add a
+place from a connected app" (Coach on the taf), and Not sent with Send again (the taf's work).
+
 ## Tests
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card

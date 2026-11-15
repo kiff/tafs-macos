@@ -143,7 +143,7 @@ struct SignedInView: View {
         return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
                                halted: { await readTafs() },
                                // Plan & usage in place of the taf's page.
-                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }).id(taf.id))
+                               openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }, me: accountModel.me).id(taf.id))
     }
 
     private var accountScreen: some View {

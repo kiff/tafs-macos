@@ -84,12 +84,15 @@ enum Home {
         let workStatus: String?
         /// Its setup stopped partway: tafs cloud's words for it, in place of what it's doing.
         let finishWords: String?
+        /// Where its results go that tafs cloud delivers (`door_reply`, `app`, `owner_email`),
+        /// as sent; nil when tafs cloud doesn't say (Setup's Results go to then reads the dial).
+        let results: [JSONValue]?
 
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, waiting, jobSummary = "job_summary"
-            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish
+            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
         enum FinishKeys: String, CodingKey { case taf, session, words }
@@ -124,6 +127,7 @@ enum Home {
             let finish = try? c.nestedContainer(keyedBy: FinishKeys.self, forKey: .finish)
             func part(_ key: FinishKeys) -> String? { text(finish.flatMap { (try? $0.decodeIfPresent(String.self, forKey: key)) ?? nil })?.trimmingCharacters(in: .whitespacesAndNewlines) }
             finishWords = part(.taf) != nil && part(.session) != nil ? part(.words) : nil
+            results = (try? c.decodeIfPresent([JSONValue].self, forKey: .results)) ?? nil
         }
 
         /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the

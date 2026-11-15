@@ -103,6 +103,8 @@ struct TafView: View {
     var halted: () async -> Void = {}
     /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
+    /// Who is signed in: Setup's account time zone and email.
+    var me: Me? = nil
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
@@ -148,7 +150,8 @@ struct TafView: View {
                     TafSetupTab(model: pages, openActivity: { query in
                         pages.show(activityQuery: query)
                         tab = .activity
-                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted)
+                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted,
+                       taf: taf, manages: manages, me: me)
                 }
             }
         }
