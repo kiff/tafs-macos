@@ -10,7 +10,7 @@ private func model(_ answers: [(Int, String)]) -> (UsageModel, CannedTransport) 
     return (UsageModel(cloud: CloudClient(transport: transport, session: session)), transport)
 }
 
-let usageMacTests: [Test] = [
+let usageScreenTests: [Test] = [
     Test("each half is read on its own: an unread balance leaves the credits, and the other way round", awaiting: { @MainActor in
         let (a, _) = model([(503, ""), (200, creditsAnswer)])
         await a.load()
