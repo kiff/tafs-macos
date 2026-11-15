@@ -38,7 +38,7 @@ private func pages(setup: String = "taf-setup.json") async throws -> (TafPagesMo
     return (model, transport)
 }
 
-let tafMacTests: [Test] = [
+let tafScreenTests: [Test] = [
     Test("Activity and Setup only read, and a filter is tafs cloud's own, asked for again", awaiting: { @MainActor in
         let (model, transport) = try await pages()
         guard case .loaded(let activity) = model.activity, case .loaded(let setup) = model.setup else { throw Failure(description: "not read") }

@@ -6,6 +6,7 @@ struct SignedInView: View {
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
     @StateObject private var people: PeopleModel
+    @StateObject private var accountHalt: HaltModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -18,6 +19,8 @@ struct SignedInView: View {
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
     @State private var tafPages: TafPagesModel?
+    /// What this person may do with each taf, as KIFF says, by KIFF agent.
+    @State private var access: [String: Access] = [:]
     private let cloud: CloudClient
     private let streamer: LineStream?
     @State private var announced = Announced()
@@ -40,6 +43,7 @@ struct SignedInView: View {
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
+        _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud))
@@ -57,7 +61,7 @@ struct SignedInView: View {
                   accountLine: accountModel.me?.email ?? accountModel.me?.account) { screen in
             switch screen {
             case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
@@ -79,13 +83,22 @@ struct SignedInView: View {
                 await needsYou.load()
                 // The tafs, for the sidebar and the Overview: read once here, and again with each round,
                 // so a taf made in Coach shows without opening the Overview.
-                await overview.load()
+                await readTafs()
                 if case .loaded(let calls) = needsYou.state {
                     notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
                 }
                 try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
             }
         }
+    }
+
+    /// The tafs, then what this person may do with each, as the iPad's `refresh()` with its
+    /// `refreshAccess` (AppModel.swift:1894-1896, 1118-1122): access decides Halt, so it's read
+    /// with the list, once the list has read. A read that fails keeps what was read.
+    private func readTafs() async {
+        await overview.load()
+        guard case .loaded = overview.state, let read = try? await account.myAccess() else { return }
+        access = read
     }
 
     /// The calls held for the person, for the sidebar, each with its taf's name.
@@ -104,7 +117,8 @@ struct SignedInView: View {
 
     private var tafPage: AnyView? {
         guard let openTaf, let chat = tafChat, let taf = overview.tafs.first(where: { $0.id == openTaf }) else { return nil }
-        return AnyView(TafView(taf: taf, chat: chat, pages: tafPages).id(taf.id))
+        return AnyView(TafView(taf: taf, chat: chat, pages: tafPages, manages: Access.manages(access[taf.id]),
+                               halted: { await readTafs() }).id(taf.id))
     }
 
     private var accountScreen: some View {

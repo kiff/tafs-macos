@@ -39,8 +39,11 @@ struct Me: Decodable, Equatable {
     /// How this session approves, in KIFF's word: `view`, `key`, `passkey`. Nil from a KIFF
     /// that doesn't say: the app then claims nothing about it.
     let approvalMode: String?
+    /// What this person may do on the account, as KIFF says ("cards.manage", …); nil from a
+    /// KIFF that doesn't say.
+    let capabilities: [String]?
 
-    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode" }
+    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode", capabilities }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func text(_ key: CodingKeys) -> String? {
@@ -50,7 +53,12 @@ struct Me: Decodable, Equatable {
         email = text(.email)
         account = text(.name) ?? text(.slug)
         approvalMode = text(.approvalMode)
+        capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
     }
+
+    /// Whether this person manages the account's Cards (KIFF's `cards.manage`), as the iPad's
+    /// `managesCards`: halting every taf is theirs. A KIFF that doesn't say leaves it to KIFF.
+    var managesCards: Bool { capabilities.map { $0.contains("cards.manage") } ?? true }
 
     /// The session reads everything and approves nothing here: exactly when KIFF says `view`.
     var viewOnly: Bool { approvalMode == "view" }
@@ -83,6 +91,14 @@ struct AccountClient {
         struct Answer: Decodable { let devices: [Device] }
         let answer: Answer = try read(try await send("GET", "/v1/me/devices"))
         return answer.devices
+    }
+
+    /// What this person may do with each of the account's agents, by KIFF agent, as the iPad's
+    /// `KIFFClient.myAccess`.
+    func myAccess() async throws -> [String: Access] {
+        struct Answer: Decodable { let agents: [String: Access] }
+        let answer: Answer = try read(try await send("GET", "/v1/me/access"))
+        return answer.agents
     }
 
     /// Signs a device out of the account: it no longer approves, and its session is over.
@@ -131,4 +147,19 @@ struct AccountClient {
         }
         return decoder
     }()
+}
+
+/// What a person may do with a taf, as KIFF answers it: use it, see everyone's work with it,
+/// change it (halt it, its Card, its versions).
+/// Decoded as the iPad's `KIFFClient.Access` (KIFFClient.swift:1417-1422): each flag is a
+/// required Bool and `groups` an optional list, so a flag missing or mistyped fails the read.
+struct Access: Decodable, Equatable {
+    var use = false
+    var oversee = false
+    var manage = false
+    var groups: [String]? = nil
+
+    /// Whether this person manages the taf, as the iPad's `manages`: without KIFF's answer for
+    /// it (not read yet, or failed), nothing is shown.
+    static func manages(_ access: Access?) -> Bool { access?.manage ?? false }
 }
