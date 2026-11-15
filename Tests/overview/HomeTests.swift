@@ -147,4 +147,51 @@ let overviewTests: [Test] = [
         // The contract leaves the recipes out: nothing listed, never an empty list drawn.
         try expectEqual(recipes.homeListsRecipes, false)
     },
+    Test("the gallery reads as the iPad's: a job or category that doesn't read is left out, missing words are none", awaiting: {
+        let json = #"""
+        {"categories":[{"id":"money","title":"Money"},{"title":"no id"}],
+         "recipes":[{"id":"r1","title":"Refunds","category":"money","say":"Refund"},{"id":"r2","title":"Disputes","category":"money"},{"id":"r3","title":"Invoices","category":"money"},{"title":"no id"},{"id":"r4","title":"x","say":7}],
+         "strip":{"shown":true,"title":"Jobs to try","ids":["r3","gone","r1"]},
+         "words":{"title":"New taf","all":"All jobs","own_words":"Say it in your own words","explore":" Explore jobs ","see_all":"See all jobs","try":"Try it with Coach","sample":"What it reported","own_words_line":7},
+         "labels":{"hand":"Set it up with Coach"}}
+        """#
+        let (client, transport) = cloud([(200, json), (200, "{}")])
+        let gallery = try await client.recipesGallery()
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/recipes/gallery")
+        try expectEqual(gallery.categories.map(\.id), ["money"])
+        try expectEqual(gallery.recipes.map(\.id), ["r1", "r2", "r3"])
+        // The strip in tafs cloud's order, an id it doesn't list skipped.
+        try expectEqual(gallery.stripRecipes.map(\.id), ["r3", "r1"])
+        try expectEqual(gallery.seeAll, "See all jobs")
+        try expectEqual(gallery.explore, "Explore jobs")
+        try expectEqual(gallery.title(browse: true), "Explore jobs")
+        try expectEqual(gallery.title(browse: false), "New taf")
+        try expectEqual(gallery.handWords(browse: true, labels: gallery.labels), "Try it with Coach")
+        try expectEqual(gallery.handWords(browse: false, labels: gallery.labels), "Set it up with Coach")
+        try expectEqual(gallery.sampleLabel, "What it reported")
+        try expectEqual(gallery.words.ownWordsLine, "")
+        try expectEqual(gallery.category(of: gallery.recipes[0])?.title, "Money")
+        try expectEqual(gallery.asRecipes().labels?.hand, "Set it up with Coach")
+        try expectEqual(gallery.asRecipes().byCategory.first?.recipes.map(\.id), ["r1", "r2", "r3"])
+        let empty = try await client.recipesGallery()
+        try expectEqual(empty.recipes, [])
+        try expectEqual(empty.explore, nil)
+        try expectEqual(empty.seeAll, nil)
+        try expectEqual(empty.stripRecipes, [])
+        try expectEqual(empty.title(browse: true), "")
+        try expectEqual(empty.handWords(browse: true, labels: nil), nil)
+        try expectEqual(empty.sampleLabel, nil)
+    }),
+    Test("the strip's See all is tafs cloud's, else its All jobs, and none when the strip shows every job; it shows only when tafs cloud says") {
+        let gallery = { (strip: String, words: String) in
+            try JSONDecoder().decode(Gallery.self, from: Data((#"{"recipes":[{"id":"r1","title":"A"},{"id":"r2","title":"B"}],"strip":"# + strip + #","words":"# + words + "}").utf8))
+        }
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1"]}"#, #"{"all":"All jobs"}"#).seeAll, "All jobs")
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1","r2"]}"#, #"{"see_all":"See all"}"#).seeAll, nil)
+        try expectEqual(try gallery(#"{"shown":true,"ids":["r1"]}"#, #"{"see_all":"  "}"#).seeAll, nil)
+        try expectEqual(try gallery(#"{"shown":false,"ids":["r1"]}"#, "{}").stripRecipes, [])
+        // The sheet's words from /v1/recipes, where the gallery sends none.
+        let recipes = try JSONDecoder().decode(Recipes.self, from: Data(#"{"labels":{"hand":"Hand it over"}}"#.utf8))
+        try expectEqual(try gallery("{}", "{}").asRecipes(labels: recipes.labels).labels?.hand, "Hand it over")
+    },
 ]
