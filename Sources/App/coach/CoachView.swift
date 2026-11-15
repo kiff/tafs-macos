@@ -226,8 +226,7 @@ struct CoachView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(words("coach.title")).font(Theme.display(28)).foregroundColor(Theme.coach)
+            VStack(alignment: .leading, spacing: 14) {
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)
@@ -247,40 +246,53 @@ struct CoachView: View {
                     if page.working, model.live == nil {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
-                            Text(words("chat.working")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                            Text(words("chat.working")).font(.system(size: 13)).foregroundColor(Theme.soft)
                         }
                     }
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
+            .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.coachWash)
-        .safeAreaInset(edge: .bottom) { composer }
+        // The screen's name sits small and centred on the background's own colour, as on the iPad.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Text(words("coach.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.background)
+                .accessibilityAddTraits(.isHeader)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .task { await model.load() }
         .sheet(item: Binding(get: { model.consent }, set: { if $0 == nil { model.declineAI() } })) { consent in
             consentSheet(consent)
         }
     }
 
-    /// The message box. Return sends; nothing goes until the person sends it.
+    /// The message box, to the iPad's: a rounded panel with the words, and the send circle at
+    /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 10) {
                 TextField(words("coach.ask_anything"), text: $model.draft)
-                    .textFieldStyle(.roundedBorder).font(.system(size: 14))
+                    .textFieldStyle(.plain).font(.system(size: 15))
                     .onSubmit { Task { await model.send() } }
-                Button(words("common.send")) { Task { await model.send() } }
-                    .buttonStyle(.plain).font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white).padding(.horizontal, 16).padding(.vertical, 7)
-                    .background(Capsule().fill(model.canSend ? Theme.coach : Theme.dim))
+                HStack {
+                    Spacer()
+                    Button { Task { await model.send() } } label: {
+                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(Theme.coach.opacity(model.canSend ? 1 : 0.4)))
+                    }
+                    .buttonStyle(.plain)
                     .disabled(!model.canSend)
+                    .accessibilityLabel(words("common.send"))
+                }
             }
-            .padding(.horizontal, 28).padding(.vertical, 12)
-            .frame(maxWidth: 760 + 56, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.coachPanel)
+            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+            .background(RoundedRectangle(cornerRadius: 18).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Theme.line))
+            .padding(.horizontal, 12).padding(.vertical, 12)
+            .background(Theme.background)
         }
     }
 
@@ -288,12 +300,8 @@ struct CoachView: View {
     private func writing(_ live: LiveAnswer) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if !live.text.isEmpty {
-                HStack {
-                    Text(verbatim: live.text).font(.system(size: 14)).foregroundColor(Theme.ink)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-                    Spacer(minLength: 80)
-                }
+                Text(verbatim: live.text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -308,9 +316,9 @@ struct CoachView: View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack {
                 Spacer(minLength: 80)
-                Text(verbatim: pending.text).font(.system(size: 14)).foregroundColor(Theme.onFill)
+                Text(verbatim: pending.text).font(.system(size: 15)).foregroundColor(.white)
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Theme.coach.opacity(pending.failed == nil ? 0.55 : 0.35)))
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Theme.brand).opacity(pending.failed == nil ? 0.6 : 0.4))
             }
             if let why = pending.failed {
                 HStack(spacing: 8) {
@@ -357,14 +365,20 @@ struct CoachView: View {
             if message.isNote {
                 Text(verbatim: message.text).font(.system(size: 12)).foregroundColor(Theme.dim)
             } else {
-                HStack {
-                    if message.fromPerson { Spacer(minLength: 80) }
-                    // The words are a person's or the model's: plain text, never a line of the app's.
-                    Text(verbatim: message.text).font(.system(size: 14)).foregroundColor(message.fromPerson ? Theme.onFill : Theme.ink)
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(message.fromPerson ? Theme.coach : Theme.panel))
-                    if !message.fromPerson { Spacer(minLength: 80) }
+                // The words are a person's or the model's: plain text, never a line of the app's.
+                if message.fromPerson {
+                    // The person's words, on the brand's gradient at the right.
+                    HStack {
+                        Spacer(minLength: 80)
+                        Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(.white)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.brand))
+                    }
+                } else {
+                    // Coach's words, as text on the page, with no bubble.
+                    Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(3)
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
             }
         case .card(let card, _):
@@ -380,20 +394,23 @@ struct CoachView: View {
     /// card whose answer is a signature isn't answered here: it says it needs the person.
     @ViewBuilder private func card(_ card: Thread.Card) -> some View {
         if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
-            VStack(alignment: .leading, spacing: 8) {
-                if let title = card.title { Text(verbatim: title).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink) }
-                if let text = card.text { Text(verbatim: text).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
+            // A card sits on the page as Coach's words do; its choices are white pills under it.
+            VStack(alignment: .leading, spacing: 10) {
+                if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
+                if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(3).fixedSize(horizontal: false, vertical: true) }
                 if let answered = card.answered {
                     Text(verbatim: answered).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ok)
                 } else if card.waitsForPerson, card.isChoice {
                     if model.answering == card.key {
-                        Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                        Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     } else {
                         HStack(spacing: 8) {
                             ForEach(card.options, id: \.value) { option in
                                 Button { Task { await model.answer(card, with: option) } } label: {
-                                    Text(verbatim: option.label).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.coach)
-                                        .padding(.horizontal, 12).padding(.vertical, 6).overlay(Capsule().stroke(Theme.coach))
+                                    Text(verbatim: option.label).font(.system(size: 14)).foregroundColor(Theme.ink)
+                                        .padding(.horizontal, 14).padding(.vertical, 8)
+                                        .background(Capsule().fill(Theme.panel)).overlay(Capsule().stroke(Theme.line))
+                                        .contentShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(model.answering != nil)
@@ -407,9 +424,7 @@ struct CoachView: View {
                     waiting(words(card.grants ? "coach.needs_you_approve" : "coach.needs_you_question"))
                 }
             }
-            .padding(12)
-            .frame(maxWidth: 520, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.coachPanel))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
