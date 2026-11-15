@@ -87,7 +87,8 @@ struct SoftwareKey: SigningKey {
 struct KeychainStore: SecretStore {
     var service = "bot.tafs.macos"
 
-    struct Refused: Error { let status: OSStatus }
+    /// The Keychain said no. It carries the Keychain's status number only, never the item.
+    struct Refused: Error, Equatable { let status: OSStatus }
 
     private func query(_ account: String) -> [CFString: Any] {
         [kSecClass: kSecClassGenericPassword, kSecAttrService: service, kSecAttrAccount: account]
@@ -102,18 +103,48 @@ struct KeychainStore: SecretStore {
         return found as? Data
     }
 
+    /// Keeps the secret, replacing this app's own item when there is one: a re-pair writes
+    /// over the session and key an earlier pairing kept.
     func save(_ secret: Data, for account: String) throws {
-        delete(account)
+        let added = add(secret, for: account)
+        if added == errSecSuccess { return }
+        guard added == errSecDuplicateItem else { throw Refused(status: added) }
+        let updated = SecItemUpdate(query(account) as CFDictionary, [kSecValueData: secret] as CFDictionary)
+        if updated == errSecSuccess { return }
+        // An item this build may not change, such as one an earlier unsigned build kept, is
+        // made anew if it may at least be deleted.
+        let deleted = SecItemDelete(query(account) as CFDictionary)
+        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw Refused(status: updated) }
+        let again = add(secret, for: account)
+        guard again == errSecSuccess else { throw Refused(status: again) }
+    }
+
+    private func add(_ secret: Data, for account: String) -> OSStatus {
         var q = query(account)
         q[kSecValueData] = secret
         q[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         q[kSecAttrSynchronizable] = false
-        let status = SecItemAdd(q as CFDictionary, nil)
-        guard status == errSecSuccess else { throw Refused(status: status) }
+        return SecItemAdd(q as CFDictionary, nil)
     }
 
     func delete(_ account: String) {
         SecItemDelete(query(account) as CFDictionary)
+    }
+}
+
+extension SecretStore {
+    /// Fails now if any of these can't be written over. A pairing checks before it shows its
+    /// code: a refusal found after the phone approved would leave a device at KIFF that this
+    /// Mac can't keep.
+    func checkWritable(_ accounts: [String]) throws {
+        for account in accounts {
+            if let kept = load(account) {
+                try save(kept, for: account)
+            } else {
+                try save(Data(), for: account)
+                delete(account)
+            }
+        }
     }
 }
 

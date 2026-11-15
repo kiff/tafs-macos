@@ -85,6 +85,7 @@ final class SignInModel: ObservableObject {
         let replaced = session
         let store = sessions.store
         do {
+            try store.checkWritable([DeviceKey.account, SessionStore.account])
             let pairingKey: SigningKey
             if replaced == nil {
                 pairingKey = key
@@ -170,6 +171,8 @@ final class SignInModel: ObservableObject {
         case KIFFError.refused(_, let code) where !code.isEmpty: why = code
         case KIFFError.refused(let status, _): why = String(status)
         case let error as KIFFError: why = String(describing: error)
+        // The Keychain's status number alone: never the item, and never the error's type.
+        case let refused as KeychainStore.Refused: why = String(refused.status)
         default: why = error.localizedDescription
         }
         step = .failed(why: why, pairing: pairing)

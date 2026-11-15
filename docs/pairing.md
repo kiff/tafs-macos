@@ -91,3 +91,27 @@ was. There is no upgrade of a device in place.
 
 The pairing steps name the phone's own button, from the shared words
 (`settings.devices.pair`).
+
+## The Keychain
+
+The session, the device key (or its Secure Enclave handle) and a pairing's new key are kept
+by `KeychainStore`, in the login Keychain, under the service `bot.tafs.macos`.
+
+- **A save replaces this app's own item.** It adds the item; if one is there already, it
+  updates it; if that is refused, it deletes the item and adds it again. A re-pair writes over
+  the session and key an earlier pairing kept.
+- **Why that matters for an unsigned build.** The Keychain ties an item to the build that made
+  it, and each unsigned build is a new app to it. An earlier build's item may refuse to be
+  changed or deleted by the next build. Saving used to delete without reading the answer, then
+  add, so the add failed as a duplicate (`errSecDuplicateItem`, -25299) once the phone had
+  already approved, and KIFF was left with a Mac device that this Mac couldn't keep.
+- **A pairing checks first.** Before it shows its code, it writes the device key and the
+  session over themselves (`SecretStore.checkWritable`). If the Keychain refuses, the pairing
+  stops there: no code, no claim, and nothing for the phone to approve.
+- **A refusal carries the Keychain's status number only** (`KeychainStore.Refused`), never the
+  item. The screen says "This Mac wasn't added: -25299. Show a new code and try again." and
+  never the error's type.
+
+`scripts/test.sh pairing` on a Mac writes over an item kept with none of this build's
+attributes, pairs and then re-pairs at a new launch against a test service in the real
+Keychain, and checks that a Keychain that refuses stops the pairing before its code.
