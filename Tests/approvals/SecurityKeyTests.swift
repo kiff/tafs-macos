@@ -112,6 +112,31 @@ let approvalsSecurityKeyTests: [Test] = [
         try expectEqual(SecurityKeyCredentialAsk.rpName, "KIFF")
         try expectEqual(SecurityKeyWait.milliseconds, 120_000)
     },
+    Test("with the PIN, the uv option is left out (some CTAP2.0 keys refuse both), presence is asked, and the credential isn't discoverable") {
+        let assertion = try SecurityKeyAssertionAsk(clientDataHash: Data(repeating: 1, count: 32), credentialID: Data([7]))
+        try expectEqual(assertion.userVerification, .omit)
+        try expectEqual(assertion.userPresence, .yes)
+        let credential = try SecurityKeyCredentialAsk(clientDataHash: Data(repeating: 1, count: 32), userID: Data([2]), userName: "rae@example.com")
+        try expectEqual(credential.userVerification, .omit)
+        try expectEqual(credential.residentKey, .no)
+    },
+    Test("authenticator data without the UV flag is still refused, though uv isn't asked for", awaiting: {
+        final class NoUV: PasskeyAuthenticator {
+            func getAssertion(clientDataHash: Data, credentialID: Data, pin: SecurityKeyPIN?) async throws -> PasskeyAssertion {
+                PasskeyAssertion(authenticatorData: testSHA256(Data("kiff.dev".utf8)) + Data([0x01, 0, 0, 0, 1]), signatureDER: Data("SIG".utf8))
+            }
+            func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: SecurityKeyPIN?) async throws -> PasskeyMade {
+                PasskeyMade(authenticatorData: Data(), attestationObject: Data())
+            }
+        }
+        let approver = PasskeyApprover(authenticator: NoUV(), credentialID: Data("c".utf8), sha256: testSHA256, enabled: true)
+        do {
+            _ = try await approver.approve(tenant: "t1", method: "POST", path: "/v1/cards", body: Data("{}".utf8), pin: try pin("1234"))
+            throw Failure(description: "taken without UV")
+        } catch let refusal as PasskeyRefusal {
+            try expectEqual(refusal, .notVerified)
+        }
+    }),
     Test("the attestation object is fmt, attStmt and authData, in CTAP2's canonical order") {
         let authData = Data(repeating: 0xab, count: 37)
         let object = AttestationObject.make(format: "none", statement: Data([0xa0]), authenticatorData: authData)

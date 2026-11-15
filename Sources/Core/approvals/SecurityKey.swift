@@ -9,11 +9,27 @@ import Glibc
 /// PIN, its answers' failures, and the attestation object of a new credential. The app's
 /// `FidoKey` asks the key through libfido2 with exactly these, and nothing else.
 
+/// A CTAP2 option as libfido2 takes it: left out, false or true (`fido_opt_t`).
+enum FidoOption: Equatable {
+    case omit, no, yes
+}
+
+/// The key is always asked with its PIN, and the PIN is what verifies the person: so the `uv`
+/// option is left out, as some CTAP2.0 keys refuse it alongside a PIN token. Core still refuses
+/// authenticator data without the UV flag. Without a PIN, the key isn't asked at all
+/// (`SecurityKeyFailure.pinMissing`).
+enum SecurityKeyVerification {
+    static let uvOption = FidoOption.omit
+}
+
 /// One assertion asked of the key: kiff.dev, the hash of the `clientDataJSON` this app built, and
-/// the one credential this Mac approves with. The person must be present and verified (the PIN).
+/// the one credential this Mac approves with. The person must be present, and verified by the PIN.
 struct SecurityKeyAssertionAsk: Equatable {
     let clientDataHash: Data
     let credentialID: Data
+    /// User presence is asked for; `uv` is left out, as the PIN verifies.
+    let userPresence = FidoOption.yes
+    let userVerification = SecurityKeyVerification.uvOption
 
     /// Refuses a hash that isn't SHA-256's 32 bytes, and an empty or oversized credential id
     /// (CTAP2 takes at most 1023 bytes), before the key is asked.
@@ -27,8 +43,8 @@ struct SecurityKeyAssertionAsk: Equatable {
 }
 
 /// One new credential asked of the key, as Windows' `WindowsHello.CreateAsync`: kiff.dev ("KIFF"),
-/// ES256 only, the person verified, kept on the key's side as a credential id this Mac holds (not
-/// a discoverable one).
+/// ES256 only, the person verified by the PIN, kept on the key's side as a credential id this Mac
+/// holds (not a discoverable one).
 struct SecurityKeyCredentialAsk: Equatable {
     /// The relying party's name, as Windows gives it.
     static let rpName = "KIFF"
@@ -38,6 +54,9 @@ struct SecurityKeyCredentialAsk: Equatable {
     let clientDataHash: Data
     let userID: Data
     let userName: String
+    /// Not discoverable; `uv` is left out, as the PIN verifies.
+    let residentKey = FidoOption.no
+    let userVerification = SecurityKeyVerification.uvOption
 
     /// Refuses a hash that isn't 32 bytes, and a user id outside CTAP2's 1 to 64 bytes.
     init(clientDataHash: Data, userID: Data, userName: String) throws {

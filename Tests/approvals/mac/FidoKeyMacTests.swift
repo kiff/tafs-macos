@@ -27,6 +27,11 @@ let approvalsFidoMacTests: [Test] = [
         try expectEqual(bytes(fido_assert_clientdata_hash_ptr(assert), fido_assert_clientdata_hash_len(assert)), hash(9))
         try expectEqual(fido_assert_count(assert), 0)
     },
+    Test("the options reach libfido2 as asked: uv left out, presence true, not discoverable") {
+        try expect(FidoKey.opt(.omit) == FIDO_OPT_OMIT, "omit")
+        try expect(FidoKey.opt(.no) == FIDO_OPT_FALSE, "false")
+        try expect(FidoKey.opt(.yes) == FIDO_OPT_TRUE, "true")
+    },
     Test("a new credential asks libfido2 for ES256 on kiff.dev (KIFF), for the user given") {
         let ask = try SecurityKeyCredentialAsk(clientDataHash: hash(4), userID: Data("sub-1".utf8), userName: "rae@example.com")
         let cred = try FidoKey.prepared(ask)

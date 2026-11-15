@@ -86,16 +86,16 @@ final class FidoKey: PasskeyAuthenticator {
 
     // MARK: What is asked
 
-    /// The assertion libfido2 sends: kiff.dev, the hash, the one credential allowed, presence and
-    /// verification required. The caller frees it (`free(assert:)`).
+    /// The assertion libfido2 sends: kiff.dev, the hash, the one credential allowed, presence
+    /// required, and `uv` left out, as the PIN verifies. The caller frees it (`free(assert:)`).
     static func prepared(_ ask: SecurityKeyAssertionAsk) throws -> OpaquePointer {
         guard let assert = fido_assert_new() else { throw SecurityKeyFailure.failed(code: FidoCode.internal) }
         let codes = [
             fido_assert_set_rp(assert, Passkeys.rpID),
             ask.clientDataHash.withUnsafeBytes { fido_assert_set_clientdata_hash(assert, $0.bindMemory(to: UInt8.self).baseAddress, $0.count) },
             ask.credentialID.withUnsafeBytes { fido_assert_allow_cred(assert, $0.bindMemory(to: UInt8.self).baseAddress, $0.count) },
-            fido_assert_set_up(assert, FIDO_OPT_TRUE),
-            fido_assert_set_uv(assert, FIDO_OPT_TRUE),
+            fido_assert_set_up(assert, opt(ask.userPresence)),
+            fido_assert_set_uv(assert, opt(ask.userVerification)),
         ]
         if let bad = codes.first(where: { $0 != FidoCode.ok }) {
             free(assert: assert)
@@ -104,8 +104,8 @@ final class FidoKey: PasskeyAuthenticator {
         return assert
     }
 
-    /// The credential libfido2 asks for: ES256, kiff.dev ("KIFF"), the user, not discoverable,
-    /// verification required. The caller frees it (`free(cred:)`).
+    /// The credential libfido2 asks for: ES256, kiff.dev ("KIFF"), the user, not discoverable, and
+    /// `uv` left out, as the PIN verifies. The caller frees it (`free(cred:)`).
     static func prepared(_ ask: SecurityKeyCredentialAsk) throws -> OpaquePointer {
         guard let cred = fido_cred_new() else { throw SecurityKeyFailure.failed(code: FidoCode.internal) }
         let codes = [
@@ -115,14 +115,23 @@ final class FidoKey: PasskeyAuthenticator {
             ask.userID.withUnsafeBytes {
                 fido_cred_set_user(cred, $0.bindMemory(to: UInt8.self).baseAddress, $0.count, ask.userName, ask.userName, nil)
             },
-            fido_cred_set_rk(cred, FIDO_OPT_FALSE),
-            fido_cred_set_uv(cred, FIDO_OPT_TRUE),
+            fido_cred_set_rk(cred, opt(ask.residentKey)),
+            fido_cred_set_uv(cred, opt(ask.userVerification)),
         ]
         if let bad = codes.first(where: { $0 != FidoCode.ok }) {
             free(cred: cred)
             throw SecurityKeyFailure.failed(code: bad)
         }
         return cred
+    }
+
+    /// libfido2's `fido_opt_t` for an option.
+    static func opt(_ option: FidoOption) -> fido_opt_t {
+        switch option {
+        case .omit: return FIDO_OPT_OMIT
+        case .no: return FIDO_OPT_FALSE
+        case .yes: return FIDO_OPT_TRUE
+        }
     }
 
     static func free(assert: OpaquePointer) {

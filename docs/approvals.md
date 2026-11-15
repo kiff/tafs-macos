@@ -159,9 +159,12 @@ before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
   retry count is read. It's never reset, its PIN is never set or changed, and its credentials are
   never listed or deleted.
 - **An assertion** (`SecurityKeyAssertionAsk`) is kiff.dev, the `clientDataHash` this app computed,
-  the one credential this Mac approves with in the allow list, and presence and verification
-  required. **A new credential** (`SecurityKeyCredentialAsk`) is ES256 on kiff.dev ("KIFF"), not
-  discoverable, the person verified, with Windows' two minutes to answer.
+  the one credential this Mac approves with in the allow list, and presence required. **A new
+  credential** (`SecurityKeyCredentialAsk`) is ES256 on kiff.dev ("KIFF"), not discoverable,
+  with Windows' two minutes to answer.
+- **UV comes from the PIN:** the key is always asked with its PIN, so the `uv` option is left out
+  (`SecurityKeyVerification`), as some CTAP2.0 keys refuse it alongside a PIN token. Core still
+  requires the UV flag. Without a PIN, the key isn't asked at all.
 - **Core checks what comes back**, whatever libfido2 says: the raw authenticator data
   (`fido_assert_authdata_raw_ptr`, not the CBOR-wrapped one) goes through `PasskeyApprover`'s
   checks, and the DER signature is sent as the key gave it.
