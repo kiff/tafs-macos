@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
@@ -33,6 +34,20 @@ let usageMacTests: [Test] = [
         await model.load()
         await model.show(previous: true)
         try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
+    }),
+    Test("the meter fills to its fraction and never past its track, either way", awaiting: { @MainActor in
+        // Red on a white ground, so a pixel says plainly whether the fill reaches it.
+        func filled(_ fraction: Double, at x: Double) throws -> Bool {
+            let meter = Meter(fraction: fraction, color: Color(red: 1, green: 0, blue: 0)).background(Color.white)
+            guard let bitmap = Snapshot.bitmap(of: meter, size: CGSize(width: 200, height: 5)),
+                  let pixel = bitmap.colorAt(x: Int(Double(bitmap.pixelsWide) * x), y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB)
+            else { throw Failure(description: "no bitmap") }
+            return pixel.redComponent > 0.9 && pixel.greenComponent < 0.2
+        }
+        try expect(try filled(0.4, at: 0.3), "40% reaches 30%")
+        try expect(!(try filled(0.4, at: 0.5)), "40% stops before 50%")
+        try expect(try filled(2, at: 0.95), "past 1 is full")
+        try expect(!(try filled(-1, at: 0.05)), "under 0 is empty")
     }),
     Test("the screenshots: Plan & usage in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

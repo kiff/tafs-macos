@@ -99,16 +99,10 @@ struct UsageView: View {
         case .loaded(let balance):
             Text(verbatim: balance.words).font(.system(size: 17, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.ink)
             if let meter = balance.meter {
-                GeometryReader { space in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.raised)
-                        Capsule().fill(balance.state == "ok" ? Theme.ok : Theme.amber)
-                            .frame(width: space.size.width * CGFloat(meter) / 100)
-                    }
-                }
-                .frame(height: 8)
-                .accessibilityLabel(words("usage.label"))
-                .accessibilityValue(words.number(meter) + " %")
+                Meter(fraction: Double(meter) / 100, color: balance.state == "ok" ? Theme.ok : Theme.amber)
+                    .accessibilityElement()
+                    .accessibilityLabel(words("usage.label"))
+                    .accessibilityValue(words.number(meter) + " %")
             }
             if let detail = balance.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
             if let warning = balance.warning {
