@@ -58,7 +58,7 @@ struct SignedInView: View {
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
-            case .connectApps: return AnyView(ConnectAppsView(model: connect))
+            case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
                                                   listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))

@@ -25,10 +25,13 @@ enum Apps {
         let whose: String?
         /// The tafs that use one of the account's own connections, by name, as sent.
         let usedBy: [String]
+        /// The app's own icon on tafs cloud, when it has one: only a `/v1/logos/<32 hex>` path
+        /// is kept, so no other address is ever fetched for a row.
+        let logo: String?
 
         var id: String { entry }
 
-        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, usedBy = "used_by" }
+        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, logo, usedBy = "used_by" }
         private struct User: Decodable { let name: String? }
         private struct LenientUser: Decodable {
             let name: String?
@@ -54,6 +57,7 @@ enum Apps {
             whose = text(.whose)
             method = text(.method)
             how = text(.how)
+            logo = text(.logo).flatMap { Apps.logoPath($0) }
             // A user that doesn't read is left out, never the row.
             let users = ((try? c.decodeIfPresent([LenientUser].self, forKey: .usedBy)) ?? nil) ?? []
             usedBy = users.compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -67,6 +71,13 @@ enum Apps {
         var isYours: Bool { state == "connected" || state == "needs_reconnect" }
         /// Its sign-in is no longer taken: it needs the person.
         var needsReconnect: Bool { state == "needs_reconnect" }
+        /// Connected, with nothing to do: the row ends with a green check.
+        var isConnected: Bool { state == "connected" }
+        /// Not set up for anyone to connect yet: tafs cloud's words say so, and there is no Connect.
+        var needsSetup: Bool { state == "needs_setup" }
+
+        /// The icon's address on tafs cloud, when it sent one.
+        var logoURL: URL? { logo.flatMap { URL(string: CloudClient.base + $0) } }
     }
 
     struct Page: Decodable, Equatable {
@@ -74,8 +85,11 @@ enum Apps {
         let nextCursor: String?
         /// The catalog read stopped with pages left: an app that isn't listed isn't absent.
         let partial: Bool
+        /// Coach can connect an app that isn't listed, from its own docs, with a key: the
+        /// screen then ends with "Not listed? Ask Coach", as on the iPad.
+        let byKey: Bool
 
-        enum CodingKeys: String, CodingKey { case apps, nextCursor = "next_cursor", partial }
+        enum CodingKeys: String, CodingKey { case apps, nextCursor = "next_cursor", partial, byKey = "by_key" }
         private struct Lenient: Decodable {
             let app: App?
             init(from decoder: Decoder) throws { app = try? App(from: decoder) }
@@ -86,11 +100,21 @@ enum Apps {
             apps = try c.decode([Lenient].self, forKey: .apps).compactMap(\.app)
             nextCursor = (try? c.decodeIfPresent(String.self, forKey: .nextCursor)) ?? nil
             partial = ((try? c.decodeIfPresent(Bool.self, forKey: .partial)) ?? nil) ?? false
+            byKey = ((try? c.decodeIfPresent(Bool.self, forKey: .byKey)) ?? nil) ?? false
         }
     }
 
     /// The longest search sent.
     static let longestSearch = 100
+
+    /// A logo's path as the iPad keeps it: `/v1/logos/` and 32 lowercase hex digits, else nil.
+    static func logoPath(_ path: String) -> String? {
+        let prefix = "/v1/logos/"
+        guard path.hasPrefix(prefix) else { return nil }
+        let key = path.utf8.dropFirst(prefix.utf8.count)
+        guard key.count == 32, key.allSatisfy({ (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }) else { return nil }
+        return path
+    }
 }
 
 extension CloudClient {

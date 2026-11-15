@@ -13,6 +13,8 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var canContinue = false
     /// tafs cloud's read stopped early: an app that isn't listed isn't absent.
     @Published private(set) var partial = false
+    /// Coach can connect an app that isn't listed: the screen ends with "Not listed? Ask Coach".
+    @Published private(set) var byKey = false
     @Published var search = ""
 
     private let cloud: CloudClient
@@ -32,6 +34,7 @@ final class ConnectAppsModel: ObservableObject {
             let page = try await cloud.apps(search)
             guard mine == asked else { return }
             apps = page.apps
+            byKey = false
             show(page)
         } catch {
             guard mine == asked else { return }
@@ -59,15 +62,18 @@ final class ConnectAppsModel: ObservableObject {
         cursor = page.nextCursor
         canContinue = cursor != nil
         partial = page.partial
+        byKey = byKey || page.byKey
         state = .loaded
     }
 }
 
 /// Connect apps: the account's own connections, then the catalog. This screen lists; an
-/// app is connected through Coach, where its Card is approved with it.
+/// app is connected through Coach, where its Card is approved with it, so Connect, Sign in
+/// again and "Not listed? Ask Coach" open Coach.
 struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
+    var openCoach: () -> Void = {}
 
     /// The columns' widths, the same for the headings and every row, as the iPad's
     /// `ConnectColumns`: the app takes the rest, at least 200.
@@ -129,7 +135,11 @@ struct ConnectAppsView: View {
                         Button(words("connect.apps.more")) { Task { await model.more() } }
                             .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                     }
-                    Text(words("connect.apps.not_listed_why")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    // Only when Coach can connect an app that isn't listed, as on the iPad.
+                    if model.byKey {
+                        Button(words("connect.apps.not_listed"), action: openCoach)
+                            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                    }
                 }
             }
             .padding(.horizontal, Look.inset)
@@ -169,10 +179,15 @@ struct ConnectAppsView: View {
     private func row(_ app: Apps.App, yours: Bool) -> some View {
         let setup = app.state == "needs_setup"
         return HStack(alignment: .center, spacing: Self.gap) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 6).fill(Theme.raised).frame(width: 24, height: 24)
-                    .overlay(Text(verbatim: String(app.name.prefix(1)).uppercased()).font(.system(size: 12, weight: .bold)).foregroundColor(Theme.soft))
+            HStack(spacing: 10) {
+                // The app's own icon, only when tafs cloud sends one; nothing in its place otherwise.
+                if let url = app.logoURL {
+                    AsyncImage(url: url) { phase in
+                        if case .success(let image) = phase { image.resizable().interpolation(.high).scaledToFit() }
+                    }
+                    .frame(width: 24, height: 24)
                     .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     // An app an operator sets up first is named in the soft colour, as on the iPad.
                     Text(verbatim: app.name).font(.system(size: 16, weight: .semibold)).foregroundColor(setup ? Theme.soft : Theme.ink)
@@ -184,24 +199,46 @@ struct ConnectAppsView: View {
                 .frame(width: Self.how, alignment: .leading)
             Text(verbatim: yours ? (app.whose ?? "") : "").font(.system(size: 14)).foregroundColor(Theme.soft)
                 .frame(width: Self.whose, alignment: .leading)
-            VStack(alignment: .leading, spacing: 2) {
-                if app.needsReconnect {
-                    Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
-                } else if app.isYours {
-                    Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
-                } else if setup, let line = app.words {
-                    // For an app an operator sets up first: tafs cloud's own line, in its status.
-                    Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if app.needsReconnect {
+                        Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                    } else if app.isYours {
+                        Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+                    } else if setup, let line = app.words {
+                        // For an app an operator sets up first: tafs cloud's own line, in its status.
+                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
+                    }
+                    // Which tafs use one of the account's own connections, under its status.
+                    if yours, !app.usedBy.isEmpty {
+                        Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
+                    }
                 }
-                // Which tafs use one of the account's own connections, under its status.
-                if yours, !app.usedBy.isEmpty {
-                    Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
-                }
+                Spacer(minLength: 4)
+                trailing(app)
             }
             .frame(width: Self.status, alignment: .leading)
         }
         .frame(minHeight: 52)
         .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The row's end, as the iPad's `trailing`: a green check for a connected app; nothing for
+    /// one an operator sets up first; else Connect, or Sign in again, as wide as its words. No
+    /// chevron yet: a connection has no page of its own on the Mac.
+    @ViewBuilder private func trailing(_ app: Apps.App) -> some View {
+        if app.needsSetup {
+            EmptyView()
+        } else if app.isConnected {
+            Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+                .accessibilityLabel(words("connect.status.connected"))
+        } else {
+            Button(action: openCoach) {
+                Text(words(app.needsReconnect ? "connect.sign_in_again" : "connect.apps.connect")).padding(.horizontal, 16)
+            }
+            .buttonStyle(OutlineButtonStyle())
+            .fixedSize()
+        }
     }
 }

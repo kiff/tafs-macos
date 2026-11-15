@@ -80,3 +80,30 @@ struct TafAvatar: View {
             .accessibilityHidden(true)
     }
 }
+
+/// The iPad's outlined button: 15 medium in ink, at least 48 high, on a continuous rounded
+/// stroke at 40%, faded while disabled.
+struct OutlineButtonStyle: ButtonStyle {
+    var color: Color = Theme.ink
+
+    func makeBody(configuration: Configuration) -> some View {
+        Look(configuration: configuration, color: color)
+    }
+
+    private struct Look: View {
+        let configuration: Configuration
+        let color: Color
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 15, weight: .medium))
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .foregroundColor(color)
+                .background(Theme.ink.opacity(configuration.isPressed ? 0.08 : 0))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(color.opacity(0.4), lineWidth: 1))
+                .contentShape(Rectangle())
+                .opacity(isEnabled ? 1 : 0.4)
+        }
+    }
+}
