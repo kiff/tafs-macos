@@ -41,7 +41,11 @@ let overviewMacTests: [Test] = [
             for (name, body) in [("tafs", homePage), ("empty", #"{"tafs":[]}"#)] {
                 let model = model([(200, body)])
                 await model.load()
-                let view = OverviewView(model: model).environment(\.words, Words.load(folder: strings, preferred: [language]))
+                // A held call for Refunds, so NEEDS YOU shows a row, and tafs cloud counting one more.
+                let calls = #"{"exceptions":[{"id":"e1","subject":"agent_refunds","action":"refund","title":"Refund order #4471","created_at":"2026-11-15T00:17:00Z","expires_at":"2026-11-15T00:27:00Z"}]}"#
+                struct Held: Decodable { let exceptions: [HeldCall] }
+                let held = ((try? AccountClient.decoder.decode(Held.self, from: Data(calls.utf8)))?.exceptions ?? []).map { HeldRow($0, tafs: model.tafs) }
+                let view = OverviewView(model: model, held: name == "tafs" ? held : []).environment(\.words, Words.load(folder: strings, preferred: [language]))
                 guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
                 try png.write(to: folder.appendingPathComponent("overview-\(name)-\(language).png"))
             }
