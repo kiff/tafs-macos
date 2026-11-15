@@ -36,7 +36,23 @@ let recordMacTests: [Test] = [
         try expectEqual(unread.state, .unread(why: "500"))
         let (none, _) = model([(200, #"{"entries":[],"none_words":"Nothing matched."}"#)])
         await none.find("zzz")
-        try expectEqual(none.found?.noneWords, "Nothing matched.")
+        try expectEqual(none.found?.pages.last?.noneWords, "Nothing matched.")
+        try expectEqual(none.found?.pages.allSatisfy(\.isEmpty), true)
+    }),
+    Test("a search reads its next page only on More, and keeps each page as tafs cloud sent it", awaiting: { @MainActor in
+        let (model, transport) = model([(200, recordPage), (200, second)])
+        await model.find("refund")
+        try expectEqual(transport.sent.count, 1)
+        try expectEqual(model.found?.nextCursor, "c2")
+        await model.find("refund", more: true)
+        try expectEqual(transport.sent[1].path, "/v1/record?q=refund&cursor=c2")
+        // "today" on both pages stays two groups, each as sent.
+        try expectEqual(model.found?.pages.map { $0.shown.map(\.id) }, [["today"], ["today"]])
+        try expectEqual(model.found?.pages[1].shown[0].entries.map(\.id), ["e3"])
+        try expectEqual(model.found?.nextCursor, nil)
+        try expectEqual(model.found?.pages.last?.endWords, "That's everything.")
+        await model.find("refund", more: true)
+        try expectEqual(transport.sent.count, 2)
     }),
     Test("a taf's chip keeps that taf's calls, and All tafs every taf's", awaiting: { @MainActor in
         let (model, _) = model([(200, recordPage)])
@@ -84,7 +100,7 @@ let recordMacTests: [Test] = [
         model.filter = .stopped
         try expectEqual(model.shown, [])
         await model.find("refund")
-        try expectEqual(model.found?.groups.flatMap(\.entries).map(\.id), ["e1", "e2"])
+        try expectEqual(model.found?.pages.flatMap(\.shown).flatMap(\.entries).map(\.id), ["e1", "e2"])
     }),
     Test("the same words typed while they're being searched aren't asked for twice", awaiting: { @MainActor in
         let transport = CannedTransport([(200, recordPage)])

@@ -28,12 +28,10 @@ final class RecordModel: ObservableObject {
     /// words, its pages as tafs cloud sent them, and where it stands.
     struct Found: Equatable {
         let q: String
-        var groups: [Record.Group] = []
-        var loading = true
+        var pages: [Record.Page] = []
+        var loading = false
         var error: String?
-        var nextCursor: String?
-        var endWords: String?
-        var noneWords: String?
+        var nextCursor: String? { pages.last?.nextCursor }
     }
 
     /// The search shown in the list's place; nil shows the list.
@@ -135,23 +133,12 @@ final class RecordModel: ObservableObject {
         do {
             let page = try await cloud.record(q, cursor: more ? current?.nextCursor : nil, saying: true)
             guard var now = found, now.q == q else { return }
-            if more {
-                for group in page.shown {
-                    if let at = now.groups.firstIndex(where: { $0.id == group.id }) {
-                        now.groups[at] = Record.Group(id: group.id, title: group.title, entries: now.groups[at].entries + group.entries)
-                    } else {
-                        now.groups.append(group)
-                    }
-                }
-            } else {
-                now.groups = page.shown
-            }
+            // Each page as tafs cloud sent it, after the ones before: a day split across two
+            // pages is two groups, as on the iPad.
+            now.pages = (more ? now.pages : []) + [page]
             now.loading = false
-            now.nextCursor = page.nextCursor
-            now.endWords = page.nextCursor == nil ? page.endWords : nil
-            now.noneWords = now.groups.isEmpty ? page.noneWords : nil
             found = now
-            if !page.hint.isEmpty { hint = page.hint }
+            if !page.hint.trimmingCharacters(in: .whitespaces).isEmpty { hint = page.hint }
         } catch let refusal as CloudRefusal where more && refusal.status == 409 {
             await find(q)
         } catch {
@@ -266,13 +253,31 @@ struct RecordView: View {
         }
     }
 
-    /// What a search found, as the iPad's `RecordResults`: tafs cloud's groups as sent, each call
-    /// with what it's about as the link to its case; nothing found in tafs cloud's words; why it
-    /// couldn't be read; its next page as the end shows.
+    /// What a search found, as the iPad's `RecordResults`: each page's groups as tafs cloud sent
+    /// them, each call with what it's about as the link to its case; nothing found in tafs
+    /// cloud's words; why it couldn't be read; its next page on More.
     @ViewBuilder private func results(_ found: RecordModel.Found) -> some View {
-        ForEach(found.groups) { group in
+        ForEach(Array(found.pages.enumerated()), id: \.offset) { _, page in
+            pageGroups(page)
+        }
+        if !found.pages.isEmpty, found.pages.allSatisfy(\.isEmpty), let none = found.pages.last?.noneWords {
+            Text(verbatim: none).font(.system(size: 14)).foregroundColor(Theme.soft)
+        }
+        if let why = found.error { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no) }
+        if found.loading {
+            ProgressView().controlSize(.small).frame(maxWidth: .infinity)
+        } else if found.nextCursor != nil {
+            Button(words("common.more")) { Task { await model.find(found.q, more: true) } }
+                .buttonStyle(OutlineButtonStyle())
+        } else if let end = found.pages.last?.endWords {
+            Text(verbatim: end).font(.system(size: 13)).foregroundColor(Theme.dim)
+        }
+    }
+
+    @ViewBuilder private func pageGroups(_ page: Record.Page) -> some View {
+        ForEach(page.shown) { group in
             if !group.title.isEmpty {
-                Text(verbatim: group.title.uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+                Text(verbatim: group.title).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim).padding(.top, 4)
             }
             VStack(spacing: 8) {
                 ForEach(group.entries) { entry in
@@ -282,15 +287,6 @@ struct RecordView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }
-        }
-        if let none = found.noneWords, !found.loading { Text(verbatim: none).font(.system(size: 14)).foregroundColor(Theme.soft) }
-        if let why = found.error { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no) }
-        if found.loading {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-        } else if found.nextCursor != nil {
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity).task { await model.find(found.q, more: true) }
-        } else if let end = found.endWords, !found.groups.isEmpty {
-            Text(verbatim: end).font(.system(size: 13)).foregroundColor(Theme.soft)
         }
     }
 

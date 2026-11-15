@@ -26,8 +26,11 @@ answer as sent.
   Return searches at once. **An emptied box shows the list again at once**, with nothing read.
 - **A search is kept apart from the list** (`RecordModel.Found`, the iPad's `RecordSearch`)
   and stands in for it: its calls as tafs cloud found them, never narrowed by the list's taf
-  chips or filters; tafs cloud's "nothing matched"; why it couldn't be read, its words first;
-  its next page as the end shows (a refused cursor searches again). Each call found has what
+  chips or filters; tafs cloud's "nothing matched" once no page held a call; why it couldn't
+  be read (tafs cloud's words, else its error, else "tafs cloud answered {status}"). Each page
+  is drawn as tafs cloud sent it, after the ones before, so a day split across two pages is two
+  groups. **Its next page is read on More**, never by itself (a refused cursor searches again);
+  with no next page, the last page's end line shows, dim. Each call found has what
   it's about as a link,
   "Order 4471 ›", that **opens its case** (the iPad's `RecordHitRow` and `RecordCaseSheet`):
   every call about the same thing, oldest first (`GET /v1/record/cases/{about}`), the step
@@ -38,7 +41,7 @@ answer as sent.
   choose among the calls already read; a group left with none is left out.
 - Each group has tafs cloud's title; each row has a dot for how it went, in the iPad's kind
   colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf and what it is about, its amount and its time.
-- The next page loads when the end of the list comes into view, and joins its group.
+- The list (not a search) reads its next page when its end comes into view, and joins its group.
 - A cursor tafs cloud no longer takes (a call was made since) starts the search again.
 - A slower answer to an older search is dropped.
 
