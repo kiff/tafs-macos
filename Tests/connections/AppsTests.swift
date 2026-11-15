@@ -74,4 +74,29 @@ let connectionsTests: [Test] = [
         try expectEqual(words("connect.apps.used_by", ["tafs": words.list(["Refunds"])]), "Used by Refunds")
         try expect(words.list(["Refunds", "Invoices"]).contains("Invoices"), "both names")
     },
+    Test("a logo is kept only as tafs cloud's own /v1/logos/ path, and nothing stands in for one it didn't send") {
+        let key = String(repeating: "0a", count: 16)
+        try expectEqual(Apps.logoPath("/v1/logos/\(key)"), "/v1/logos/\(key)")
+        for path in ["https://elsewhere.example/x.png", "/v1/logos/\(key)0", "/v1/logos/\(key.uppercased())", "/v1/logos/../me", "/v1/logos/"] {
+            try expect(Apps.logoPath(path) == nil, path)
+        }
+        let json = #"{"apps":[{"entry":"a","name":"A","state":"connected","logo":"/v1/logos/"# + key + #""},{"entry":"b","name":"B","state":"available","logo":"https://elsewhere.example/b.png"},{"entry":"c","name":"C","state":"available"}]}"#
+        let page = try AccountClient.decoder.decode(Apps.Page.self, from: Data(json.utf8))
+        try expectEqual(page.apps.map(\.logoURL?.absoluteString), [CloudClient.base + "/v1/logos/" + key, nil, nil])
+    },
+    Test("a row ends as the iPad's: a check when connected, nothing to set up first, else Connect or Sign in again") {
+        let page = try AccountClient.decoder.decode(Apps.Page.self, from: Data(appsPage.utf8))
+        try expectEqual(page.apps.map(\.isConnected), [true, false, false, false])
+        try expectEqual(page.apps.map(\.needsSetup), [false, false, false, true])
+        try expectEqual(page.apps.map(\.needsReconnect), [false, true, false, false])
+    },
+    Test("by_key says Coach can connect an app that isn't listed; anything but true reads as false") {
+        func byKey(_ value: String) throws -> Bool {
+            try AccountClient.decoder.decode(Apps.Page.self, from: Data((#"{"apps":[],"by_key":"# + value + "}").utf8)).byKey
+        }
+        try expectEqual(try byKey("true"), true)
+        try expectEqual(try byKey("false"), false)
+        try expectEqual(try byKey("{}"), false)
+        try expectEqual(try AccountClient.decoder.decode(Apps.Page.self, from: Data(#"{"apps":[]}"#.utf8)).byKey, false)
+    },
 ]
