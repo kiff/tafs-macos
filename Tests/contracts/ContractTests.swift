@@ -14,6 +14,10 @@ private let notYet = [
     "taf-setup.json": "a taf's Setup tab, with the taf page",
     "taf-setup-connected.json": "a taf's Setup tab's connections, with the taf page",
     "taf-setup-reconnect.json": "a taf's Setup tab's connections, with the taf page",
+    "taf-runs.json": "the Overview's Last result",
+    "taf-run-report.json": "the Overview's Last result",
+    "taf-run-report-running.json": "the Overview's Last result",
+    "taf-run-report-terminated.json": "the Overview's Last result",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
