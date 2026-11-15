@@ -31,11 +31,16 @@ struct ScreenTitle: View {
 struct Chip: View {
     let title: String
     let chosen: Bool
+    /// A taf's colour, as a dot before its name.
+    var dot: Color?
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 13))
+            HStack(spacing: 6) {
+                if let dot { Circle().fill(dot).frame(width: 8, height: 8).accessibilityHidden(true) }
+                Text(title).font(.system(size: 13))
+            }
                 .foregroundColor(chosen ? Theme.onFill : Theme.soft)
                 .padding(.horizontal, 11).padding(.vertical, 5)
                 .background(Capsule().fill(chosen ? Theme.ink : Theme.panel))

@@ -39,6 +39,17 @@ let recordMacTests: [Test] = [
         await none.load()
         try expectEqual(none.noneWords, "Nothing matched.")
     }),
+    Test("a taf's chip keeps that taf's calls, and All tafs every taf's", awaiting: { @MainActor in
+        let (model, _) = model([(200, recordPage)])
+        await model.load()
+        let all = model.shown.flatMap(\.entries).count
+        model.taf = "taf_1"
+        try expect(model.shown.flatMap(\.entries).allSatisfy { $0.taf.id == "taf_1" }, "only Refunds")
+        model.taf = "nobody"
+        try expectEqual(model.shown, [])
+        model.taf = nil
+        try expectEqual(model.shown.flatMap(\.entries).count, all)
+    }),
     Test("the screenshots: the Record in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
@@ -46,7 +57,10 @@ let recordMacTests: [Test] = [
         for language in ["en", "fr", "pt"] {
             let (model, _) = model([(200, recordPage.replacingOccurrences(of: #","next_cursor":"c2""#, with: ""))])
             await model.load()
-            let view = RecordView(model: model).environment(\.words, Words.load(folder: strings, preferred: [language]))
+            // Two tafs, so the taf chips show; Refunds is the fixture's own taf, by its id at tafs cloud.
+            let home = #"{"tafs":[{"id":"taf_1","name":"Refunds","kiff_agent":"a1","color":1,"state":"working"},{"id":"taf_2","name":"Invoices","kiff_agent":"a2","color":4,"state":"idle"}]}"#
+            let tafs = (try? JSONDecoder().decode(Home.Page.self, from: Data(home.utf8)))?.tafs ?? []
+            let view = RecordView(model: model, tafs: tafs).environment(\.words, Words.load(folder: strings, preferred: [language]))
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("record-\(language).png"))
         }

@@ -81,4 +81,13 @@ let recordTests: [Test] = [
         try expectEqual(found.steps.map(\.id), ["e1", "e2"])
         try expectEqual(found.failed, Record.Case.Failed(id: "e2", words: "The refund didn't go through."))
     }),
+    Test("one taf's chip keeps only that taf's calls, and a day left with none is left out") {
+        func entry(_ id: String, taf: String) -> String {
+            #"{"id":"\#(id)","at":"2026-11-15T00:17:00Z","kind":"done","title":"t","detail":"d","time":"00:17","taf":{"id":"\#(taf)","name":"N"}}"#
+        }
+        let json = #"{"hint":"h","entries":[],"groups":[{"id":"d1","title":"Today","entries":[\#(entry("a", taf: "t1")),\#(entry("b", taf: "t2"))]},{"id":"d2","title":"Yesterday","entries":[\#(entry("c", taf: "t2"))]}]}"#
+        let page = try AccountClient.decoder.decode(Record.Page.self, from: Data(json.utf8))
+        try expectEqual(Record.only(taf: "t1", in: page.groups).map { $0.entries.map(\.id) }, [["a"]])
+        try expectEqual(Record.only(taf: nil, in: page.groups).count, 2)
+    },
 ]
