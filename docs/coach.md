@@ -14,25 +14,29 @@ The app draws the list as it comes. It places and folds nothing itself.
 
 | Item | Drawn as |
 |---|---|
-| A message from the person | When it was sent, small and centred; then their words on the brand's gradient, at the right |
-| A message from Coach | "Worked for 32 s", which opens the run's steps; then its words as text on the page, with no bubble |
+| A message from the person | Their words on the brand's gradient, at the right. A time, centred, on the first item and after an hour's gap |
+| A message from Coach | "Worked for 32 s", which opens the run's steps folded as the iPad's (`WorkRows`); then its words, with no bubble |
 | A job's instruction (`kickoff`) | A small note |
-| The plan (`steps`) | A strip: "Plan · 1 of 3" and the step in hand; it opens to every step |
-| A choice (`confirm`) | What it asks, then a white pill for each answer |
-| An approval or a sign-in that waits | A card edged in amber: "Needs you · approve", what it asks, **Decline**, and where to approve |
-| An approval already answered | One folded line: what was answered and what it was, with tafs cloud's line for the connection |
-| A note (`notice`) | A line with a small arrow |
-| The hand-over (`result`) | A card edged in green: "Set up · the taf's name", what it does, its tools, and **Open** it |
+| The plan (`steps`) | tafs cloud's `line` and the step in hand with its mark; opened, every step with its mark, the one in hand semibold, a skipped one struck through |
+| A choice (`confirm`) | What it asks, then a white pill for each answer. Answered: one folded line, "{question} · {chosen}" |
+| An approval that waits | Edged in amber: "Needs you · approve", what it asks, **Decline**, and where to approve |
+| A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, where to sign in, and **Not now** |
+| An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus |
+| A note (`notice`) | A panel in its tone's colour, its title in that colour |
+| The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools, and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
 | A call KIFF held | "Needs you · approve". It is answered in Needs you. |
 | Anything else (a drive's end, a kind this app doesn't know) | Nothing |
 
-- **A run's steps** are tafs cloud's words for them. A step with no words isn't shown, and a
-  tool's name never is. A failed step is red, with tafs cloud's one line of why under it.
-- **Coach's words are drawn with bold and list items, and nothing else** (`Rich`). Every
-  piece of them is drawn with `Text(verbatim:)`.
-- **Approve is not on the Mac yet.** A Mac that can't sign an approval says so on the card;
-  the phone has the same card. **Decline** answers it, and grants nothing.
-- **Open** on a hand-over goes to the Overview until a taf's own page is built.
+- **A run's steps** are tafs cloud's words for them, never a tool's name: a tick, a red mark
+  for a failure, an arrow for one not made ("not made · read first"), and "{n} tries".
+- **Coach's words are drawn as the iPad's `MarkdownText`**: no Markdown mark shows, a link is
+  its label only, and every piece is `Text(verbatim:)`. The plan stays where it was shown.
+- **Approve is not on the Mac yet.** The card says where to approve. **Decline** and **Not
+  now** answer it with `declined` or `not now`, and grant nothing.
+- **A decline** is known only by tafs cloud's words for the answer, which it writes in the
+  app's language: "Declined". An approval or sign-in answered another way (`wrote`,
+  `no_answer`) draws nothing.
+- **See it on** goes to the Overview until a taf's own page is built.
 - A card is known by its `key`, which is unique in the thread, never only by the name the
   model gave it: the model may reuse a name.
 - An item that doesn't read is left out. An answer with no ordered list is unreadable, never

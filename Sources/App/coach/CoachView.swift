@@ -240,11 +240,15 @@ final class CoachModel: ObservableObject {
 struct CoachView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
-    /// Whether an approval can be signed on this Mac. When it can't, the card says where to.
     var canApprove = false
-    /// Opens the taf a hand-over made.
+    /// Whether an approval can be signed on this Mac. Approve comes with approvals (#16): turn
+    /// this on only with its button, never alone.
     /// Opens a hand-over's taf, by its KIFF agent.
     var openTaf: (String?) -> Void = { _ in }
+    /// The KIFF agents of the tafs listed: a hand-over shows its button once its taf is one.
+    var listed: Set<String> = []
+    /// Opens Plan & usage, for a hand-over whose taf needs a plan.
+    var openUsage: () -> Void = {}
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
     @State private var planOpen = false
@@ -262,7 +266,13 @@ struct CoachView: View {
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
                     if page.items.isEmpty { intro }
-                    ForEach(page.items) { item($0) }
+                    ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
+                        // A time on the first item, and after an hour's gap, as on the iPad.
+                        if page.showsTime(at: index), let at = item.at {
+                            Text(verbatim: Self.when(at)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                        }
+                        self.item(item)
+                    }
                     if let pending = model.pending { unsent(pending) }
                     if let live = model.live { writing(live) }
                     if let stopped = model.stopped {
@@ -328,37 +338,41 @@ struct CoachView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(verbatim: live.line ?? words("chat.thinking")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                Text(verbatim: live.line ?? words("chat.thinking")).font(.system(size: 13)).foregroundColor(Theme.dim)
             }
-            if !live.steps.isEmpty {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(live.steps.enumerated()), id: \.offset) { _, step in
-                        stepRow(step.words, done: step.done, failed: step.failed, why: nil, notMade: step.notMade)
-                    }
-                }
-                .padding(.leading, 10)
-                .overlay(Rectangle().fill(Theme.line).frame(width: 1), alignment: .leading)
-            }
-            if let trouble = live.trouble { Text(verbatim: trouble).font(.system(size: 12)).foregroundColor(Theme.no) }
+            if !live.rows.isEmpty { steps(live.rows) }
             if !live.text.isEmpty { rich(live.text) }
         }
     }
 
-    private func stepRow(_ text: String, done: Bool, failed: Bool, why: String?, notMade: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
-                Image(systemName: failed ? "xmark" : (notMade ? "arrow.uturn.backward" : (done ? "checkmark" : "circle.dotted")))
-                    .font(.system(size: 10, weight: .semibold)).foregroundColor(failed ? Theme.no : Theme.soft).frame(width: 12)
-                Text(verbatim: text).font(.system(size: 13)).foregroundColor(failed ? Theme.no : Theme.soft)
+    /// A run's steps, folded, as the iPad's `StepList`: a mark, the step's words, and "not made
+    /// · read first" or "{n} tries" beside them.
+    private func steps(_ rows: [WorkRows.Row]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: row.status == .error ? "exclamationmark.circle" : row.status == .notMade ? "arrow.uturn.left" : "checkmark")
+                        .font(.system(size: 11)).foregroundColor(row.status == .error ? Theme.no : Theme.dim).frame(width: 14)
+                    Text(verbatim: row.words.hasSuffix("…") ? String(row.words.dropLast()) : row.words)
+                        .font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    if row.status == .notMade {
+                        Text(words("chat.work.not_made_read_first")).font(.system(size: 12)).foregroundColor(Theme.dim)
+                    } else if row.tries > 1 {
+                        Text(words.count("chat.work.tries", row.tries)).font(.system(size: 12)).foregroundColor(Theme.dim)
+                    }
+                }
+                .accessibilityElement(children: .combine)
             }
-            if let why { Text(verbatim: why).font(.system(size: 12)).foregroundColor(Theme.no).padding(.leading, 20) }
         }
+        .padding(.leading, 6)
+        .overlay(Rectangle().fill(Theme.line).frame(width: 1), alignment: .leading)
+        .padding(.leading, 4)
     }
 
     /// Coach's or a taf's words, as the iPad's `MarkdownText` draws them: no mark shows, and a
     /// link is its label only.
     private func rich(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(Rich.blocks(text).enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .paragraph(let spans):
@@ -376,11 +390,10 @@ struct CoachView: View {
     }
 
     private func item(_ mark: String, _ spans: [Rich.Span]) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(verbatim: mark).font(.system(size: 16)).foregroundColor(Theme.ink)
             line(spans)
         }
-        .padding(.leading, 4)
     }
 
     private func line(_ spans: [Rich.Span], size: CGFloat = 16, weight: Font.Weight = .regular) -> some View {
@@ -444,38 +457,31 @@ struct CoachView: View {
         }
     }
 
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     /// "Worked for 32 s", which opens the steps the run took.
     private func workFold(_ work: Thread.Work, id: Int) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let rows = work.rows
+        return VStack(alignment: .leading, spacing: 6) {
             Button {
                 if unfolded.contains(id) { unfolded.remove(id) } else { unfolded.insert(id) }
             } label: {
                 HStack(spacing: 4) {
-                    Text(words("chat.work.worked_for", ["ms": work.took(words)])).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    if !work.steps.isEmpty {
-                        Image(systemName: unfolded.contains(id) ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.soft)
+                    Text(words("chat.work.worked_for", ["ms": work.took(words)])).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    if !rows.isEmpty {
+                        Image(systemName: unfolded.contains(id) ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundColor(Theme.dim)
                     }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(work.steps.isEmpty)
-            if unfolded.contains(id) {
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(Array(work.steps.enumerated()), id: \.offset) { _, step in
-                        stepRow(step.words, done: true, failed: step.failed, why: step.why, notMade: step.notMade)
-                    }
-                }
-                .padding(.leading, 10)
-                .overlay(Rectangle().fill(Theme.line).frame(width: 1), alignment: .leading)
-            }
+            .disabled(rows.isEmpty)
+            if unfolded.contains(id) { steps(rows) }
         }
+    }
+
+    /// A time in the chat: the time today, else the date and the time.
+    static func when(_ at: Date) -> String {
+        DateFormatter.localizedString(from: at, dateStyle: Calendar.current.isDateInToday(at) ? .none : .medium, timeStyle: .short)
     }
 
     @ViewBuilder private func item(_ item: Thread.Item) -> some View {
@@ -486,13 +492,9 @@ struct CoachView: View {
             } else {
                 // The words are a person's or the model's: plain text, never a line of the app's.
                 if message.fromPerson {
-                    // When it was sent, small and centred, then the person's words on the brand's gradient.
-                    if let at = message.at {
-                        Text(verbatim: Self.clock.string(from: at)).font(.system(size: 12)).foregroundColor(Theme.soft)
-                            .frame(maxWidth: .infinity)
-                    }
+                    // The person's words on the brand's gradient.
                     HStack {
-                        Spacer(minLength: 80)
+                        Spacer(minLength: 48)
                         Text(verbatim: message.text).font(.system(size: 15)).foregroundColor(.white)
                             .textSelection(.enabled)
                             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -521,6 +523,8 @@ struct CoachView: View {
             plan(card)
         } else if card.isHandOver {
             handOver(card)
+        } else if card.type == "sign_in" {
+            signIn(card)
         } else if card.grants {
             approval(card)
         } else if card.type == "notice" {
@@ -530,18 +534,19 @@ struct CoachView: View {
         }
     }
 
-    /// The plan: its progress and the step in hand, opening to every step.
+    /// The plan: tafs cloud's line and the step in hand with its mark, opening to every step.
     private func plan(_ card: Thread.Card) -> some View {
-        let current = card.plan.first { $0.status == "active" } ?? card.plan.first { $0.status != "done" } ?? card.plan.last
+        let current = card.plan.first { $0.status == "active" } ?? card.plan.first { $0.status != "done" && $0.status != "skipped" } ?? card.plan.last
         return VStack(alignment: .leading, spacing: 8) {
             Button { planOpen.toggle() } label: {
                 HStack(spacing: 10) {
-                    Circle().stroke(Theme.amber, lineWidth: 2).frame(width: 16, height: 16).accessibilityHidden(true)
+                    if !planOpen, let current { mark(current.status, size: 16) }
                     VStack(alignment: .leading, spacing: 2) {
-                        // tafs cloud's line for the plan, else the shared words for its count.
                         Text(verbatim: (card.planLine ?? words("coach.plan.progress", ["done": words.number(card.planDone), "total": words.number(card.plan.count)])).uppercased())
-                            .font(Theme.mono(10)).tracking(1.5).foregroundColor(Theme.soft)
-                        Text(verbatim: card.title ?? current?.label ?? "").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                            .font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.dim)
+                        if !planOpen, let current {
+                            Text(verbatim: current.label).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                        }
                     }
                     Spacer()
                     Image(systemName: planOpen ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold)).foregroundColor(Theme.soft)
@@ -552,84 +557,158 @@ struct CoachView: View {
             .accessibilityLabel(words(planOpen ? "coach.plan.fold" : "coach.plan.show"))
             if planOpen {
                 ForEach(Array(card.plan.enumerated()), id: \.offset) { _, step in
-                    stepRow(step.label, done: step.status == "done", failed: step.status == "failed", why: nil, notMade: false)
+                    HStack(spacing: 10) {
+                        mark(step.status, size: 18)
+                        Text(verbatim: step.label).font(.system(size: 14, weight: step.status == "active" ? .semibold : .regular))
+                            .foregroundColor(step.status == "pending" || step.status == "skipped" ? Theme.dim : Theme.ink)
+                            .strikethrough(step.status == "skipped")
+                    }
                 }
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
     }
 
-    /// A line Coach leaves in the chat, with a small arrow, in its tone's colour.
-    private func notice(_ card: Thread.Card) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "arrow.turn.down.right").font(.system(size: 10)).foregroundColor(Theme.soft)
-            Text(verbatim: [card.title, card.text].compactMap { $0 }.joined(separator: ": ")).font(.system(size: 13))
-                .foregroundColor(card.tone == "error" ? Theme.no : Theme.soft).fixedSize(horizontal: false, vertical: true)
+    /// A plan step's mark: done, failed, an amber ring while active, else a faint ring.
+    @ViewBuilder private func mark(_ status: String, size: CGFloat) -> some View {
+        switch status {
+        case "done": Image(systemName: "checkmark.circle.fill").font(.system(size: size)).foregroundColor(Theme.ok)
+        case "failed": Image(systemName: "exclamationmark.circle.fill").font(.system(size: size)).foregroundColor(Theme.no)
+        case "active": Circle().stroke(Theme.amber, lineWidth: 2).frame(width: size - 2, height: size - 2).frame(width: size, height: size)
+        default: Circle().stroke(Theme.dim.opacity(0.5), lineWidth: 1.5).frame(width: size - 2, height: size - 2).frame(width: size, height: size)
         }
     }
 
-    /// The hand-over: the taf Coach made, what it does, its tools, and the way to it.
+    /// A note Coach leaves in the chat, as the iPad's: a panel in its tone's colour.
+    private func notice(_ card: Thread.Card) -> some View {
+        let tone: Color = card.tone == "error" ? Theme.no : card.tone == "warning" ? Theme.amber : card.tone == "success" ? Theme.ok : Theme.soft
+        let titleColor: Color = card.tone == "error" ? Theme.no : card.tone == "warning" ? Theme.amberText : card.tone == "success" ? Theme.ok : Theme.soft
+        return VStack(alignment: .leading, spacing: 4) {
+            if let title = card.title { Text(verbatim: title).font(.system(size: 14, weight: .semibold)).foregroundColor(titleColor) }
+            if let text = card.text { Text(verbatim: text).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(tone.opacity(0.10)))
+    }
+
+    /// An answered card, folded into one line, as the iPad's `OutcomeLine`.
+    private func outcomeLine(_ symbol: String, _ color: Color, _ text: String, detail: String? = nil) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: symbol).font(.system(size: 14)).foregroundColor(color).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(verbatim: text).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                if let detail { Text(verbatim: detail).font(.system(size: 12)).foregroundColor(Theme.soft) }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.raised.opacity(0.6)))
+    }
+
+    /// The hand-over: the taf Coach made, what it does, its tools, and the way to it. When it
+    /// failed, why, and no button; when it needs a plan, the way to choose one.
     private func handOver(_ card: Thread.Card) -> some View {
         let name = card.tafName ?? ""
         return VStack(alignment: .leading, spacing: 10) {
-            Text(words("coach.result.set_up", ["taf": name]).uppercased()).font(Theme.mono(11)).tracking(1.5).foregroundColor(Theme.ok)
+            Text(words("coach.result.set_up", ["taf": name]).uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.ok)
             if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
             if !card.tools.isEmpty {
                 Text(verbatim: card.tools.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
-            // What came of it, in tafs cloud's words, when it didn't simply make the taf.
             if let failed = card.outcome?.failed {
-                Text(verbatim: failed).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                Text(words("coach.not_set_up", ["name": name, "why": failed])).font(.system(size: 14)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                Text(words("coach.coach_knows")).font(.system(size: 13)).foregroundColor(Theme.dim)
+            } else {
+                if let needed = card.outcome?.planNeeded {
+                    Text(verbatim: needed).font(.system(size: 13)).foregroundColor(Theme.amberText).fixedSize(horizontal: false, vertical: true)
+                    outline(words("usage.choose_plan"), color: Theme.ink, openUsage)
+                }
+                if card.tafAgent.map(listed.contains) == true {
+                    Button { openTaf(card.tafAgent) } label: {
+                        Text(verbatim: card.yes ?? words("coach.result.see_it", ["taf": name])).font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.brand)).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(words("coach.setting_up", ["name": name])).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
             }
-            if let needed = card.outcome?.planNeeded {
-                Text(verbatim: needed).font(.system(size: 13)).foregroundColor(Theme.amberText).fixedSize(horizontal: false, vertical: true)
-            }
-            Button { openTaf(card.tafAgent) } label: {
-                Text(words("coach.result.open", ["taf": name])).font(.system(size: 15, weight: .semibold)).foregroundColor(.white)
-                    .frame(maxWidth: .infinity).frame(height: 44)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.brand)).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.ok.opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.ok))
+    }
+
+    /// The iPad's outlined button: 15 medium, at least 48 high, corner 14, its colour at 0.4.
+    private func outline(_ title: String, color: Color, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: title).font(.system(size: 15, weight: .medium)).foregroundColor(color)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(color.opacity(0.4)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// A sign-in, as the iPad's: "Needs you · sign in", "Sign in at {app}", its note, and Not
+    /// now. Signing in is on the phone for now; Not now grants nothing.
+    @ViewBuilder private func signIn(_ card: Thread.Card) -> some View {
+        if card.answered != nil || !card.waitsForPerson {
+            if let answered = card.answered { outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.service].compactMap { $0 }.joined(separator: " · ")) }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(words("coach.sign_in.eyebrow").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
+                Text(card.service.map { words("coach.sign_in.at", ["vendor": $0]) } ?? words("coach.sign_in.at_vendor"))
+                    .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
+                if let note = card.note ?? card.text { Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
+                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 12)).foregroundColor(Theme.soft)
+                if model.answering == card.key {
+                    Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                } else {
+                    Button { Task { await model.decline(card) } } label: {
+                        Text(verbatim: card.no ?? words("common.not_now")).font(.system(size: 14)).foregroundColor(Theme.dim)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.answering != nil)
+                }
+                if let why = model.notAnswered[card.key] {
+                    Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
+        }
     }
 
     /// An approval or a sign-in. Answered: one folded line of what it was. Waiting: what it
     /// asks, Decline, and Approve only on a Mac that can sign one; otherwise where to approve.
     @ViewBuilder private func approval(_ card: Thread.Card) -> some View {
         if let answered = card.answered {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "checkmark.circle.fill").font(.system(size: 14)).foregroundColor(Theme.ok).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: [answered, card.title].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 14)).foregroundColor(Theme.ink)
-                    if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 12)).foregroundColor(Theme.soft) }
-                }
-                Spacer(minLength: 0)
+            // tafs cloud's words for the answer are the only sign of a decline in the thread:
+            // the shared "Declined" in the app's language, which tafs cloud writes in too.
+            if answered == words("coach.answer.declined_short") {
+                outcomeLine("minus.circle.fill", Theme.dim, card.title.map { words("coach.answer.declined_title", ["title": $0]) } ?? answered)
+            } else {
+                outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.title].compactMap { $0 }.joined(separator: " · "), detail: card.connectionWords)
             }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.raised.opacity(0.7)))
         } else if card.waitsForPerson {
             VStack(alignment: .leading, spacing: 12) {
-                Text(words("coach.needs_you_approve").uppercased()).font(Theme.mono(11)).tracking(1.5).foregroundColor(Theme.amberText)
+                Text(words("coach.needs_you_approve").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
                 if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
                 if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
                 if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 13)).foregroundColor(Theme.soft) }
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 } else {
-                    Button { Task { await model.decline(card) } } label: {
-                        Text(words("coach.answer.decline")).font(.system(size: 15)).foregroundColor(Theme.ink)
-                            .frame(maxWidth: .infinity).frame(height: 44)
-                            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.soft.opacity(0.5))).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(model.answering != nil)
+                    outline(words("coach.answer.decline"), color: Theme.ink) { Task { await model.decline(card) } }
+                        .disabled(model.answering != nil)
                 }
                 if !canApprove {
                     // No Approve here: this Mac can't sign one. The phone has the same card.
@@ -640,21 +719,28 @@ struct CoachView: View {
                     Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
                 }
             }
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Theme.amber.opacity(0.7)))
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
         }
     }
 
-    /// A choice or a question: what it asks, as Coach wrote it, then its answer or its pills.
-    private func choice(_ card: Thread.Card) -> some View {
+    /// A choice or a question: what it asks, as Coach wrote it, then its pills. Answered: one
+    /// folded line, "{question} · {chosen}".
+    @ViewBuilder private func choice(_ card: Thread.Card) -> some View {
+        if let answered = card.answered {
+            outcomeLine("checkmark.circle.fill", Theme.ok, [card.title ?? card.text, answered].compactMap { $0 }.joined(separator: " · "))
+        } else {
+            asking(card)
+        }
+    }
+
+    private func asking(_ card: Thread.Card) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
             if let text = card.text { rich(text) }
-            if let answered = card.answered {
-                Text(verbatim: answered).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ok)
-            } else if card.waitsForPerson, card.isChoice {
+            if card.waitsForPerson, card.isChoice {
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 } else {
@@ -665,6 +751,8 @@ struct CoachView: View {
                             Text(verbatim: option.label).font(.system(size: 14)).foregroundColor(Theme.ink)
                                 .padding(.horizontal, 14).padding(.vertical, 9)
                                 .background(Capsule().fill(Theme.panel)).overlay(Capsule().stroke(Theme.ink.opacity(0.18)))
+                                // Clipped to the pill, as the iPad: no sliver past its ends.
+                                .clipShape(Capsule())
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)

@@ -49,7 +49,8 @@ struct SignedInView: View {
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage))
             case .connectApps: return AnyView(ConnectAppsView(model: connect))
-            case .coach: return AnyView(CoachView(model: coach, canApprove: false, openTaf: { _ in selection = .overview }))
+            case .coach: return AnyView(CoachView(model: coach, canApprove: false, openTaf: { _ in selection = .overview },
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }))
             case .account: return AnyView(accountScreen)
             }
         }
