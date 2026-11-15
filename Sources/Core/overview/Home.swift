@@ -97,7 +97,31 @@ enum Home {
     }
 }
 
+/// Home's part of the recipes (`GET /v1/recipes`): tafs cloud's line for an account with no
+/// taf yet ("Pick a job for your first taf."), read by the contract fixture `recipes-home.json`.
+struct HomeWords: Decodable, Equatable {
+    /// Whether Home shows it.
+    let shown: Bool
+    let words: String?
+
+    enum Keys: String, CodingKey { case home }
+    enum HomeKeys: String, CodingKey { case shown, words }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        let home = try? c.nestedContainer(keyedBy: HomeKeys.self, forKey: .home)
+        shown = home.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .shown)) ?? nil } ?? false
+        let line = home.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
+        words = line.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+    }
+
+    /// The line to draw: only when tafs cloud says Home shows it.
+    var line: String? { shown ? words : nil }
+}
+
 extension CloudClient {
+    /// tafs cloud's line for a Home with no taf.
+    func homeWords() async throws -> HomeWords { try await get("/v1/recipes") }
+
     /// The app's list, as tafs cloud sends it.
     func home() async throws -> Home.Page { try await get("/v1/home") }
 }

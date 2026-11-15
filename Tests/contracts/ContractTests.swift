@@ -5,12 +5,11 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json"]
+private let read = ["ai-consent.json", "recipes-home.json"]
 private let notYet = [
     "setup-start.json": "Coach's first start, with the Coach screens",
     "setup-start-draft-alone.json": "Coach's first start, with the Coach screens",
     "setup-time-zone.json": "a new account's zone, with the Coach screens",
-    "recipes-home.json": "Home's recipes, with the Overview",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
@@ -58,6 +57,17 @@ let contractsTests: [Test] = [
                 throw Failure(description: "\(name): an answer the app doesn't read (\(status))")
             }
         }
+    },
+    Test("Home's line for an account with no taf reads as tafs cloud sends it") {
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent("recipes-home.json"))) as? [String: Any]
+        guard let answer = root?["answer"] else { throw Failure(description: "recipes-home.json has no answer") }
+        let words = try JSONDecoder().decode(HomeWords.self, from: JSONSerialization.data(withJSONObject: answer))
+        try expectEqual(words.shown, true)
+        try expect(words.line?.isEmpty == false, "Home's line")
+        // Not shown, or no words: no line, and never a failure.
+        try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":{"shown":false,"words":"Pick a job."}}"#.utf8)).line, nil)
+        try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data(#"{"home":7}"#.utf8)).line, nil)
+        try expectEqual(try JSONDecoder().decode(HomeWords.self, from: Data("{}".utf8)).line, nil)
     },
     Test("the consent's words come in the person's language, as sent") {
         let french = try cases("ai-consent.json").first { $0.name.contains("French") }

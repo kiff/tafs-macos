@@ -18,6 +18,21 @@ let overviewMacTests: [Test] = [
         await unread.load()
         try expectEqual(unread.state, .unread(why: "503"))
     }),
+    Test("nobody is told to pick a first taf unless the list was read and is empty", awaiting: { @MainActor in
+        let recipes = #"{"home":{"shown":true,"words":"Pick a job for your first taf."}}"#
+        // The list can't be read, but the recipes can: no claim that there are no tafs.
+        let unread = model([(503, ""), (200, recipes)])
+        await unread.load()
+        try expectEqual(unread.hasNoTafs, false)
+        try expectEqual(unread.noTafsLine, "Pick a job for your first taf.")
+        let withTafs = model([(200, homePage), (200, recipes)])
+        try expectEqual(withTafs.hasNoTafs, false)
+        await withTafs.load()
+        try expectEqual(withTafs.hasNoTafs, false)
+        let none = model([(200, #"{"tafs":[]}"#), (200, recipes)])
+        await none.load()
+        try expectEqual(none.hasNoTafs, true)
+    }),
     Test("the screenshots: the Overview with tafs, and with none, in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")

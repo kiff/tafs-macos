@@ -12,7 +12,7 @@ let shellScreenTests: [Test] = [
     },
     Test("the sidebar lists each screen once, in the iPad's order, with the Overview behind the app's name") {
         try expectEqual(Screen.list, [.needsYou, .record, .calendar, .usage, .connectApps])
-        try expectEqual(Screen.foot, [.coach, .account])
-        try expectEqual(Set(Screen.list + Screen.foot + [.overview]).count, Screen.allCases.count)
+        // The Overview is behind the app's name; Coach and Account are the foot's buttons.
+        try expectEqual(Set(Screen.list + [.overview, .coach, .account]).count, Screen.allCases.count)
     },
 ]
