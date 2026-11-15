@@ -98,6 +98,9 @@ let contractsTests: [Test] = [
         try expect(rae.trouble?.hasPrefix("Its last 2 checks") == true, "its failing health's first line")
         try expectEqual(rae.cards.map(\.title), ["Create refund"])
         try expectEqual(rae.cards.first?.rules.count, 1)
+        // tafs cloud sends calls.used as null: no figure from calls, the money left is the figure.
+        try expect(rae.cards.first?.calls != nil && rae.cards.first?.calls?.used == nil, "calls.used is null")
+        guard case .money? = rae.cards.first?.figure else { throw Failure(description: "the figure is the money left") }
         // A working taf that needs the person shows no state chip: its Activity says why.
         try expect(TafState.chip(state: rae.state, attention: rae.attention) == nil, "no chip")
         let paused = try AccountClient.decoder.decode(Home.Page.self, from: answer("home-paused.json")).tafs[0]
