@@ -53,25 +53,47 @@ struct PairingPayload: Codable, Equatable {
     /// `software` when the device key isn't in hardware (only with `passkey`), absent otherwise.
     /// The phone's signature covers it, so KIFF never lets that key approve.
     var keyStore: String?
+    /// This Mac's security key, which the pairing registers for it (only with `passkey`, never with
+    /// a software device key): its credential id and public key, base64url, the key as SPKI DER.
+    var credential: Credential?
     /// Base64url of 32 random bytes. The computer keeps it to claim the pairing.
     let nonce: String
     /// When the code stops working, at most 5 minutes ahead.
     let exp: String
 
-    enum CodingKeys: String, CodingKey { case v, pub, approvalPub = "approval_pub", name, platform, kind, keyStore = "key_store", nonce, exp }
+    enum CodingKeys: String, CodingKey { case v, pub, approvalPub = "approval_pub", name, platform, kind, keyStore = "key_store", credential, nonce, exp }
+
+    /// A credential as the QR names it (`{id, public_key}`), as Windows' `ToQrJson` and the phones'
+    /// `PairingRequest.Credential` read it.
+    struct Credential: Codable, Equatable {
+        let id: String
+        let publicKey: String
+        enum CodingKeys: String, CodingKey { case id, publicKey = "public_key" }
+    }
 
     /// The payload for a Mac's keys. A device key outside hardware is said so, and such a
-    /// Mac has no approval key in the code, whatever was passed.
-    init(deviceKey: Data, keyStore: String, approvalKey: Data?, name: String, nonce: String, exp: String) {
+    /// Mac has no approval key and no credential in the code, whatever was passed (it pairs as
+    /// view). A credential goes only with `passkey`: never beside an approval key, as Windows'
+    /// `PairingOffer.Create` and §5.1.
+    init(deviceKey: Data, keyStore: String, approvalKey: Data?, name: String, nonce: String, exp: String,
+         credential: Credential? = nil) {
         let software = keyStore == "software"
         let approval = software ? nil : approvalKey
         self.init(pub: Encoding.base64URL(deviceKey), approvalPub: approval.map(Encoding.base64URL), name: name,
-                  kind: approval == nil ? .passkey : .enclave, keyStore: software ? "software" : nil, nonce: nonce, exp: exp)
+                  kind: approval == nil ? .passkey : .enclave, keyStore: software ? "software" : nil,
+                  credential: software || approval != nil ? nil : credential, nonce: nonce, exp: exp)
     }
 
-    init(pub: String, approvalPub: String?, name: String, kind: Kind, keyStore: String? = nil, nonce: String, exp: String) {
+    init(pub: String, approvalPub: String?, name: String, kind: Kind, keyStore: String? = nil, credential: Credential? = nil,
+         nonce: String, exp: String) {
         self.pub = pub; self.approvalPub = approvalPub; self.name = name
-        self.kind = kind; self.keyStore = keyStore; self.nonce = nonce; self.exp = exp
+        self.kind = kind; self.keyStore = keyStore; self.credential = credential; self.nonce = nonce; self.exp = exp
+    }
+
+    /// The key the check code covers after the device key (§5.2): the approval key, or in its
+    /// place the credential's, so the code covers the key the phone registers; nil with neither.
+    var checkedKeyDER: Data? {
+        (approvalPub ?? credential?.publicKey).flatMap(Encoding.fromBase64URL)
     }
 
     /// How long a code is shown before a new one takes its place.
