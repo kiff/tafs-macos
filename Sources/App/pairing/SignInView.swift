@@ -52,15 +52,19 @@ struct SignInView: View {
             agreement
             back
         case (.failed, .failed(let why, _)):
-            SignInArt.kiff()
+            firstRun
             note(words("sign_in.could_not_start", ["why": why]), color: Theme.no)
             primary(words("common.try_again")) { await model.signIn() }
         default:
-            SignInArt.kiff()
+            firstRun
             title(words("sign_in.with_kiff"))
             primary(words("common.continue")) { await model.signIn() }
         }
     }
+
+    /// Board 1, first run (docs/window.md › Illustrations): a card opening, where the iPad's welcome
+    /// draws it, before Sign in with KIFF.
+    private var firstRun: some View { Illustration.firstRun.frame(maxWidth: .infinity) }
 
     /// "By signing in, you agree to KIFF's Terms … and its Privacy policy", each a link to its page
     /// in the app's language where kiff.dev has it.

@@ -31,7 +31,7 @@ private func filled(_ bitmap: NSBitmapImageRep, from top: Int, to bottom: Int, d
     (top...bottom).contains { !near(Snapshot.hex(bitmap, x: 20, y: $0), dark ? Palette.raised.dark : Palette.raised.light) }
 }
 
-let shellMacTests: [Test] = [
+let shellViewMacTests: [Test] = [
     Test("every date and time is in the app's language, never this Mac's: English words, English dates, on a Spanish Mac too") {
         let folder = URL(fileURLWithPath: ".shared/app/strings")
         let english = Words.load(folder: folder, preferred: ["en"])

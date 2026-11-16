@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// The sign-in window's illustrations, drawn from shapes and SF Symbols only, as the iPad's
-/// `SignInArt`: no letter, number or word is ever in one (every word on the screen is a shared
-/// line). Each is decoration, hidden from VoiceOver.
+/// The sign-in window's illustrations that no approved board covers, drawn from shapes and SF
+/// Symbols only, as the iPad's `SignInArt`: no letter, number or word is ever in one (every word on
+/// the screen is a shared line). Each is decoration, hidden from VoiceOver. KIFF's half draws the
+/// approved board 1, first run (`Illustration.firstRun`).
 enum SignInArt {
-    /// KIFF's side: a Card, its mark and a lock, with two orbiting dots.
-    static func kiff(size: CGFloat = 150) -> some View { KIFFArt(size: size).accessibilityHidden(true) }
     /// The phone's side: a phone holding a code of squares, with the scan's corners.
     static func phone(size: CGFloat = 150) -> some View { PhoneArt(size: size).accessibilityHidden(true) }
     /// Connected: a Mac and a phone, joined, with a check.
@@ -19,29 +18,6 @@ private struct ArtBackdrop: View {
         ZStack {
             Circle().fill(Theme.brand).opacity(0.12)
             Circle().stroke(Theme.line, lineWidth: 1).padding(size * 0.08)
-        }
-        .frame(width: size, height: size)
-    }
-}
-
-private struct KIFFArt: View {
-    let size: CGFloat
-    var body: some View {
-        ZStack {
-            ArtBackdrop(size: size)
-            RoundedRectangle(cornerRadius: size * 0.08).fill(Theme.panel)
-                .frame(width: size * 0.62, height: size * 0.42)
-                .overlay(RoundedRectangle(cornerRadius: size * 0.08).stroke(Theme.line))
-                .shadow(color: .black.opacity(0.08), radius: 6, y: 3)
-            Capsule().fill(Theme.line).frame(width: size * 0.26, height: size * 0.035).offset(x: size * 0.07, y: -size * 0.06)
-            Capsule().fill(Theme.line).frame(width: size * 0.18, height: size * 0.035).offset(x: size * 0.03, y: size * 0.01)
-            RoundedRectangle(cornerRadius: size * 0.05).fill(Theme.brand)
-                .frame(width: size * 0.15, height: size * 0.15).offset(x: -size * 0.17, y: -size * 0.03)
-            Circle().fill(Theme.brand).frame(width: size * 0.22, height: size * 0.22)
-                .overlay(Image(systemName: "lock.fill").font(.system(size: size * 0.1, weight: .bold)).foregroundColor(.white))
-                .offset(x: size * 0.24, y: size * 0.17)
-            Circle().fill(Theme.amber).frame(width: size * 0.06, height: size * 0.06).offset(x: -size * 0.33, y: -size * 0.3)
-            Circle().fill(Theme.sky).frame(width: size * 0.045, height: size * 0.045).offset(x: size * 0.36, y: -size * 0.24)
         }
         .frame(width: size, height: size)
     }

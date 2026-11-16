@@ -124,9 +124,10 @@ when the phone's code starts by itself, is `SignInPlan` (Core).
   by itself.
 - **A view-only Mac adding itself** sees the phone's half alone, titled "Add this Mac with your
   phone", with **Cancel**.
-- **The illustrations** (`SignInArt`) are shapes and SF Symbols only, never a letter, number or
-  word, and hidden from VoiceOver. Every word is a shared line: `sign_in.*` and lines already
-  used.
+- **The illustrations** are shapes only, never a letter, number or word, and hidden from
+  VoiceOver. KIFF's half draws the approved board 1, first run (`Illustration.firstRun`,
+  docs/window.md › Illustrations); the phone's half and Connected keep `SignInArt`, shapes and SF
+  Symbols, which no board covers. Every word is a shared line: `sign_in.*` and lines already used.
 - **Connected.** A session just gained, on either path, is celebrated once over home
   (`ConnectedView`): "You're connected. Let's build great things together." and **Let's go**
   (`sign_in.connected`, `connected_line`, `lets_go`). A session kept from the last launch isn't.
