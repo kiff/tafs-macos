@@ -19,7 +19,7 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
     return (CloudClient(transport: transport, session: session, language: "fr"), transport)
 }
 
-let overviewTests: [Test] = [
+let overviewHomeTests: [Test] = [
     Test("a taf's status is tafs cloud's, active when it isn't sent, as the iPad's CloudTaf.status") {
         func taf(_ fields: String) throws -> Home.Taf {
             try AccountClient.decoder.decode(Home.Taf.self, from: Data((#"{"kiff_agent":"a1","name":"Refunds","#  + fields + "}").utf8))

@@ -25,7 +25,7 @@ private let galleryAnswer = #"""
  "words":{"title":"Start a new taf","all":"All jobs","own_words":"Say it in your own words","own_words_line":"Coach builds the taf with you.","explore":"Explore jobs","see_all":"See all jobs","try":"Try it with Coach","sample":"What it reported after its test run"}}
 """#
 
-let overviewMacTests: [Test] = [
+let overviewScreenTests: [Test] = [
     Test("the gallery is read with each list read: a failed read keeps it, and a tafs cloud without it leaves none", awaiting: { @MainActor in
         let transport = CannedTransport([(200, homePage), (200, galleryAnswer), (200, homePage), (500, ""), (200, homePage), (404, #"{"error":"not_found"}"#)])
         let overview = OverviewModel(cloud: CloudClient(transport: transport, session: session))

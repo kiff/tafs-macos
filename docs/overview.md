@@ -18,6 +18,8 @@ name, at the top of the sidebar.
 | A warning colour on Now | `work.attention` |
 | What is wrong with it | the first of `health.lines`, when `health.level` isn't `healthy` |
 | How many of its calls wait | `waiting` |
+| Its labels (`Home.Taf.labels`) | `labels: [id]`, on a taf that has any |
+| The account's labels (`HomeLabel`) | `labels: [{id, name, color, count, waiting, headline}]`, in the order to show them, and `labels_words.all` for the first chip |
 
 - A list whose tafs don't read is unreadable. It is never shown as "No tafs yet."
 - A headline or a count that isn't the expected shape is left out; the list is still drawn.
@@ -40,6 +42,22 @@ Every cell of a taf's row is centred on the row's height, which its avatar sets,
 Card and Last result sit level with its name. The iPad's grid aligns its cells to the top
 (`Grid(alignment: .topLeading)`, `ShareViews.swift:315`); on macOS 12 the owner asked for
 them centred, so the Mac differs here.
+
+## Labels (`HomeLabels`, `LabelChips`)
+
+As the iPad's Overview (kiff/tafs#1173, `ShareViews.swift` and `BriefView.swift:142-169`,
+`378-427`) and kiff/tafs `docs/labels.md`. A label is a name and a colour Coach gives a taf; the
+apps only filter by it.
+
+- **The chips**, under NEEDS YOU: All, then two labels, then "+N", which shows the rest once
+  clicked. Each label has its count, and an amber dot while one of its tafs waits for the person.
+  The chosen one is inverted; clicked again, it goes back to All. The first chip's word is
+  tafs cloud's (`labels_words.all`), else the app's "All" (`record.filter.all`).
+- **A chip filters the table** to the tafs carrying it, in Home's order: filtering never
+  reorders. A label that's gone shows them all. The list opens on All.
+- **A taf's row** shows two of its labels as small grey chips under its name, then "+1".
+- **With no labelled taf**, Home sends no labels: there's no chip row, and the Overview is as
+  before. A label or a taf's labels of another shape read as none, never the list.
 
 ## Last result (`Runs`)
 
@@ -114,5 +132,6 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 `scripts/test.sh overview`: the list as tafs cloud sends it, each Card's one line (in the
 `taf` part), what Now falls back to, a taf
 with only its required fields, an unreadable list, a malformed headline. It writes
-`build/screenshots/overview-*.png`, and `overview-contract-en.png` from tafs cloud's own
+`build/screenshots/overview-*.png` (with `overview-labels-en`, `overview-labels-money-en` and
+`overview-labels-fr` for the chips), and `overview-contract-en.png` from tafs cloud's own
 `home.json`, whose taf has a Card, so the Card column shows its line.
