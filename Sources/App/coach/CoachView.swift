@@ -78,11 +78,16 @@ final class CoachModel: ObservableObject {
 
     /// The taf whose chat this is, when it isn't Coach's: then nothing is read to find it.
     private let fixed: Coach?
+    /// This device's planque proof for Coach's thread read, as the iPad's `loadSetupThread`: signed
+    /// with the device key and no prompt, so tafs cloud marks Coach's approval and sign-in cards
+    /// (`wider`). Nil, or nil from it, reads the thread unmarked; a taf's chat never sends it.
+    private let proof: (() async -> String?)?
 
     init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
-         now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore()) {
+         now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore(), proof: (() async -> String?)? = nil) {
         self.cloud = cloud
         self.fixed = taf
+        self.proof = proof
         self.streamer = streamer
         self.sleep = sleep
         self.now = now
@@ -105,7 +110,10 @@ final class CoachModel: ObservableObject {
     /// The chat shown, read; nil while a new conversation has nothing to read.
     private func read(_ coach: Coach) async throws -> Thread.Page? {
         if fresh { return nil }
-        return try await cloud.thread(of: coach.id, session: isCoach ? chat : nil)
+        // Only Coach's own thread carries the proof, as on the iPad.
+        var signed: String?
+        if isCoach, let make = proof { signed = await make() }
+        return try await cloud.thread(of: coach.id, session: isCoach ? chat : nil, proof: signed)
     }
 
     /// A new conversation, as the iPad's `newSetupChat`: nothing in it until its first message.
@@ -1574,6 +1582,8 @@ struct CoachView: View {
                 Text(card.service.map { words("coach.sign_in.at", ["vendor": $0]) } ?? words("coach.sign_in.at_vendor"))
                     .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
                 if let note = card.note ?? card.text { Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
+                // A sign-in that asks for more than the job, said above the button, in tafs cloud's words.
+                if let wider = card.widerWords { WiderLine(words: wider) }
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 12)).foregroundColor(Theme.soft)
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
@@ -1612,6 +1622,8 @@ struct CoachView: View {
                 if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
                 if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
                 if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 13)).foregroundColor(Theme.soft) }
+                // A sign-in that asks for more than the job, said above the buttons, in tafs cloud's words.
+                if let wider = card.widerWords { WiderLine(words: wider) }
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 } else {
