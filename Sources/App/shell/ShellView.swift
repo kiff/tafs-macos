@@ -10,6 +10,8 @@ struct ShellView: View {
     @Binding var selection: Screen
     /// How many requests wait for the person: the number beside Needs you.
     var needsYou = 0
+    /// Needs you's name in the sidebar: tafs cloud's "Your brief" once there is one.
+    var needsYouTitle: String?
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
@@ -180,7 +182,7 @@ struct ShellView: View {
                 Image(systemName: screen.symbol)
                     .font(.system(size: 17)).foregroundColor(Theme.ink)
                     .frame(width: 24, alignment: .leading)
-                Text(words(screen.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(verbatim: screen == .needsYou ? needsYouTitle ?? words(screen.titleKey) : words(screen.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 Spacer(minLength: 0)
                 if screen == .needsYou, needsYou > 0 {
                     // The count as the iPad shows it: a plain number at the row's end.
