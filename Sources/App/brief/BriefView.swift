@@ -77,7 +77,7 @@ struct BriefScreen<NeedsYouList: View>: View {
             }
             // All, then two labels, then "+N": the tafs list's chips, filtering the brief.
             if !brief.labels.isEmpty {
-                LabelChips(labels: brief.labels, selected: model.label, all: brief.words.all.isEmpty ? words("record.filter.all") : brief.words.all) { id in
+                LabelChips(labels: brief.labels, selected: model.label, all: brief.words.all.isEmpty ? words("home.labels_all") : brief.words.all) { id in
                     Task { await model.filter(id) }
                 }
             }

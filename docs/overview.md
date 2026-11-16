@@ -52,7 +52,7 @@ apps only filter by it.
 - **The chips**, under NEEDS YOU: All, then two labels, then "+N", which shows the rest once
   clicked. Each label has its count, and an amber dot while one of its tafs waits for the person.
   The chosen one is inverted; clicked again, it goes back to All. The first chip's word is
-  tafs cloud's (`labels_words.all`), else the app's "All" (`record.filter.all`).
+  tafs cloud's (`labels_words.all`), else the app's "All" (`home.labels_all`, as the iPad's `labelsAllWords`).
 - **A chip filters the table** to the tafs carrying it, in Home's order: filtering never
   reorders. A label that's gone shows them all. The list opens on All.
 - **A taf's row** shows two of its labels as small grey chips under its name, then "+1".
