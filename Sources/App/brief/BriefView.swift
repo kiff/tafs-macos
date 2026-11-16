@@ -94,6 +94,9 @@ struct BriefScreen<NeedsYouList: View>: View {
             }
             if let more = brief.more { Text(verbatim: more.words).font(.system(size: 13)).foregroundColor(Theme.soft) }
             if let why = model.laterRefused { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no) }
+        } else if ArtBoard.brief(openDecisions: open.count) == .briefClear {
+            // Board 3, nothing to decide (docs/window.md › Illustrations): a calm sun where the decisions go.
+            Illustration.briefClear.frame(maxWidth: .infinity).padding(.vertical, 8)
         }
     }
 

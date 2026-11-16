@@ -60,7 +60,10 @@ let tafHaltTests: [Test] = [
             let model = HaltModel(cloud: CloudClient(transport: CannedTransport([(200, answer), (200, answer)]), session: session), taf: nil, sleep: { _ in })
             await model.refresh()
             let view = HaltView(model: model, name: nil, close: {}).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
-            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 520, height: 520)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            // Halted, Halt all draws board 4, and its sheet is taller by the drawing's room.
+            let height = HaltView.height(ArtBoard.halt(all: true, state: model.halt.state))
+            try expectEqual(height, name == "halted" ? 520 + HaltView.artHeight + 16 : 520)
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 520, height: height)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("halt-\(name)-en.png"))
         }
     }),

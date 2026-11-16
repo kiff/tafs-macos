@@ -854,6 +854,9 @@ struct CoachView: View {
     var openTaf: (String?) -> Void = { _ in }
     /// The KIFF agents of the tafs listed: a hand-over shows its button once its taf is one.
     var listed: Set<String> = []
+    /// How many tafs the account has, as the iPad's `model.tafs.count`: its empty chat draws
+    /// board 7 with none or one (`ArtBoard.coach`).
+    var tafCount = 0
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
@@ -1209,6 +1212,13 @@ struct CoachView: View {
             improvingStart(taf)
         } else {
             VStack(alignment: .leading, spacing: 14) {
+                // Board 9 before Coach is started (the iPad's `introBefore`, at its width), board 7 in
+                // an empty chat with no taf or one (its `starts`): docs/window.md › Illustrations.
+                switch ArtBoard.coach(started: model.state != .notStarted, improving: false, tafs: tafCount) {
+                case .coachStarting?: Illustration.coachStarting.frame(maxWidth: .infinity)
+                case .coachFirst?: Illustration.coachFirst
+                default: EmptyView()
+                }
                 Text(words("coach.coach_mode")).font(Theme.display(30)).foregroundColor(Theme.coach)
                     .accessibilityAddTraits(.isHeader)
                 Text(words("coach.ask_anything_line")).font(.system(size: 16)).foregroundColor(Theme.soft)
