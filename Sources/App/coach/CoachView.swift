@@ -1514,6 +1514,8 @@ struct CoachView: View {
                 Text(card.service.map { words("coach.sign_in.at", ["vendor": $0]) } ?? words("coach.sign_in.at_vendor"))
                     .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
                 if let note = card.note ?? card.text { Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
+                // A sign-in that asks for more than the job, said above the button, in tafs cloud's words.
+                if let wider = card.widerWords { WiderLine(words: wider) }
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 12)).foregroundColor(Theme.soft)
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
@@ -1552,6 +1554,8 @@ struct CoachView: View {
                 if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
                 if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
                 if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 13)).foregroundColor(Theme.soft) }
+                // A sign-in that asks for more than the job, said above the buttons, in tafs cloud's words.
+                if let wider = card.widerWords { WiderLine(words: wider) }
                 if model.answering == card.key {
                     Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 } else {

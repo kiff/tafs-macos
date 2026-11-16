@@ -16,6 +16,17 @@ private func cards() throws -> [Thread.Card] {
     try JSONDecoder().decode(Thread.Page.self, from: Data(cardsThread.utf8)).items.compactMap { if case .card(let card, _) = $0 { return card } else { return nil } }
 }
 
+/// tafs cloud's line for a sign-in wider than the job, in English (kiff/tafs `card_wider`).
+let widerLine = "The sign-in for Google Sheets can't be narrowed to this job: it asks for more access than the taf uses. The taf still uses only its own tools."
+
+/// One waiting card of this kind, with `more` in its component, read as a thread.
+private func one(_ type: String, _ more: String) throws -> Thread.Card? {
+    let json = #"{"items":[{"type":"card","card":{"key":"s1:c-1","session":"s1","component":{"id":"c-1","type":"\#(type)","title":"Connect Google Sheets","service":"Google Sheets","waits":"owner"\#(more)}}}]}"#
+    let page = try JSONDecoder().decode(Thread.Page.self, from: Data(json.utf8))
+    guard case .card(let card, _) = page.items.first else { return nil }
+    return card
+}
+
 private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport) {
     let transport = CannedTransport(answers)
     return (CloudClient(transport: transport, session: session), transport)
@@ -38,6 +49,28 @@ let coachCardTests: [Test] = [
         try expectEqual(all[2].isChoice, false)
         try expectEqual(all[3].grants, true)
         try expectEqual(all[3].isChoice, false)
+    },
+    Test("a sign-in wider than the job is read from an approval's and a sign-in's wider.words, as sent") {
+        for type in ["approval", "sign_in"] {
+            let card = try one(type, #","wider":{"words":"\#(widerLine)"}"#)
+            try expectEqual(card?.widerWords, widerLine)
+            try expectEqual(card?.grants, true)
+        }
+        // As sent: tafs cloud's words, never the app's.
+        try expectEqual(try one("approval", #","wider":{"words":"  Ça demande plus.\n"}"#)?.widerWords, "  Ça demande plus.\n")
+    },
+    Test("a wider mark that is missing, blank or of another shape is no line, and the card reads as before") {
+        let odd = [#""#, #","wider":null"#, #","wider":"yes""#, #","wider":true"#, #","wider":[]"#, #","wider":{}"#,
+                   #","wider":{"words":"  "}"#, #","wider":{"words":3}"#, #","wider":{"words":null}"#, #","wider":{"said":"more"}"#]
+        for more in odd {
+            for type in ["approval", "sign_in"] {
+                guard let card = try one(type, more) else { throw Failure(description: "\(type) with \(more) wasn't read") }
+                try expectEqual(card.widerWords, nil)
+                try expectEqual(card.title, "Connect Google Sheets")
+                try expectEqual(card.service, "Google Sheets")
+                try expectEqual(card.waitsForPerson, true)
+            }
+        }
     },
     Test("an answer is one of the card's own options, sent as data to that card in its chat", awaiting: {
         let all = try cards()
