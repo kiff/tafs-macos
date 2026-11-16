@@ -19,8 +19,9 @@ struct TafsApp: App {
                     // The session's own key: after a pairing it is the new one.
                     SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language),
                                  cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
-                                 route: .phoneOrPasskey, streamer: NetworkLineStream(), signedOut: { signIn.signedOut() },
-                                 addThisMac: { Task { await signIn.pair() } }, softwareKey: signIn.key.keyStore == "software")
+                                 route: ApprovalRoute.of(.passkey, securityKey: securityKey != nil), streamer: NetworkLineStream(),
+                                 signedOut: { signIn.signedOut() }, addThisMac: { Task { await signIn.pair() } },
+                                 softwareKey: signIn.key.keyStore == "software", deviceKey: signIn.key.publicKeyDER, securityKey: securityKey)
                         .id(session.accessToken)
                 } else {
                     SignInView(model: signIn)
@@ -32,6 +33,11 @@ struct TafsApp: App {
             .onAppear { ThemeChoice.saved().apply() }
         }
     }
+
+    /// The security key that goes with this Mac, registered through its pairing: its credential
+    /// id, read from the Keychain (`SecurityKeyStore`). Its route is given only once passkey
+    /// approvals are on (`ApprovalRoute.of(_:securityKey:)`).
+    private var securityKey: Data? { SecurityKeyStore(store: KeychainStore()).load() }
 
     /// This Mac's device key, from the Keychain or the Secure Enclave. If neither can keep one,
     /// a key for this launch only: it signs in, and the next launch signs in again.

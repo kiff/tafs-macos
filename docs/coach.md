@@ -142,6 +142,59 @@ and `loadSetupThread` (`:7328-7375`):
 - **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
   Coach closes a taf's page first, so Back from there lands on the screen under it.
 
+## Starting Coach (`CoachStart`, `PasskeySession`, `CoachModel.startSetup`, `followStart`)
+
+As the iPad's `startSetup` (`AppModel.swift:7556-7635`), `TafsCloud.startSetup` and
+`CoachStart.startable` (`TafsCloud.swift:2247-2290`, `2470-2478`), `KIFFClient.submitNoToolsDraft`
+(`KIFFClient.swift:1261-1269`) and `SetupChatView.introBefore`'s Start (`SetupChatView.swift:196-233`),
+on Windows' passkey route (tafs-windows `CoachStart.StartAsync`), for an account with no Coach yet:
+
+- **Who may start it** (`CoachStart.mayStart`): a Mac on its security key's route
+  (`ApprovalRoute.passkey`), with the key that goes with it (`PasskeySession`). Setup's draft
+  grants authority, so it is approved by the security key, through the PIN sheet
+  ([approvals.md](approvals.md), "Passkeys on macOS 12"), and sent as `KIFF-Passkey-Assertion`.
+- **It fails closed.** Without the security key's session, `start` asks nothing, reads nothing,
+  enrols nothing, mints nothing and sends nothing: it says "This device can't approve…". The
+  device key never approves the draft in its place, and a draft is sent only as
+  `PasskeySession.Signed`, which only `signDraft` makes.
+- **Off for now:** the route is given only once `Features.macPasskeyApprovals` is on, so every
+  Mac today says, where Start would be, "This device can't approve. Approve on another device
+  signed in to your account." (`approval.device_can_not_approve_approve`), and **follows the start
+  made on the phone**: Setup is read again every 10 seconds while it shows, and once the phone
+  has started Coach its thread shows here. Only reads.
+- **On a Mac that may**, Start, in Windows' order:
+  1. no device key: "Sign in with KIFF again: this sign-in can't sign for the Mac."
+     (`sign_in.again_to_sign_device`);
+  2. planque set up and Coach there: nothing more;
+  3. no security key's session: it stops (above), before anything is asked;
+  4. Setup read (`GET /v1/setup`), before anything is asked: Coach there and planque set up,
+     nothing more; tafs cloud's first start, signed once with Coach's tools, isn't here yet
+     (below), and nothing is sent;
+  5. **the one approval:** the PIN sheet, then the key's touch, over Setup's draft
+     (`{"agent_id":"setup","label":"Setup","no_tools":true}`), exactly the bytes sent, at a
+     `signed_at` never used twice. Closed, nothing is enrolled or sent, and nothing is said. With
+     Coach already there and only planque to set up, the owner confirms instead (Touch ID or the
+     Mac's password, as Windows' gate);
+  6. planque's enrolment, if this Mac isn't set up (`PlanqueEnrolment`, see
+     [connections.md](connections.md)), signed by the device key with no prompt, as the iPad's
+     `signConfirmed`. planque's signer is armed only inside it, after the approval and its account
+     check, and cleared when it ends. What stops it says why;
+  7. the draft sent with its approval, then tafs cloud claims its key (`POST /v1/setup`,
+     `{draft_id, claim_secret}`, unsigned with the session's token);
+  8. then Coach's thread is read.
+  A draft without its secret says "KIFF didn't answer as expected"; anything else says
+  "Couldn't start." with tafs cloud's words, else KIFF's plain line, never a code.
+- **The account is checked after every step**: the read, the approval, the enrolment (and inside
+  it), the draft, and the claim (one more than the iPad's `:7615`). A session that ends drops
+  what comes back and says nothing. Any change of session (a sign-out, a pairing, a new sign-in)
+  rebuilds the window, and its going ends what the old one started (`coach.signedOut()`, the taf
+  chat's, and a PIN sheet left open), as the iPad's `accountGeneration` (`AppModel.swift:887`, `:1472`).
+- **Not here yet:** tafs cloud's first start, the tools batch and Coach's Cards signed once
+  (`startCoachTogether`, `RequestsTogether` on the key); the tools step; keeping planque's
+  enrolment across launches (it lasts this session; asked again, planque answers `kept`, and
+  nothing is minted). The iPad's "Starting asks for {biometry} once." isn't shown on this route:
+  the shared words have no line for the security key there, and the PIN sheet says what it asks.
+
 ## Improving a taf (`CoachModel.improve`, `ask(about:words:mayUseCoach:manages:)`)
 
 As the iPad's `improveTaf`, `askCoachAbout` and `deliverSetup`'s improvement

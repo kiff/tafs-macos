@@ -78,6 +78,11 @@ private func object(_ data: Data) throws -> [String: Any] {
 }
 
 let pairingSecurityKeyTests: [Test] = [
+    Test("the key keeps the session's email as the credential's name when it's known, else this Mac's name") {
+        try expectEqual(SecurityKeyPairing.userName(email: "rae@acme.example", macName: "tafs on this Mac"), "rae@acme.example")
+        try expectEqual(SecurityKeyPairing.userName(email: nil, macName: "tafs on this Mac"), "tafs on this Mac")
+        try expectEqual(SecurityKeyPairing.userName(email: "  ", macName: "tafs on this Mac"), "tafs on this Mac")
+    },
     Test("the credential's client data is Windows' bytes: webauthn.create, the challenge, kiff.dev, not cross-origin") {
         try expectEqual(String(decoding: SecurityKeyPairing.clientDataJSON(challenge: "abc_-"), as: UTF8.self),
                         #"{"type":"webauthn.create","challenge":"abc_-","origin":"https://kiff.dev","crossOrigin":false}"#)

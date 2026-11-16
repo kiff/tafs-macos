@@ -52,6 +52,12 @@ struct SignedInView: View {
     /// This Mac's device key is a software key: pairing it again with the phone gives no more.
     private let softwareKey: Bool
     private let route: ApprovalRoute
+    /// This Mac's device key, its public half (SPKI DER), for planque's enrolment.
+    private let deviceKey: Data
+    /// The credential of the security key that goes with this Mac (`SecurityKeyStore`), if any.
+    private let securityKey: Data?
+    /// The PIN sheet, while the security key is asked.
+    @State private var pinSheet: PINSheetModel?
     /// How often the calls waiting are read again while the window is open.
     static let refreshEvery: TimeInterval = 30
 
@@ -60,7 +66,7 @@ struct SignedInView: View {
     @State private var planque: PlanqueClient
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
-         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false) {
+         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data(), securityKey: Data? = nil) {
         self.account = account
         let planque = PlanqueClient()
         // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
@@ -75,6 +81,8 @@ struct SignedInView: View {
         self.signedOut = signedOut
         self.addThisMac = addThisMac
         self.softwareKey = softwareKey
+        self.deviceKey = deviceKey
+        self.securityKey = securityKey
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
@@ -113,11 +121,14 @@ struct SignedInView: View {
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach, dictation: dictation,
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach, dictation: dictation,
                                                   hints: Dictating.hints(tafs: overview.tafs.map(\.name))))
             case .account: return AnyView(accountScreen)
             }
         }, startNewTaf: startNewTaf, openCoach: openCoach)
+        .sheet(item: $pinSheet) { model in
+            PINSheet(model: model).environment(\.words, words)
+        }
         .sheet(item: $openRecipe) { recipe in
             RecipeSheet(recipe: recipe, recipes: overview.sheetRecipes(for: recipe), canHand: mayUseCoach,
                         sampleLabel: overview.gallery?.sampleLabel, close: { openRecipe = nil }) {
@@ -147,6 +158,14 @@ struct SignedInView: View {
         }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
+        // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
+        // every account change (AppModel.swift:887, :1472).
+        .onDisappear {
+            coach.signedOut()
+            tafChat?.signedOut()
+            pinSheet?.cancel()
+        }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
@@ -189,6 +208,59 @@ struct SignedInView: View {
     private var heldRows: [HeldRow] {
         guard case .loaded(let calls) = needsYou.state else { return [] }
         return calls.map { HeldRow($0, tafs: overview.tafs) }
+    }
+
+    /// The session's security-key side, for what grants authority on this Mac: only on the security
+    /// key's route (`ApprovalRoute.passkey`, given once `Features.macPasskeyApprovals` is on), with
+    /// the key that goes with this Mac. Never the device key in its place.
+    private var passkeySession: PasskeySession? {
+        guard route == .passkey, let securityKey else { return nil }
+        return PasskeySession(transport: account.transport, session: account.session, language: account.language,
+                              approver: PasskeyApprover(authenticator: FidoKey(), credentialID: securityKey, sha256: PasskeyCrypto.sha256))
+    }
+
+    /// Coach's Start, on a Mac that may start it (`CoachStart.mayStart`); nil on one that can't
+    /// approve, whose Coach says so and follows the start made on the phone.
+    private var coachStart: (() async -> Void)? {
+        guard CoachStart.mayStart(route: route, approval: passkeySession) else { return nil }
+        return { await startCoach() }
+    }
+
+    /// Starts Coach on the security key's route, as Windows' `StartAsync`: Setup's draft approved
+    /// by the key through the PIN sheet; then planque's calls and KIFF's mint signed by the device
+    /// key with no prompt (`signConfirmed`). planque's signer is armed only inside the enrolment,
+    /// after the approval and its account check, and cleared when it ends (`AppModel.swift:7569-7575`).
+    @MainActor private func startCoach() async {
+        guard let passkey = passkeySession else { return }
+        let key = deviceKey, reason = words("coach.prompt.connect_tools_mac")
+        await coach.startSetup(account: account, approval: passkey,
+                               sign: { body in try await askSecurityKey { pin in try await passkey.signDraft(body, pin: pin) } },
+                               confirm: { try await NeedsYouModel.confirmOwner(reason) },
+                               enrol: { [planque, account] ended in
+                                   planque.tenant = account.session.tenant
+                                   planque.signer = account.signMessage
+                                   planque.bodyHash = Signing.sha256Hex
+                                   planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!)
+                                   defer { planque.signer = nil }
+                                   return await PlanqueEnrolment.enrol(planque: planque, account: account, deviceKey: key, ended: ended)
+                               },
+                               words: words)
+    }
+
+    /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries
+    /// as the person makes; it answers once the key approved, or throws once the sheet is closed.
+    @MainActor private func askSecurityKey<Answer>(_ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
+        try await withCheckedThrowingContinuation { continuation in
+            var answer: Answer?
+            pinSheet = PINSheetModel(words: words, attempt: { pin in answer = try await ask(pin) },
+                                     readTries: { try await FidoKey().triesLeft() },
+                                     done: { error in
+                                         pinSheet = nil
+                                         if let error { continuation.resume(throwing: error) }
+                                         else if let answer { continuation.resume(returning: answer) }
+                                         else { continuation.resume(throwing: CancellationError()) }
+                                     })
+        }
     }
 
     /// This device's planque proof for a taf's Setup, as the iPad's `loadTafSetup`: the account's
