@@ -7,7 +7,7 @@ let signedReceipt = #"{"schema_version":"0.1","trace_id":"01KTRACE","tenant_id":
 let receiptTestSigner = "0x2c7536e3605d9c16a7a3d7b1898e529396a65c23"
 
 private func check(_ receipt: String, signer: String = receiptTestSigner) -> ReceiptCheck {
-    ReceiptCheck.check(Data(receipt.utf8), signer: signer, sha256: testSHA256)
+    ReceiptCheck.check(Data(receipt.utf8), signer: signer, sha256: testSHA256, recover: Secp256k1.recover)
 }
 
 private func hex(_ data: Data) -> String { ReceiptCheck.hexEncode(data) }
@@ -15,8 +15,9 @@ private func bytes(_ hex: String) -> Data { ReceiptCheck.hexDecode(hex)! }
 
 /// Recovery vectors from python-ecdsa 0.19 (SECP256k1, RFC 6979 signatures), the address from
 /// pycryptodome's Keccak-256: secret 1, a small secret, and n − 1. Each with its digest, r ‖ s ‖ v, and
-/// the same signature with a high s (n − s, its parity flipped), which libsecp256k1 takes too.
-private let vectors: [(digest: String, signature: String, high: String, address: String)] = [
+/// the same signature with a high s (n − s, its parity flipped), which libsecp256k1 takes too. The Mac
+/// test checks libsecp256k1 against the oracle on these (`ReceiptRecoveryMacTests`).
+let receiptRecoveryVectors: [(digest: String, signature: String, high: String, address: String)] = [
     ("405839d62904fd64a901c2443d79f712f403395dea5652b22f01e62211b8a735",
      "5c3a4bcc8502240a0fd0f36f53cd894c0adda9839c8e81365f50af54b120a278644e220addfc76abf25e982ef4268e07d7008cac9df8be2f1c25671e047555d001",
      "5c3a4bcc8502240a0fd0f36f53cd894c0adda9839c8e81365f50af54b120a2789bb1ddf5220389540da167d10bd971f6e3ae503a114fe20ca3acf76ecbc0eb7100",
@@ -32,15 +33,18 @@ private let vectors: [(digest: String, signature: String, high: String, address:
 ]
 
 let receiptCheckTests: [Test] = [
-    Test("Keccak-256 matches the standard vectors and Go's, either side of a block") {
+    Test("Keccak-256, the iPad's own file at the pin, matches the standard vectors, either side of the 136-byte rate") {
         try expectEqual(hex(Keccak.hash256(Data())), "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
         try expectEqual(hex(Keccak.hash256(Data("abc".utf8))), "4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45")
+        // 200 bytes, 0 to 199: one full block and a second, padded (pycryptodome's Keccak-256).
+        try expectEqual(hex(Keccak.hash256(Data((0..<200).map { UInt8($0) }))), "bfb0aa97863e797943cf7c33bb7e880bb4543f3d2703c0923c6901c2af57b890")
+        try expectEqual(hex(Keccak.hash256(Data(repeating: 0x61, count: 200))), "96ea54061def936c4be90b518992fdc6f12f535068a256229aca54267b4d084d")
         try expectEqual(hex(Keccak.hash256(Data(repeating: 0x61, count: 135))), "34367dc248bbd832f4e3e69dfaac2f92638bd0bbd18f2912ba4ef454919cf446")
         try expectEqual(hex(Keccak.hash256(Data(repeating: 0x61, count: 136))), "a6c4d403279fe3e0af03729caada8374b5ca54d8065329a3ebcaeb4b60aa386e")
         try expectEqual(hex(Keccak.hash256(Data(repeating: 0x61, count: 300))), "5b7e0e47a96f32a88b4f14ca177982790807c40e1a105742ba0fc1babe1ef826")
     },
-    Test("secp256k1 recovers the signer of another library's signatures, with v as 0–1 or 27–28, and a high s") {
-        for vector in vectors {
+    Test("the test oracle recovers the signer of another library's signatures, with v as 0–1 or 27–28, and a high s") {
+        for vector in receiptRecoveryVectors {
             let digest = bytes(vector.digest), signature = bytes(vector.signature)
             try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: signature), vector.address)
             var v27 = signature
@@ -62,15 +66,41 @@ let receiptCheckTests: [Test] = [
         try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: Data(repeating: 0, count: 65)), nil)
         try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: Data(repeating: 0xFF, count: 65)), nil)
         try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: Data(repeating: 1, count: 64)), nil)
-        try expectEqual(Secp256k1.recoverAddress(digest: Data(repeating: 1, count: 31), signature: bytes(vectors[0].signature)), nil)
+        try expectEqual(Secp256k1.recoverAddress(digest: Data(repeating: 1, count: 31), signature: bytes(receiptRecoveryVectors[0].signature)), nil)
         // r = n, and s = n: neither is below n.
         let n = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141"
-        try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: bytes(n + String(vectors[0].signature.dropFirst(64)))), nil)
-        try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: bytes(String(vectors[0].signature.prefix(64)) + n + "00")), nil)
+        try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: bytes(n + String(receiptRecoveryVectors[0].signature.dropFirst(64)))), nil)
+        try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: bytes(String(receiptRecoveryVectors[0].signature.prefix(64)) + n + "00")), nil)
         // v outside 0–3 (and 27–30).
-        var v = bytes(vectors[0].signature)
+        var v = bytes(receiptRecoveryVectors[0].signature)
         v[64] = 4
         try expectEqual(Secp256k1.recoverAddress(digest: digest, signature: v), nil)
+    },
+    Test("v is read as the iPad reads it: 0–3 or 27–30, and any other is refused before the library is asked") {
+        let vector = receiptRecoveryVectors[0]
+        let digest = bytes(vector.digest), signature = bytes(vector.signature)
+        var asked: [Int32] = []
+        let recover: ReceiptRecover = { digest, compact, id in
+            asked.append(id)
+            return Secp256k1.recover(digest: digest, compact: compact, recoveryID: id)
+        }
+        for v: UInt8 in [0, 1, 2, 3, 27, 28, 29, 30] {
+            var sig = signature
+            sig[64] = v
+            _ = ReceiptSigner.address(digest: digest, signature: sig, recover: recover)
+        }
+        try expectEqual(asked, [0, 1, 2, 3, 0, 1, 2, 3])
+        asked = []
+        for v: UInt8 in [4, 5, 26, 31, 32, 255] {
+            var sig = signature
+            sig[64] = v
+            try expectEqual(ReceiptSigner.address(digest: digest, signature: sig, recover: recover), nil)
+        }
+        try expectEqual(asked, [])
+        // The fixture's own v, 1 and 28, recovers its signer; a key that isn't 64 bytes is no key.
+        try expectEqual(ReceiptSigner.address(digest: digest, signature: signature, recover: recover), vector.address)
+        try expectEqual(ReceiptSigner.address(digest: digest, signature: signature, recover: { _, _, _ in Data(count: 65) }), nil)
+        try expectEqual(ReceiptSigner.address(digest: digest.prefix(31), signature: signature, recover: recover), nil)
     },
     Test("a receipt KIFF signed checks out, as the iPad's fixture does") {
         try expectEqual(check(signedReceipt), .verified(signer: receiptTestSigner))
@@ -102,7 +132,7 @@ let receiptCheckTests: [Test] = [
         try expectEqual(check(amount), .failed(.signatureMismatch))
     },
     Test("a receipt signed by another key isn't KIFF's: production pins KIFF's signer") {
-        try expectEqual(ReceiptCheck.check(Data(signedReceipt.utf8), sha256: testSHA256), .failed(.notKiff))
+        try expectEqual(ReceiptCheck.check(Data(signedReceipt.utf8), sha256: testSHA256, recover: Secp256k1.recover), .failed(.notKiff))
         try expectEqual(ReceiptCheck.kiffSigner, "0x2f297affd7b62ef712a1e3158421ccb4bf2efcbe")
     },
     Test("not signed yet isn't a failure, and an unknown algorithm or a short signature fails") {

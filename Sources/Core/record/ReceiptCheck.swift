@@ -42,7 +42,7 @@ enum ReceiptCheck: Equatable {
     /// The receipt in `response`, checked against `expected`. `sha256` is passed in (CryptoKit's in the
     /// app), as Core builds on Linux without it.
     static func check(_ response: Data, signer expected: String = kiffSigner, sha256: (Data) -> Data,
-                      recover: (Data, Data) -> String? = Secp256k1.recoverAddress) -> ReceiptCheck {
+                      recover: ReceiptRecover) -> ReceiptCheck {
         guard let receipt = (try? JSONSerialization.jsonObject(with: response)) as? [String: Any] else {
             return .failed(.unreadable)
         }
@@ -64,7 +64,9 @@ enum ReceiptCheck: Equatable {
 
         let chainHash = hexEncode(sha256(chain))
         let digest = Keccak.hash256(Data(chainHash.utf8))
-        guard let recovered = recover(digest, signature) else { return .failed(.signatureMismatch) }
+        guard let recovered = ReceiptSigner.address(digest: digest, signature: signature, recover: recover) else {
+            return .failed(.signatureMismatch)
+        }
         guard recovered == declared else { return .failed(.signatureMismatch) }
         guard recovered == expected.lowercased() else { return .failed(.notKiff) }
         return .verified(signer: recovered)
@@ -93,6 +95,30 @@ enum ReceiptCheck: Equatable {
             i = j
         }
         return out
+    }
+}
+
+/// How a receipt's signer is recovered: from the 32-byte digest, r ‖ s (64 bytes) and the recovery id
+/// 0–3, the public key's X ‖ Y (64 bytes), or nil. The app passes libsecp256k1's, built from pinned
+/// source (`ReceiptRecovery`, scripts/fido.sh), as the iPad links it; Core builds on Linux without it.
+typealias ReceiptRecover = (_ digest: Data, _ compact: Data, _ recoveryID: Int32) -> Data?
+
+/// The address that signed a receipt, as the iPad's `ReceiptCheck.recoverAddress` reads it.
+enum ReceiptSigner {
+    /// "0x" and the last 20 bytes of keccak256 of the recovered key, or nil when the signature can't be
+    /// read or recovers no key. `signature` is r ‖ s ‖ v, 65 bytes.
+    ///
+    /// v as the iPad reads it: 27 and up has 27 taken off, and libsecp256k1 then takes a recovery id of
+    /// 0–3. So v is 0–3 or 27–30, as there. Any other v is refused here, before the library is asked:
+    /// libsecp256k1 treats a recovery id outside 0–3 as a caller's error, not a bad signature.
+    static func address(digest: Data, signature: Data, recover: ReceiptRecover) -> String? {
+        guard digest.count == 32, signature.count == 65 else { return nil }
+        let bytes = [UInt8](signature)
+        var v = Int32(bytes[64])
+        if v >= 27 { v -= 27 }
+        guard (0...3).contains(v) else { return nil }
+        guard let key = recover(Data(digest), Data(bytes[0..<64]), v), key.count == 64 else { return nil }
+        return "0x" + ReceiptCheck.hexEncode(Keccak.hash256(key).suffix(20))
     }
 }
 

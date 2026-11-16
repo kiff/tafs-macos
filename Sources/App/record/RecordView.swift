@@ -197,7 +197,7 @@ final class RecordModel: ObservableObject {
             let raw = try await account.send("GET", "/v1/receipts/\(CloudClient.escaped(trace))")
             let signer = receiptSigner
             // The signer's recovery is plain arithmetic: off the main thread.
-            let check = await Task.detached { ReceiptCheck.check(raw, signer: signer, sha256: PasskeyCrypto.sha256) }.value
+            let check = await Task.detached { ReceiptCheck.check(raw, signer: signer, sha256: PasskeyCrypto.sha256, recover: ReceiptRecovery.recover) }.value
             guard receiptEntry?.id == entry.id else { return }
             receiptRaw = raw
             receiptCheck = check

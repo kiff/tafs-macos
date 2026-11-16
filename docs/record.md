@@ -57,8 +57,18 @@ this Mac. Nothing opens outside the app.
 - **The check:** the digest is keccak256 of the chain's SHA-256 in hex; the signer recovered from the
   65-byte secp256k1 signature must match the receipt's `wallet_address`, and must be KIFF's own
   signer, `0x2f297affd7b62ef712a1e3158421ccb4bf2efcbe` (the iPad's and Linux's). secp256k1 isn't in
-  CryptoKit, so its recovery (`Secp256k1`) and Keccak-256 (`Keccak`) are plain Swift in Core; SHA-256
-  is CryptoKit's.
+  CryptoKit:
+  - **The recovery is libsecp256k1's own** (`ReceiptRecovery`), with its recovery module only, built
+    from pinned source by `scripts/fido.sh` (docs/building.md). It's the release the iPad's
+    swift-secp256k1 vendors, so both recover with the same C code. Core takes the recovery as a
+    function (`ReceiptRecover`), as it builds on Linux without the library.
+  - **Keccak-256 is the iPad's own file** (`ios/Tafs/KIFF/Keccak.swift`), fetched at the pin and
+    compiled into Core as it is (`scripts/shared.sh sources`): one Keccak for the Apple apps.
+  - **SHA-256** is CryptoKit's.
+  - **v** is read as the iPad reads it: 27 and up has 27 taken off, and the recovery id must be 0–3,
+    so v is 0–3 or 27–30. Any other v is refused before the library is asked. **A high s is taken**,
+    as on the iPad and Linux: a receipt's signature only says who signed it, so s or n − s proves the
+    same.
 - **Refused as "couldn't be read":** a receipt that writes any key twice, at its top or in its
   attestation. A repeated key could make the hash and the screen read different values.
 - **Not signed yet** (no attestation) isn't a failure: KIFF signs within a minute. After ten minutes the
@@ -87,9 +97,14 @@ taf's reference.
 `scripts/test.sh record` checks the page as tafs cloud sends it, the escaping and the limit,
 an ungrouped page, an unreadable one, a refusal's code, a case, the paging and the restart;
 on a Mac, a search once typing pauses and at once on Return, and a case opened and closed.
-The receipt: Keccak-256's vectors; secp256k1 recovery against python-ecdsa's signatures (v as
-0–1 or 27–28, a high s); the iPad's fixture signed by KIFF's own signer; a repeated key, a changed
-byte, another signer, not signed yet; and on a Mac the read, a refusal, and when what happened shows.
+The receipt: Keccak-256's vectors (the empty string, "abc", 135, 136, 200 and 300 bytes, either
+side of the 136-byte rate); v read as the iPad reads it; the iPad's fixture signed by KIFF's own
+signer; a repeated key, a changed byte, another signer, a malformed signature, not signed yet. On
+Linux the recovery is a test oracle in plain Swift (`Tests/record/Secp256k1.swift`), checked against
+python-ecdsa's signatures. On a Mac, libsecp256k1 and the oracle agree on the fixtures (a high s, and
+v as 0–1 or 27–28) and on 1,600 random inputs, and both refuse r or s at n, zero or all ones; the
+fixture checks out through libsecp256k1 and each failure fails; and the read, a refusal, and when
+what happened shows.
 It writes `build/screenshots/record-*.png` and `receipt-*.png`. There is no fixture for the Record in kiff/tafs's
 `contracts/` yet: the shape is taken from kiff/tafs's `docs/api.md` and the iPad app's reader.
 

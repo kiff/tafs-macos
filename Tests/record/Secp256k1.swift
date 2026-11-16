@@ -1,10 +1,18 @@
 import Foundation
 
-/// Recovering the signer of a secp256k1 signature, as libsecp256k1's `ecdsa_recover` does: KIFF signs
-/// its receipts with a secp256k1 key (Ethereum-style, `secp256k1+keccak256`), which CryptoKit doesn't
-/// have. Plain arithmetic (SEC 1 v2, §4.1.6), so it runs on macOS 12 and on Linux alike. Every input is
-/// public (a signature and a digest), so it needn't run in constant time.
+/// A test oracle for the receipt check's recovery, never the app's: plain arithmetic (SEC 1 v2, §4.1.6)
+/// that recovers the signer of a secp256k1 signature as libsecp256k1's `ecdsa_recover` does. The app
+/// recovers with libsecp256k1 itself, built from pinned source (scripts/fido.sh, `ReceiptRecovery`);
+/// this stands in for it in the tests that run on Linux, and a Mac test checks the two agree on the
+/// fixtures and on random inputs.
 enum Secp256k1 {
+    /// The shape `ReceiptCheck.check` takes (`ReceiptRecover`): r ‖ s and the recovery id 0–3, the key's
+    /// X ‖ Y.
+    static func recover(digest: Data, compact: Data, recoveryID: Int32) -> Data? {
+        guard compact.count == 64, (0...3).contains(recoveryID) else { return nil }
+        return recoverKey(digest: digest, signature: Data(compact) + [UInt8(recoveryID)])
+    }
+
     /// The Ethereum-style address that signed `digest`: "0x" and the last 20 bytes of keccak256 of the
     /// uncompressed public key. Nil when the signature can't be read or recovers no key.
     /// `signature` is r ‖ s ‖ v, 65 bytes; v is 0–3, or 27–30.
