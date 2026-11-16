@@ -11,12 +11,14 @@ import Foundation
 /// 4. with the creation proof on, the claim carries `credential_proof`, and the credential's
 ///    challenge holds the pairing's nonce and device key.
 ///
-/// **Off:** nothing is asked of the key while `Features.macPasskeyApprovals` is off, and nothing
-/// in the app calls this yet. The PIN sheet comes with the switch (part 4).
+/// **Off with approvals:** the pairing screen asks the key through the PIN sheet only while
+/// `Features.macPasskeyApprovals` is on (`SignInModel.pair`); otherwise this Mac pairs without a
+/// credential and approves on the phone, as today.
 extension Features {
     /// Whether the claim proves the credential (`credential_proof`), as Windows'
-    /// `Features.PairingPasskeyProof`: off until KIFF takes it.
-    static let macPairingPasskeyProof = false
+    /// `Features.PairingPasskeyProof`: on, since KIFF checks it and requires it on a passkey
+    /// computer's claim from 1 Dec 2026. A claim with no credential carries no proof.
+    static let macPairingPasskeyProof = true
 }
 
 /// What the creation returned, kept as it is for KIFF's creation proof: the `clientDataJSON` this
@@ -108,9 +110,10 @@ enum SecurityKeyPairing {
     ///   asks the key for nothing and leaves no extra credential on it.
     /// - **With it,** the challenge holds the nonce, so each attempt makes it again, and one whose
     ///   challenge isn't this pairing's is refused here, before the QR is shown.
-    /// - **A refused or unread credential, or a key not touched or declined,** pairs without one
-    ///   (the Mac then approves on the phone), as Windows pairs when Windows Hello is closed. Any other
-    ///   failure (no key, a wrong PIN, a blocked key) is thrown, for the PIN sheet to say why.
+    /// - **A refused or unread credential, a key not touched or declined, or the PIN sheet closed,**
+    ///   pairs without one (the Mac then approves on the phone), as Windows pairs when Windows Hello
+    ///   is closed. Any other failure (no key, a wrong PIN, a blocked key) is thrown, for the PIN
+    ///   sheet to say why.
     static func credential(kept: PairingPasskey?, proving: Bool, nonce: String, deviceKeyDER: Data,
                            make: (_ challenge: String) async throws -> PairingPasskey,
                            sha256: (Data) -> Data, random: () -> Data) async throws -> PairingPasskey? {
@@ -125,11 +128,53 @@ enum SecurityKeyPairing {
             return nil
         } catch SecurityKeyFailure.denied {
             return nil
+        } catch is CancellationError where !Task.isCancelled {
+            // The PIN sheet was closed: pair without the key, as Windows when Windows Hello is
+            // closed. A pairing that was itself stopped still stops.
+            return nil
         }
         if proving {
             let pairing = PasskeyRegistration.pairingChallenge(nonce: nonce, deviceKeyDER: deviceKeyDER, sha256: sha256)
             guard let proof = made.proof, proofChallenge(proof) == pairing else { throw PasskeyRefusal.unreadable }
         }
         return made
+    }
+}
+
+/// One pairing attempt's offer on a Mac that approves with a passkey, as Windows'
+/// `PairingAttempt.OfferAsync` and `PairingClaim.BodyAsync`: the QR's payload, the credential it
+/// names, and what the claim proves.
+struct PasskeyPairingOffer {
+    let payload: PairingPayload
+    /// The security key's credential the QR names; nil when this Mac pairs without one.
+    let passkey: PairingPasskey?
+    /// The claim's `credential_proof`: only with the proof on, and only for a credential the QR names.
+    let claimProof: CredentialProof?
+
+    /// The credential id to keep once this offer's pairing is claimed (`SecurityKeyStore`): the
+    /// QR's credential, or nil when it named none.
+    var keptCredentialID: Data? { passkey?.passkey.credentialID }
+}
+
+extension SecurityKeyPairing {
+    /// The offer for one attempt, with `nonce`:
+    ///
+    /// - **The key is asked** (`make`, through the PIN sheet) only when it's given, and never for a
+    ///   software device key, which pairs as view with no credential (`PairingPayload`).
+    /// - **Its credential** is `credential(kept:proving:…)`'s: kept without the proof, made again with it.
+    /// - **The claim proves it** only with the proof on and a credential in the QR.
+    static func offer(deviceKeyDER: Data, keyStore: String, name: String, nonce: String, exp: String,
+                      kept: PairingPasskey?, proving: Bool = Features.macPairingPasskeyProof,
+                      make: ((_ challenge: String) async throws -> PairingPasskey)?,
+                      sha256: (Data) -> Data, random: () -> Data) async throws -> PasskeyPairingOffer {
+        var made: PairingPasskey?
+        if let make, keyStore != "software" {
+            made = try await credential(kept: kept, proving: proving, nonce: nonce, deviceKeyDER: deviceKeyDER,
+                                        make: make, sha256: sha256, random: random)
+        }
+        let payload = PairingPayload(deviceKey: deviceKeyDER, keyStore: keyStore, approvalKey: nil, name: name,
+                                     nonce: nonce, exp: exp, credential: made?.credential)
+        let named = payload.credential == nil ? nil : made
+        return PasskeyPairingOffer(payload: payload, passkey: named, claimProof: proving ? named?.proof : nil)
     }
 }

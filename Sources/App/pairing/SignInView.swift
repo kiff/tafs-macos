@@ -27,6 +27,8 @@ struct SignInView: View {
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        // A pairing asks this Mac's security key for its credential through its PIN sheet.
+        .sheet(item: $model.pinSheet) { sheet in PINSheet(model: sheet).environment(\.words, words) }
     }
 
     @ViewBuilder private var welcome: some View {

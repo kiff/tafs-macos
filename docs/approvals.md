@@ -179,16 +179,17 @@ before the security key is asked, and `ApprovalRoute.passkey` is given only once
   (unplug it and plug it in again), another key than this Mac's, not touched in time, refused or
   cancelled at the key, and unplugged. A cancelled task cancels the request at the key.
 
-**Registering the key through pairing** (`SecurityKeyPairing`, part 3), as Windows' own passkey
-(`PairingAttempt`, `PairingOffer`, `PairingClaim`, `WindowsHello.CreateAsync`). Nothing calls it
-yet, and switched off it asks the key nothing:
+**Registering the key through pairing** (`SecurityKeyPairing`, part 3; the screen, part 5), as
+Windows' own passkey (`PairingAttempt`, `PairingOffer`, `PairingClaim`, `WindowsHello.CreateAsync`).
+The pairing screen asks the key through the PIN sheet only while passkey approvals are on
+([pairing.md](pairing.md)); switched off it asks the key nothing:
 - **The credential:** `make` asks the key for one with the `clientDataJSON` this app writes,
   `{"type":"webauthn.create","challenge":…,"origin":"https://kiff.dev","crossOrigin":false}`, its
   user id sha256 of the device key (the same on every attempt), and this Mac's name. What comes
   back is checked as an approval's is, then as a new credential (`PasskeyRegistration.read`):
   ES256 on P-256, an id of 1 to 1023 bytes, and not the device key.
-- **The challenge:** with the creation proof on (`Features.macPairingPasskeyProof`, off as
-  Windows' `PairingPasskeyProof`), the pairing's `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`,
+- **The challenge:** with the creation proof on (`Features.macPairingPasskeyProof`, **on**, as
+  KIFF requires it on a passkey computer's claim from 1 Dec 2026), the pairing's `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`,
   so each attempt makes the credential again, and one made for another pairing is refused before
   the QR is shown. Without it, 32 random bytes, and a new code keeps the last credential, so the
   key isn't asked again.
@@ -199,10 +200,14 @@ yet, and switched off it asks the key nothing:
   an approval key or a software device key ([pairing.md](pairing.md)). The check code covers its
   key in the approval key's place.
 - **The claim** carries `credential_proof {client_data_json, attestation_object}` with the proof on.
-- **A refused credential, or a key not touched or declined,** pairs without one: this Mac then
-  approves on the phone, as Windows pairs when Windows Hello is closed. No key, a wrong PIN or a
-  blocked key is thrown, for the PIN sheet to say why.
-- **Kept:** only the credential id (`SecurityKeyStore`), in the Keychain beside the session.
+- **A refused credential, a key not touched or declined, or the PIN sheet closed,** pairs without
+  one: this Mac then approves on the phone, as Windows pairs when Windows Hello is closed. No key,
+  a wrong PIN or a blocked key is said in the PIN sheet, which stays open to try again.
+- **One attempt's offer** (`SecurityKeyPairing.offer`): the payload, the credential it names, and
+  the claim's proof, only with the proof on and a credential in the QR. A software device key is
+  never asked for one.
+- **Kept:** only the credential id (`SecurityKeyStore`), in the Keychain beside the session, saved
+  once the pairing is claimed and never before. A pairing that names no key forgets an earlier one.
   Signing this Mac out forgets it, as signing it out in Devices removes the key at KIFF.
 
 **The PIN sheet and Start Coach on the key's route** (part 4). Still off: nothing gives the
@@ -236,10 +241,9 @@ route while `Features.macPasskeyApprovals` is off.
 2. **Confirmed on a real Mac:** an unsigned app reads a FIDO HID device on macOS 12 without an
    Input Monitoring prompt. libfido2 opens the key's FIDO interface (usage page `0xF1D0`), which
    isn't a keyboard, so none is expected.
-3. **The pairing screen** asking the key for its credential through the PIN sheet, and saving it
-   (`SecurityKeyStore`) once the pairing is claimed. The creation proof
-   (`Features.macPairingPasskeyProof`) is turned on first: KIFF will require `credential_proof` on
-   a passkey computer's claim.
+3. **One real pairing end to end** with a USB security key on a macOS 12 Mac with a Secure
+   Enclave: the PIN sheet, the key's touch, the phone's approval, and KIFF taking the claim's
+   `credential_proof`. The screen and the proof are in (part 5); a real key can't run in CI.
 4. tafs cloud's first start's pair (`RequestsTogether` on the key), with the tools step.
 
 ## Tests
