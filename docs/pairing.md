@@ -39,6 +39,11 @@ pairs as today, with no credential, and approves on the phone.
   closes it. **Closing it pairs without the key,** as Windows pairs when Windows Hello is closed:
   this Mac then approves on the phone. Cancelling the pairing closes the sheet, and nothing is
   asked or claimed.
+- **The sheet's own words while pairing** (`SecurityKeySheetPurpose.addKey`): "Add your security
+  key to this computer" (`approval.security_key.add_title`), what it asks
+  (`add_enter_pin`), **Add key** (`add`) and **Pair without a key** (`pair_without`, the sheet's
+  close and Esc). An approval's sheet keeps its own title, lead, Approve and Cancel. The PIN, the
+  touch and every failure line are the same for both.
 - **The QR** names the key's new credential as `credential {id, public_key}`, base64url, the key
   as SPKI DER. It goes only with `kind: "passkey"`, never beside an approval key or with a
   software device key, which pairs as view.

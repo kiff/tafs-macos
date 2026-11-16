@@ -225,7 +225,7 @@ final class SignInModel: ObservableObject {
         pinSheet?.cancel()
         return try await withCheckedThrowingContinuation { continuation in
             var answer: PairingPasskey?
-            pinSheet = PINSheetModel(words: key.words, attempt: { pin in answer = try await ask(pin) }, readTries: key.readTries,
+            pinSheet = PINSheetModel(words: key.words, purpose: .addKey, attempt: { pin in answer = try await ask(pin) }, readTries: key.readTries,
                                      done: { [weak self] error in
                                          self?.pinSheet = nil
                                          if let error { continuation.resume(throwing: error) }
