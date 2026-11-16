@@ -101,13 +101,13 @@ let connectReceiptMacTests: [Test] = [
     }),
     Test("the receipt draws board 5, tafs cloud's line or the shared Connected, and Done, on the theme's ground in light and dark", awaiting: { @MainActor in
         for dark in [false, true] {
-            let view = ConnectReceiptSheet(receipt: ConnectReceipt(id: "k", heading: "Connect Qonto", line: "Qonto is connected (read only)"), done: {})
+            let view = ConnectReceiptSheet(receipt: ConnectReceipt(id: "k", heading: "Connect Qonto", line: "Qonto is connected (read only)"), managesCards: false, done: {})
                 .environment(\.words, receiptWords())
             let size = receiptSize(view)
             try expect(size.height > 250, "board 5, the heading, the line and Done: \(size.height)")
             guard let bitmap = Snapshot.bitmap(of: view, size: size, dark: dark) else { throw Failure(description: "no bitmap") }
             try expect(receiptNear(bitmap, x: 3, y: 3, dark ? Palette.background.dark : Palette.background.light), "the ground, dark: \(dark)")
-            // Done is the brand's button across the foot, white on its fill: never the ground there.
+            // Done is the brand's button across the foot (Disconnect, below it, has its own test), white on its fill: never the ground there.
             try expect(!receiptNear(bitmap, x: Int(size.width) / 2 - 60, y: Int(size.height) - 30, dark ? Palette.background.dark : Palette.background.light), "Done, dark: \(dark)")
         }
         let folder = URL(fileURLWithPath: "build/screenshots")
