@@ -48,4 +48,18 @@ let approvalsSecurityKeyWordsTests: [Test] = [
         try expectEqual(ApprovalRoute.of(.passkey, securityKey: true), .phoneOrPasskey)
         try expectEqual(ApprovalRoute.of(.key(Data([1])), securityKey: true, enabled: true), .touchID)
     },
+    Test("the PIN sheet's purpose picks its words: approving a request, or adding the key while this computer pairs") {
+        let w = try words()
+        try expectEqual(w(SecurityKeySheetPurpose.approve.titleKey), "Approve with your security key")
+        try expectEqual(w(SecurityKeySheetPurpose.addKey.titleKey), "Add your security key to this computer")
+        try expectEqual(w(SecurityKeySheetPurpose.addKey.leadKey),
+                        "Enter your security key's PIN to add it. tafs asks for it each time and never stores it.")
+        try expectEqual(w(SecurityKeySheetPurpose.addKey.actionKey), "Add key")
+        try expectEqual(w(SecurityKeySheetPurpose.addKey.closeKey), "Pair without a key")
+        try expectEqual(SecurityKeySheetPurpose.approve.leadKey, "approval.security_key.enter_pin")
+        try expectEqual(SecurityKeySheetPurpose.approve.actionKey, "approval.approve")
+        try expectEqual(SecurityKeySheetPurpose.approve.closeKey, "common.cancel")
+        let fr = try words("fr")
+        try expectEqual(fr(SecurityKeySheetPurpose.addKey.closeKey), "Associer sans clé")
+    },
 ]

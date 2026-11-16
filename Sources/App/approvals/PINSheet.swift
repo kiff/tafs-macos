@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// The security key's PIN sheet, for each approval this Mac makes with its key (kiff/tafs
-/// `docs/computer-passkeys.md`): its title, what it asks, the tries left when the key says, the
+/// The security key's PIN sheet, for each approval this Mac makes with its key, and for adding
+/// the key while this Mac pairs (`SecurityKeySheetPurpose`; kiff/tafs `docs/computer-passkeys.md`): its title, what it asks, the tries left when the key says, the
 /// PIN field, then "Touch your security key." while the key waits; each failure in its own
 /// shared line (`SecurityKeyWords`), and the sheet stays open to try again, but for a locked key.
 ///
@@ -27,6 +27,8 @@ final class PINSheetModel: ObservableObject, Identifiable {
     /// The key is locked: nothing more is asked of it here.
     @Published var locked = false
     let reader = PINReader()
+    /// Approving a request, or adding the key while this Mac pairs: only the sheet's words differ.
+    let purpose: SecurityKeySheetPurpose
     private let words: Words
     private let attempt: (SecurityKeyPIN) async throws -> Void
     private let readTries: () async throws -> Int
@@ -35,9 +37,10 @@ final class PINSheetModel: ObservableObject, Identifiable {
     /// - `attempt` asks the key with the PIN; it returns once the key approved.
     /// - `readTries` reads the PIN tries left, before the PIN is asked.
     /// - `done` hears once: nil once approved, or the error that closed the sheet.
-    init(words: Words, attempt: @escaping (SecurityKeyPIN) async throws -> Void, readTries: @escaping () async throws -> Int,
-         done: @escaping (Error?) -> Void) {
+    init(words: Words, purpose: SecurityKeySheetPurpose = .approve, attempt: @escaping (SecurityKeyPIN) async throws -> Void,
+         readTries: @escaping () async throws -> Int, done: @escaping (Error?) -> Void) {
         self.words = words
+        self.purpose = purpose
         self.attempt = attempt
         self.readTries = readTries
         self.done = done
@@ -71,7 +74,8 @@ final class PINSheetModel: ObservableObject, Identifiable {
         }
     }
 
-    /// Closes the sheet: nothing is approved, and the field is emptied.
+    /// Closes the sheet: nothing is approved, and the field is emptied. While pairing, that pairs
+    /// this Mac without the key (`pair_without`).
     func cancel() {
         reader.clear()
         finish(CancellationError())
@@ -152,9 +156,9 @@ struct PINSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(words("approval.security_key.title")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(words(model.purpose.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 .frame(maxWidth: .infinity).accessibilityAddTraits(.isHeader)
-            Text(words("approval.security_key.enter_pin")).font(.system(size: 14)).foregroundColor(Theme.soft)
+            Text(words(model.purpose.leadKey)).font(.system(size: 14)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
             if let tries = model.triesLine {
                 Text(verbatim: tries).font(.system(size: 13)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
@@ -181,8 +185,8 @@ struct PINSheet: View {
     private var buttons: some View {
         HStack {
             Spacer()
-            Button(words("common.cancel")) { model.cancel() }.keyboardShortcut(.cancelAction)
-            Button(words("approval.approve")) { Task { await model.approve() } }
+            Button(words(model.purpose.closeKey)) { model.cancel() }.keyboardShortcut(.cancelAction)
+            Button(words(model.purpose.actionKey)) { Task { await model.approve() } }
                 .keyboardShortcut(.defaultAction)
                 .disabled(model.phase == .touching || model.locked)
         }
