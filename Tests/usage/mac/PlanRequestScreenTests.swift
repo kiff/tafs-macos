@@ -47,7 +47,7 @@ let usageRequestScreenTests: [Test] = [
         try expectEqual(model.planMessage, Words.app("billing.request.not_withdrawn", ["why": Words.app("error.ours")]))
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/usage", "POST /v1/me/pack-requests/req_5/withdraw", "GET /v1/me/usage"])
     }),
-    Test("a decline asks for Touch ID or the Mac's password, then is signed; closed, nothing is sent or said", awaiting: { @MainActor in
+    Test("a decline asks for Touch ID or the Mac's password, then is signed; closed, nothing is sent and it says \"Cancelled. Nothing changed.\"", awaiting: { @MainActor in
         var asked: [String] = []
         let (admin, transport) = model([(200, teamUsage), (200, packRequestAnswer), (200, teamUsage)], confirm: { asked.append($0) })
         await admin.load()
@@ -59,13 +59,22 @@ let usageRequestScreenTests: [Test] = [
         try expectEqual(transport.sent[1].headers["KIFF-Device-Signature"], "t=x,v1=SIG")
         try expectEqual(String(decoding: transport.sent[1].body, as: UTF8.self), #"{"note":"Not now"}"#)
         try expectEqual(transport.sent.count, 3)
-        // The prompt closed: nothing sent, nothing said, as the iPad's `catch { return false }`.
+        // The prompt closed: nothing sent, and it says so, as every app does where nothing is
+        // pending after it.
         let (closed, quiet) = model([(200, teamUsage)], confirm: { _ in throw LAError(.userCancel) })
         await closed.load()
         let got4 = await closed.declineRequest(request, note: "")
         try expectEqual(got4, false)
         try expectEqual(quiet.sent.map(\.method), ["GET"])
-        try expectEqual(closed.planMessage, nil)
+        try expectEqual(closed.planMessage, Words.app("approval.cancelled"))
+        try expectEqual(closed.planMessage, "Cancelled. Nothing changed.")
+        // A prompt that failed, not closed: nothing sent, and it wasn't confirmed.
+        let (failed, quieter) = model([(200, teamUsage)], confirm: { _ in throw LAError(.authenticationFailed) })
+        await failed.load()
+        let got5 = await failed.declineRequest(request, note: "")
+        try expectEqual(got5, false)
+        try expectEqual(quieter.sent.map(\.method), ["GET"])
+        try expectEqual(failed.planMessage, Words.app("common.not_sent_unconfirmed"))
     }),
     Test("a decline without a device key says to sign in again; one KIFF refuses says why and reads again", awaiting: { @MainActor in
         let (keyless, quiet) = model([(200, teamUsage)], signed: false)

@@ -42,6 +42,7 @@ private final class Start {
     var enrolStop: PlanqueEnrolment.Stop?
     var sheetCloses = false
     var confirmFails = false
+    var confirmCloses = false
     var endsAt: Int?
     var checks = 0
     var enabled = true
@@ -78,7 +79,8 @@ private final class Start {
             },
             confirm: { [unowned self] in
                 confirmed += 1
-                if confirmFails { throw Failure(description: "closed") }
+                if confirmCloses { throw OwnerPrompt.Closed() }
+                if confirmFails { throw Failure(description: "failed") }
             },
             enrol: { [unowned self] _ in enrolled += 1; return enrolStop },
             ended: { [unowned self] in checks += 1; return endsAt.map { checks >= $0 } ?? false },
@@ -155,6 +157,26 @@ let coachStartTests: [Test] = [
         try expectEqual(CoachStart.mayStart(route: .passkey, approval: nil), false)
         try expectEqual(CoachStart.mayStart(route: .phoneOrPasskey, approval: start.passkeySession()), false)
         try expectEqual(CoachStart.mayStart(route: .touchID, approval: start.passkeySession()), false)
+    }),
+    Test("with Coach there, a closed owner's prompt says \"Cancelled. Nothing changed.\" and enrols nothing; one that failed says it wasn't confirmed", awaiting: { @MainActor in
+        let known = Coach(id: "taf_setup", name: "Setup")
+        let closed = Start(cloud: [])
+        closed.confirmCloses = true
+        let (outcome, ready) = try await closed.run(coach: known)
+        try expectEqual(outcome, .stopped("Cancelled. Nothing changed."))
+        try expectEqual(ready, false)
+        try expectEqual([closed.confirmed, closed.enrolled, closed.cloud.sent.count, closed.passkeyKIFF.sent.count], [1, 0, 0, 0])
+        let failed = Start(cloud: [])
+        failed.confirmFails = true
+        let (stopped, _) = try await failed.run(coach: known)
+        try expectEqual(stopped, .stopped("Not sent: it wasn't confirmed."))
+        try expectEqual(failed.enrolled, 0)
+        // A session that ended while the prompt was up says nothing.
+        let ended = Start(cloud: [])
+        ended.confirmCloses = true
+        ended.endsAt = 1
+        let (quiet, _) = try await ended.run(coach: known)
+        try expectEqual(quiet, .stopped(nil))
     }),
     Test("a closed PIN sheet sends nothing and says nothing; nothing is enrolled", awaiting: { @MainActor in
         let start = Start(cloud: [(200, none)])

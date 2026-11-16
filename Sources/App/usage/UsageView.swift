@@ -109,10 +109,11 @@ final class UsageModel: ObservableObject {
 
     /// Declines a member's request, with a note, as the iPad's `declineRequest`
     /// (AppModel.swift:3672-3696): the admin's answer, confirmed with Touch ID or the Mac's
-    /// password, then signed by the device key. A prompt closed or failed sends nothing and says
-    /// nothing, as the iPad's. A decline whose session ended while the prompt was up sends
-    /// nothing, and one that ended while it went says nothing (`gen == accountGeneration`,
-    /// :3681 and :3689).
+    /// password, then signed by the device key. A prompt closed or failed sends nothing: closed, it
+    /// says "Cancelled. Nothing changed." (`approval.cancelled`), as every app does where nothing
+    /// is pending after; failed, "Not sent: it wasn't confirmed." A decline whose session ended
+    /// while the prompt was up sends nothing and says nothing, and one that ended while it went
+    /// says nothing (`gen == accountGeneration`, :3681 and :3689).
     func declineRequest(_ request: PackRequest, note: String) async -> Bool {
         planMessage = nil
         guard let account else { return false }
@@ -120,7 +121,11 @@ final class UsageModel: ObservableObject {
             planMessage = Words.app("sign_in.again_to_sign")
             return false
         }
-        do { try await confirm(Words.app("billing.request.decline_prompt")) } catch { return false }
+        do { try await confirm(Words.app("billing.request.decline_prompt")) } catch {
+            guard !Task.isCancelled else { return false }
+            planMessage = NeedsYouModel.closed(error) ? Words.app("approval.cancelled") : Words.app("common.not_sent_unconfirmed")
+            return false
+        }
         guard !Task.isCancelled else { return false }
         do {
             _ = try await account.declineRequest(request.id, note: note.trimmingCharacters(in: .whitespacesAndNewlines))

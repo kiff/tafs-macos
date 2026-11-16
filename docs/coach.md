@@ -174,7 +174,10 @@ on Windows' passkey route (tafs-windows `CoachStart.StartAsync`), for an account
      (`{"agent_id":"setup","label":"Setup","no_tools":true}`), exactly the bytes sent, at a
      `signed_at` never used twice. Closed, nothing is enrolled or sent, and nothing is said. With
      Coach already there and only planque to set up, the owner confirms instead (Touch ID or the
-     Mac's password, as Windows' gate);
+     Mac's password, as Windows' gate). That prompt closed says "Cancelled. Nothing changed."
+     (`approval.cancelled`, `OwnerPrompt`), and one that failed "Not sent: it wasn't
+     confirmed."; either way nothing is enrolled, and a session that ended meanwhile says
+     nothing. Refuse and Your step, whose call still waits, keep "the request is kept";
   6. planque's enrolment, if this Mac isn't set up (`PlanqueEnrolment`, see
      [connections.md](connections.md)), signed by the device key with no prompt, as the iPad's
      `signConfirmed`. planque's signer is armed only inside it, after the approval and its account

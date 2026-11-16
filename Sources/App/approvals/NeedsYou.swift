@@ -52,14 +52,24 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// The words for a prompt the person closed, as the iPad's `ApprovalReadiness.cancelled`; nil
-    /// for any other failure.
+    /// for any other failure. For a call still waiting (Refuse, Your step), so the request is kept.
     static func cancelled(_ error: Error) -> String? {
+        closed(error) ? Words.app("approval.cancelled_nothing_approved_request_kept") : nil
+    }
+
+    /// Whether the person closed the prompt, rather than it failing.
+    nonisolated static func closed(_ error: Error) -> Bool {
+        if error is OwnerPrompt.Closed { return true }
         switch (error as? LAError)?.code {
-        case .userCancel?, .systemCancel?, .appCancel?, .userFallback?:
-            return Words.app("approval.cancelled_nothing_approved_request_kept")
-        default:
-            return nil
+        case .userCancel?, .systemCancel?, .appCancel?, .userFallback?: return true
+        default: return false
         }
+    }
+
+    /// `confirmOwner` for Core, which can't read the system's errors: a closed prompt throws
+    /// `OwnerPrompt.Closed`, and any other failure as it is.
+    nonisolated static func confirmOwnerForCore(_ reason: String) async throws {
+        do { try await confirmOwner(reason) } catch where closed(error) { throw OwnerPrompt.Closed() }
     }
 
     var count: Int {

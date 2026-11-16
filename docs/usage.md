@@ -44,8 +44,10 @@ its routes (`:768-799`), and `askAdmin`, `withdrawRequest` and `declineRequest`
 - **Declining**, for someone who manages billing: each open request's line ("Someone asks for
   Rayo.") and reason, with **Decline**. Its sheet asks the question and takes a note. The person
   confirms with Touch ID or the Mac's password (`billing.request.decline_prompt`), then the
-  device key signs, as the iPad's `signer.sign`. A prompt closed or failed sends nothing and
-  says nothing; without a device key it says to sign in again. The model owns the decline, and
+  device key signs, as the iPad's `signer.sign`. A prompt closed or failed sends nothing:
+  closed, it says "Cancelled. Nothing changed." (`approval.cancelled`), since nothing waits on
+  it after; failed, "Not sent: it wasn't confirmed." (`common.not_sent_unconfirmed`). Without a
+  device key it says to sign in again. The model owns the decline, and
   sign-out cancels it (`cancelAnswers`): one whose session ended while the prompt was up sends
   nothing, and one that ended while it went says nothing, as the iPad's `accountGeneration`
   (`AppModel.swift:3681`, `:3689`).
