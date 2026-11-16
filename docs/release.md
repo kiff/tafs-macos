@@ -12,7 +12,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 2. imports the Developer ID certificate into a keychain of its own, which it deletes at the end;
 3. signs the app, packs the image and signs it (`scripts/dmg.sh`);
 4. sends it to Apple's notary service and waits for its answer, then staples the ticket. If Apple refuses it, the run prints Apple's log and stops;
-5. checks the image as Gatekeeper would, prints its SHA-256, and keeps it as the run's **`tafs-dmg`** artifact for 30 days;
+5. checks the image as Gatekeeper would and prints its SHA-256. It isn't kept as a run artifact: this repository is public, so any signed-in GitHub user could download a run's artifacts, and the draft release is the image's only copy;
 6. attaches it to a **draft GitHub release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A draft is seen only by people with push access; publishing it is a separate, deliberate step. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one.
 
 **On a pull request** that changes the packaging (`scripts/dmg.sh`, `scripts/build.sh`, `App/Info.plist` or the workflow), the `check` job builds the image signed ad hoc and opens it, with no secret and no Apple.

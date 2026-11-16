@@ -6,8 +6,9 @@ name: DMG
 #
 # - On a pull request that changes the packaging, `check` builds the image signed
 #   ad hoc and opens it: no secret, no Apple.
-# - By hand, from main, `release` makes the real one, keeps it as the run's
-#   `tafs-dmg` artifact, and attaches it to a draft GitHub release of this repo,
+# - By hand, from main, `release` makes the real one and attaches it to a draft
+#   GitHub release of this repo, its only copy (a run artifact of a public repo
+#   could be downloaded by any signed-in GitHub user),
 #   `v<version>-<build>`: a draft is seen only by people with push access, so it
 #   stays the team's until someone publishes it. It reads the Developer ID certificate (DEVELOPER_ID_P12,
 #   DEVELOPER_ID_P12_PASSWORD) and the App Store Connect key notarization uses
@@ -125,12 +126,6 @@ jobs:
           # As Gatekeeper judges a downloaded image.
           spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           shasum -a 256 "$dmg"
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: tafs-dmg
-          path: build/tafs-*.dmg
-          retention-days: 30
 
       # A draft, seen only by people with push access. A version already
       # released stops the run: App/Info.plist's version or build goes up first.
