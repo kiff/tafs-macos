@@ -98,25 +98,53 @@ key's id leaving the new session standing; and screenshots `pairing-pin-sheet-en
 
 ## The screens
 
-A Mac with no session opens on sign-in (`SignInView`, driven by `SignInModel`).
+A Mac with no session opens on sign-in (`SignInView`, driven by `SignInModel`): the whole window
+in two halves, as the iPad's regular width, with very little text. What each half shows, and
+when the phone's code starts by itself, is `SignInPlan` (Core).
 
-| Step | What it shows |
+| Half | What it shows |
 |---|---|
-| Welcome | What tafs is, **Sign in with KIFF**, and "Already use tafs on your phone? Add this Mac with it." |
-| The browser's code | The code KIFF's page must show, and that the Mac is waiting. KIFF's page opens by itself. |
-| The pairing code | The QR code, where to scan it on the phone, the 6-character check code, and that the Mac is waiting. |
-| The code ran out | "This code expired." and **Show a new code**. Each code has a new nonce. |
-| It didn't work | KIFF's own code for why, and **Try again**. |
+| **Left: Sign in with KIFF** | An illustration, **Sign in with KIFF** and **Continue**. After Continue: what signing in does, the browser's code to check, that the Mac is waiting, the agreement with its Terms and Privacy policy links, and **Cancel**. KIFF's page opens by itself. |
+| **Right: Sign in with your phone** (on `raised`) | An illustration with the title, the QR, **Scan with tafs**, where to scan it on the phone (Account → Devices → Add a device), and a panel: **Your code**, the 6-character check code, then this Mac's name, and that it's waiting for the phone. |
 
+- **The QR is shown as the window opens**, with nothing to press (`SignInModel.showPhoneCode`).
+- **It's renewed silently.** A code lasts at most 5 minutes; when it runs out, a new one with a
+  new nonce takes its place, with no message and nothing to press.
+- **No prompt.** Showing and renewing the code signs only the claim's proof with the device key
+  (`Signing.claimProof`), which is made with no access control: no Touch ID, no password.
+  - The one exception is this Mac's security key, once passkey approvals are on: its PIN sheet
+    is a prompt, so the code is then shown on **Continue** and isn't renewed by itself.
+- **The check code comes first**, before this Mac's name. The name is the one this Mac gives
+  itself in the QR, shown as its own claim, which the phone shows too. There's no "Show the
+  code" (Windows only).
+- **One sign-in at a time.** Continue on KIFF's half stops the phone's code; the phone's half then
+  offers **Continue** to show it again, which stops the browser's wait. Cancel on KIFF's half brings
+  the code back by itself.
+- **A failure** says why in its own half, with **Try again**. A failed pairing isn't started again
+  by itself.
+- **A view-only Mac adding itself** sees the phone's half alone, titled "Add this Mac with your
+  phone", with **Cancel**.
+- **The illustrations** (`SignInArt`) are shapes and SF Symbols only, never a letter, number or
+  word, and hidden from VoiceOver. Every word is a shared line: `sign_in.*` and lines already
+  used.
+- **Connected.** A session just gained, on either path, is celebrated once over home
+  (`ConnectedView`): "You're connected. Let's build great things together." and **Let's go**
+  (`sign_in.connected`, `connected_line`, `lets_go`). A session kept from the last launch isn't.
 - **Only KIFF's page is ever opened**: `https`, on `kiff.dev`. Any other address in the answer is ignored.
 - **Cancel** stops the waiting, and a late answer to a cancelled attempt is dropped.
 - **The QR code** (`QRCode`) is the pairing text as bytes with error correction M. A test reads
-  it back from the image, as a phone's camera would.
+  it back from the image, as a phone's camera would, and from the drawn window.
 - **The session** goes to the Keychain as soon as it is handed over, and the next launch opens
   signed in.
 
-`scripts/test.sh pairing` writes the screens to `build/screenshots/sign-in-*.png` in English,
-French and Portuguese.
+`scripts/test.sh pairing` writes the window to `build/screenshots/sign-in-{en,fr}.png` (the two
+halves, the QR on load), `sign-in-browser-*`, `sign-in-adding-*` (a Mac adding itself) and
+`sign-in-connected-*`, in English and French. Its tests (`SignInPlanTests`, `SignInScreenTests`):
+the QR on load and its renewal each sign only the claim with the device key, with no PIN sheet; no
+pairing source names `LocalAuthentication`, `LAContext` or `SecAccessControl`; nothing starts by
+itself on a still picture, while signed in or after a failure; the QR reads back off the drawn
+window, beside the two halves' colours; and the check code comes before the name, in English and
+French.
 
 ## Adding a Mac that is already signed in
 

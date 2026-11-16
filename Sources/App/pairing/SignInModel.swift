@@ -41,17 +41,23 @@ final class SignInModel: ObservableObject {
     @Published private(set) var session: Session?
     /// The security key's PIN sheet, while a pairing asks the key for its credential.
     @Published var pinSheet: PINSheetModel?
+    /// A session was just gained, on either path: the window celebrates it once, over home
+    /// (`ConnectedView`), until the person moves on. Never set by a session kept from the last launch.
+    @Published var justConnected = false
 
     private let client: KIFFClient
     /// This Mac's device key: the one its session is bound to.
     private(set) var key: SigningKey
     private let approval: ApprovalMeans
     private let sessions: SessionStore
-    private let deviceName: String
+    /// The name this Mac gives itself in the QR: the phone shows it as this Mac's own claim.
+    let deviceName: String
     private let sleep: (TimeInterval) async throws -> Void
     private let open: (URL) -> Void
     private let now: () -> Date
     private var attempt = 0
+    /// The screen is a still picture (`show`): nothing starts by itself.
+    private var still = false
     /// Where Export my chats writes its files: removed at every session change, as the iPad's
     /// `removeOpenedFiles` in `useSession` and `forgetSession`, so a person's chats never stay
     /// on the Mac after them.
@@ -159,6 +165,7 @@ final class SignInModel: ObservableObject {
                 key = pairingKey
                 session = got
                 step = .welcome
+                justConnected = true
                 // Last, once the screen holds what the store holds: it can't throw past this step.
                 keepSecurityKey(offer)
                 await endSession(replaced, oldKey)
@@ -176,8 +183,35 @@ final class SignInModel: ObservableObject {
         }
     }
 
-    /// Puts the screen on a step, for a screenshot.
-    func show(_ step: Step) { self.step = step }
+    /// Puts the screen on a step, for a screenshot: a still picture, so the phone's code isn't
+    /// started by itself.
+    func show(_ step: Step) {
+        still = true
+        self.step = step
+    }
+
+    /// Whether showing the phone's code asks this Mac's security key first (its PIN sheet): then
+    /// the code is shown only when the person asks, never by itself.
+    var asksKey: Bool { securityKey?.enabled == true }
+
+    /// The step, without its data, for the plan of the window (`SignInPlan`).
+    var phase: SignInPlan.Now {
+        switch step {
+        case .welcome: return .welcome
+        case .browser: return .browser
+        case .pairing: return .pairing
+        case .codeExpired: return .codeExpired
+        case .failed(_, let pairing): return .failed(pairing: pairing)
+        }
+    }
+
+    /// Shows the phone's code by itself when the plan says so: when the window opens, and again,
+    /// silently, each time a code runs out. Showing and renewing it signs only with the device
+    /// key, which asks for nothing (`Signing.claimProof`).
+    func showPhoneCode() async {
+        guard !still, pinSheet == nil, SignInPlan.showsCode(phase, signedIn: session != nil, asksKey: asksKey) else { return }
+        await pair()
+    }
 
     /// A pairing is on screen: its code, an expired code, why it didn't work, or the security key's
     /// PIN sheet before the code (so a view-only Mac adding itself sees the sheet over this screen).
@@ -253,6 +287,7 @@ final class SignInModel: ObservableObject {
         SecurityKeyStore(store: sessions.store).forget()
         sessions.forget()
         session = nil
+        justConnected = false
         step = .welcome
     }
 
@@ -263,6 +298,7 @@ final class SignInModel: ObservableObject {
         RememberedHome.forget(in: rememberedList)
         session = got
         step = .welcome
+        justConnected = true
     }
 
     private func fail(_ error: Error, _ mine: Int, pairing: Bool) {

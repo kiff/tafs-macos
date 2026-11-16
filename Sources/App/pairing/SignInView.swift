@@ -1,76 +1,152 @@
 import SwiftUI
 
-/// Signing in, and adding this Mac with a phone: the first screen of a Mac with no session.
+/// Signing in: the first window of a Mac with no session, in two halves of the whole window, as
+/// the iPad's regular width (`SignInPlan`). On the left, **Sign in with KIFF**; on the right,
+/// **Sign in with your phone**, whose QR is shown as the window opens and renewed silently when it
+/// runs out. A view-only Mac adding itself sees the phone's half alone, with Cancel.
 struct SignInView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: SignInModel
 
     private var device: String { words("device.mac") }
+    private var halves: SignInPlan.Halves { SignInPlan.halves(model.phase, signedIn: model.session != nil, asksKey: model.asksKey) }
 
     var body: some View {
-        VStack(spacing: 18) {
-            switch model.step {
-            case .welcome: welcome
-            case .browser(let start): browser(start)
-            case .pairing(let code): pairing(code)
-            case .codeExpired:
-                note(words("pair.code_expired"))
-                primary(words("pair.new_code")) { await model.pair() }
-                back
-            case .failed(let why, let pairing):
-                note(pairing ? words("pair.failed", ["device": device, "why": why]) : words("sign_in.could_not_start", ["why": why]), color: Theme.no)
-                primary(words("common.try_again")) { pairing ? await model.pair() : await model.signIn() }
-                back
+        HStack(spacing: 0) {
+            if let kiff = halves.kiff {
+                half { kiffHalf(kiff) }
+                Divider()
             }
+            half { phoneHalf(halves.phone) }.background(Theme.raised)
         }
-        .frame(maxWidth: 440)
-        .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        // The phone's code as the window opens, and a new one each time it runs out.
+        .onAppear { Task { await model.showPhoneCode() } }
+        .onChange(of: model.step) { _ in Task { await model.showPhoneCode() } }
         // A pairing asks this Mac's security key for its credential through its PIN sheet.
         .sheet(item: $model.pinSheet) { sheet in PINSheet(model: sheet).environment(\.words, words) }
     }
 
-    @ViewBuilder private var welcome: some View {
-        Mascot(size: 96)
-        Text(words("sign_in.welcome.title")).font(Theme.display(40)).foregroundColor(Theme.ink)
-        note(words("sign_in.welcome.lead"), color: Theme.ink, size: 17)
-        note(words("sign_in.lead", ["device": device]))
-        primary(words("sign_in.with_kiff")) { await model.signIn() }
-        Button(words("pair.from_sign_in", ["device": device])) { Task { await model.pair() } }
-            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.coach)
-    }
-
-    @ViewBuilder private func browser(_ start: DeviceStart) -> some View {
-        Mascot(size: 64)
-        note(words("sign_in.your_code"))
-        code(start.userCode)
-        note(words("sign_in.check_code"))
-        waiting(words("sign_in.waiting"))
-        back
-    }
-
-    @ViewBuilder private func pairing(_ shown: SignInModel.Code) -> some View {
-        Text(words("pair.title", ["device": device])).font(Theme.display(24)).foregroundColor(Theme.ink)
-            .multilineTextAlignment(.center)
-        if let image = QRCode.image(shown.text, side: 220) {
-            Image(nsImage: image).interpolation(.none).resizable().frame(width: 220, height: 220)
-                .padding(12).background(RoundedRectangle(cornerRadius: 12).fill(Color.white))
-                .accessibilityLabel(words("pair.title", ["device": device]))
+    /// One half: its content centred, scrolling when the window is too short for it.
+    private func half<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        let inner = VStack(spacing: 18) { content() }.frame(maxWidth: 400).padding(40)
+        return GeometryReader { geometry in
+            ScrollView {
+                inner.frame(width: geometry.size.width).frame(minHeight: geometry.size.height)
+            }
         }
-        note(words("pair.steps", ["account": words("settings.title"), "devices": words("settings.devices.title"), "pair": words("settings.devices.pair")]))
-        note(words("pair.check_code_lead", ["device": device]), color: Theme.ink)
-        code(shown.check)
-        waiting(words("pair.waiting"))
-        back
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func code(_ text: String) -> some View {
-        Text(text).font(Theme.mono(30, weight: .bold)).foregroundColor(Theme.ink).tracking(3)
-            .padding(.horizontal, 18).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
-            .textSelection(.enabled)
+    // MARK: Sign in with KIFF
+
+    @ViewBuilder private func kiffHalf(_ shown: SignInPlan.KIFFHalf) -> some View {
+        switch (shown, model.step) {
+        case (.code, .browser(let start)):
+            title(words("sign_in.with_kiff"), size: 24)
+            note(words("sign_in.lead", ["device": device]))
+            codePanel([.eyebrow(words("sign_in.your_code")), .code(start.userCode)])
+            note(words("sign_in.check_code"), color: Theme.ink)
+            waiting(words("sign_in.waiting"))
+            agreement
+            back
+        case (.failed, .failed(let why, _)):
+            SignInArt.kiff()
+            note(words("sign_in.could_not_start", ["why": why]), color: Theme.no)
+            primary(words("common.try_again")) { await model.signIn() }
+        default:
+            SignInArt.kiff()
+            title(words("sign_in.with_kiff"))
+            primary(words("common.continue")) { await model.signIn() }
+        }
+    }
+
+    /// "By signing in, you agree to KIFF's Terms … and its Privacy policy", each a link to its page
+    /// in the app's language where kiff.dev has it.
+    private var agreement: some View {
+        func link(_ key: String, _ url: String) -> String {
+            let label = words(key)
+            return "[\(LegalPages.saysEnglish(words.language) ? words("settings.legal_in_english", ["label": label]) : label)](\(url))"
+        }
+        let line = words("sign_in.agree", ["terms": link("settings.terms", LegalPages.terms(words.language)),
+                                           "privacy": link("settings.privacy_policy", LegalPages.privacy(words.language))])
+        return Text((try? AttributedString(markdown: line)) ?? AttributedString(line))
+            .font(.system(size: 12)).foregroundColor(Theme.dim).multilineTextAlignment(.center)
+            .tint(Theme.amberText)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    // MARK: Sign in with your phone
+
+    /// The phone's title: a view-only Mac adding itself says so.
+    private var phoneTitle: String {
+        model.session == nil ? words("sign_in.with_phone") : words("pair.title", ["device": device])
+    }
+
+    @ViewBuilder private func phoneHalf(_ shown: SignInPlan.PhoneHalf) -> some View {
+        switch (shown, model.step) {
+        case (.code, .pairing(let code)):
+            pairing(code)
+        case (.failed, .failed(let why, _)):
+            SignInArt.phone()
+            note(words("pair.failed", ["device": device, "why": why]), color: Theme.no)
+            primary(words("common.try_again"), isDefault: halves.kiff == nil) { await model.pair() }
+        case (.offer, _):
+            SignInArt.phone()
+            title(phoneTitle)
+            primary(words("common.continue"), isDefault: halves.kiff == nil) { await model.pair() }
+        default:
+            SignInArt.phone()
+            title(phoneTitle)
+            ProgressView().controlSize(.small).accessibilityLabel(words("sign_in.pair_waiting"))
+        }
+        if model.session != nil { back }
+    }
+
+    @ViewBuilder private func pairing(_ code: SignInModel.Code) -> some View {
+        HStack(spacing: 12) {
+            SignInArt.phone(size: 64)
+            Text(phoneTitle).font(Theme.display(24)).foregroundColor(Theme.ink).accessibilityAddTraits(.isHeader)
+        }
+        if let image = QRCode.image(code.text, side: 220) {
+            Image(nsImage: image).interpolation(.none)
+                .padding(10).background(RoundedRectangle(cornerRadius: 14).fill(Color.white))
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                .accessibilityLabel(phoneTitle)
+        }
+        Label(words("sign_in.scan_with_tafs"), systemImage: "viewfinder").font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+        note(words("sign_in.pair_how", ["account": words("settings.title"), "devices": words("settings.devices.title"), "add": words("settings.devices.pair")]))
+        codePanel(SignInPlan.codeLines(eyebrow: words("sign_in.your_code"), check: code.check, name: model.deviceName,
+                                       waiting: words("sign_in.pair_waiting")))
+    }
+
+    // MARK: Pieces
+
+    /// A code's panel, its lines in the order given: for a pairing, the check code first, then the
+    /// name this Mac gives itself, as its own claim.
+    private func codePanel(_ lines: [SignInPlan.CodeLine]) -> some View {
+        VStack(spacing: 10) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                switch line {
+                case .eyebrow(let text): Eyebrow(text: text)
+                case .code(let text):
+                    Text(text).font(Theme.mono(30, weight: .bold)).foregroundColor(Theme.ink).tracking(3).textSelection(.enabled)
+                case .name(let name):
+                    Label(name, systemImage: "laptopcomputer").font(.system(size: 13)).foregroundColor(Theme.soft)
+                case .waiting(let text): waiting(text)
+                }
+            }
+        }
+        .padding(.horizontal, 22).padding(.vertical, 16)
+        .frame(maxWidth: 360)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius).stroke(Theme.line))
+    }
+
+    private func title(_ text: String, size: CGFloat = 28) -> some View {
+        Text(text).font(Theme.display(size)).foregroundColor(Theme.ink).multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
     }
 
     private func note(_ text: String, color: Color = Theme.dim, size: CGFloat = 14) -> some View {
@@ -85,18 +161,20 @@ struct SignInView: View {
         }
     }
 
-    private func primary(_ title: String, _ action: @escaping () async -> Void) -> some View {
-        Button { Task { await action() } } label: {
+    /// The half's one button, filled with the brand. The KIFF half's is the window's default (Return).
+    @ViewBuilder private func primary(_ title: String, isDefault: Bool = true, _ action: @escaping () async -> Void) -> some View {
+        let button = Button { Task { await action() } } label: {
             Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
                 .padding(.horizontal, 26).padding(.vertical, 12)
                 .background(Capsule().fill(Theme.brand))
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(.defaultAction)
+        if isDefault { button.keyboardShortcut(.defaultAction) } else { button }
     }
 
     private var back: some View {
         Button(words("common.cancel")) { model.cancel() }
             .buttonStyle(.plain).font(.system(size: 14)).foregroundColor(Theme.soft)
+            .keyboardShortcut(.cancelAction)
     }
 }
