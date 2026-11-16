@@ -119,7 +119,7 @@ Devices removes it. The key itself can be plugged in elsewhere, so its PIN is as
 approval.
 
 **Off for now** (`Features.macPasskeyApprovals = false`): a switched-off `PasskeyApprover` refuses
-before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
+before the security key is asked, and `ApprovalRoute.passkey` is given only once it's on.
 
 **In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
 `PasskeyRegistration`:
@@ -205,17 +205,42 @@ yet, and switched off it asks the key nothing:
 - **Kept:** only the credential id (`SecurityKeyStore`), in the Keychain beside the session.
   Signing this Mac out forgets it, as signing it out in Devices removes the key at KIFF.
 
-**Next, each its own change:**
-1. **The PIN sheet**, which asks for the PIN for each approval and for the pairing, says the tries
-   left, and says each failure. Its shared words are being worded in kiff/tafs, so it waits for
-   them. A new credential without the UV flag says `failed`, never the key's decline.
+**The PIN sheet and Start Coach on the key's route** (part 4). Still off: nothing gives the
+route while `Features.macPasskeyApprovals` is off.
+- **The route** (`ApprovalRoute.of(_:securityKey:)`): `.passkey` for a passkey session whose
+  security key goes with this Mac (`SecurityKeyStore`), once the switch is on; else the phone.
+- **The PIN sheet** (`PINSheet`, `PINSheetModel`): "Approve with your security key", what it asks
+  (it's asked each time and never stored), the tries left when the key says (read before the PIN
+  is asked), the PIN field, Cancel (Esc) and Approve; then "Touch your security key." while the
+  key waits. Each failure says its shared line (`SecurityKeyWords`, `approval.security_key.*`):
+  a wrong PIN with the tries left, a PIN too short or too long, three in a row, a locked key, no
+  PIN set, no key, several keys, a key that can't check a PIN, another key, not touched in time,
+  the key's decline (`not_allowed`), unplugged, and anything else. **Authenticator data KIFF would
+  refuse, no user verification among them, says the key couldn't sign (`failed`), never the
+  key's decline.** The sheet stays open to try again, but for a locked key.
+- **The PIN never becomes a Swift `String`:** `PINReader` reads the secure field's own storage
+  straight into UTF-8 bytes (CoreFoundation's `CFStringGetBytes`) and empties the field at once.
+  The bytes become one `SecurityKeyPIN`, which clears them, is handed to the key once, then is
+  cleared and freed, whatever the key answered. What's left: AppKit's field editor held the
+  characters while they were typed, and the app can't zero that memory; it's emptied, never
+  copied.
+- **Start Coach** ([coach.md](coach.md), "Starting Coach"): Setup's draft approved by the key
+  through the sheet, sent as `KIFF-Passkey-Assertion` (`PasskeySession`), as Windows' passkey
+  route.
+- **The key's name** for its credential, when it's made in pairing: the session's email when it's
+  known, else this Mac's name (`SecurityKeyPairing.userName`).
+
+**Before the switch is turned on:**
+1. **The origin** for a computer that writes its own client data (`https://kiff.dev`), agreed
+   with KIFF's side.
 2. **Confirmed on a real Mac:** an unsigned app reads a FIDO HID device on macOS 12 without an
    Input Monitoring prompt. libfido2 opens the key's FIDO interface (usage page `0xF1D0`), which
    isn't a keyboard, so none is expected.
-3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, the pairing screen asking
-   the key for its credential, and the switch turned on. The creation proof
+3. **The pairing screen** asking the key for its credential through the PIN sheet, and saving it
+   (`SecurityKeyStore`) once the pairing is claimed. The creation proof
    (`Features.macPairingPasskeyProof`) is turned on first: KIFF will require `credential_proof` on
    a passkey computer's claim.
+4. tafs cloud's first start's pair (`RequestsTogether` on the key), with the tools step.
 
 ## Tests
 

@@ -112,7 +112,7 @@ enum ApprovalRoute: Equatable {
     case phoneOrPasskey
     /// By the person's USB security key, registered through this Mac's pairing, sent as
     /// `KIFF-Passkey-Assertion` (`PasskeyApprover`): macOS 12's route, as these Macs have no Touch ID.
-    /// Nothing gives this route yet (`ApprovalRoute.of`), and `Features.macPasskeyApprovals` is off.
+    /// Given by `ApprovalRoute.of(_:securityKey:)` only once `Features.macPasskeyApprovals` is on.
     case passkey
 
     static func of(_ means: ApprovalMeans) -> ApprovalRoute {

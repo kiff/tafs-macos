@@ -53,6 +53,13 @@ enum SecurityKeyPairing {
         Data(#"{"type":"webauthn.create","challenge":"\#(challenge)","origin":"\#(Passkeys.origin)","crossOrigin":false}"#.utf8)
     }
 
+    /// The name the key keeps for its credential: the session's email when it's known, else this
+    /// Mac's name, as Windows gives the person's email, else the PC's name.
+    static func userName(email: String?, macName: String) -> String {
+        if let email = email?.trimmingCharacters(in: .whitespacesAndNewlines), !email.isEmpty { return email }
+        return macName
+    }
+
     /// The credential's user id: sha256 of the device key, the same on every attempt with that key, so a
     /// credential made again for this Mac is for the same user, as Windows' `PasskeyUserId`.
     static func userID(deviceKeyDER: Data, sha256: (Data) -> Data) -> Data { sha256(deviceKeyDER) }
