@@ -42,9 +42,14 @@ The app draws the list as it comes. It places and folds nothing itself.
   sign-in card `wider: {words}`, in the reader's language. Its words are drawn as sent, 14
   medium in amber text, above the card's buttons: on an approval after what it asks and the
   connection's line, before **Decline**; on a sign-in after its note, before where to sign in
-  and **Not now**. With no words, nothing is drawn. tafs cloud marks the cards only on a read
-  that carries this device's planque proof, which the Mac's conversation read doesn't send
-  yet, so until it does the line shows only where tafs cloud sends it anyway.
+  and **Not now**. With no words, nothing is drawn.
+- **Coach's thread is read with this device's planque proof** (`Planque-Device-Signature`), as
+  the iPad's `loadSetupThread`: tafs cloud marks the cards (`wider`, and `signs`) only on a read
+  that carries it (kiff/tafs `markSigns`). It's `PlanqueClient.grantsReadProof`, the proof a
+  taf's Setup read sends, signed with the device key and no prompt: it reads, it grants
+  nothing. No `?can=`: this Mac signs no step past connect and cards. Without a device key the
+  thread is read without it, and the cards come unmarked. A taf's own chat never sends it, as
+  on the iPad.
 - **A decline** is known only by tafs cloud's words for the answer, which it writes in the
   app's language: "Declined". An approval or sign-in answered another way (`wrote`,
   `no_answer`) draws nothing.

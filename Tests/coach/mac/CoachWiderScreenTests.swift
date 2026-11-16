@@ -64,6 +64,28 @@ private func widerDrawn(_ thread: String, language: String = "en") async throws 
 }
 
 let coachWiderMacTests: [Test] = [
+    Test("Coach's thread is read with this device's proof, and tafs cloud's wider card reaches Coach's card; a taf's chat sends none", awaiting: { @MainActor in
+        var asked = 0
+        let transport = CannedTransport([(200, setupAnswer), (200, noChats), (200, try widerConversation(stripeWider))])
+        let model = CoachModel(cloud: CloudClient(transport: transport, session: session), sleep: { _ in }, proof: { asked += 1; return "t=1,v1=c2ln,d=dev_mac" })
+        await model.load()
+        let read = transport.sent.filter { $0.path.contains("/conversation") }
+        try expectEqual(read.count, 1)
+        try expectEqual(read[0].headers["Planque-Device-Signature"], "t=1,v1=c2ln,d=dev_mac")
+        try expectEqual(asked, 1)
+        guard case .loaded(_, let page) = model.state else { throw Failure(description: "the thread wasn't read") }
+        let marked = page.items.compactMap { item -> Thread.Card? in if case .card(let card, _) = item, card.widerWords != nil { return card } else { return nil } }
+        try expectEqual(marked.map(\.type), ["approval", "sign_in"])
+        try expectEqual(marked.map(\.widerWords), [stripeWider, stripeWider])
+
+        let tafTransport = CannedTransport([(200, try widerConversation(stripeWider))])
+        let taf = CoachModel(cloud: CloudClient(transport: tafTransport, session: session), taf: Coach(id: "taf-1", name: "Refunds"), sleep: { _ in },
+                             proof: { asked += 1; return "t=1,v1=c2ln,d=dev_mac" })
+        await taf.load()
+        try expectEqual(tafTransport.sent.map(\.path), ["/v1/tafs/taf-1/conversation"])
+        try expectEqual(tafTransport.sent[0].headers["Planque-Device-Signature"], nil)
+        try expectEqual(asked, 1)
+    }),
     Test("an approval and a sign-in draw tafs cloud's wider words, in amber, only when it sends some", awaiting: { @MainActor in
         let model = await widerCoach(widerThread(widerMarked(widerLine)))
         guard case .loaded(_, let page) = model.state else { throw Failure(description: "the thread wasn't read") }

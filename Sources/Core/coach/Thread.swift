@@ -469,7 +469,13 @@ extension CloudClient {
     }
 
     /// The thread of the person's chats with a taf, or with Coach; with `session`, that chat's alone.
-    func thread(of taf: String, session: String? = nil) async throws -> Thread.Page {
-        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""))
+    /// `proof` is this device's signed read of its planque grants (`Planque-Device-Signature`), as the
+    /// iPad's `setupThread(_:session:proof:can:)` sends with Coach's thread: with it, tafs cloud reads
+    /// the account's grants and marks each waiting approval or sign-in whose sign-in can't be narrowed
+    /// to the job (`wider`, kiff/tafs `markSigns`, `markWider`). Without it, the cards come unmarked.
+    /// No `?can=`: this Mac signs no step past connect and cards.
+    func thread(of taf: String, session: String? = nil, proof: String? = nil) async throws -> Thread.Page {
+        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""),
+                      headers: proof.map { ["Planque-Device-Signature": $0] } ?? [:])
     }
 }

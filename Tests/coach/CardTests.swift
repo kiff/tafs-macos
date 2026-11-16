@@ -27,6 +27,37 @@ private func one(_ type: String, _ more: String) throws -> Thread.Card? {
     return card
 }
 
+/// tafs cloud's Coach conversation at the pin (`.shared/contracts/coach-conversation.json`, written by its
+/// tests), with its approval waiting and marked as `markWider` marks it on a read with the device's proof,
+/// and a sign-in for the same grant beside it: `{...card, wider: {words}}`.
+func widerConversation(_ words: String) throws -> String {
+    let fixture = try Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/coach-conversation.json"))
+    guard let root = try JSONSerialization.jsonObject(with: fixture) as? [String: Any], var answer = root["answer"] as? [String: Any],
+          var items = answer["items"] as? [[String: Any]] else { throw Failure(description: "coach-conversation.json has no items") }
+    guard let at = items.firstIndex(where: { (($0["card"] as? [String: Any])?["component"] as? [String: Any])?["type"] as? String == "approval" }),
+          var card = items[at]["card"] as? [String: Any], var component = card["component"] as? [String: Any] else {
+        throw Failure(description: "coach-conversation.json has no approval card")
+    }
+    // tafs cloud marks only a card that still waits.
+    card["answer"] = nil
+    component["wider"] = ["words": words]
+    card["component"] = component
+    items[at]["card"] = card
+    var signIn = card
+    var signInComponent = component
+    signInComponent["type"] = "sign_in"
+    signInComponent["id"] = "sign-in-stripe"
+    signInComponent["service"] = "Stripe"
+    signIn["component"] = signInComponent
+    signIn["key"] = "sess1#sign-in-stripe"
+    items.insert(["type": "card", "card": signIn], at: at + 1)
+    answer["items"] = items
+    return String(decoding: try JSONSerialization.data(withJSONObject: answer), as: UTF8.self)
+}
+
+/// tafs cloud's line for Stripe, as its English `card_wider` writes it.
+let stripeWider = "The sign-in for Stripe can't be narrowed to this job: it asks for more access than the taf uses. The taf still uses only its own tools."
+
 private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport) {
     let transport = CannedTransport(answers)
     return (CloudClient(transport: transport, session: session), transport)
@@ -72,6 +103,29 @@ let coachCardTests: [Test] = [
             }
         }
     },
+    Test("Coach's thread read carries this device's planque proof, and the wider card tafs cloud then sends reaches the card", awaiting: {
+        let proof = "t=1794830400,v1=c2lnbmVk,d=dev_mac"
+        let (client, transport) = cloud([(200, try widerConversation(stripeWider)), (200, try widerConversation(stripeWider))])
+        let page = try await client.thread(of: "taf-cccc0000000000000000", session: "sess1", proof: proof)
+        // What tafs cloud's markSigns reads before it marks anything: the proof, as signed, and no ?can=.
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf-cccc0000000000000000/conversation/sess1")
+        try expectEqual(transport.sent[0].headers["Planque-Device-Signature"], proof)
+        let cards = page.items.compactMap { item -> Thread.Card? in if case .card(let card, _) = item { return card } else { return nil } }
+        guard let approval = cards.first(where: { $0.type == "approval" }), let signIn = cards.first(where: { $0.type == "sign_in" }) else {
+            throw Failure(description: "no approval and sign-in read")
+        }
+        try expectEqual(approval.widerWords, stripeWider)
+        try expectEqual(approval.waitsForPerson, true)
+        try expectEqual(approval.title, "Connect Stripe")
+        try expectEqual(signIn.widerWords, stripeWider)
+        try expectEqual(signIn.service, "Stripe")
+        // The rest of the thread reads as before: a card with no mark has no line.
+        try expectEqual(cards.filter { $0.widerWords != nil }.map(\.type), ["approval", "sign_in"])
+        // Without a proof, nothing is sent for it.
+        _ = try await client.thread(of: "taf-cccc0000000000000000")
+        try expectEqual(transport.sent[1].path, "/v1/tafs/taf-cccc0000000000000000/conversation")
+        try expectEqual(transport.sent[1].headers["Planque-Device-Signature"], nil)
+    }),
     Test("an answer is one of the card's own options, sent as data to that card in its chat", awaiting: {
         let all = try cards()
         let (client, transport) = cloud([(200, "{}")])
