@@ -5,7 +5,7 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json", "taf-setup-connected.json", "taf-setup-reconnect.json"]
+private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json", "taf-setup-connected.json", "taf-setup-reconnect.json", "coach-wider.json"]
 private let notYet = [
     "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
@@ -49,6 +49,16 @@ let contractsTests: [Test] = [
         }
         for file in read + Array(notYet.keys) {
             try expect(files.contains(file), "\(file) is no longer in kiff/tafs: take it off the list")
+        }
+    },
+    Test("Coach's chat read with the device's proof: the approval tafs cloud marks wider carries its words to the card") {
+        let page = try JSONDecoder().decode(Thread.Page.self, from: try answer("coach-wider.json"))
+        let cards = page.items.compactMap { item -> Thread.Card? in if case .card(let card, _) = item { return card } else { return nil } }
+        let marked = cards.filter { $0.widerWords != nil }
+        try expect(!marked.isEmpty, "a card marked wider")
+        for card in marked {
+            try expectEqual(card.type, "approval")
+            try expect(card.widerWords?.contains("can't be narrowed") == true, "tafs cloud's words, as sent: \(card.widerWords ?? "")")
         }
     },
     Test("the AI consent reads as tafs cloud answers it") {
