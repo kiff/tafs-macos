@@ -6,12 +6,12 @@ import Foundation
 private final class P256Key: PasskeyAuthenticator {
     let key = P256.Signing.PrivateKey()
 
-    func getAssertion(clientDataHash: Data, credentialID: Data, pin: [UInt8]?) async throws -> PasskeyAssertion {
+    func getAssertion(clientDataHash: Data, credentialID: Data, pin: SecurityKeyPIN?) async throws -> PasskeyAssertion {
         let authData = PasskeyCrypto.sha256(Data("kiff.dev".utf8)) + Data([0x05, 0, 0, 0, 1])
         return PasskeyAssertion(authenticatorData: authData, signatureDER: try key.signature(for: authData + clientDataHash).derRepresentation)
     }
 
-    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: [UInt8]?) async throws -> PasskeyMade {
+    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: SecurityKeyPIN?) async throws -> PasskeyMade {
         PasskeyMade(authenticatorData: Data(), attestationObject: Data())
     }
 }

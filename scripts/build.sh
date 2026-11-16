@@ -19,11 +19,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 SDK=$(scripts/sdk.sh)
 echo "SDK: $SDK"
 
+# The security key's library, built from pinned source for each architecture (scripts/fido.sh).
+# shellcheck disable=SC2086
+scripts/fido.sh $ARCHS
+
 SLICES=""
 for arch in $ARCHS; do
     echo "Compiling for $arch"
     find Sources -name '*.swift' | sort | xargs swiftc -swift-version 5 -parse-as-library $OPT -sdk "$SDK" \
-        -target "$arch-apple-macos12.0" -module-name Tafs -o "$OUT/tafs-$arch"
+        -target "$arch-apple-macos12.0" -I "build/fido/$arch/include" -L "build/fido/$arch/lib" \
+        -module-name Tafs -o "$OUT/tafs-$arch"
     SLICES="$SLICES $OUT/tafs-$arch"
 done
 
@@ -42,4 +47,7 @@ for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped
 done
 [ -d "$STRINGS/en" ] || { echo "No words were copied into the app" >&2; exit 1; }
 cp .shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png "$APP/Contents/Resources/mascot.png"
+# The licenses of the libraries linked in: libfido2, libcbor and OpenSSL.
+mkdir -p "$APP/Contents/Resources/licenses"
+cp build/fido/licenses/*.txt "$APP/Contents/Resources/licenses/"
 echo "Built $APP: $(lipo -archs "$APP/Contents/MacOS/tafs")"

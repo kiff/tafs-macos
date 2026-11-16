@@ -21,13 +21,13 @@ private final class FakeKey: PasskeyAuthenticator {
         self.usedCredential = usedCredential
     }
 
-    func getAssertion(clientDataHash: Data, credentialID: Data, pin: [UInt8]?) async throws -> PasskeyAssertion {
+    func getAssertion(clientDataHash: Data, credentialID: Data, pin: SecurityKeyPIN?) async throws -> PasskeyAssertion {
         asked.append(clientDataHash)
         let authData = testSHA256(Data(rp.utf8)) + Data([flags, 0, 0, 0, 7])
         return PasskeyAssertion(authenticatorData: authData, signatureDER: Data("SIG".utf8), credentialID: usedCredential)
     }
 
-    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: [UInt8]?) async throws -> PasskeyMade {
+    func makeCredential(clientDataHash: Data, userID: Data, userName: String, pin: SecurityKeyPIN?) async throws -> PasskeyMade {
         PasskeyMade(authenticatorData: Data(), attestationObject: Data())
     }
 }
