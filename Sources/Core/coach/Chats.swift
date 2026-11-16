@@ -56,4 +56,32 @@ extension CloudClient {
         let answer: Answer = try await get("/v1/tafs/\(Self.escaped(taf))/chats")
         return answer.chats
     }
+
+    /// Archives one of the taf's chats, as the iPad's `archiveChat` (TafsCloud.swift:1560-1565):
+    /// tafs cloud leaves it out of `chats` and the thread from then on, on every device. It isn't
+    /// deleted. An answer that doesn't say `archived` is unreadable.
+    func archive(chat session: String, of taf: String) async throws {
+        try await chatMove("/v1/tafs/\(Self.escaped(taf))/chats/\(Self.escaped(session))/archive")
+    }
+
+    /// The chats archived, to open one or put it back, as the iPad's `archivedChats`
+    /// (TafsCloud.swift:1567-1572).
+    func archivedChats(of taf: String) async throws -> [CoachChat] {
+        struct Answer: Decodable { let chats: [CoachChat] }
+        let answer: Answer = try await get("/v1/tafs/\(Self.escaped(taf))/chats/archived")
+        return answer.chats
+    }
+
+    /// Puts an archived chat back in the list, as the iPad's `unarchiveChat`
+    /// (TafsCloud.swift:1574-1578).
+    func putBack(chat session: String, of taf: String) async throws {
+        try await chatMove("/v1/tafs/\(Self.escaped(taf))/chats/\(Self.escaped(session))/unarchive")
+    }
+
+    /// One of the two moves, answered `{"archived": …}` as the iPad decodes it.
+    private func chatMove(_ path: String) async throws {
+        struct Answer: Decodable { let archived: Bool }
+        let body = try await post(path, [:])
+        guard (try? JSONDecoder().decode(Answer.self, from: body)) != nil else { throw KIFFError.unreadable }
+    }
 }

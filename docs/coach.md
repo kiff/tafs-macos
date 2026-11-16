@@ -130,6 +130,18 @@ and `loadSetupThread` (`:7328-7375`):
   and the chat is read by its session. A list read that fails keeps the list as it was. A
   reopen whose read fails keeps the page shown, with "The conversation couldn't be loaded: …" and
   Try again under it, as `loadSetupThread`'s `setupError`. Done (Esc) closes it.
+- **Archive** (`coach.chats.archive`), as `SetupChatsList`'s swipe (`SetupChatView.swift:800-873`)
+  and `archiveSetupChat` (`AppModel.swift:7533-7551`): asked first ("Archive this
+  conversation?", with what it means), then `POST /v1/tafs/{id}/chats/{session}/archive`. tafs
+  cloud keeps it out of the list and the thread from then on, on every device; it isn't
+  deleted. The chat shown gives way to a new conversation. One tafs cloud refuses says
+  "Not archived. {why}" at the top of the list, which stays as it was.
+- **Archived**, at the end of the list, as `ArchivedSetupChats` (`:875-925`): the archived
+  chats (`GET /v1/tafs/{id}/chats/archived`), each opened with a click, and **Put back**
+  (`POST …/chats/{session}/unarchive`), which reads the list again. A read that fails keeps
+  what was read; "Not put back. {why}" when tafs cloud refuses. ‹ Back returns to the list.
+- **After sign-out**, an archive, a put-back or an archived list that comes back late does and
+  says nothing.
 - **After sign-out**, a chats list or a reopened chat that comes back late is dropped, as the
   iPad's `accountGeneration` guard.
 - **Start a new taf**, from Home's Own words, the gallery's own words, and the sidebar's +
@@ -141,6 +153,10 @@ and `loadSetupThread` (`:7328-7375`):
 
 - **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
   Coach closes a taf's page first, so Back from there lands on the screen under it.
+- **No swipe:** Archive and Put back are each row's own button at its end, and its right-click
+  menu.
+- **Coach is a screen of the window, not a panel over it,** so there's no edge to drag to
+  resize it: the window itself is resized.
 
 ## Starting Coach (`CoachStart`, `PasskeySession`, `CoachModel.startSetup`, `followStart`)
 
@@ -447,8 +463,7 @@ A message still going is at 0.7.
 ## Not yet
 
 Approving a connection or a Card,
-archiving a conversation and the archived ones (Previous conversations' swipe and
-Archived), and Coach mode over a taf's page. Each is its own pull request; the ones
+and Coach mode over a taf's page. Each is its own pull request; the ones
 that grant authority come with their approval.
 
 ## Tests
