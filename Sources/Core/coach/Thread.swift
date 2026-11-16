@@ -17,6 +17,8 @@ enum Thread {
         var work: Work?
         /// The chat it's in, as tafs cloud names it: a report of it names the chat too.
         var session: String? = nil
+        /// The files sent with it, by name, as the iPad's `ChatMessage.attachments`.
+        var attachments: [AttachmentRef] = []
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
@@ -161,7 +163,7 @@ enum Thread {
         /// A new conversation, before its first message: nothing to read yet.
         static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
@@ -210,7 +212,10 @@ enum Thread {
                     }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
                                                   kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work,
-                                                  session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil), position: position))
+                                                  session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil,
+                                                  // As the iPad's: the files read whole, or none.
+                                                  attachments: ((try? m.decodeIfPresent([AttachmentRef].self, forKey: .attachments)) ?? nil) ?? []),
+                                          position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
                           let shown = try? card.nestedContainer(keyedBy: ComponentKeys.self, forKey: .component) else { continue }
@@ -329,10 +334,12 @@ enum Thread {
             }
         }
 
-        func hasPersonsLast(_ text: String, since: Date) -> Bool {
+        func hasPersonsLast(_ text: String, since: Date, files: [String] = []) -> Bool {
             for item in items.reversed() {
                 guard case .message(let message, _) = item, message.fromPerson else { continue }
-                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines) == text, let at = message.at else { return false }
+                // Its files too: a message of files alone isn't taken for an earlier one.
+                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines) == text, message.attachments.map(\.id) == files,
+                      let at = message.at else { return false }
                 return at >= since.addingTimeInterval(-60)
             }
             return false
@@ -381,6 +388,14 @@ enum Outgoing {
         return trimmed.isEmpty || trimmed.count > longest ? nil : trimmed
     }
 
+    /// The text to send with files, as the iPad's `deliverSetupOnce` guard: words or files, never
+    /// neither, and never too long. Nil when it can't go.
+    static func text(_ typed: String, files: [AttachmentRef]) -> String? {
+        guard !files.isEmpty else { return text(typed) }
+        let trimmed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count > longest ? nil : trimmed
+    }
+
     /// What tafs cloud answers a sent message: the thread gives the same message that id.
     struct Sent: Decodable, Equatable {
         struct Message: Decodable, Equatable { let id: String }
@@ -402,9 +417,9 @@ extension CloudClient {
 
     /// Sends the person's message to a taf's chat: its live one unless `target` names one or
     /// asks for a new one. It starts a run: only ever called for what the person typed and sent.
-    func send(_ text: String, to taf: String, target: ChatTarget = .live) async throws -> Outgoing.Sent {
-        guard let text = Outgoing.text(text) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
-        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", body: ChatTarget.Message(text, target))
+    func send(_ text: String, to taf: String, target: ChatTarget = .live, files: [AttachmentRef] = []) async throws -> Outgoing.Sent {
+        guard let text = Outgoing.text(text, files: files) else { throw CloudRefusal(status: 0, body: Data(#"{"error":"not_a_message"}"#.utf8)) }
+        let body = try await post("/v1/tafs/\(Self.escaped(taf))/messages", body: ChatTarget.Message(text, target, files: files))
         guard let sent = try? JSONDecoder().decode(Outgoing.Sent.self, from: body) else { throw KIFFError.unreadable }
         return sent
     }

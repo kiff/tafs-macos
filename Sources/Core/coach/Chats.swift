@@ -26,13 +26,16 @@ struct ChatTarget: Equatable {
         let session: String?
         let newChat: Bool?
         let newChatAfterHandover: Bool?
-        enum CodingKeys: String, CodingKey { case text, session, newChat = "new_chat", newChatAfterHandover = "new_chat_after_handover" }
+        /// The files attached to it, by the ids their uploads gave; none, and it's left out.
+        let attachments: [String]?
+        enum CodingKeys: String, CodingKey { case text, session, attachments, newChat = "new_chat", newChatAfterHandover = "new_chat_after_handover" }
 
-        init(_ text: String, _ target: ChatTarget) {
+        init(_ text: String, _ target: ChatTarget, files: [AttachmentRef] = []) {
             self.text = text
             session = target.session
             newChat = target.newChat ? true : nil
             newChatAfterHandover = target.newChatAfterHandover ? true : nil
+            attachments = files.isEmpty ? nil : files.map(\.id)
         }
     }
 }

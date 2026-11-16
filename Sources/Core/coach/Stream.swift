@@ -144,11 +144,11 @@ protocol LineStream {
 extension CloudClient {
     /// The request that sends a message with its answer streamed. Nil when what was typed
     /// isn't a message.
-    func streamRequest(_ typed: String, to taf: String, target: ChatTarget = .live) -> HTTPRequest? {
-        guard let text = Outgoing.text(typed) else { return nil }
+    func streamRequest(_ typed: String, to taf: String, target: ChatTarget = .live, files: [AttachmentRef] = []) -> HTTPRequest? {
+        guard let text = Outgoing.text(typed, files: files) else { return nil }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let body = try? encoder.encode(ChatTarget.Message(text, target)) else { return nil }
+        guard let body = try? encoder.encode(ChatTarget.Message(text, target, files: files)) else { return nil }
         return HTTPRequest(method: "POST", path: "/v1/tafs/\(Self.escaped(taf))/messages/stream", headers: [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "text/event-stream", "Content-Type": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",

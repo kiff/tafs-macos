@@ -27,6 +27,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | AIConsentView.swift | 74 | The AI-data consent, and Account's AI use row | Coach's consent sheet: the words, Allow, Not now (`coach/CoachView.swift`, `Core/contracts/AIConsent.swift`) | `AIConsentRow` (Account › AI use) |
 | AccountPreferencesView.swift | 37 | Account's theme and time zone pickers | `ThemePicker`: Light, Dark, System, kept across launches (`account/AccountView.swift`) | `TimeZonePicker` |
 | ApprovalSetupView.swift | 102 | This device's approval readiness: `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalNotReady`'s line where an approval can't be made here (`approvals/NeedsYou.swift`, `taf/HaltView.swift`) | `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`: no Mac approves yet |
+| AttachViews.swift | 267 | Attaching photos and files in a chat | `AttachButton` (Choose photos, Choose file, as many as the message has room for), `FileTray`, `FileChip`, `FileIcon`, `MessageFiles`; each file declared to tafs cloud and its bytes put to storage, sent with the message by id (`coach/ChatFilesViews.swift`, `FilePrepMac.swift`, `CoachView.swift`, `Core/coach/ChatFiles.swift`) | Take photo (this Mac's camera); Quick Look in place (a file opens in the app this Mac opens its kind with) |
 | CalendarView.swift | 434 | Calendar: the month card, Day, Week, Month | All three views, the month card, the agenda, today in the account's zone (`calendar/CalendarView.swift`, `Core/calendar/Agenda.swift`) | Opening a taf from an event |
 | CoachMode.swift | 131 | Coach mode over the app: `CoachView`, `CoachPanel`, `PhoneCoachPanel` | Coach as a screen of the window, with its title and New conversation (`coach/CoachView.swift`) | Coach mode over the app and over a taf's page: the panel, the dimmed ground, Back, a tap outside. `PhoneCoachPanel` is the phone's |
 | ConnectAppsView.swift | 1141 | Connect apps, a connected app's detail, connecting's approval | The search, Yours and Discover, the table (`ConnectColumns`), each row's end, logos, More apps, Not listed? Ask Coach (`connections/ConnectAppsView.swift`, `Core/connections/Apps.swift`) | Connecting and Sign in again from here, `ConnectApprovalSheet`, `AppConnectionsView`, `ConnectionDetailView`, Disconnect (each with its approval) |
@@ -58,7 +59,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | :- | -: | :- | :- |
 | AllowSheetView.swift | 96 | "Allow this from now on" | HoldAllow |
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
-| AttachViews.swift | 267 | Attaching photos and files in a chat | |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
@@ -99,5 +99,5 @@ merges.
 
 ## Counts
 
-Ported 5, partial 27, not started 14, not for macOS 12 4: the 50 view files at the pin
+Ported 5, partial 28, not started 13, not for macOS 12 4: the 50 view files at the pin
 (`da55768`).
