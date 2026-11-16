@@ -97,6 +97,12 @@ enum Thread {
         /// A card's own words for its yes and its no, as tafs cloud sends them.
         var yes: String?
         var no: String?
+        /// tafs cloud's words for a sign-in wider than the job (`wider: {words}`, in the reader's
+        /// language, as sent): the app's sign-in can't be narrowed to what the taf uses, so it asks
+        /// for more access than the job. Drawn above an approval's or a sign-in's buttons, as the
+        /// iPad's `SetupComponent.widerWords`. None when tafs cloud doesn't say, says it blank, or
+        /// in another shape: that is no line, never a card unread.
+        var widerWords: String?
         /// A questions card's questions, each Coach's own (`Question`). A card whose questions, or
         /// any one of them, don't read isn't read at all, as the iPad's `LenientShown`.
         var questions: [Question] = []
@@ -167,11 +173,12 @@ enum Thread {
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
         enum ConnectionKeys: String, CodingKey { case done, words }
+        enum WiderKeys: String, CodingKey { case words }
         enum WorkKeys: String, CodingKey { case ms, steps }
         enum WorkStepKeys: String, CodingKey { case words, failed, error, why, notMade = "not_made" }
         enum OptionKeys: String, CodingKey { case label, value }
@@ -300,6 +307,12 @@ enum Thread {
                     if let connection = try? shown.nestedContainer(keyedBy: ConnectionKeys.self, forKey: .connection),
                        ((try? connection.decodeIfPresent(Bool.self, forKey: .done)) ?? nil) == true {
                         made.connectionWords = ((try? connection.decodeIfPresent(String.self, forKey: .words)) ?? nil).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+                    }
+                    // Read leniently, as the iPad's `SetupComponent.Wider`: a mark of another shape,
+                    // or blank words, is no mark, and the card reads as before.
+                    if let wider = try? shown.nestedContainer(keyedBy: WiderKeys.self, forKey: .wider) {
+                        made.widerWords = ((try? wider.decodeIfPresent(String.self, forKey: .words)) ?? nil)
+                            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                     }
                     items.append(.card(made, position: position))
                 case "held":
@@ -456,7 +469,13 @@ extension CloudClient {
     }
 
     /// The thread of the person's chats with a taf, or with Coach; with `session`, that chat's alone.
-    func thread(of taf: String, session: String? = nil) async throws -> Thread.Page {
-        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""))
+    /// `proof` is this device's signed read of its planque grants (`Planque-Device-Signature`), as the
+    /// iPad's `setupThread(_:session:proof:can:)` sends with Coach's thread: with it, tafs cloud reads
+    /// the account's grants and marks each waiting approval or sign-in whose sign-in can't be narrowed
+    /// to the job (`wider`, kiff/tafs `markSigns`, `markWider`). Without it, the cards come unmarked.
+    /// No `?can=`: this Mac signs no step past connect and cards.
+    func thread(of taf: String, session: String? = nil, proof: String? = nil) async throws -> Thread.Page {
+        try await get("/v1/tafs/\(Self.escaped(taf))/conversation" + (session.map { "/\(Self.escaped($0))" } ?? ""),
+                      headers: proof.map { ["Planque-Device-Signature": $0] } ?? [:])
     }
 }

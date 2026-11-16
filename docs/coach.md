@@ -21,8 +21,8 @@ The app draws the list as it comes. It places and folds nothing itself.
 | The plan (`steps`) | tafs cloud's `line` and the step in hand with its mark; opened, every step with its mark, the one in hand semibold, a skipped one struck through |
 | A choice (`confirm`) | What it asks, then a white pill for each answer. Answered: one folded line, "{question} · {chosen}" |
 | Questions (`questions`) | The iPad's `QuestionsCard`: Coach's words, its title as an eyebrow with "{n} of {total} answered", each question numbered with its options and **Something else…**, then **Send answers** and **Chat about this**. Answered: one folded line, "Your answers · {tafs cloud's words}" |
-| An approval that waits | Edged in amber: "Needs you · approve", what it asks, **Decline**, and where to approve |
-| A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, where to sign in, and **Not now** |
+| An approval that waits | Edged in amber: "Needs you · approve", what it asks, tafs cloud's wider line when it sends one, **Decline**, and where to approve |
+| A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, tafs cloud's wider line when it sends one, where to sign in, and **Not now** |
 | An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus |
 | A note (`notice`) | A panel in its tone's colour, its title in that colour |
 | The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools, and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
@@ -37,6 +37,19 @@ The app draws the list as it comes. It places and folds nothing itself.
   never closed is code to the end, as while an answer streams. The plan stays where it was shown.
 - **Approve is not on the Mac yet.** The card says where to approve. **Decline** and **Not
   now** answer it with `declined` or `not now`, and grant nothing.
+- **A sign-in wider than the job is said on the card** (`WiderLine`, as the iPad's): when the
+  app's sign-in can't be narrowed to what the taf uses, tafs cloud marks a waiting approval or
+  sign-in card `wider: {words}`, in the reader's language. Its words are drawn as sent, 14
+  medium in amber text, above the card's buttons: on an approval after what it asks and the
+  connection's line, before **Decline**; on a sign-in after its note, before where to sign in
+  and **Not now**. With no words, nothing is drawn.
+- **Coach's thread is read with this device's planque proof** (`Planque-Device-Signature`), as
+  the iPad's `loadSetupThread`: tafs cloud marks the cards (`wider`, and `signs`) only on a read
+  that carries it (kiff/tafs `markSigns`). It's `PlanqueClient.grantsReadProof`, the proof a
+  taf's Setup read sends, signed with the device key and no prompt: it reads, it grants
+  nothing. No `?can=`: this Mac signs no step past connect and cards. Without a device key the
+  thread is read without it, and the cards come unmarked. A taf's own chat never sends it, as
+  on the iPad.
 - **A decline** is known only by tafs cloud's words for the answer, which it writes in the
   app's language: "Declined". An approval or sign-in answered another way (`wrote`,
   `no_answer`) draws nothing.
@@ -72,6 +85,7 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
 | A hand-over | a `result` component's `taf` (`name`, `agent`) and `tools`; the card's `answer.outcome` | The taf it is about, by its agent, and its tools in KIFF's words; once tafs cloud answered it, what came of it: the taf made (`taf_id`), a `version`, why it `failed`, or `plan_needed`. A component's own `taf_id` is a dial card's, never the hand-over's. |
 | An answer | the card's `answer.state` and `words` | Shown as answered only when the person chose (`answered`). One they wrote past (`wrote`) or that stopped waiting (`no_answer`) waits no more, and shows no answer. |
 | A connection already made | an approval component's `connection`, when `done` | tafs cloud's line for it. |
+| A sign-in wider than the job | an approval's or a sign-in's `wider.words` | tafs cloud's words, as sent (`Thread.Card.widerWords`), read leniently as the iPad's `SetupComponent.Wider`: missing, `null`, blank words, words that aren't text, or a `wider` that isn't an object are no line, and the card reads as before. |
 | The live steps | the stream's `activity {step, call_id}` and `step {call_id, status}` | Listed as they come, without the trailing "…", and each ended **by its call**: calls may overlap, and a step with no words ends without touching a listed one. `done`, `error` (failed) or `not_made` (its own state, not done). At most 200. |
 
 - **A run's steps are folded as the iPad's `WorkLog.rows`** (`WorkRows`): tries of the same

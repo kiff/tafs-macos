@@ -102,7 +102,14 @@ struct SignedInView: View {
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
         _runs = StateObject(wrappedValue: RunNowModel(cloud: cloud))
-        _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer))
+        // Coach's thread is read with this device's planque proof, as the iPad's `loadSetupThread`, so
+        // tafs cloud marks its approval and sign-in cards (`wider`). Signed with no prompt: it reads only.
+        let coachProof: () async -> String? = { [account, planque] in
+            guard let sign = account.signMessage else { return nil }
+            planque.tenant = account.session.tenant
+            return try? await planque.grantsReadProof(signedBy: sign)
+        }
+        _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer, proof: coachProof))
         // Alerts are kept per account, as the iPad keys them by tenant.
         _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
     }
