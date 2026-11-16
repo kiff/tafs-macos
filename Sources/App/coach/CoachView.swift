@@ -154,6 +154,67 @@ final class CoachModel: ObservableObject {
         chats = read
     }
 
+    /// Coach's archived chats, for Archived, as the iPad's `archivedSetupChats`.
+    @Published private(set) var archivedChats: [CoachChat] = []
+
+    /// The chat shown, by its session: the one opened, else the live chat's, as the iPad's
+    /// `setupChat ?? setupThread.session`; nil for a new conversation.
+    private var shownSession: String? {
+        if let chat { return chat }
+        guard !fresh, case .loaded(_, let page) = state else { return nil }
+        for item in page.items.reversed() {
+            if case .message(let message, _) = item, let session = message.session { return session }
+        }
+        return nil
+    }
+
+    /// Archives one of Coach's chats, as the iPad's `archiveSetupChat` (AppModel.swift:7533-7551):
+    /// it leaves the list, and the one shown gives way to a new conversation. Nil once tafs cloud
+    /// has taken it, else why, in the shared words. An answer after sign-out says nothing.
+    func archive(chat session: String) async -> String? {
+        guard isCoach, case .loaded(let coach, _) = state else { return Words.app("coach.not_archived_try_again") }
+        let gen = accountGeneration
+        do {
+            try await cloud.archive(chat: session, of: coach.id)
+        } catch {
+            guard gen == accountGeneration else { return nil }
+            return Words.app("taf.not_archived", ["why": NeedsYouModel.why(error)])
+        }
+        guard gen == accountGeneration else { return nil }
+        let shown = shownSession == session
+        chats.removeAll { $0.session == session }
+        if shown { newChat() }
+        return nil
+    }
+
+    /// Reads Coach's archived chats, as the iPad's `loadArchivedSetupChats`
+    /// (AppModel.swift:7553-7559): a read that fails keeps the list as it was, and one that
+    /// comes back after sign-out is dropped.
+    func loadArchivedChats() async {
+        guard isCoach, case .loaded(let coach, _) = state else { return }
+        let gen = accountGeneration
+        guard let read = try? await cloud.archivedChats(of: coach.id), gen == accountGeneration else { return }
+        archivedChats = read
+    }
+
+    /// Puts an archived chat back in the list, as the iPad's `unarchiveSetupChat`
+    /// (AppModel.swift:7561-7577), then reads the list again. Nil once tafs cloud has taken it,
+    /// else why.
+    func putBack(chat session: String) async -> String? {
+        guard isCoach, case .loaded(let coach, _) = state else { return Words.app("coach.not_put_back_try_again") }
+        let gen = accountGeneration
+        do {
+            try await cloud.putBack(chat: session, of: coach.id)
+        } catch {
+            guard gen == accountGeneration else { return nil }
+            return Words.app("taf.not_put_back", ["why": NeedsYouModel.why(error)])
+        }
+        guard gen == accountGeneration else { return nil }
+        archivedChats.removeAll { $0.session == session }
+        await loadChats()
+        return nil
+    }
+
     /// Why a past chat reopened from Previous conversations couldn't be read, as the iPad's
     /// `setupError` from `loadSetupThread`: the page shown stays, with this under it.
     @Published private(set) var notReopened: String?
