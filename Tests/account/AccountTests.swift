@@ -121,7 +121,7 @@ let accountClientTests: [Test] = [
         let declared = info["CFBundleLocalizations"] as? [String] ?? []
         let shipped = try Words.shipped(folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(Set(declared), Set(shipped))
-        try expectEqual(AppInfo.version(info), "0.1 (1)")
+        try expectEqual(AppInfo.version(info), "0.1 (2)")
     },
     Test("people and groups are read as KIFF lists them and kept as the iPad keeps them; only read", awaiting: {
         let groups = #"{"groups":[{"id":"g2","name":"finance","members":[{"subject":"u2","role":"member"}],"agents":[]},{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"}],"agents":["refunds","gone"]},{"id":"g3","name":"Accounts","members":[],"agents":[]}]}"#
