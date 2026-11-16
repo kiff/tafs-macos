@@ -1,17 +1,18 @@
 #!/bin/sh
-# Builds the security key's library, libfido2, and the two it needs, libcbor and OpenSSL's
-# libcrypto, from pinned source, as static libraries for macOS 12 (docs/building.md):
+# Builds the native libraries from pinned source, as static libraries for macOS 12
+# (docs/building.md): the security key's libfido2, with the two it needs, libcbor and OpenSSL's
+# libcrypto; and libsecp256k1, with its recovery module only, for KIFF's receipts:
 #   scripts/fido.sh                 for this Mac's architecture
 #   scripts/fido.sh x86_64 arm64    for each one named
-# Each architecture gets build/fido/<arch>/include, with a module map Swift imports as CFido,
-# and build/fido/<arch>/lib. Their licenses go to build/fido/licenses, which the app ships.
+# Each architecture gets build/fido/<arch>/include, with a module map Swift imports as CFido and
+# CSecp256k1, and build/fido/<arch>/lib. Their licenses go to build/fido/licenses, which the app ships.
 # Every source is checked against its pinned SHA-256 before it's unpacked, and nothing prebuilt
 # is used. An architecture built by this script, as it is now, isn't built again.
 # zlib, which libfido2 links, is the macOS SDK's.
 set -eu
 cd "$(dirname "$0")/.."
 
-# The pins. Moving one: docs/building.md, "The security key's library".
+# The pins. Moving one: docs/building.md, "The native libraries".
 FIDO_VERSION=1.17.0
 FIDO_URL="https://developers.yubico.com/libfido2/Releases/libfido2-$FIDO_VERSION.tar.gz"
 # The tarball whose release signature verified (key 78D9 97D5 3E9C 0A2A 2053 92ED 14A1 9784 723C 9988).
@@ -26,6 +27,13 @@ CBOR_VERSION=0.13.0
 CBOR_GIT=https://github.com/PJK/libcbor
 CBOR_COMMIT=9826a4315116a588f7416912db9da6fcecd8da11
 CBOR_TREE_SHA256=9496e5ef09911b276f2dcbe9f4c47c19643cad71403de3a1a0e8a7cd3beda322
+# libsecp256k1: the release the iPad's swift-secp256k1 0.24.0 vendors (its vendir.lock.yml), so
+# the Mac recovers a receipt's signer with the same C code. Its tag at a pinned commit, and the
+# SHA-256 of its files, as libcbor's.
+SECP_VERSION=0.7.1
+SECP_GIT=https://github.com/bitcoin-core/secp256k1
+SECP_COMMIT=1a53f4961f337b4d166c25fce72ef0dc88806618
+SECP_TREE_SHA256=8424a1c5fa69be87e8e5f39f6d64573ebe7a6ade0d120e6d50d75502d5d3adfa
 
 ARCHS="${*:-$(uname -m)}"
 OUT="$PWD/build/fido"
@@ -57,14 +65,16 @@ fetch() { # name url sha256
     tar -xzf "$tarball" -C "$SRC/$1" --strip-components 1
 }
 
-# Clones libcbor's tag, then checks the commit and its files' SHA-256.
-fetch_cbor() {
-    rm -rf "$SRC/libcbor"
-    git -c advice.detachedHead=false clone -q --depth 1 --branch "v$CBOR_VERSION" "$CBOR_GIT" "$SRC/libcbor"
-    commit=$(git -C "$SRC/libcbor" rev-parse HEAD)
-    [ "$commit" = "$CBOR_COMMIT" ] || { echo "libcbor: commit $commit, not the pinned $CBOR_COMMIT" >&2; exit 1; }
-    tree=$(cd "$SRC/libcbor" && find . -type f ! -path './.git/*' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)
-    [ "$tree" = "$CBOR_TREE_SHA256" ] || { echo "libcbor: files' SHA-256 $tree, not the pinned $CBOR_TREE_SHA256" >&2; exit 1; }
+# Clones a tag, then checks the commit and its files' SHA-256 (each file's SHA-256 and path,
+# sorted, hashed).
+fetch_git() { # name git tag commit tree_sha256
+    rm -rf "${SRC:?}/$1"
+    mkdir -p "$SRC"
+    git -c advice.detachedHead=false clone -q --depth 1 --branch "$3" "$2" "$SRC/$1"
+    commit=$(git -C "$SRC/$1" rev-parse HEAD)
+    [ "$commit" = "$4" ] || { echo "$1: commit $commit, not the pinned $4" >&2; exit 1; }
+    tree=$(cd "$SRC/$1" && find . -type f ! -path './.git/*' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)
+    [ "$tree" = "$5" ] || { echo "$1: files' SHA-256 $tree, not the pinned $5" >&2; exit 1; }
 }
 
 # The licenses the app ships, from the sources checked above.
@@ -73,6 +83,7 @@ licenses() {
     cp "$SRC/libfido2/LICENSE" "$OUT/licenses/libfido2.txt"
     cp "$SRC/libcbor/LICENSE.md" "$OUT/licenses/libcbor.txt"
     cp "$SRC/openssl/LICENSE.txt" "$OUT/licenses/openssl.txt"
+    cp "$SRC/secp256k1/COPYING" "$OUT/licenses/secp256k1.txt"
 }
 
 build_openssl() { # arch prefix
@@ -105,18 +116,20 @@ build_cmake() { # name arch prefix [options]
 fetched=false
 for arch in $ARCHS; do
     prefix="$OUT/$arch"
-    if [ -f "$prefix/.stamp" ] && [ "$(cat "$prefix/.stamp")" = "$STAMP" ] && [ -f "$OUT/licenses/libfido2.txt" ]; then
-        echo "libfido2 $FIDO_VERSION for $arch: built"
+    if [ -f "$prefix/.stamp" ] && [ "$(cat "$prefix/.stamp")" = "$STAMP" ] && [ -f "$OUT/licenses/libfido2.txt" ] \
+        && [ -f "$OUT/licenses/secp256k1.txt" ]; then
+        echo "libfido2 $FIDO_VERSION and libsecp256k1 $SECP_VERSION for $arch: built"
         continue
     fi
     if [ "$fetched" = false ]; then
         fetch libfido2 "$FIDO_URL" "$FIDO_SHA256"
         fetch openssl "$OPENSSL_URL" "$OPENSSL_SHA256"
-        fetch_cbor
+        fetch_git libcbor "$CBOR_GIT" "v$CBOR_VERSION" "$CBOR_COMMIT" "$CBOR_TREE_SHA256"
+        fetch_git secp256k1 "$SECP_GIT" "v$SECP_VERSION" "$SECP_COMMIT" "$SECP_TREE_SHA256"
         licenses
         fetched=true
     fi
-    echo "Building libfido2 $FIDO_VERSION, libcbor $CBOR_VERSION and OpenSSL $OPENSSL_VERSION for $arch"
+    echo "Building libfido2 $FIDO_VERSION, libcbor $CBOR_VERSION, OpenSSL $OPENSSL_VERSION and libsecp256k1 $SECP_VERSION for $arch"
     rm -rf "$prefix"
     mkdir -p "$prefix/lib/pkgconfig" "$OUT/work/$arch"
     build_openssl "$arch" "$prefix"
@@ -127,8 +140,15 @@ for arch in $ARCHS; do
     PKG_CONFIG_PATH="$prefix/lib/pkgconfig" PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" \
         build_cmake libfido2 "$arch" "$prefix" -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
         -DBUILD_EXAMPLES=OFF -DBUILD_MANPAGES=OFF -DBUILD_TOOLS=OFF -DBUILD_TESTS=OFF
+    # libsecp256k1 with its recovery module alone: every other module, the tests, the benchmarks
+    # and the examples off.
+    build_cmake secp256k1 "$arch" "$prefix" -DBUILD_SHARED_LIBS=OFF -DSECP256K1_ENABLE_MODULE_RECOVERY=ON \
+        -DSECP256K1_ENABLE_MODULE_ECDH=OFF -DSECP256K1_ENABLE_MODULE_EXTRAKEYS=OFF \
+        -DSECP256K1_ENABLE_MODULE_SCHNORRSIG=OFF -DSECP256K1_ENABLE_MODULE_MUSIG=OFF \
+        -DSECP256K1_ENABLE_MODULE_ELLSWIFT=OFF -DSECP256K1_BUILD_BENCHMARK=OFF -DSECP256K1_BUILD_TESTS=OFF \
+        -DSECP256K1_BUILD_EXHAUSTIVE_TESTS=OFF -DSECP256K1_BUILD_CTIME_TESTS=OFF -DSECP256K1_BUILD_EXAMPLES=OFF
     # What Swift imports: fido.h, linked with the three static libraries, the SDK's zlib and the
-    # frameworks libfido2's USB HID code uses.
+    # frameworks libfido2's USB HID code uses; and libsecp256k1's two headers, linked with it.
     cat > "$prefix/include/module.modulemap" <<'MAP'
 module CFido [system] {
     header "fido.h"
@@ -140,8 +160,14 @@ module CFido [system] {
     link framework "CoreFoundation"
     export *
 }
+module CSecp256k1 [system] {
+    header "secp256k1.h"
+    header "secp256k1_recovery.h"
+    link "secp256k1"
+    export *
+}
 MAP
-    for lib in libfido2.a libcbor.a libcrypto.a; do
+    for lib in libfido2.a libcbor.a libcrypto.a libsecp256k1.a; do
         [ -f "$prefix/lib/$lib" ] || { echo "$lib wasn't built for $arch" >&2; exit 1; }
     done
     # Only the static libraries: nothing shared is left for the linker to pick instead.
