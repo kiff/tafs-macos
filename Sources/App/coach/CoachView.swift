@@ -909,6 +909,9 @@ struct CoachView: View {
     /// How many tafs the account has, as the iPad's `model.tafs.count`: its empty chat draws
     /// board 7 with none or one (`ArtBoard.coach`).
     var tafCount = 0
+    /// Whether this person manages the account's Cards (KIFF's `cards.manage`): the connect
+    /// receipt draws Disconnect only then, as the iPad's.
+    var managesCards = true
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
@@ -968,7 +971,7 @@ struct CoachView: View {
         .sheet(item: $reporting) { ReportAnswerSheet(model: model, answer: $0).environment(\.words, words) }
         // An app connected while Coach is shown: its receipt, as the iPad's (docs/connections.md › The receipt).
         .sheet(item: Binding(get: { model.receipt }, set: { if $0 == nil { model.closeReceipt() } })) { receipt in
-            ConnectReceiptSheet(receipt: receipt, done: { model.closeReceipt() }).environment(\.words, words)
+            ConnectReceiptSheet(receipt: receipt, managesCards: managesCards, done: { model.closeReceipt() }).environment(\.words, words)
         }
         // Coach's chat is read again while a connection waits, so its sign-in's end is seen here.
         .task(id: model.watchesConnection) { if model.watchesConnection { await model.watchConnection() } }

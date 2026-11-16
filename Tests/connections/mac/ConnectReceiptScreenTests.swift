@@ -76,6 +76,29 @@ let connectReceiptMacTests: [Test] = [
         await task.value
         try expectEqual(sent.sent.filter { $0.path.hasPrefix("/v1/tafs/taf-coach/conversation") }.count, 1)
     }),
+    Test("Disconnect is drawn for whoever manages the Cards, and a tap says to approve on another device, asking nothing", awaiting: { @MainActor in
+        let receipt = ConnectReceipt(id: "k", heading: "Connect Qonto", line: "Qonto is connected (read only)")
+        let words = receiptWords()
+        let manages = receiptSize(ConnectReceiptSheet(receipt: receipt, done: {}).environment(\.words, words)).height
+        let doesNot = receiptSize(ConnectReceiptSheet(receipt: receipt, managesCards: false, done: {}).environment(\.words, words)).height
+        let tapped = receiptSize(ConnectReceiptSheet(receipt: receipt, disconnecting: true, done: {}).environment(\.words, words)).height
+        try expect(manages > doesNot, "Disconnect only for whoever manages the Cards: \(manages) against \(doesNot)")
+        try expect(tapped > manages, "after a tap, the gate's words under it: \(tapped) against \(manages)")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for (name, language, dark) in [("connect-receipt-disconnect-en-light", "en", false), ("connect-receipt-disconnect-fr-dark", "fr", true)] {
+            let view = ConnectReceiptSheet(receipt: receipt, disconnecting: true, done: {}).environment(\.words, receiptWords(language))
+            guard let bitmap = Snapshot.bitmap(of: view, size: receiptSize(view), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for \(name)") }
+            try png.write(to: folder.appendingPathComponent("\(name).png"))
+        }
+    }),
+    Test("a receipt with no heading of its own heads with its line, else Connected, never empty", awaiting: { @MainActor in
+        let words = receiptWords("fr")
+        let named = receiptSize(ConnectReceiptSheet(receipt: ConnectReceipt(id: "k", heading: "Google Sheets", line: nil), done: {}).environment(\.words, words)).height
+        let bare = receiptSize(ConnectReceiptSheet(receipt: ConnectReceipt(id: "k", heading: nil, line: nil), done: {}).environment(\.words, words)).height
+        // The bare one heads with "Connecté" and drops the line under it, so it's one line shorter, never headless.
+        try expect(bare < named && bare > named - 60, "bare \(bare), named \(named)")
+    }),
     Test("the receipt draws board 5, tafs cloud's line or the shared Connected, and Done, on the theme's ground in light and dark", awaiting: { @MainActor in
         for dark in [false, true] {
             let view = ConnectReceiptSheet(receipt: ConnectReceipt(id: "k", heading: "Connect Qonto", line: "Qonto is connected (read only)"), done: {})

@@ -43,6 +43,31 @@ let connectReceiptTests: [Test] = [
         let receipt = ConnectReceipt.made(before: try chat([waitingSignIn, waitingApproval]), after: try chat([connectedSignIn, connectedApproval]))
         try expectEqual(receipt?.id, "s1:approval-1")
     },
+    Test("the heading is never empty: the title, else the service, else the card's words, else the line, else Connected") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        func receipt(_ component: String) throws -> ConnectReceipt? {
+            let waiting = #"{"key":"k","component":{"id":"a","type":"approval",\#(component),"waits":"owner"}}"#
+            let made = #"{"key":"k","answer":{"state":"answered"},"component":{"id":"a","type":"approval",\#(component),"connection":{"done":true}}}"#
+            return ConnectReceipt.made(before: try chat([waiting]), after: try chat([made]))
+        }
+        try expectEqual(try receipt(#""title":"Connect Qonto","service":"Qonto","text":"Approve to connect Qonto.""#)?.heading, "Connect Qonto")
+        try expectEqual(try receipt(#""title":"  ","service":"Google Sheets""#)?.heading, "Google Sheets")
+        try expectEqual(try receipt(#""text":"Approve to connect Stripe for Refunds.""#)?.heading, "Approve to connect Stripe for Refunds.")
+        try expectEqual(try receipt(#""note":"x""#)?.heading, nil)
+        // As drawn: never empty, and the line isn't said twice.
+        let named = ConnectReceipt(id: "k", heading: "Google Sheets", line: nil)
+        try expectEqual(named.title(words), "Google Sheets")
+        try expectEqual(named.showsLine, true)
+        let lineOnly = ConnectReceipt(id: "k", heading: nil, line: "Qonto is connected (read only)")
+        try expectEqual(lineOnly.title(words), "Qonto is connected (read only)")
+        try expectEqual(lineOnly.showsLine, false)
+        let bare = ConnectReceipt(id: "k", heading: nil, line: nil)
+        try expectEqual(bare.title(words), words("connect.status.connected"))
+        try expectEqual(bare.showsLine, false)
+        for receipt in [named, lineOnly, bare] {
+            try expect(!receipt.title(words).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(receipt)")
+        }
+    },
     Test("the receipt draws board 5, an app connected") {
         try expectEqual(ConnectReceipt.board, .appConnected)
         try expectEqual(ConnectReceipt.board.rawValue, 5)
@@ -73,7 +98,7 @@ let connectReceiptTests: [Test] = [
         try expectEqual(Set(languages), ["en", "de", "es", "fr", "it", "nl", "pl", "pt"])
         for language in languages {
             let words = try Words(language: language, folder: folder)
-            for key in ["connect.status.connected", "common.done"] {
+            for key in ["connect.status.connected", "common.done", "connect.disconnect_button", "approval.device_can_not_approve_approve"] {
                 try expect(words(key) != key && !words(key).isEmpty, "\(key) in \(language)")
             }
         }

@@ -74,14 +74,27 @@ Once an app is connected, a receipt confirms it, as the iPad's `ConnectApprovalS
   or an answer being written has its own reads. Only `GET`. Coming back to Coach reads it too,
   so a sign-in finished meanwhile shows its receipt then.
 - **The sheet** is the iPad's receipt, over Coach, 460 wide: board 5 at its own width (280, 123
-  high), the heading (a green lock, then tafs cloud's title for the card in 22 bold, else the
-  app's name as the card names it), a green check with tafs cloud's line for the connection
-  in 16 semibold ("Qonto is connected (read only)"), else the shared "Connected"
-  (`connect.status.connected`, the iPad's own fallback), and **Done** (`common.done`, the
-  brand's button, Return), which closes it.
-- **Where it differs from the iPad's:** no logo or host in the heading, and no last 4
-  characters in the line: they are the key sheet's, and Coach's card carries neither; no
-  Disconnect, which asks for an approval.
+  high); the heading, a green lock and then, on the same line in 22 bold, tafs cloud's title for
+  the card, else the app's name as the card names it (a sign-in's `service`), else the card's
+  own words; a green check with tafs cloud's line for the connection in 16 semibold ("Qonto is
+  connected (read only)"), else the shared "Connected" (`connect.status.connected`, the iPad's
+  own fallback); **Done** (`common.done`, the brand's button, Return), which closes it; and
+  **Disconnect**.
+- **The heading is never empty** (`ConnectReceipt.title`). A card that names nothing heads with
+  tafs cloud's line, else "Connected", and the check's line under it is then left out, so
+  nothing is said twice.
+- **Disconnect** is the iPad's (`:965-978`), drawn in the shared "Remove access"
+  (`connect.disconnect_button`) for whoever manages the account's Cards (KIFF's `cards.manage`),
+  as the iPad's `canManageCards`. This Mac can't sign the disconnection, so a tap asks nothing
+  and sends nothing: it shows "This device can't approve. Approve on another device signed in
+  to your account." (`approval.device_can_not_approve_approve`), as every approval this Mac
+  can't make shows in place of the iPad's `ApprovalGate` (docs/approvals.md).
+- **Where it differs from the iPad's:**
+  - No logo or host in the heading: they're the iPad's key sheet's, and Coach's card doesn't
+    carry them yet. They'll be drawn once tafs cloud adds them to the card.
+  - No last 4 characters in the line: this Mac never holds the key.
+  - The iPad's Disconnect words are tafs cloud's, from the key sheet; here they're the shared
+    ones.
 
 ## Setting planque up (`PlanqueEnrolment`, `PlanqueClient.enrol`)
 
@@ -154,5 +167,6 @@ The receipt (`ConnectReceiptTests`, and on a Mac `ConnectReceiptScreenTests`): w
 "Connected"), when it doesn't (a first read, a card first seen made, one not made, a card that
 isn't a connection, another chat, a taf's chat), the newest of two, board 5, its words in the 8
 languages, when Coach is read again and that it stops (made, at its limit, cancelled, only
-`GET`), Done, and the sheet on the theme's ground in light and dark. It writes
-`build/screenshots/connect-receipt-*.png`, and board 5's `board-5-connect-receipt-*.png`.
+`GET`), Done, the heading never empty, Disconnect only for whoever manages the Cards and its tap
+saying to approve on another device, and the sheet on the theme's ground in light and dark. It writes
+`build/screenshots/connect-receipt-*.png` (with `connect-receipt-disconnect-*`), and board 5's `board-5-connect-receipt-*.png`.

@@ -12,8 +12,9 @@ import Foundation
 struct ConnectReceipt: Equatable, Identifiable {
     /// The card it is the receipt of, by its key in the thread.
     let id: String
-    /// tafs cloud's title for the card, else the app's name as the card names it; nil draws no
-    /// heading.
+    /// tafs cloud's title for the card, else the app's name as the card names it (a sign-in's
+    /// `service`), else the card's own words; nil only when the card has none of them, and then
+    /// the screen's heading is its line (`title(_:)`), so it's never empty.
     let heading: String?
     /// tafs cloud's line for the connection ("Qonto is connected (read only)"); nil draws the
     /// shared "Connected".
@@ -30,7 +31,24 @@ struct ConnectReceipt: Equatable, Identifiable {
     }
 
     init(_ card: Thread.Card) {
-        self.init(id: card.key, heading: card.title ?? card.service, line: card.connectionWords)
+        self.init(id: card.key, heading: Self.named(card.title) ?? Self.named(card.service) ?? Self.named(card.text),
+                  line: card.connectionWords)
+    }
+
+    /// The receipt's heading as drawn: the card's heading, else its line, else the shared
+    /// "Connected". Never empty, so the person always sees what was connected, or at least that
+    /// it was.
+    func title(_ words: Words) -> String {
+        heading ?? line ?? words("connect.status.connected")
+    }
+
+    /// Whether the green check's line shows under the heading: not when the heading already is
+    /// that line, so it's never said twice.
+    var showsLine: Bool { heading != nil }
+
+    private static func named(_ text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return nil }
+        return text
     }
 
     /// The receipt to show for the chat read again: the newest connection card that `before`
