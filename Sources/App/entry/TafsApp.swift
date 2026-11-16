@@ -33,6 +33,8 @@ struct TafsApp: App {
                     SignInView(model: signIn)
                 }
             }
+            // A session just gained, on either path: celebrated once, over home.
+            .overlay(Group { if signIn.justConnected { ConnectedView { signIn.justConnected = false } } })
             .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
             .environment(\.words, words)
             // The theme the person chose, from the last launch.
