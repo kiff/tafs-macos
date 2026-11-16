@@ -179,17 +179,43 @@ before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
   (unplug it and plug it in again), another key than this Mac's, not touched in time, refused or
   cancelled at the key, and unplugged. A cancelled task cancels the request at the key.
 
+**Registering the key through pairing** (`SecurityKeyPairing`, part 3), as Windows' own passkey
+(`PairingAttempt`, `PairingOffer`, `PairingClaim`, `WindowsHello.CreateAsync`). Nothing calls it
+yet, and switched off it asks the key nothing:
+- **The credential:** `make` asks the key for one with the `clientDataJSON` this app writes,
+  `{"type":"webauthn.create","challenge":…,"origin":"https://kiff.dev","crossOrigin":false}`, its
+  user id sha256 of the device key (the same on every attempt), and this Mac's name. What comes
+  back is checked as an approval's is, then as a new credential (`PasskeyRegistration.read`):
+  ES256 on P-256, an id of 1 to 1023 bytes, and not the device key.
+- **The challenge:** with the creation proof on (`Features.macPairingPasskeyProof`, off as
+  Windows' `PairingPasskeyProof`), the pairing's `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`,
+  so each attempt makes the credential again, and one made for another pairing is refused before
+  the QR is shown. Without it, 32 random bytes, and a new code keeps the last credential, so the
+  key isn't asked again.
+- **Attestation `none`,** the only format KIFF takes: exactly `{fmt: "none", attStmt: {}, authData}`,
+  as Windows asks for none. The key's own statement and certificate, which name its model, never
+  leave this Mac.
+- **The QR** names it as `credential {id, public_key}`, only with `kind: "passkey"`, never beside
+  an approval key or a software device key ([pairing.md](pairing.md)). The check code covers its
+  key in the approval key's place.
+- **The claim** carries `credential_proof {client_data_json, attestation_object}` with the proof on.
+- **A refused credential, or a key not touched or declined,** pairs without one: this Mac then
+  approves on the phone, as Windows pairs when Windows Hello is closed. No key, a wrong PIN or a
+  blocked key is thrown, for the PIN sheet to say why.
+- **Kept:** only the credential id (`SecurityKeyStore`), in the Keychain beside the session.
+  Signing this Mac out forgets it, as signing it out in Devices removes the key at KIFF.
+
 **Next, each its own change:**
-1. **The PIN sheet**, which asks for the PIN for each approval, says the tries left, and says each
-   failure. The shared words don't have its lines yet, so it waits for them.
+1. **The PIN sheet**, which asks for the PIN for each approval and for the pairing, says the tries
+   left, and says each failure. Its shared words are being worded in kiff/tafs, so it waits for
+   them. A new credential without the UV flag says `failed`, never the key's decline.
 2. **Confirmed on a real Mac:** an unsigned app reads a FIDO HID device on macOS 12 without an
    Input Monitoring prompt. libfido2 opens the key's FIDO interface (usage page `0xF1D0`), which
    isn't a keyboard, so none is expected.
-3. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
-   credential, shows the `kind: "passkey"` pairing QR naming it, the phone approves the pairing,
-   and the claim proves it with `credential_proof`. The key then goes with this Mac: signing
-   this Mac out in Devices removes it.
-4. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on.
+3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, the pairing screen asking
+   the key for its credential, and the switch turned on. The creation proof
+   (`Features.macPairingPasskeyProof`) is turned on first: KIFF will require `credential_proof` on
+   a passkey computer's claim.
 
 ## Tests
 

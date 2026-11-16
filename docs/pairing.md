@@ -30,6 +30,19 @@ and never approves an action.
 
 A code lasts at most 5 minutes. A session is handed over once.
 
+**This Mac's security key** (not shown yet: it comes with the switch, [approvals.md](approvals.md)):
+- **The QR** names the key's new credential as `credential {id, public_key}`, base64url, the key
+  as SPKI DER. It goes only with `kind: "passkey"`, never beside an approval key or with a
+  software device key, which pairs as view.
+- **The check code** covers the credential's key in the approval key's place
+  (`PairingPayload.checkedKeyDER`), so the code covers the key the phone registers. It's tested on
+  the phones' vector: `H6SJNU` for the public keys of private keys 1 and 2, `LTJFF6` for the first
+  alone.
+- **With the creation proof on,** the claim adds
+  `credential_proof {client_data_json, attestation_object}`, each base64url. Without it, the claim
+  is as before.
+- **Signing out forgets the key's credential id** with the session.
+
 ## Waiting
 
 `Waiting.until` paces every ask as the contract says:
@@ -49,7 +62,10 @@ A code lasts at most 5 minutes. A session is handed over once.
 
 `scripts/test.sh pairing`: the exact fields each route is sent, that a Mac with no approval
 key never sends one, every answer the contract names, and the waiting's pace with a clock
-the test controls. No test reaches the network.
+the test controls. No test reaches the network. For the security key: the credential's client
+data, user id and challenge, the attestation sent as `none`, each refusal, the kept and remade
+credential, the QR's `credential`, the check code's vector, and the claim's `credential_proof`.
+On a Mac, a real P-256 key's credential against CryptoKit's SPKI, and sign-out forgetting it.
 
 ## The screens
 
@@ -94,8 +110,8 @@ The pairing steps name the phone's own button, from the shared words
 
 ## The Keychain
 
-The session, the device key (or its Secure Enclave handle) and a pairing's new key are kept
-by `KeychainStore`, in the login Keychain, under the service `bot.tafs.macos`.
+The session, the device key (or its Secure Enclave handle), a pairing's new key and the
+security key's credential id are kept by `KeychainStore`, in the login Keychain, under the service `bot.tafs.macos`.
 
 - **A save replaces this app's own item.** It adds the item; if one is there already, it
   updates it; if that is refused, it deletes the item and adds it again. A re-pair writes over
