@@ -121,12 +121,19 @@ struct KIFFClient {
     }
 
     /// One ask for a pairing's session, with the proof that this Mac holds the device key.
-    /// `publicKey` is as the QR code wrote it (base64url).
-    func claimPairing(nonce: String, publicKey: String, proof: String) async throws -> Session {
-        try await post("/v1/pair/claim", ["nonce": nonce, "pub": publicKey, "proof": proof])
+    /// `publicKey` is as the QR code wrote it (base64url). With `credentialProof`, the claim proves
+    /// the QR's credential was made for this pairing (`credential_proof`, as Windows'
+    /// `PairingClaim.BodyAsync`).
+    func claimPairing(nonce: String, publicKey: String, proof: String, credentialProof: CredentialProof? = nil) async throws -> Session {
+        struct Claim: Encodable {
+            let nonce: String, pub: String, proof: String
+            let credentialProof: [String: String]?
+            enum CodingKeys: String, CodingKey { case nonce, pub, proof, credentialProof = "credential_proof" }
+        }
+        return try await post("/v1/pair/claim", Claim(nonce: nonce, pub: publicKey, proof: proof, credentialProof: credentialProof?.fields))
     }
 
-    private func post<Answer: Decodable>(_ path: String, _ fields: [String: String]) async throws -> Answer {
+    private func post<Answer: Decodable, Fields: Encodable>(_ path: String, _ fields: Fields) async throws -> Answer {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let request = HTTPRequest(method: "POST", path: path, headers: ["Content-Type": "application/json"],

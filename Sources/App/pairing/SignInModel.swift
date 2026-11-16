@@ -108,8 +108,7 @@ final class SignInModel: ObservableObject {
             let payload = PairingPayload(deviceKey: pairingKey.publicKeyDER, keyStore: pairingKey.keyStore, approvalKey: approvalDER, name: deviceName,
                                          nonce: nonce, exp: KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime)))
             // The check code is made from exactly the keys the code carries.
-            let carried = payload.approvalPub == nil ? nil : approvalDER
-            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: pairingKey.publicKeyDER, approvalKey: carried)))
+            step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: pairingKey.publicKeyDER, approvalKey: payload.checkedKeyDER)))
             let proof = try Signing.claimProof(key: pairingKey, nonce: nonce)
             let got = try await Waiting.until(interval: 3, expiresIn: PairingPayload.lifetime, sleep: sleep) {
                 guard self.attempt == mine else { throw CancellationError() }
@@ -160,10 +159,12 @@ final class SignInModel: ObservableObject {
         step = .welcome
     }
 
-    /// Forgets the session on this Mac. Ending it at KIFF is the caller's, with the session.
+    /// Forgets the session on this Mac, and the security key that went with it. Ending it at KIFF
+    /// is the caller's, with the session.
     func signedOut() {
         ChatsExport.removeFiles(in: exportFolder)
         RememberedHome.forget(in: rememberedList)
+        SecurityKeyStore(store: sessions.store).forget()
         sessions.forget()
         session = nil
         step = .welcome
