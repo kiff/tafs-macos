@@ -27,6 +27,9 @@ words.count("needs_you.count", 3)                     // the plural form of 3 in
 
 - **A value** fills its `{name}`. `{name|possessive}` gets the language's possessive, by the
   same rule as kiff/tafs's generator: English and German have one, the others keep the name.
+  `{name|this}` (`{name|This}` to open a sentence) gets "this" before the name by its `THIS`
+  rule: French "ce Mac", "cet appareil", the others keep the name. A form the app doesn't know
+  stays as written, and a test that fills every line in every language fails on any brace left.
 - **A count** takes the plural form of its number in the language (Polish has `one`, `few`
   and `many`), or `other` when the line has no such form.
 - **The app's language** is the first one the person prefers that is shipped, else English.

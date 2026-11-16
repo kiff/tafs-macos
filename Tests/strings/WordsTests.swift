@@ -36,6 +36,46 @@ let wordsTests: [Test] = [
         try expectEqual(Words.possessive("Rae", language: "fr"), "Rae")
         try expectEqual(try words("en")("card.issue_prompt", ["taf": "Refunds"]), "Issue Refunds' Card")
     },
+    Test("\"this\" before a name follows the language's rule, both ways") {
+        let french = ["Mac", "PC", "PC Windows", "appareil", "iPad", "écran", "hôte"].map { Words.demonstrative($0, language: "fr") }
+        try expectEqual(french, ["ce Mac", "ce PC", "ce PC Windows", "cet appareil", "cet iPad", "cet écran", "cet hôte"])
+        try expectEqual(Words.demonstrative("Mac", language: "fr", capital: true), "Ce Mac")
+        try expectEqual(Words.demonstrative("appareil", language: "fr", capital: true), "Cet appareil")
+        try expectEqual(Words.demonstrative("Mac", language: "en"), "Mac")
+        try expectEqual(Words.demonstrative("", language: "fr", capital: true), "")
+        let line = Words(language: "fr", lines: ["a.b": .text("Alertes sur {device|this}"), "a.c": .text("{device|This} est ajouté."),
+                                                 "a.d": .text("Sur {device|that}")])
+        try expectEqual(line("a.b", ["device": "Mac"]), "Alertes sur ce Mac")
+        try expectEqual(line("a.c", ["device": "appareil"]), "Cet appareil est ajouté.")
+        // A form this app doesn't know stays as written, for the test below to catch.
+        try expectEqual(line("a.d", ["device": "Mac"]), "Sur {device|that}")
+    },
+    Test("every line at the pin fills, in every language, with no brace left") {
+        let placeholder = try NSRegularExpression(pattern: #"\{([a-z][a-z0-9_]*)(\|[^}]*)?\}"#)
+        func names(_ text: String) -> [String] {
+            placeholder.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
+                Range($0.range(at: 1), in: text).map { String(text[$0]) }
+            }
+        }
+        for language in try Words.shipped(folder: folder) {
+            let book = try words(language)
+            for (key, line) in book.lines {
+                switch line {
+                case .text(let text):
+                    let values = Dictionary(names(text).map { ($0, "Mac") }, uniquingKeysWith: { first, _ in first })
+                    let filled = book(key, values)
+                    try expect(!filled.contains("{"), "\(language) \(key) left a brace: \(filled)")
+                case .forms(let forms):
+                    let values = Dictionary(forms.values.flatMap(names).filter { $0 != "count" }.map { ($0, "Mac") },
+                                            uniquingKeysWith: { first, _ in first })
+                    for n in 0...25 {
+                        let filled = book.count(key, n, values)
+                        try expect(!filled.contains("{"), "\(language) \(key) (\(n)) left a brace: \(filled)")
+                    }
+                }
+            }
+        }
+    },
     Test("a number takes its language's plural form") {
         let cases: [(String, [Int: String])] = [
             ("en", [0: "other", 1: "one", 2: "other"]),
