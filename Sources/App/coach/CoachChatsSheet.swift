@@ -25,7 +25,7 @@ struct CoachChatsSheet: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(verbatim: chat.title).font(.system(size: 15)).foregroundColor(Theme.ink).lineLimit(2)
                                     .multilineTextAlignment(.leading)
-                                Text(verbatim: Self.when(chat.updated)).font(.system(size: 12)).foregroundColor(Theme.dim)
+                                Text(verbatim: Self.when(chat.updated, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -52,10 +52,7 @@ struct CoachChatsSheet: View {
 
     /// When a chat was last written to: the date abbreviated and the time short, as the iPad's
     /// `shown(date: .abbreviated, time: .shortened)`.
-    static func when(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+    static func when(_ date: Date, words: Words) -> String {
+        AppDates.formatter(words, date: .medium, time: .short).string(from: date)
     }
 }

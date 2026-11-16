@@ -32,7 +32,8 @@ Top to bottom, as on the iPad:
 - **The held calls and the tafs are read side by side**, at launch and with each 30-second
   round, as the iPad's `refresh` reads Home, the held calls and the account together
   (`AppModel.swift:1815-1821`). What this person may do with each taf is read after the list,
-  as there. Who is signed in is read at once on its own.
+  as there. Who is signed in is read at once on its own. Back in front, a round is read at
+  once, as the iPad's `refresh()` when its scene becomes active (`TafsApp.swift:60-68`).
 - **The list last read shows in the first frame** (`RememberedHome`, the iPad's remembered
   list, `AppModel.swift:2022-2054`): the tafs alone from Home's answer, kept with their account
   in the app's preferences, shown only for that account and read again at once. It holds the
@@ -51,6 +52,12 @@ Top to bottom, as on the iPad:
 The build copies each shipped language's lines and the mascot from kiff/tafs at the pin into
 the app ([shared.md](shared.md)). `Words.load()` picks the person's language, and every view
 reads `@Environment(\.words)`.
+
+**Dates and times are in the app's language, with this Mac's region** (`AppDates.locale`), as
+the iPad's `Locale.current` with a per-app language: a Mac set to Spanish that shows the app in
+English reads English dates, and an English app on a British Mac reads "15 Nov 2026" and 14:05. A fixed clock ("HH:mm") is `en_US_POSIX`, so no language or Mac setting makes it
+12-hour. The Record's day titles (`AccountTime.dayTitle`) and the dial's times (`zonedShown`)
+take the words' language too.
 
 ## Screenshots
 

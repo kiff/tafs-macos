@@ -110,6 +110,10 @@ enum ApprovalRoute: Equatable {
     case touchID
     /// On the phone, or by a passkey: this Mac has no approval key.
     case phoneOrPasskey
+    /// By the person's USB security key, registered through this Mac's pairing, sent as
+    /// `KIFF-Passkey-Assertion` (`PasskeyApprover`): macOS 12's route, as these Macs have no Touch ID.
+    /// Nothing gives this route yet (`ApprovalRoute.of`), and `Features.macPasskeyApprovals` is off.
+    case passkey
 
     static func of(_ means: ApprovalMeans) -> ApprovalRoute {
         switch means {
@@ -129,11 +133,15 @@ extension AccountClient {
 
     /// Refuses a held call, signed by the device key over the hold as the person saw it.
     /// A refusal takes authority away, so it needs no approval key: any signed-in Mac may
-    /// refuse. `nextStep` must be one of the call's own next steps.
-    func refuse(_ call: HeldCall, nextStep: String? = nil, at date: Date = Date()) async throws {
+    /// refuse. `nextStep` must be one of the call's own next steps. `confirm` runs just before
+    /// the key signs, as the iPad's `signer.sign(_:reason:)` asks for the owner there: when it
+    /// throws, nothing is signed or sent, and its error comes back as `Unconfirmed`.
+    func refuse(_ call: HeldCall, nextStep: String? = nil, at date: Date = Date(),
+                confirm: () async throws -> Void = {}) async throws {
         guard let signMessage else { throw KIFFError.refused(status: 0, code: "no_device_key") }
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
         if let nextStep, !call.nextSteps.contains(nextStep) { throw KIFFError.refused(status: 0, code: "not_a_next_step") }
+        do { try await confirm() } catch { throw Unconfirmed(error: error) }
         let signedAt = KIFFMessage.time(date)
         let message = KIFFMessage.answer(tenant: session.tenant, callID: call.id, answer: .reject, nextStep: nextStep,
                                          accountingVersion: version, signedAt: signedAt)
@@ -147,4 +155,10 @@ extension AccountClient {
         let id = call.id.addingPercentEncoding(withAllowedCharacters: allowed) ?? call.id
         _ = try await send("POST", "/v1/me/card-exceptions/\(id)/reject", body: body)
     }
+}
+
+/// The owner didn't confirm an answer before the device key signed it: nothing was signed or
+/// sent. `error` is the prompt's own, to tell a closed prompt from a failed one.
+struct Unconfirmed: Error {
+    let error: Error
 }

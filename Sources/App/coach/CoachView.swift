@@ -79,8 +79,8 @@ final class CoachModel: ObservableObject {
         self.now = now
     }
 
-    /// Coach's own chat, not a taf's: only it has conversations.
-    private var isCoach: Bool { fixed == nil }
+    /// Coach's own chat, not a taf's: only it has conversations, and only its cards are answered.
+    var isCoach: Bool { fixed == nil }
 
     /// Where the next message goes, as the iPad's `setupTarget`: a new chat, the one shown, else
     /// the live one. Coach's all say they follow a new chat after a hand-over. A taf's chat
@@ -290,6 +290,55 @@ final class CoachModel: ObservableObject {
             await reload(coach)
         } catch {
             notAnswered[card.key] = Self.why(error)
+        }
+    }
+
+    /// The card an answer for `id` is for, as the iPad's `cardRef` (AppModel.swift:6708-6711): the
+    /// one waiting under that id, since Coach can use an id again, else the latest.
+    func cardRef(_ id: String) -> Thread.Card? {
+        guard case .loaded(_, let page) = state else { return nil }
+        let cards = page.items.compactMap { item -> Thread.Card? in if case .card(let card, _) = item { return card } else { return nil } }
+        return cards.last { $0.id == id && $0.answerState == nil } ?? cards.last { $0.id == id }
+    }
+
+    /// The key a card's answer goes by, its `cardRef`'s: what's on its way and why it didn't go.
+    func refKey(_ card: Thread.Card) -> String { cardRef(card.id)?.key ?? card.key }
+
+    /// Answers a questions card with every one of its questions answered, as the iPad's
+    /// `answer(_:_:)` (AppModel.swift:8355-8385): only in Coach's chat (`setupTaf`), for someone
+    /// who may use Coach (`mayUseCoach`, Keyboard.swift:70), to the card its id names now
+    /// (`cardRef`), in that card's chat. Whatever `waits` says, a card with no answer is answered,
+    /// as the iPad's `QuestionsCard`. The run that waited goes on in the chat tafs cloud names
+    /// (`settleSetupChat`), and it's followed. A card that no longer waits is read again as it is;
+    /// one refused for want of the AI-data consent stays quiet; anything else, a refusal too, says
+    /// the answer didn't reach Setup. An answer that comes back after sign-out is the session
+    /// before's: it's dropped.
+    func answer(_ card: Thread.Card, questions answers: [String: QuestionAnswers.Answer], mayUseCoach: Bool) async {
+        guard isCoach, mayUseCoach, case .loaded(let coach, _) = state, answering == nil else { return }
+        guard let ref = cardRef(card.id), ref.answerState != "answered", ref.isQuestions,
+              answers.count == ref.questions.count else { return }
+        answering = ref.key
+        defer { answering = nil }
+        let gen = accountGeneration
+        do {
+            let answered = try await cloud.answer(ref, questions: answers, in: coach.id)
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+            settle(answered.session)
+            await follow(coach)
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+            await reload(coach)
+        } catch let refusal as CloudRefusal where refusal.code == TafsCloud.aiConsentRequired {
+            // Refused for want of the AI-data consent: the card stays as it was, its answers as
+            // chosen, with nothing said, as the iPad's (AppModel.swift:8372-8376).
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = nil
+        } catch {
+            // Anything else, a refusal too, as the iPad's `answerDidNotReachSetup` (:8377-8381).
+            guard gen == accountGeneration else { return }
+            notAnswered[ref.key] = Words.app("coach.answer_did_not_reach_setup")
         }
     }
 
@@ -535,6 +584,9 @@ struct CoachView: View {
     var listed: Set<String> = []
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
+    /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
+    /// answered here.
+    var mayUseCoach = false
     /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back; nil
     /// draws no Back.
     var close: (() -> Void)? = nil
@@ -546,6 +598,11 @@ struct CoachView: View {
     @State private var reporting: ReportedAnswer?
     /// Previous conversations is open.
     @State private var showingChats = false
+    /// Speaking a message instead of typing it, into this chat's box (`MicButton`).
+    /// The signed-in app's one dictation, as the iPad's `model.dictation`; nil draws no mic.
+    var dictation: Dictation? = nil
+    /// The words the person is likely to say, so dictation spells them right (`Dictating.hints`).
+    var hints: [String] = []
     @State private var planOpen = false
 
     var body: some View {
@@ -648,7 +705,7 @@ struct CoachView: View {
                     ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
                         // A time on the first item, and after an hour's gap, as on the iPad.
                         if page.showsTime(at: index), let at = item.at {
-                            Text(verbatim: Self.when(at)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                            Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
                         }
                         self.item(item)
                     }
@@ -694,10 +751,14 @@ struct CoachView: View {
                 TextField(placeholder, text: $model.draft)
                     .textFieldStyle(.plain).font(.system(size: 16))
                     .padding(.horizontal, 14).padding(.vertical, 10)
-                    .onSubmit { Task { await model.send() } }
+                    .onSubmit { send() }
                 HStack {
                     Spacer()
-                    Button { Task { await model.send() } } label: {
+                    // Speak instead of typing, as the iPad's: the words wait in the box, unsent.
+                    if let dictation {
+                        MicButton(dictation: dictation, text: $model.draft, hints: hints.isEmpty ? Dictating.hints(tafs: []) : hints)
+                    }
+                    Button { send() } label: {
                         Image(systemName: "arrow.up").font(.system(size: 16, weight: .bold)).foregroundColor(Theme.onFill)
                             .frame(width: 40, height: 40)
                             .background(Circle().fill(Theme.coach.opacity(model.canSend ? 1 : 0.4)))
@@ -713,7 +774,21 @@ struct CoachView: View {
             .padding(.horizontal, 12).padding(.vertical, 10)
             // The iPad's bar: the background with a faint shadow upward, apart from the wash.
             .background(Theme.background.shadow(color: Theme.ink.opacity(0.06), radius: 6, x: 0, y: -2))
+            // Leaving the chat stops dictating, so its words never land in another chat's box.
+            .onDisappear { leave() }
+            if let dictation { DictationBar(dictation: dictation) }
         }
+    }
+
+    /// Leaving the chat stops dictating, so its words never land in another chat's box, as the
+    /// iPad's `.onDisappear { model.dictation.stop() }` (SetupChatView.swift:759).
+    func leave() { dictation?.stop() }
+
+    /// Sending stops dictating, as the iPad's `send()`: what was heard goes with it, as it
+    /// stands in the box.
+    func send() {
+        dictation?.stop()
+        Task { await model.send() }
     }
 
     /// The answer as it is written, as on the iPad: the live line, the steps done under it,
@@ -932,8 +1007,8 @@ struct CoachView: View {
     }
 
     /// A time in the chat: the time today, else the date and the time.
-    static func when(_ at: Date) -> String {
-        DateFormatter.localizedString(from: at, dateStyle: Calendar.current.isDateInToday(at) ? .none : .medium, timeStyle: .short)
+    static func when(_ at: Date, words: Words) -> String {
+        AppDates.formatter(words, date: Calendar.current.isDateInToday(at) ? .none : .medium, time: .short).string(from: at)
     }
 
     @ViewBuilder private func item(_ item: Thread.Item) -> some View {
@@ -989,6 +1064,8 @@ struct CoachView: View {
             approval(card)
         } else if card.type == "notice" {
             notice(card)
+        } else if card.type == "questions" {
+            questions(card)
         } else if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
             choice(card)
         }
@@ -1183,6 +1260,19 @@ struct CoachView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
+        }
+    }
+
+    /// Several questions at once, as the iPad's `QuestionsCard` (QuestionsCard.swift:17-24):
+    /// answered, one folded line, "Your answers · {tafs cloud's words}"; with no answer, whatever
+    /// `waits` says, the card, in Coach's own chat for someone who may use Coach; else what it asks.
+    @ViewBuilder private func questions(_ card: Thread.Card) -> some View {
+        if card.answerState == "answered" {
+            outcomeLine("checkmark.circle.fill", Theme.ok, words("coach.questions.your_answers") + (card.answered ?? ""))
+        } else if model.isCoach, mayUseCoach, card.isQuestions {
+            QuestionsCard(model: model, card: card, mayUseCoach: mayUseCoach)
+        } else {
+            asking(card)
         }
     }
 

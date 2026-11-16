@@ -2,7 +2,12 @@ import SwiftUI
 
 /// The window of a signed-in Mac: the sidebar, with each built screen in its place.
 struct SignedInView: View {
+    /// Whether the app is in front: back in front, the lists are read again.
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.words) private var words
+    /// The one dictation for the signed-in app, as the iPad's `AppModel.dictation`
+    /// (AppModel.swift:260): Coach's and each taf's chat share it, so only one listens.
+    @StateObject private var dictation = Dictation()
     @StateObject private var needsYou: NeedsYouModel
     @StateObject private var devices: DevicesModel
     @StateObject private var people: PeopleModel
@@ -102,13 +107,14 @@ struct SignedInView: View {
                                                         answered: { await needsYou.load(); await readTafs() }))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
-            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs))
+            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, close: closeCoach))
+                                                  listed: Set(overview.tafs.map(\.id)), openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, close: closeCoach, dictation: dictation,
+                                                  hints: Dictating.hints(tafs: overview.tafs.map(\.name))))
             case .account: return AnyView(accountScreen)
             }
         }, startNewTaf: startNewTaf, openCoach: openCoach)
@@ -144,19 +150,27 @@ struct SignedInView: View {
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
             while !Task.isCancelled {
-                // The held calls and the tafs side by side, as the iPad's `refresh`
-                // (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the
-                // sidebar and the Overview, are read once here and again with each round, so a
-                // taf made in Coach shows without opening the Overview; what this person may do
-                // with each is read after the list, as there (`readTafs`).
-                async let held: Void = needsYou.load()
-                async let tafs: Void = readTafs()
-                _ = await (held, tafs)
-                if case .loaded(let calls) = needsYou.state {
-                    notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
-                }
+                await readRound()
                 try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
             }
+        }
+        // Back in front, the lists are read again at once, as the iPad's `refresh()` when its
+        // scene becomes active (TafsApp.swift:60-68), not only at the next round.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { Task { await readRound() } }
+        }
+    }
+
+    /// One round: the held calls and the tafs side by side, as the iPad's `refresh`
+    /// (AppModel.swift:1815-1821): neither waits for the other. The tafs, for the sidebar and the
+    /// Overview, are read with each round, so a taf made in Coach shows without opening the
+    /// Overview; what this person may do with each is read after the list, as there (`readTafs`).
+    private func readRound() async {
+        async let held: Void = needsYou.load()
+        async let tafs: Void = readTafs()
+        _ = await (held, tafs)
+        if case .loaded(let calls) = needsYou.state {
+            notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
         }
     }
 
@@ -265,7 +279,8 @@ struct SignedInView: View {
                                openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }, me: accountModel.me,
                                doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
                                myEmail: accountModel.me?.email,
-                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email), tab: tafTab).id(taf.id))
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
+                               dictation: dictation, tab: tafTab).id(taf.id))
     }
 
     private var accountScreen: some View {

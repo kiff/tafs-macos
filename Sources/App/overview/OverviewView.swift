@@ -102,9 +102,7 @@ final class OverviewModel: ObservableObject {
     /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
     /// Only while the Overview is shown, and once a taf; one that can't be read stays "–".
     func loadLastResults(words: Words) async {
-        let clock = DateFormatter()
-        clock.dateStyle = .none
-        clock.timeStyle = .short
+        let clock = AppDates.formatter(words, time: .short)
         for taf in tafs {
             guard let id = taf.tafID, lastResults[id] == nil, let runs = try? await cloud.runs(of: id) else { continue }
             let latest = Runs.latest(runs)
@@ -208,7 +206,7 @@ struct OverviewView: View {
             ForEach(held) { row in
                 needsRow(row.taf.map { "\($0) · \(row.asks)" } ?? row.asks) {
                     if let by = row.answerBy {
-                        Text(words("needs_you.answer_by", ["time": Self.clock.string(from: by)])).font(.system(size: 12)).foregroundColor(Theme.soft)
+                        Text(words("needs_you.answer_by", ["time": clock.string(from: by)])).font(.system(size: 12)).foregroundColor(Theme.soft)
                     }
                 }
             }
@@ -235,12 +233,8 @@ struct OverviewView: View {
         .buttonStyle(.plain)
     }
 
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter
-    }()
+    /// A time as the app shows it, in its language.
+    private var clock: DateFormatter { AppDates.formatter(words, time: .short) }
 
     /// The iPad's four columns, headed in plain 11 bold.
     private func table(_ tafs: [Home.Taf]) -> some View {
@@ -275,7 +269,7 @@ struct OverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Group {
                 // "Now" by its state, as the iPad's; the sidebar shows what went wrong instead.
-                Text(verbatim: taf.now(words, time: { Self.clock.string(from: $0) })).foregroundColor(Theme.ink)
+                Text(verbatim: taf.now(words, time: { clock.string(from: $0) })).foregroundColor(Theme.ink)
                 Text(verbatim: taf.cards.first?.line(words) ?? "–").foregroundColor(Theme.ink)
                 Text(verbatim: taf.tafID.flatMap { model.lastResults[$0] } ?? "–").foregroundColor(Theme.soft).lineLimit(2)
             }

@@ -27,7 +27,7 @@ private func refusal(_ body: @autoclosure () async throws -> Void, is code: Stri
     }
 }
 
-let approvalsTests: [Test] = [
+let approvalsHeldTests: [Test] = [
     Test("a held call says which tool even under a vendor's label, as the iPad's KIFFMapping.says") {
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Write Stripe API data"), "Write Stripe API data · refund payment")
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Refund a payment"), "Refund a payment")
@@ -118,6 +118,27 @@ let approvalsTests: [Test] = [
         try await refusal(try await account.refuse(all[1]), is: "no_accounting_version")
         try await refusal(try await account.refuse(all[0], nextStep: "pay anyway"), is: "not_a_next_step")
         try expectEqual(a.sent.count + b.sent.count, 0)
+    }),
+    Test("a refusal asks for the owner just before the key signs, after its own checks, and a refused confirmation signs and sends nothing", awaiting: {
+        let all = try await calls()
+        var order: [String] = []
+        let (account, transport) = client([(200, "{}")], signMessage: { _ in order.append("signed"); return "SIG" })
+        try await account.refuse(all[0], confirm: { order.append("confirmed") })
+        try expectEqual(order, ["confirmed", "signed"])
+        try expectEqual(transport.sent.count, 1)
+        // A hold that fails its own checks never asks.
+        var asked = false
+        try await refusal(try await account.refuse(all[1], confirm: { asked = true }), is: "no_accounting_version")
+        try expectEqual(asked, false)
+        struct Closed: Error {}
+        let (unconfirmed, quiet) = client([(200, "{}")], signMessage: { _ in throw Failure(description: "signed") })
+        do {
+            try await unconfirmed.refuse(all[0], confirm: { throw Closed() })
+            throw Failure(description: "sent")
+        } catch let error as Unconfirmed {
+            try expect(error.error is Closed, "the prompt's own error")
+        }
+        try expectEqual(quiet.sent.count, 0)
     }),
     Test("a call is announced once, never those already waiting, and again if it is held again", awaiting: {
         let all = try await calls()

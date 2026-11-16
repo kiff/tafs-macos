@@ -32,7 +32,7 @@ makes an answer count only for the hold as the person saw it.
 
 | Answer | Grants authority? | Who signs on a Mac |
 |---|---|---|
-| **Refuse** (`reject`) | No: it takes authority away | The device key. Any signed-in Mac may refuse. |
+| **Refuse** (`reject`) | No: it takes authority away | The device key, once the person confirms with Touch ID or the Mac's password. Any signed-in Mac may refuse. |
 | **Approve once** (`approve-once`) | Yes | Touch ID's approval key on a Mac that has one. Otherwise the phone, or a passkey. |
 | **Extra room** (`change-card`) | Yes | The same as Approve once. |
 
@@ -40,6 +40,18 @@ makes an answer count only for the hold as the person saw it.
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
 - **A refusal is not sent** without the device key, without the hold's accounting version,
   or with a next step that isn't one of the hold's own.
+- **A refusal is confirmed before it's signed**, as the iPad's `answer(_:with:)` signs with
+  `signer.sign(_:reason:)` (`AppModel.swift:2917-2990`): after the checks above, the person
+  confirms with Touch ID or the Mac's login password (`.deviceOwnerAuthentication`, which every
+  Mac has), prompted "Answer {summary}" (`needs_you.prompt.answer`). A prompt the person
+  closed keeps the call and says nothing was approved
+  (`approval.cancelled_nothing_approved_request_kept`); any other failure says it wasn't sent
+  (`common.not_sent_unconfirmed`). Neither signs nor sends. Those words show as they are:
+  only KIFF's own refusal reads "KIFF didn't take the answer: …" (`needs_you.refused.other`), as
+  the iPad's `lastError` (`AppModel.swift:2972-2979` against `:2994`).
+  - **Mac difference:** the summary is the call's title, else its action, as its card shows
+    it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
+    for a call without arguments) isn't ported yet.
 
 Approving with Touch ID, on the phone and with a passkey each arrive in their own pull request.
 
@@ -90,6 +102,70 @@ first on Needs you, oldest first.
   ended.
 - An answered or ended step leaves the list at once, and stays off while Home still lists it;
   the lists are then read again.
+
+## Passkeys on macOS 12
+
+This app is for Macs without Touch ID, so it never holds an approval key. An approval on such a
+Mac can be the person's passkey: a USB security key signing the exact request, sent as
+`KIFF-Passkey-Assertion`. The route is the public spec's "A Mac without Touch ID, and Linux", in
+[How a computer approves with a passkey](https://github.com/kiff/tafs/blob/main/docs/computer-passkeys.md)
+(in review); KIFF's checks are as `docs/secure-connection.md` describes them. Anything else is
+approved on the phone ("Approve on your phone"). macOS 12 has no system cross-device passkey (it
+came in macOS 13), and its platform authenticator needs Touch ID, so neither is used.
+
+**A security key goes with its computer.** It's registered through pairing, and KIFF lists it
+with that computer ("Goes with its computer", no Remove of its own): signing the computer out in
+Devices removes it. The key itself can be plugged in elsewhere, so its PIN is asked for each
+approval.
+
+**Off for now** (`Features.macPasskeyApprovals = false`): a switched-off `PasskeyApprover` refuses
+before the security key is asked, and nothing gives `ApprovalRoute.passkey` yet.
+
+**In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
+`PasskeyRegistration`:
+- **The message:** a request's `kiff.request.v1` (the body's hash, a `signed_at` from
+  `SigningTime.next()`, never the same twice), or two requests' `kiff.requests.v1` with the two
+  hashes sorted.
+- **`clientDataJSON`**, which this app writes, as Windows does over raw CTAP2:
+  `{"type":"webauthn.get","challenge":base64url(sha256(message)),"origin":"https://kiff.dev","crossOrigin":false}`.
+  The security key is given its SHA-256 (`clientDataHash`), never the JSON.
+- **Checked here before sending, whatever the key says:** rpIdHash is `sha256("kiff.dev")`; UP and
+  UV are set (the key's PIN was checked); the credential is the one asked for; and the passkey
+  isn't a synced one (BE and BS are 0, as Windows refuses). A USB key reports neither, and can
+  still be used from another computer with its PIN: the check refuses a synced passkey, nothing
+  more. Each is its own refusal (`PasskeyRefusal`).
+- **Only two ways in:** `approve` for one request and `RequestsTogether.approve` for the pair,
+  each with the `signed_at` that went into its message. The signing itself is private.
+- **The header:** `t=<signed_at>,a=<base64url of {credential_id, client_data_json,
+  authenticator_data, signature}>`; for the pair, each request's header adds
+  `with=sha256:<the other request's hash>`.
+- **A new credential** (`PasskeyRegistration.read`): its id and its ES256 COSE key as SPKI DER.
+  Another algorithm or curve, a point off P-256, another RP, BE or BS, or no verification is
+  refused. Its creation's challenge is the pairing's
+  `base64url(sha256("kiff.passkey.pair.v1\n<nonce>\n<device key>"))`.
+- **`ApprovalRoute.passkey`:** the route of a Mac with a registered key.
+- **Hashing is passed in** (`sha256`): Core builds on Linux, and the app gives CryptoKit's
+  (`PasskeyCrypto`).
+- **A new key's point is checked on P-256 by the curve's equation** (`P256Curve.contains`:
+  `y² ≡ x³ − 3x + b (mod p)`, both coordinates below `p`), in Core, so Linux tests it too.
+  CryptoKit's key init isn't used as the check: on macOS it takes a point off the curve.
+
+**Next, each its own change:**
+1. **The security key over libfido2**, behind `PasskeyAuthenticator`, on the review's conditions:
+   - libfido2 and its CBOR and crypto libraries pinned, built from source in CI with their source
+     checksums checked, never a prebuilt binary; their licence notices shipped;
+   - only `make_cred` and `get_assert`, given the `clientDataHash` this app computes; never
+     credential management, reset or enrolment;
+   - the PIN asked in the app's own prompt for each approval, handed over once, its buffer zeroed;
+     never kept, logged or sent; the tries left said, and a blocked key said to be blocked;
+   - confirmed on a real Mac: an unsigned app reads a FIDO HID device on macOS 12 without an
+     Input Monitoring prompt.
+2. **Registering the key through pairing** (the public spec's pairing): the Mac makes the
+   credential, shows the `kind: "passkey"` pairing QR naming it, the phone approves the pairing,
+   and the claim proves it with `credential_proof`. The key then goes with this Mac: signing
+   this Mac out in Devices removes it.
+3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, and the switch turned on
+   once the public spec's route has merged.
 
 ## Tests
 

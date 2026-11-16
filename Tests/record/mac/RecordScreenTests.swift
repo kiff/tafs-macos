@@ -11,6 +11,33 @@ private func model(_ answers: [(Int, String)]) -> (RecordModel, CannedTransport)
 }
 
 let recordMacTests: [Test] = [
+    Test("a day's title is the iPad's dayTitle: Today and Yesterday with the date, else the weekday, in the account's zone") {
+        let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+        let paris = AccountTime("Europe/Paris")
+        let now = ISO8601DateFormatter().date(from: "2026-11-15T10:00:00Z")!
+        let day = { (iso: String) in paris.calendar.startOfDay(for: ISO8601DateFormatter().date(from: iso)!) }
+        try expectEqual(paris.dayTitle(day("2026-11-15T08:00:00Z"), words: words, now: now, region: "US"), "Today · Nov 15")
+        try expectEqual(paris.dayTitle(day("2026-11-14T08:00:00Z"), words: words, now: now, region: "US"), "Yesterday · Nov 14")
+        try expectEqual(paris.dayTitle(day("2026-11-13T08:00:00Z"), words: words, now: now, region: "US"), "Friday · Nov 13")
+        // 23:30 UTC on the 14th is already the 15th in Paris: today.
+        try expectEqual(paris.dayTitle(day("2026-11-14T23:30:00Z"), words: words, now: now, region: "US"), "Today · Nov 15")
+    },
+    Test("a day's date is in the app's language, never this Mac's: English words read Nov 15 on a Spanish Mac too") {
+        let paris = AccountTime("Europe/Paris")
+        let now = ISO8601DateFormatter().date(from: "2026-11-15T10:00:00Z")!
+        let today = paris.calendar.startOfDay(for: now)
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        // Whatever this Mac's own language, the English words give an English date.
+        let english = Words.load(folder: folder, preferred: ["en"])
+        try expectEqual(paris.dayTitle(today, words: english, now: now, region: "US"), "Today · Nov 15")
+        // And the Spanish words give the Spanish date, the date formatted in their language.
+        let spanish = Words.load(folder: folder, preferred: ["es"])
+        var style = Date.FormatStyle(locale: Locale(identifier: "es_ES")).day().month(.abbreviated)
+        style.timeZone = paris.zone
+        let date = today.formatted(style)
+        try expectEqual(paris.dayTitle(today, words: spanish, now: now, region: "ES"), spanish("calendar.today_date", ["date": date]))
+        try expect(date != "Nov 15", "a Spanish date")
+    },
     Test("the next page joins its group, and the end's words show only at the end", awaiting: { @MainActor in
         let (model, transport) = model([(200, recordPage), (200, second)])
         await model.load()
