@@ -10,7 +10,7 @@ private func model(_ answers: [(Int, String)]) -> (RecordModel, CannedTransport)
     return (RecordModel(cloud: CloudClient(transport: transport, session: session)), transport)
 }
 
-let recordMacTests: [Test] = [
+let recordScreenTests: [Test] = [
     Test("a day's title is the iPad's dayTitle: Today and Yesterday with the date, else the weekday, in the account's zone") {
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
         let paris = AccountTime("Europe/Paris")

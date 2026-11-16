@@ -43,7 +43,18 @@ final class RecordModel: ObservableObject {
     @Published private(set) var openCase: Record.Case?
     @Published private(set) var caseError: String?
 
+    /// One line's KIFF receipt, open in its sheet: the line, the receipt as KIFF wrote it, and this
+    /// Mac's check of it, as the iPad's `ReceiptView`.
+    @Published private(set) var receiptEntry: Record.Entry?
+    @Published private(set) var receiptRaw: Data?
+    @Published private(set) var receiptCheck: ReceiptCheck?
+    @Published private(set) var receiptError: String?
+    /// The signer a receipt must be KIFF's by: KIFF's own, set otherwise only by a test.
+    var receiptSigner = ReceiptCheck.kiffSigner
+
     private let cloud: CloudClient
+    /// KIFF itself, for a line's receipt (`GET /v1/receipts/{trace_id}`); nil reads none.
+    private let account: AccountClient?
     private var cursor: String?
     private var asked = 0
     /// The search waiting for the person to stop typing.
@@ -52,7 +63,10 @@ final class RecordModel: ObservableObject {
     /// iPad's `recordTypingPause`.
     var typingPause: UInt64 = 400_000_000
 
-    init(cloud: CloudClient) { self.cloud = cloud }
+    init(cloud: CloudClient, account: AccountClient? = nil) {
+        self.cloud = cloud
+        self.account = account
+    }
 
     /// Reads the Record's list again from the first page. A slower answer is dropped.
     func load() async {
@@ -164,6 +178,41 @@ final class RecordModel: ObservableObject {
         }
     }
 
+    /// Opens a line's receipt sheet and reads KIFF's receipt, as the iPad's `ReceiptView`. A line
+    /// with no receipt opens nothing.
+    func openReceipt(_ entry: Record.Entry) async {
+        guard entry.receipt != nil else { return }
+        receiptEntry = entry
+        await loadReceipt()
+    }
+
+    /// Reads the open line's receipt from KIFF, as it wrote it, and checks it on this Mac. A sheet
+    /// closed or moved to another line meanwhile takes nothing.
+    func loadReceipt() async {
+        guard let entry = receiptEntry, let trace = entry.receipt?.traceID, let account else { return }
+        receiptRaw = nil
+        receiptCheck = nil
+        receiptError = nil
+        do {
+            let raw = try await account.send("GET", "/v1/receipts/\(CloudClient.escaped(trace))")
+            let signer = receiptSigner
+            // The signer's recovery is plain arithmetic: off the main thread.
+            let check = await Task.detached { ReceiptCheck.check(raw, signer: signer, sha256: PasskeyCrypto.sha256) }.value
+            guard receiptEntry?.id == entry.id else { return }
+            receiptRaw = raw
+            receiptCheck = check
+        } catch {
+            if receiptEntry?.id == entry.id { receiptError = UsageModel.plainWhy(error) }
+        }
+    }
+
+    func closeReceipt() {
+        receiptEntry = nil
+        receiptRaw = nil
+        receiptCheck = nil
+        receiptError = nil
+    }
+
     func closeCase() {
         caseAbout = nil
         openCase = nil
@@ -217,6 +266,9 @@ struct RecordView: View {
         .background(Theme.background)
         .task { await model.load() }
         .sheet(isPresented: Binding(get: { model.caseAbout != nil }, set: { if !$0 { model.closeCase() } })) { caseSheet }
+        .background(EmptyView().sheet(isPresented: Binding(get: { model.receiptEntry != nil }, set: { if !$0 { model.closeReceipt() } })) {
+            if let entry = model.receiptEntry { ReceiptSheet(model: model, entry: entry) }
+        })
     }
 
     /// Every call by day, as before a search: the chips, then the calls they keep.
@@ -325,6 +377,15 @@ struct RecordView: View {
                 }
                 Text(verbatim: [entry.about, entry.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.system(size: 13)).foregroundColor(Theme.soft)
+                // KIFF's receipt, opened in its sheet and checked there, as the iPad's row opens it.
+                // Not from inside a case's own sheet: a window shows one sheet at a time.
+                if opensCase, entry.receipt != nil {
+                    Button { Task { await model.openReceipt(entry) } } label: {
+                        Label(words("receipt.kiff_receipt"), systemImage: "doc.text").font(.system(size: 12)).foregroundColor(Theme.ok)
+                    }
+                    .buttonStyle(.plain)
+                    .help(words("record.shows_receipt"))
+                }
                 // In a search, what it's about opens the case, as the iPad's `RecordHitRow`.
                 if opensCase, model.found != nil, let about = entry.about, !about.trimmingCharacters(in: .whitespaces).isEmpty {
                     Button { Task { await model.open(case: about) } } label: {

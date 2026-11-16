@@ -31,8 +31,31 @@ enum Record {
         let taf: Taf
         /// What the call is about, the taf's business reference ("Order 1042"): it opens the case.
         let about: String?
+        /// KIFF's receipt for the call, from its `call`: signed, or pending until KIFF's next sweep.
+        /// Nil for a line with none.
+        let receipt: Receipt?
+        /// The money the call moved, as KIFF names it in its `call`: what its receipt is checked against.
+        let amount: Amount?
+        /// The owner's answer to a held call, from its `call` ("approved_once", "refused").
+        let answer: String?
 
-        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about }
+        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call }
+
+        /// The part of KIFF's call the receipt sheet reads. Each part that doesn't read is left out, and
+        /// the line still reads.
+        private struct Call: Decodable {
+            struct Answer: Decodable { let decision: String }
+            var receipt: Receipt?
+            var amount: Amount?
+            var answer: Answer?
+            enum CodingKeys: String, CodingKey { case receipt, amount, answer }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                receipt = (try? c.decodeIfPresent(Receipt.self, forKey: .receipt)) ?? nil
+                amount = (try? c.decodeIfPresent(Amount.self, forKey: .amount)) ?? nil
+                answer = (try? c.decodeIfPresent(Answer.self, forKey: .answer)) ?? nil
+            }
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -49,6 +72,38 @@ enum Record {
             }
             amountText = text(.amountText)
             about = text(.about)
+            let call = (try? c.decodeIfPresent(Call.self, forKey: .call)) ?? nil
+            receipt = call?.receipt.flatMap { $0.traceID.isEmpty ? nil : $0 }
+            amount = call?.amount
+            answer = call?.answer?.decision
+        }
+    }
+
+    /// A call's KIFF receipt: its id, and whether KIFF has signed it yet.
+    struct Receipt: Decodable, Equatable {
+        let traceID: String
+        let status: String
+        enum CodingKeys: String, CodingKey { case traceID = "trace_id", status }
+    }
+
+    /// Money as KIFF writes it: a decimal string and its unit ("150.00", "EUR"). A gateway call's
+    /// integer amount has no unit.
+    struct Amount: Decodable, Equatable {
+        let value: String
+        var unit: String?
+
+        /// The same amount as `other`: the same number, whatever its trailing zeros ("150.00" and "150"),
+        /// in the same unit, whatever its case. A value that isn't a plain decimal is compared as written.
+        func same(as other: Amount) -> Bool {
+            guard (unit ?? "").uppercased() == (other.unit ?? "").uppercased() else { return false }
+            guard let a = Self.decimal(value), let b = Self.decimal(other.value) else { return value == other.value }
+            return a == b
+        }
+
+        /// A plain decimal ("150", "-3.50"), never a prefix of something else ("150abc").
+        private static func decimal(_ s: String) -> Decimal? {
+            guard s.range(of: #"^-?[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
+            return Decimal(string: s, locale: Locale(identifier: "en_US_POSIX"))
         }
     }
 
