@@ -19,7 +19,7 @@ written in Swift with SwiftUI and AppKit.
 
   A full Swift 5.7 build needs Xcode 14 or the Command Line Tools of macOS 12. The Mac job
   lists the Xcodes its runner has; the build on a Mac with macOS 12 stays the final check.
-- **`cmake` and `pkg-config`**, for the security key's library (below). The Command Line Tools
+- **`cmake` and `pkg-config`**, for the native libraries (below). The Command Line Tools
   don't carry them. CI's Mac runners have `cmake`, and `pkg-config` is installed when missing.
 
 ## The SDK
@@ -45,33 +45,35 @@ open build/tafs.app
 
 The build is not signed. Signing and notarization are a release step, not part of this script.
 
-## The security key's library
+## The native libraries
 
 The app talks to a USB security key through libfido2 (docs/approvals.md, "Passkeys on macOS
-12"). `scripts/fido.sh` builds it, and the two libraries it needs, from pinned source:
+12"), and recovers a KIFF receipt's signer with libsecp256k1 (docs/record.md). `scripts/fido.sh`
+builds both, and the two libfido2 needs, from pinned source:
 
 | Library | Version | Source, and what's checked |
 |---|---|---|
 | libfido2 | 1.17.0 | Its release tarball, by SHA-256. The pinned hash is the tarball's whose release signature verified. |
 | OpenSSL (libcrypto) | 3.5.9 | Its release tarball, by the SHA-256 openssl.org publishes. |
 | libcbor | 0.13.0 | Its tag, at a pinned commit, and the SHA-256 of its files: it publishes no tarball. libfido2 1.17.0 builds with this version. |
+| libsecp256k1 | 0.7.1 | Its tag, at a pinned commit (`1a53f496…`), and the SHA-256 of its files, as libcbor's. It's the release the iPad's swift-secp256k1 0.24.0 vendors. Built with its recovery module only: ECDH, extrakeys, Schnorr, MuSig and ElligatorSwift off, and no tests, benchmarks or examples. |
 
 - **Nothing prebuilt is used**, and a source whose hash isn't the pinned one isn't unpacked.
 - **Static libraries for each architecture**, for macOS 12, in `build/fido/<arch>/lib`, with
-  their headers and a module map (`import CFido`) in `build/fido/<arch>/include`. zlib, which
+  their headers and a module map (`import CFido`, `import CSecp256k1`) in `build/fido/<arch>/include`. zlib, which
   libfido2 links, is the SDK's. libcrypto is built alone: no shared library, modules, engines,
   apps, tests or docs.
 - **`build.sh` runs it for each architecture it builds**, and `test.sh` for this Mac's when the
   app's views are tested. Once an architecture is built by the script as it is, it isn't built
   again (`build/fido/<arch>/.stamp` holds the script's hash). The first build takes a few minutes.
-- **The licences** of the three go to `build/fido/licenses`, and `build.sh` puts them in the app
+- **The licences** of the four go to `build/fido/licenses`, and `build.sh` puts them in the app
   (`Contents/Resources/licenses/`).
 - **CI's Mac job** restores the libraries an earlier run of this same script built, keyed on the
   script's hash, so a moved pin builds again. The nightly run restores nothing and builds them.
 
 **Moving a pin:** change the version and its hash in `scripts/fido.sh` together, from the
 publisher: libfido2's tarball, after checking its `.sig`; OpenSSL's `.sha256` from openssl.org;
-for libcbor, the tag's commit and the files' hash (`find . -type f ! -path './.git/*' -print0 |
+for libcbor and libsecp256k1, the tag's commit and the files' hash (`find . -type f ! -path './.git/*' -print0 |
 LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256` in a fresh clone of the tag).
 
 ## Where the code is
@@ -116,7 +118,7 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
   always run.
 - **The tests that need no Mac run on Linux** with Swift 5.7.
 - **The Swift 5.7 checks** (`swift57`) run on every change, on Linux.
-- **A Mac job** builds the app for both architectures, with the security key's library (above),
+- **A Mac job** builds the app for both architectures, with the native libraries (above),
   checks the libraries' licences are in it, and runs the parts' Mac tests. It runs
   when `Sources/App/`, `App/`, a `mac/` test folder, shared code, the runner, a script, the
   workflow or the shared pin changed.

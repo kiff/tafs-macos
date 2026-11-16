@@ -28,6 +28,8 @@ printf 'import Foundation\n\nvar suites: [(name: String, tests: [Test])] = []\n'
 [ "$CORE" = 1 ] || printf 'Words.app = (try? Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))) ?? Words.app\n' >> "$MAIN"
 
 find Sources/Core Tests/Runner -name '*.swift' | sort >> "$FILES"
+# The iPad's Swift that Core compiles as it is (scripts/shared.sh sources).
+scripts/shared.sh sources >> "$FILES"
 # The app's views are tested on a Mac, without the file that starts the app.
 [ "$CORE" = 1 ] || find Sources/App -name '*.swift' -not -path 'Sources/App/entry/*' | sort >> "$FILES"
 
@@ -48,7 +50,7 @@ echo "$MAIN" >> "$FILES"
 
 TARGET=""
 # On a Mac, the SDK the app is built against, named (scripts/sdk.sh), and with the app's views,
-# the security key's library (scripts/fido.sh).
+# the native libraries (scripts/fido.sh).
 if [ "$(uname)" = "Darwin" ]; then
     TARGET="-target $(uname -m)-apple-macos12.0 -sdk $(scripts/sdk.sh)"
     if [ "$CORE" = 0 ]; then

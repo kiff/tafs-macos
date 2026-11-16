@@ -14,7 +14,7 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
     return (CloudClient(transport: transport, session: session, language: "pt"), transport)
 }
 
-let recordTests: [Test] = [
+let recordListTests: [Test] = [
     Test("the calls are by day in the account's calendar, newest first, whichever group they came in, as the iPad's days") {
         func entry(_ id: String, _ at: String) -> String {
             #"{"id":"\#(id)","at":"\#(at)","kind":"done","title":"T","detail":"","time":"","taf":{"id":"taf_1","name":"Refunds"}}"#
