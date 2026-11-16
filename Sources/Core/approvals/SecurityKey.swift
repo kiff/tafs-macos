@@ -162,22 +162,35 @@ final class SecurityKeyPIN {
     init(utf8 bytes: inout [UInt8]) throws {
         defer { bytes.withUnsafeMutableBytes { SecurityKeyPIN.clear($0.baseAddress, $0.count) } }
         guard bytes.count <= Self.mostBytes, !bytes.contains(0) else { throw SecurityKeyFailure.pinTooLong }
-        var characters = 0
+        // The bytes are read only through a buffer pointer, never an iterator or a copy of the
+        // array: one of those still alive when the `defer` runs would hold a second reference to
+        // the array's storage, so `withUnsafeMutableBytes` would copy on write and clear only the
+        // copy, leaving the typed PIN in memory.
+        let characters = try bytes.withUnsafeBufferPointer { try Self.scalars($0) }
+        guard characters >= Self.fewestCharacters else { throw SecurityKeyFailure.pinTooShort }
+        let size = bytes.count + 1
+        self.size = size
+        let buffer = UnsafeMutablePointer<CChar>.allocate(capacity: size)
+        bytes.withUnsafeBufferPointer { typed in
+            for i in typed.indices { buffer[i] = CChar(bitPattern: typed[i]) }
+        }
+        buffer[size - 1] = 0
+        self.buffer = buffer
+    }
+
+    /// How many Unicode scalars the UTF-8 holds; throws for bytes that aren't UTF-8. It reads the
+    /// buffer it's given and keeps nothing.
+    private static func scalars(_ utf8: UnsafeBufferPointer<UInt8>) throws -> Int {
+        var count = 0
         var decoder = UTF8()
-        var iterator = bytes.makeIterator()
-        decoding: while true {
+        var iterator = utf8.makeIterator()
+        while true {
             switch decoder.decode(&iterator) {
-            case .scalarValue: characters += 1
-            case .emptyInput: break decoding
+            case .scalarValue: count += 1
+            case .emptyInput: return count
             case .error: throw SecurityKeyFailure.pinTooShort
             }
         }
-        guard characters >= Self.fewestCharacters else { throw SecurityKeyFailure.pinTooShort }
-        size = bytes.count + 1
-        let buffer = UnsafeMutablePointer<CChar>.allocate(capacity: size)
-        for (i, byte) in bytes.enumerated() { buffer[i] = CChar(bitPattern: byte) }
-        buffer[bytes.count] = 0
-        self.buffer = buffer
     }
 
     /// Whether the PIN can still be handed over.
