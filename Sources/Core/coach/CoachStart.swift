@@ -48,7 +48,8 @@ enum CoachStart {
     /// - `sign` approves the draft's exact bytes with the security key: the PIN sheet, then the
     ///   key's touch. It throws when the sheet is closed, and nothing is sent.
     /// - `confirm` is the owner's confirmation for planque alone, when Coach is already there
-    ///   (Windows' `PlanqueEnrolment.GateAsync`).
+    ///   (Windows' `PlanqueEnrolment.GateAsync`). It throws `OwnerPrompt.Closed` when the person
+    ///   closed the prompt, which stops with "Cancelled. Nothing changed."
     /// - `enrol` is planque's enrolment (`PlanqueEnrolment.enrol`), given the account check.
     /// - `ended` says the session ended meanwhile, as the iPad's `gen != accountGeneration`,
     ///   checked after every step.
@@ -86,7 +87,12 @@ enum CoachStart {
         if known == nil {
             do { signed = try await sign(draftBody()) } catch { return (.stopped(nil), planqueReady) }
         } else {
-            do { try await confirm() } catch { return (.stopped(nil), planqueReady) }
+            // Nothing is pending after it, so a closed prompt says "Cancelled. Nothing changed."
+            // (`OwnerPrompt`); a session that ended meanwhile says nothing.
+            do { try await confirm() } catch {
+                guard !ended() else { return (.stopped(nil), planqueReady) }
+                return (.stopped(OwnerPrompt.stopped(error, words: words)), planqueReady)
+            }
         }
         guard !ended() else { return (.stopped(nil), planqueReady) }
         var ready = planqueReady

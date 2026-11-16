@@ -258,7 +258,7 @@ struct SignedInView: View {
         let key = deviceKey, reason = words("coach.prompt.connect_tools_mac")
         await coach.startSetup(account: account, approval: passkey,
                                sign: { body in try await askSecurityKey { pin in try await passkey.signDraft(body, pin: pin) } },
-                               confirm: { try await NeedsYouModel.confirmOwner(reason) },
+                               confirm: { try await NeedsYouModel.confirmOwnerForCore(reason) },
                                enrol: { [planque, account] ended in
                                    planque.tenant = account.session.tenant
                                    planque.signer = account.signMessage
