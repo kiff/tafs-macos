@@ -21,7 +21,7 @@ let labelChipsMacTests: [Test] = [
         let sent = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, labelledHome), (404, "")]), session: session))
         await sent.load()
         try expectEqual(sent.labelsAll(fr), "All")
-        let none = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, labelledHome.replacingOccurrences(of: #","labels_words":{"all":"All"}"#, with: "")), (404, "")]), session: session))
+        let none = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, labelledHome.replacingOccurrences(of: #""labels_words":{"all":"All"}"#, with: #""labels_words":{}"#)), (404, "")]), session: session))
         await none.load()
         try expectEqual(none.labelsAll(fr), fr("record.filter.all"))
     }),
