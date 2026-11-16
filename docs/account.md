@@ -87,7 +87,7 @@ size on the iPad; each group's heading is 17 semibold in the soft colour.
 | Theme | Light, Dark, or System. Kept for the next launch and applied to the whole app. |
 | Language | **Language**, the app's language by its own name ("Français"), then **Change language** in amber, which opens macOS's Language & Region, where a language is chosen for one app. The app declares every shipped language (`CFBundleLocalizations`) so macOS lists it there; a test keeps that list the shipped one. |
 | How it works | The shared line. |
-| Legal | Terms and Privacy policy, on kiff.dev. Only those two pages are ever opened from here. In any language but English each says "(in English)", as on the iPad. |
+| Legal | Terms and Privacy policy, on kiff.dev, in the app's language where kiff.dev has them: `kiff.dev/<lang>/tafs/terms` and `/privacy` for German, Spanish, French, Italian, Dutch, Polish and Portuguese, else the English pages (`LegalPages`). The English pages govern. Only those two pages are ever opened from here. In any other language each says "(in English)". |
 | About | **Version**, the version and its build ("0.1 (1)"), then the tagline in dim. |
 | Account actions | Sign out, **confirmed first** with the iPad's words ("Sign out of KIFF?", a destructive Sign out, and Cancel), so a stray click never ends the session. |
 
