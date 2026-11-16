@@ -4,6 +4,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 swiftc --version 2>&1 | head -1
-find Sources Tests -name '*.swift' | sort | xargs swiftc -parse
+scripts/shared.sh fetch > /dev/null
+{ find Sources Tests -name '*.swift' | sort; scripts/shared.sh sources; } | xargs swiftc -parse
 find Sources/App -name '*.swift' | sort | xargs python3 scripts/viewbuilders.py
 echo "Swift 5.7: every file parses, and no builder holds more than 10 views."

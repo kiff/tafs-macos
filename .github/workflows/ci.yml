@@ -116,7 +116,7 @@ jobs:
     needs: parts
     if: needs.parts.outputs.mac == 'true' && needs.parts.outputs.parts != ''
     runs-on: macos-15
-    # The security key's library takes a few minutes when it's built, not restored.
+    # The native libraries take a few minutes when they're built, not restored.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,10 +125,10 @@ jobs:
       # Which Xcodes this runner has: a full Swift 5.7 build needs Xcode 14 (docs/building.md).
       - name: The Xcodes on this runner
         run: ls -d /Applications/Xcode*.app || true
-      # libfido2, libcbor and libcrypto as an earlier run of this same scripts/fido.sh built them
+      # libfido2, libcbor, libcrypto and libsecp256k1 as an earlier run of this same scripts/fido.sh built them
       # from checked source: the key is the script's hash, so a moved pin builds again. The
       # nightly run restores nothing and builds them from source.
-      - name: The security key's library, as built before by this script
+      - name: The native libraries, as built before by this script
         if: github.event_name != 'schedule'
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
@@ -143,7 +143,7 @@ jobs:
         run: |
           scripts/build.sh
           test "$(lipo -archs build/tafs.app/Contents/MacOS/tafs)" = "x86_64 arm64"
-          for license in libfido2 libcbor openssl; do
+          for license in libfido2 libcbor openssl secp256k1; do
             test -s "build/tafs.app/Contents/Resources/licenses/$license.txt"
           done
       - name: The parts' tests, with the app's views

@@ -95,7 +95,7 @@ struct SignedInView: View {
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
-        _record = StateObject(wrappedValue: RecordModel(cloud: cloud))
+        _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))

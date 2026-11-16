@@ -12,8 +12,10 @@ repository.
 | `app/strings/<lang>/*.json` | The apps' own words, in 8 languages | `Words` (`Sources/Core/strings`) |
 | `app/strings/languages.json` | The languages the apps ship | `Words.shipped` |
 | `contracts/*.json` | What tafs cloud answers the apps | the `contracts` tests |
+| `ios/Tafs/KIFF/Keccak.swift` | The iPad's Keccak-256, for KIFF's receipts | Core, compiled as it is (`scripts/shared.sh sources`; docs/record.md) |
 
-`scripts/shared.sh fetch` puts them in `.shared/`, which git ignores. The tests run it first.
+`scripts/shared.sh fetch` puts them in `.shared/`, which git ignores. The tests, the build and the
+Swift 5.7 check run it first.
 
 ## Using a line
 
