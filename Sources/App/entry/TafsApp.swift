@@ -3,14 +3,16 @@ import SwiftUI
 
 @main
 struct TafsApp: App {
-    private let words = Words.load()
+    /// The app's language, kept for this Mac and changed from Account › Language.
+    @StateObject private var language = AppLanguage()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())
 
     init() {
-        Words.app = words
         // The launch's time, for how long the first window and the first list take.
         _ = LaunchClock.started
     }
+
+    private var words: Words { language.words }
 
     var body: some Scene {
         WindowGroup {
@@ -21,8 +23,12 @@ struct TafsApp: App {
                                  cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
                                  route: ApprovalRoute.of(.passkey, securityKey: securityKey != nil), streamer: NetworkLineStream(),
                                  signedOut: { signIn.signedOut() }, addThisMac: { Task { await signIn.pair() } },
-                                 softwareKey: signIn.key.keyStore == "software", deviceKey: signIn.key.publicKeyDER, securityKey: securityKey)
-                        .id(session.accessToken)
+                                 softwareKey: signIn.key.keyStore == "software", deviceKey: signIn.key.publicKeyDER, securityKey: securityKey,
+                                 startOn: language.changedIn == session.accessToken ? .account : .overview)
+                        // A new language makes every client again, so every request's
+                        // Accept-Language follows; the window opens on Account, where it was chosen.
+                        .id(session.accessToken + "|" + words.language)
+                        .environment(\.languageChooser, language.chooser(session: session.accessToken))
                 } else {
                     SignInView(model: signIn)
                 }
