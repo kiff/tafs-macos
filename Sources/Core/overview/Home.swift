@@ -95,12 +95,14 @@ enum Home {
         let results: [JSONValue]?
         /// Its doors, for Needs you's knocks; absent when it has none.
         let doors: [TafDoors.Light]?
+        /// Its labels by id (kiff/tafs `docs/labels.md`), only on a taf that has any.
+        let labels: [String]
 
         var id: String { kiffAgent }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, status, waiting, jobSummary = "job_summary"
-            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results, doors
+            case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results, doors, labels
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
         enum FinishKeys: String, CodingKey { case taf, session, words }
@@ -139,6 +141,7 @@ enum Home {
             results = (try? c.decodeIfPresent([JSONValue].self, forKey: .results)) ?? nil
             // As the iPad's `HomeTaf.doors`: a list, or none; each door reads what it can.
             doors = try c.decodeIfPresent([TafDoors.Light].self, forKey: .doors)
+            labels = HomeLabels.ids(c, .labels)
         }
 
         /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the
@@ -181,8 +184,16 @@ enum Home {
         let doorsOffered: [String]?
         /// The steps the tafs handed their owner (`your_steps`), each read strictly, as the iPad's `Home`.
         let yourSteps: [YourStep]
+        /// The account's labels, in the order to show them; none with no labelled taf, and the list
+        /// draws no chips, as before (kiff/tafs `docs/labels.md`).
+        let labels: [HomeLabel]
+        /// Home's word for the labels' first chip (`labels_words.all`).
+        let labelsAll: String?
 
-        enum CodingKeys: String, CodingKey { case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps" }
+        enum CodingKeys: String, CodingKey {
+            case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps", labels
+            case labelsWords = "labels_words"
+        }
         enum WordsKeys: String, CodingKey { case words, count }
 
         init(from decoder: Decoder) throws {
@@ -197,6 +208,8 @@ enum Home {
             needsYouWords = needs.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil }
             doorsOffered = try c.decodeIfPresent([String].self, forKey: .doorsOffered)
             yourSteps = try c.decodeIfPresent([YourStep].self, forKey: .yourSteps) ?? []
+            labels = HomeLabels.list(c, .labels)
+            labelsAll = HomeLabels.all(c, .labelsWords)
         }
     }
 }

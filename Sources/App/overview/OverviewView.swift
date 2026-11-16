@@ -20,6 +20,8 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var lastResults: [String: String] = [:]
     /// The doors tafs cloud offers here, as Home last said; a read that fails keeps them.
     @Published private(set) var doorsOffered: [String] = []
+    /// The label the tafs list is filtered to; nil is All. The list opens on All every time.
+    @Published private(set) var listLabel: String?
     private let cloud: CloudClient
     /// Where the list last read is kept for the next launch's first frame; nil keeps none.
     private let remembered: UserDefaults?
@@ -50,6 +52,24 @@ final class OverviewModel: ObservableObject {
 
     /// The session is ending: nothing read from now on is kept for the next launch.
     func endSession() { ended = true }
+
+    /// The account's labels as Home last sent them; none with no labelled taf.
+    var labels: [HomeLabel] {
+        if case .loaded(let page) = state { return page.labels }
+        return []
+    }
+
+    /// The first chip's word: Home's, else the app's own "All".
+    func labelsAll(_ words: Words) -> String {
+        if case .loaded(let page) = state, let all = page.labelsAll { return all }
+        return words("record.filter.all")
+    }
+
+    /// Filters the list to a label, or back to All with nil, as the iPad's `filterList`.
+    func filterList(_ label: String?) { listLabel = label }
+
+    /// The tafs the list shows under its chip, in Home's order (`HomeLabels.filtered`).
+    func filtered(_ tafs: [Home.Taf]) -> [Home.Taf] { HomeLabels.filtered(tafs, by: listLabel, in: labels) }
 
     func load() async {
         // Whether this read worked: a list kept on screen after a failed read doesn't count.
@@ -152,7 +172,12 @@ struct OverviewView: View {
                 case .loaded(let page):
                     let count = page.needsYouCount ?? 0
                     if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
-                    if page.tafs.isEmpty { noTaf } else { table(page.tafs) }
+                    // The labels' chips, filtering the table below, as the iPad's Overview
+                    // (ShareViews.swift, #1173); none without a labelled taf.
+                    if !page.labels.isEmpty {
+                        LabelChips(labels: page.labels, selected: model.listLabel, all: model.labelsAll(words)) { model.filterList($0) }
+                    }
+                    if page.tafs.isEmpty { noTaf } else { table(model.filtered(page.tafs)) }
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
@@ -264,7 +289,10 @@ struct OverviewView: View {
                 RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
                     .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(.white))
                     .accessibilityHidden(true)
-                Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                    TafLabelChips(labels: HomeLabels.of(taf, in: model.labels))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Group {
