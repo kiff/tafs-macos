@@ -55,7 +55,9 @@ pairs as today, with no credential, and approves on the phone.
 - **Kept only once claimed:** the credential id is saved (`SecurityKeyStore`) once the pairing is
   claimed, never while the phone hasn't approved. A pairing that names no key forgets an earlier
   one, which went with another device key. The store is checked writable before the code, with
-  the session's.
+  the session's, and the id is saved last, once the screen holds the new session: a store that
+  refuses it then keeps none (this Mac approves on the phone), and the pairing stands.
+- **One sheet at a time:** a new ask closes a sheet still up, so its own ask resumes as cancelled.
 - **Signing out forgets the key's credential id** with the session.
 
 ## Waiting
@@ -85,7 +87,8 @@ without it, none for a software key, a closed sheet pairing without the key, and
 as KIFF reads it. On a Mac, a real P-256 key's credential against CryptoKit's SPKI; the screen
 (`KeyPairingScreenTests`): the PIN sheet, the QR naming the key, the claim proving it, the id kept
 only once claimed and forgotten at sign-out; a wrong PIN and no key kept in the sheet; the sheet
-closed; approvals off; a cancelled pairing; and screenshots `pairing-pin-sheet-en`,
+closed; approvals off; a cancelled pairing; two asks in a row both resuming; a store refusing the
+key's id leaving the new session standing; and screenshots `pairing-pin-sheet-en`,
 `pairing-pin-sheet-fr` and `pairing-key-en`.
 
 ## The screens

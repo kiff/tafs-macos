@@ -154,16 +154,17 @@ final class SignInModel: ObservableObject {
                 let oldKey = key
                 try DeviceKey.promoteNext(in: store)
                 try sessions.save(got)
-                try keepSecurityKey(offer)
                 ChatsExport.removeFiles(in: exportFolder)
                 RememberedHome.forget(in: rememberedList)
                 key = pairingKey
                 session = got
                 step = .welcome
+                // Last, once the screen holds what the store holds: it can't throw past this step.
+                keepSecurityKey(offer)
                 await endSession(replaced, oldKey)
             } else {
-                try keepSecurityKey(offer)
                 try finish(got, mine)
+                keepSecurityKey(offer)
             }
         } catch {
             if replaced != nil { DeviceKey.discardNext(in: store) }
@@ -218,9 +219,11 @@ final class SignInModel: ObservableObject {
     }
 
     /// Asks the security key through the PIN sheet, as many tries as the person makes: it answers
-    /// once the key made the credential, or throws `CancellationError` once the sheet is closed.
-    private func askKey(_ key: PairingSecurityKey, _ ask: @escaping (SecurityKeyPIN) async throws -> PairingPasskey) async throws -> PairingPasskey {
-        try await withCheckedThrowingContinuation { continuation in
+    /// once the key made the credential, or throws `CancellationError` once the sheet is closed. A
+    /// sheet already up is closed first, so its own ask resumes (as cancelled) and never hangs.
+    func askKey(_ key: PairingSecurityKey, _ ask: @escaping (SecurityKeyPIN) async throws -> PairingPasskey) async throws -> PairingPasskey {
+        pinSheet?.cancel()
+        return try await withCheckedThrowingContinuation { continuation in
             var answer: PairingPasskey?
             pinSheet = PINSheetModel(words: key.words, attempt: { pin in answer = try await ask(pin) }, readTries: key.readTries,
                                      done: { [weak self] error in
@@ -232,11 +235,14 @@ final class SignInModel: ObservableObject {
         }
     }
 
-    /// Once a pairing is claimed: the credential its QR named is kept as the security key that goes
-    /// with this Mac; with none, any earlier one is forgotten, as it went with another device key.
-    private func keepSecurityKey(_ offer: PasskeyPairingOffer?) throws {
+    /// Once a pairing is claimed, last of all: the credential its QR named is kept as the security
+    /// key that goes with this Mac; with none, any earlier one is forgotten, as it went with another
+    /// device key. A store that refuses it (checked writable before the code, so not expected) keeps
+    /// none: this Mac then approves on the phone, and the pairing stands as the screen shows it.
+    private func keepSecurityKey(_ offer: PasskeyPairingOffer?) {
         let keys = SecurityKeyStore(store: sessions.store)
-        if let id = offer?.keptCredentialID { try keys.save(id) } else { keys.forget() }
+        guard let id = offer?.keptCredentialID else { return keys.forget() }
+        do { try keys.save(id) } catch { keys.forget() }
     }
 
     /// Forgets the session on this Mac, and the security key that went with it. Ending it at KIFF

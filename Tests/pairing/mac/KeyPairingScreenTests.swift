@@ -54,6 +54,20 @@ private final class FailingKey: PasskeyAuthenticator {
     }
 }
 
+/// A store that refuses the security key's id once told to (after the pairing's writable check),
+/// to see the screen and the store stay as one.
+private final class RefusingKeyStore: SecretStore {
+    struct Refused: Error {}
+    let inner = MemoryStore()
+    var refuseKey = false
+    func load(_ account: String) -> Data? { inner.load(account) }
+    func save(_ secret: Data, for account: String) throws {
+        if refuseKey && account == SecurityKeyStore.account { throw Refused() }
+        inner.save(secret, for: account)
+    }
+    func delete(_ account: String) { inner.delete(account) }
+}
+
 private let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
 
 @MainActor
@@ -183,6 +197,44 @@ let pairingKeyScreenTests: [Test] = [
         try expectEqual(transport.sent.count, 0)
         try expectEqual(model.step, .welcome)
         try expectEqual(model.session, nil)
+    }),
+    Test("a second ask closes the PIN sheet already up: both asks resume, the first as cancelled", awaiting: { @MainActor in
+        let key = PairingKey()
+        let (model, _, _) = model([], store: MemoryStore(), key: key)
+        let security = PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: true, proving: true)
+        let first = Task { try await model.askKey(security) { _ in throw Failure(description: "the first sheet is never answered") } }
+        let firstSheet = try await sheet(model)
+        let second = Task { try await model.askKey(security) { _ in throw Failure(description: "the second sheet is never answered") } }
+        for _ in 0..<300 where model.pinSheet == nil || model.pinSheet === firstSheet {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        do { _ = try await first.value; throw Failure(description: "the first ask answered") } catch is CancellationError {}
+        try expect(model.pinSheet != nil && model.pinSheet !== firstSheet, "the second sheet is up")
+        model.pinSheet?.cancel()
+        do { _ = try await second.value; throw Failure(description: "the second ask answered") } catch is CancellationError {}
+        try expectEqual(model.pinSheet == nil, true)
+        try expectEqual(key.asked.count, 0)
+    }),
+    Test("a store that refuses the key's id after the claim: the new session stands on screen and in the store, with no key kept", awaiting: { @MainActor in
+        let store = RefusingKeyStore()
+        try SecurityKeyStore(store: store).save(Data("an-earlier-key".utf8))
+        let key = PairingKey()
+        let transport = CannedTransport([(200, paired)])
+        let model = SignInModel(client: KIFFClient(transport: transport), key: HardwareKey(), approval: .passkey, sessions: SessionStore(store: store),
+                                deviceName: "A Mac", sleep: { _ in }, open: { _ in },
+                                securityKey: PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: true, proving: true))
+        let pairing = Task { await model.pair() }
+        let pin = try await sheet(model)
+        store.refuseKey = true
+        let field = NSSecureTextField()
+        pin.reader.field = field
+        field.stringValue = "2468"
+        await pin.approve()
+        await pairing.value
+        try expectEqual(model.step, .welcome)
+        try expectEqual(model.session?.deviceID, "dev_1")
+        try expectEqual(SessionStore(store: store).load(), model.session)
+        try expectEqual(SecurityKeyStore(store: store).load(), nil)
     }),
     Test("the screenshots: the PIN sheet over the pairing, and the QR naming the key", awaiting: { @MainActor in
         let folder = URL(fileURLWithPath: "build/screenshots")
