@@ -9,7 +9,7 @@ struct SignInView: View {
     @ObservedObject var model: SignInModel
 
     private var device: String { words("device.mac") }
-    private var halves: SignInPlan.Halves { SignInPlan.halves(model.now, signedIn: model.session != nil, asksKey: model.asksKey) }
+    private var halves: SignInPlan.Halves { SignInPlan.halves(model.phase, signedIn: model.session != nil, asksKey: model.asksKey) }
 
     var body: some View {
         HStack(spacing: 0) {

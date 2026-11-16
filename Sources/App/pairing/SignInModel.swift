@@ -195,7 +195,7 @@ final class SignInModel: ObservableObject {
     var asksKey: Bool { securityKey?.enabled == true }
 
     /// The step, without its data, for the plan of the window (`SignInPlan`).
-    var now: SignInPlan.Now {
+    var phase: SignInPlan.Now {
         switch step {
         case .welcome: return .welcome
         case .browser: return .browser
@@ -209,7 +209,7 @@ final class SignInModel: ObservableObject {
     /// silently, each time a code runs out. Showing and renewing it signs only with the device
     /// key, which asks for nothing (`Signing.claimProof`).
     func showPhoneCode() async {
-        guard !still, pinSheet == nil, SignInPlan.showsCode(now, signedIn: session != nil, asksKey: asksKey) else { return }
+        guard !still, pinSheet == nil, SignInPlan.showsCode(phase, signedIn: session != nil, asksKey: asksKey) else { return }
         await pair()
     }
 

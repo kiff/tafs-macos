@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -102,13 +103,13 @@ let pairingSignInScreenTests: [Test] = [
         let code = try sampleCode()
         model.show(.pairing(code))
         let view = SignInView(model: model).environment(\.words, try wordsIn("en"))
-        guard let bitmap = Snapshot.settled(of: view, size: CGSize(width: 1280, height: 800), until: { read($0) == code.text }) else {
+        guard let bitmap = Snapshot.settled(of: view, size: CGSize(width: 1280, height: 800), until: { qrText($0) == code.text }) else {
             throw Failure(description: "no bitmap")
         }
-        try expectEqual(read(bitmap), code.text)
+        try expectEqual(qrText(bitmap), code.text)
         // Two halves: the window's background on the left, the raised one on the right.
-        try expectEqual(Snapshot.hex(bitmap, x: 8, y: 8), Palette.background.light)
-        try expectEqual(Snapshot.hex(bitmap, x: 1272, y: 8), Palette.raised.light)
+        try expect(near(bitmap, x: 8, y: 8, Palette.background.light), "the left half on the background")
+        try expect(near(bitmap, x: 1272, y: 8, Palette.raised.light), "the right half on raised")
     }),
     Test("the code's panel shows the check code before this Mac's name, in English and French", awaiting: { @MainActor in
         for language in ["en", "fr"] {
@@ -127,10 +128,17 @@ let pairingSignInScreenTests: [Test] = [
 ]
 
 /// The QR code a camera would read off the drawn window, if any.
-private func read(_ bitmap: NSBitmapImageRep) -> String? {
+private func qrText(_ bitmap: NSBitmapImageRep) -> String? {
     let image = NSImage(size: bitmap.size)
     image.addRepresentation(bitmap)
     return QRCode.read(image)
+}
+
+/// Whether the point is drawn in the colour, within a runner's rounding, as stored or as sRGB.
+private func near(_ bitmap: NSBitmapImageRep, x: Int, y: Int, _ wanted: UInt32) -> Bool {
+    Snapshot.hexes(bitmap, x: x, y: y).contains { got in
+        [16, 8, 0].allSatisfy { abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }
+    }
 }
 
 private func sampleCode() throws -> SignInModel.Code {
