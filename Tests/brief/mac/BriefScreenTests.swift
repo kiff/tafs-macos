@@ -50,7 +50,7 @@ let briefMacTests: [Test] = [
         await brief.load()
         await brief.later(brief.decisions[1])
         await brief.filter("lab_money")
-        try expectEqual(transport.sent.last?.path, "/v1/brief?label=lab_money")
+        try expectEqual(transport.sent.last?.path, "/v1/brief?label=lab%5Fmoney")
         try expectEqual(brief.label, "lab_money")
         try expectEqual(brief.decisions.count, 3)
     }),
