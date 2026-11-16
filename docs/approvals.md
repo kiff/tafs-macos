@@ -192,9 +192,9 @@ yet, and switched off it asks the key nothing:
   so each attempt makes the credential again, and one made for another pairing is refused before
   the QR is shown. Without it, 32 random bytes, and a new code keeps the last credential, so the
   key isn't asked again.
-- **No attestation:** the attestation object sent is `none` (an empty statement around the
-  authenticator data), as Windows asks for none. The key's own statement and certificate, which
-  name its model, never leave this Mac.
+- **Attestation `none`,** the only format KIFF takes: exactly `{fmt: "none", attStmt: {}, authData}`,
+  as Windows asks for none. The key's own statement and certificate, which name its model, never
+  leave this Mac.
 - **The QR** names it as `credential {id, public_key}`, only with `kind: "passkey"`, never beside
   an approval key or a software device key ([pairing.md](pairing.md)). The check code covers its
   key in the approval key's place.
@@ -213,7 +213,9 @@ yet, and switched off it asks the key nothing:
    Input Monitoring prompt. libfido2 opens the key's FIDO interface (usage page `0xF1D0`), which
    isn't a keyboard, so none is expected.
 3. **Start Coach and the first start's pair** on `ApprovalRoute.passkey`, the pairing screen asking
-   the key for its credential, and the switch turned on.
+   the key for its credential, and the switch turned on. The creation proof
+   (`Features.macPairingPasskeyProof`) is turned on first: KIFF will require `credential_proof` on
+   a passkey computer's claim.
 
 ## Tests
 
