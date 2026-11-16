@@ -35,6 +35,9 @@ The app draws the list as it comes. It places and folds nothing itself.
   its label only, and every piece is `Text(verbatim:)`. A ``` fenced block is its lines as
   written, no mark read inside, in 14 mono on the raised ground (padding 10, radius 8); one
   never closed is code to the end, as while an answer streams. The plan stays where it was shown.
+- **A connection made while Coach is shown** shows its receipt, with board 5 (docs/connections.md ›
+  The receipt). While a connection card waits, Coach's chat is read again every 4 seconds, at
+  most 75 times, while Coach is on screen.
 - **Approve is not on the Mac yet.** The card says where to approve. **Decline** and **Not
   now** answer it with `declined` or `not now`, and grant nothing.
 - **A sign-in wider than the job is said on the card** (`WiderLine`, as the iPad's): when the

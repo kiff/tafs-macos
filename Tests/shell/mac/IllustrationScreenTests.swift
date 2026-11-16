@@ -75,6 +75,11 @@ let shellIllustrationMacTests: [Test] = [
         let halt = HaltModel(cloud: CloudClient(transport: CannedTransport([(200, halted), (200, halted)]), session: artSession), taf: nil, sleep: { _ in })
         await halt.refresh()
         try shoot(.allHalted, "halt", HaltView(model: halt, name: nil, close: {}), CGSize(width: 520, height: HaltView.height(.allHalted)))
+        // 5. An app connected: connecting's receipt.
+        let receipt = ConnectReceipt(id: "s1:approval-1", heading: "Connect Qonto", line: "Qonto is connected (read only)")
+        let receiptSheet = ConnectReceiptSheet(receipt: receipt, done: {})
+        try shoot(.appConnected, "connect-receipt", receiptSheet, CGSize(width: ConnectReceiptSheet.width,
+                                                                          height: ceil(NSHostingView(rootView: receiptSheet.environment(\.words, artWords())).fittingSize.height)))
         // 6. Needs you with nothing waiting.
         let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([(200, #"{"exceptions":[]}"#)]), session: artSession, signMessage: { _ in "SIG" }),
                                      route: .phoneOrPasskey, confirm: { _ in })

@@ -251,7 +251,7 @@ final class CoachModel: ObservableObject {
         do {
             let page = try await read(coach) ?? .empty
             guard gen == accountGeneration, mine == conversation else { return }
-            state = .loaded(coach, page)
+            show(coach, page)
         } catch {
             guard gen == accountGeneration, mine == conversation else { return }
             notReopened = NeedsYouModel.why(error)
@@ -562,7 +562,7 @@ final class CoachModel: ObservableObject {
         guard case .loaded(let coach, _) = state, let tried = pending, tried.failed != nil else { return }
         if let page = try? await read(coach), page.hasPersonsLast(tried.text, since: tried.at) {
             pending = Pending(text: tried.text, at: tried.at)
-            state = .loaded(coach, page)
+            show(coach, page)
             pending = nil
             if page.working { await follow(coach) }
             return
@@ -629,7 +629,7 @@ final class CoachModel: ObservableObject {
                     // thread is followed; only if it doesn't is the message sent plainly, below.
                     if let page = try? await read(coach), mine == conversation, let tried = pending,
                        page.hasPersonsLast(tried.text, since: tried.at, files: tried.files.map(\.id)) {
-                        state = .loaded(coach, page)
+                        show(coach, page)
                         pending = nil
                         await follow(coach)
                         return true
@@ -714,8 +714,52 @@ final class CoachModel: ObservableObject {
     private func reload(_ coach: Coach) async {
         let mine = conversation
         guard let page = try? await read(coach), mine == conversation else { return }
-        state = .loaded(coach, page)
+        show(coach, page)
         take(page)
+    }
+
+    // MARK: An app connected: the receipt, as the iPad's `ConnectApprovalSheet.receipt`
+
+    /// The receipt of an app connected while Coach's chat was shown (`ConnectReceipt`), until
+    /// Done; nil draws none.
+    @Published private(set) var receipt: ConnectReceipt?
+    /// The chat the page shown was read for: a page is compared only with the same chat's.
+    private var pageChat: String?
+
+    /// Shows a page read for the chat shown. A connection card it had without its connection
+    /// made, marked made now, shows its receipt: on this Mac, that's where an app's sign-in
+    /// finishes (`ConnectReceipt.made`). Coach's own chat only: a taf's connects nothing.
+    private func show(_ coach: Coach, _ page: Thread.Page) {
+        if isCoach, case .loaded(let shown, let before) = state, shown.id == coach.id, pageChat == chat,
+           let made = ConnectReceipt.made(before: before, after: page) {
+            receipt = made
+        }
+        pageChat = chat
+        state = .loaded(coach, page)
+    }
+
+    /// Done on the receipt, as the iPad's `finish`: it closes, and the chat stays as read.
+    func closeReceipt() { receipt = nil }
+
+    /// While Coach's chat waits on a connection (`ConnectReceipt.watches`), it is read again at
+    /// the phones' pace (`followEvery`), at most `watchAtMost` times, so the sign-in made on the
+    /// phone shows its receipt here. Only while Coach is on screen (`CoachView`'s task).
+    static let watchAtMost = 75
+
+    /// Whether Coach's own chat waits on a connection.
+    var watchesConnection: Bool {
+        guard isCoach, case .loaded(_, let page) = state else { return false }
+        return ConnectReceipt.watches(page)
+    }
+
+    /// Reads the chat again while it waits on a connection. A message on its way, or an answer
+    /// being written, has its own reads: none is added then.
+    func watchConnection() async {
+        for _ in 0..<Self.watchAtMost {
+            guard watchesConnection, !Task.isCancelled, (try? await sleep(Self.followEvery)) != nil, !Task.isCancelled else { return }
+            guard watchesConnection, !sending, live == nil, case .loaded(let coach, _) = state else { continue }
+            await reload(coach)
+        }
     }
 
     /// Reads the thread again while an answer is owed. A newer send takes over the following.
@@ -724,7 +768,7 @@ final class CoachModel: ObservableObject {
         let mine = following
         for _ in 0..<Self.followAtMost {
             guard mine == following, let page = try? await read(coach), mine == following else { return }
-            state = .loaded(coach, page)
+            show(coach, page)
             take(page)
             if pending == nil, !page.working { return }
             guard (try? await sleep(Self.followEvery)) != nil else { return }
@@ -836,7 +880,7 @@ final class CoachModel: ObservableObject {
                 chat = newest.session
             }
             guard mine == conversation else { return }
-            state = .loaded(coach, try await read(coach) ?? .empty)
+            show(coach, try await read(coach) ?? .empty)
             if let taf = improveWhenRead {
                 improveWhenRead = nil
                 improve(taf)
@@ -865,6 +909,9 @@ struct CoachView: View {
     /// How many tafs the account has, as the iPad's `model.tafs.count`: its empty chat draws
     /// board 7 with none or one (`ArtBoard.coach`).
     var tafCount = 0
+    /// Whether this person manages the account's Cards (KIFF's `cards.manage`): the connect
+    /// receipt draws Disconnect only then, as the iPad's.
+    var managesCards = true
     /// Opens Plan & usage, for a hand-over whose taf needs a plan.
     var openUsage: () -> Void = {}
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: only then are its cards
@@ -922,6 +969,12 @@ struct CoachView: View {
             consentSheet(consent)
         }
         .sheet(item: $reporting) { ReportAnswerSheet(model: model, answer: $0).environment(\.words, words) }
+        // An app connected while Coach is shown: its receipt, as the iPad's (docs/connections.md › The receipt).
+        .sheet(item: Binding(get: { model.receipt }, set: { if $0 == nil { model.closeReceipt() } })) { receipt in
+            ConnectReceiptSheet(receipt: receipt, managesCards: managesCards, done: { model.closeReceipt() }).environment(\.words, words)
+        }
+        // Coach's chat is read again while a connection waits, so its sign-in's end is seen here.
+        .task(id: model.watchesConnection) { if model.watchesConnection { await model.watchConnection() } }
         .sheet(isPresented: $showingChats) {
             CoachChatsSheet(model: model) { session in
                 showingChats = false

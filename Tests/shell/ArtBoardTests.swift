@@ -11,6 +11,7 @@ private let drawn: [(board: ArtBoard, file: String)] = [
     (.noTafs, "overview/OverviewView.swift"),
     (.briefClear, "brief/BriefView.swift"),
     (.allHalted, "taf/HaltView.swift"),
+    (.appConnected, "connections/ConnectReceiptSheet.swift"),
     (.nothingWaiting, "approvals/NeedsYou.swift"),
     (.coachFirst, "coach/CoachView.swift"),
     (.newTaf, "overview/RecipeGalleryView.swift"),
@@ -60,10 +61,10 @@ let shellArtBoardTests: [Test] = [
         try expectEqual(ArtBoard.coach(started: true, improving: false, tafs: 2), nil)
         try expectEqual(ArtBoard.coach(started: true, improving: true, tafs: 0), nil)
     },
-    Test("ten boards, the iPad's, and only an app connected waits for its screen on this Mac") {
+    Test("ten boards, the iPad's, each drawn on its screen on this Mac: an app connected on connecting's receipt") {
         try expectEqual(ArtBoard.allCases.map(\.rawValue), Array(1...10))
-        try expectEqual(ArtBoard.notOnThisMac, [.appConnected])
-        try expectEqual(Set(drawn.map(\.board)).union(ArtBoard.notOnThisMac), Set(ArtBoard.allCases))
+        try expectEqual(Set(drawn.map(\.board)), Set(ArtBoard.allCases))
+        try expectEqual(ConnectReceipt.board, .appConnected)
     },
     Test("rule 14: the drawings are shapes in the theme's colours, never a word, a number, an image or a symbol") {
         let file = try source("base/Illustrations.swift")
@@ -92,6 +93,7 @@ let shellArtBoardTests: [Test] = [
         try expect(try source("brief/BriefView.swift").contains("ArtBoard.brief(openDecisions:"), "the brief asks")
         try expect(try source("taf/HaltView.swift").contains("ArtBoard.halt(all: model.taf == nil"), "Halt all asks")
         try expect(try source("coach/CoachView.swift").contains("ArtBoard.coach(started: model.state != .notStarted"), "Coach asks")
+        try expect(try source("coach/CoachView.swift").contains("ConnectReceiptSheet("), "Coach shows the receipt")
         let signIn = try source("pairing/SignInView.swift")
         try expect(!signIn.contains("SignInArt.kiff"), "the KIFF half's placeholder is gone")
         try expect(!(try source("pairing/SignInArt.swift")).contains("static func kiff"), "and its drawing")

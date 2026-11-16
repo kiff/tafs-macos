@@ -7,9 +7,8 @@ import Foundation
 enum ArtBoard: Int, CaseIterable {
     case firstRun = 1, noTafs, briefClear, allHalted, appConnected, nothingWaiting, coachFirst, newTaf, coachStarting, overview
 
-    /// Boards whose screen this Mac doesn't have yet: an app connected is drawn on connecting's
-    /// receipt (the iPad's `ConnectApprovalSheet`), and this Mac doesn't connect an app yet.
-    static let notOnThisMac: Set<ArtBoard> = [.appConnected]
+    /// An app connected (board 5) is drawn on connecting's receipt, as the iPad's
+    /// `ConnectApprovalSheet`: `ConnectReceipt.board`, whenever a receipt shows (`ConnectReceipt.made`).
 
     /// The Overview's board, as the iPad's Home with no taf and its Overview's header: no taf
     /// yet (board 2) where the list was read empty and tafs cloud lists no job, above the empty

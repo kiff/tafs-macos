@@ -72,7 +72,7 @@ enum Illustration {
         }
     }
 
-    /// Board 5, an app connected: two tiles joined, a check between them. The iPad's key receipt: not on this Mac yet (`ArtBoard.notOnThisMac`).
+    /// Board 5, an app connected: two tiles joined, a check between them. Connecting's receipt (`ConnectReceiptSheet`).
     static var appConnected: some View {
         Board(width: 490, height: 215, shown: 280) {
             ZStack { sheet(22); mark(90, radius: 24) }.placed(15, 15, 180, 180)
