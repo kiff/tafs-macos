@@ -50,6 +50,9 @@ struct TafsApp: App {
         return SignInModel(client: KIFFClient(transport: NetworkTransport()), key: key, approval: .passkey,
                            sessions: SessionStore(store: store), deviceName: words("pair.device_name", ["device": words("device.mac")]),
                            open: { NSWorkspace.shared.open($0) },
+                           // The security key that goes with this Mac, registered by its pairing once
+                           // passkey approvals are on (`PairingSecurityKey.enabled`).
+                           securityKey: PairingSecurityKey(words: words, authenticator: FidoKey(), readTries: { try await FidoKey().triesLeft() }),
                            // The view-only session a pairing replaced is ended at KIFF with its own key.
                            endSession: { old, oldKey in
                                try? await AccountClient(session: old, key: oldKey, language: words.language).signOut()

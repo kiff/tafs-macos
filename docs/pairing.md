@@ -30,7 +30,15 @@ and never approves an action.
 
 A code lasts at most 5 minutes. A session is handed over once.
 
-**This Mac's security key** (not shown yet: it comes with the switch, [approvals.md](approvals.md)):
+**This Mac's security key** ([approvals.md](approvals.md), "Passkeys on macOS 12"). Asked only
+while passkey approvals are on (`Features.macPasskeyApprovals`, off for now): until then this Mac
+pairs as today, with no credential, and approves on the phone.
+- **The PIN sheet first** (`SignInModel.pair`, `PairingSecurityKey`): before the code is shown,
+  the sheet asks for the key's PIN, then the key makes the credential for this pairing. A wrong
+  PIN, no key or a locked key says why in the sheet's shared lines, and the person tries again or
+  closes it. **Closing it pairs without the key,** as Windows pairs when Windows Hello is closed:
+  this Mac then approves on the phone. Cancelling the pairing closes the sheet, and nothing is
+  asked or claimed.
 - **The QR** names the key's new credential as `credential {id, public_key}`, base64url, the key
   as SPKI DER. It goes only with `kind: "passkey"`, never beside an approval key or with a
   software device key, which pairs as view.
@@ -38,9 +46,16 @@ A code lasts at most 5 minutes. A session is handed over once.
   (`PairingPayload.checkedKeyDER`), so the code covers the key the phone registers. It's tested on
   the phones' vector: `H6SJNU` for the public keys of private keys 1 and 2, `LTJFF6` for the first
   alone.
-- **With the creation proof on,** the claim adds
-  `credential_proof {client_data_json, attestation_object}`, each base64url. Without it, the claim
-  is as before.
+- **The creation proof is on** (`Features.macPairingPasskeyProof`): KIFF checks it, and requires
+  it on a passkey computer's claim from 1 Dec 2026. The credential's challenge holds the pairing's
+  nonce and device key, so each code asks the key again, and the claim adds
+  `credential_proof {client_data_json, attestation_object}`, each base64url: the client data this
+  app wrote, and attestation `none` with an empty `attStmt`. A claim with no credential carries no
+  proof.
+- **Kept only once claimed:** the credential id is saved (`SecurityKeyStore`) once the pairing is
+  claimed, never while the phone hasn't approved. A pairing that names no key forgets an earlier
+  one, which went with another device key. The store is checked writable before the code, with
+  the session's.
 - **Signing out forgets the key's credential id** with the session.
 
 ## Waiting
@@ -65,7 +80,13 @@ key never sends one, every answer the contract names, and the waiting's pace wit
 the test controls. No test reaches the network. For the security key: the credential's client
 data, user id and challenge, the attestation sent as `none`, each refusal, the kept and remade
 credential, the QR's `credential`, the check code's vector, and the claim's `credential_proof`.
-On a Mac, a real P-256 key's credential against CryptoKit's SPKI, and sign-out forgetting it.
+The offer for one attempt (`SecurityKeyPairing.offer`): the proof with the credential, none
+without it, none for a software key, a closed sheet pairing without the key, and the claim's body
+as KIFF reads it. On a Mac, a real P-256 key's credential against CryptoKit's SPKI; the screen
+(`KeyPairingScreenTests`): the PIN sheet, the QR naming the key, the claim proving it, the id kept
+only once claimed and forgotten at sign-out; a wrong PIN and no key kept in the sheet; the sheet
+closed; approvals off; a cancelled pairing; and screenshots `pairing-pin-sheet-en`,
+`pairing-pin-sheet-fr` and `pairing-key-en`.
 
 ## The screens
 

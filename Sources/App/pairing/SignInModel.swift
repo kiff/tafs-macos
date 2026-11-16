@@ -1,6 +1,20 @@
 import CryptoKit
 import Foundation
 
+/// How a pairing asks this Mac's security key for its credential: through the PIN sheet, in the
+/// app's words (kiff/tafs `docs/computer-passkeys.md`, "A security key goes with its computer").
+struct PairingSecurityKey {
+    let words: Words
+    let authenticator: PasskeyAuthenticator
+    /// The PIN tries left, read before the PIN is asked.
+    let readTries: () async throws -> Int
+    /// Only with passkey approvals on (`Features.macPasskeyApprovals`) is the key asked: a key this
+    /// Mac couldn't approve with isn't registered for it.
+    var enabled = Features.macPasskeyApprovals
+    /// Whether the claim proves the credential (`Features.macPairingPasskeyProof`).
+    var proving = Features.macPairingPasskeyProof
+}
+
 /// Signing in and adding this Mac, step by step, for the screen to draw.
 @MainActor
 final class SignInModel: ObservableObject {
@@ -25,6 +39,8 @@ final class SignInModel: ObservableObject {
     @Published private(set) var step: Step = .welcome
     /// The session, once this Mac has one.
     @Published private(set) var session: Session?
+    /// The security key's PIN sheet, while a pairing asks the key for its credential.
+    @Published var pinSheet: PINSheetModel?
 
     private let client: KIFFClient
     /// This Mac's device key: the one its session is bound to.
@@ -49,13 +65,20 @@ final class SignInModel: ObservableObject {
     private let endSession: (Session, SigningKey) async -> Void
     /// Whether the keys are made in the Secure Enclave. Tests say no.
     private let enclave: Bool?
+    /// This Mac's security key, for a pairing to register; nil asks no key.
+    private let securityKey: PairingSecurityKey?
+    /// The last attempt's credential, with the device key it was made for: a new code uses it again
+    /// when the claim doesn't prove it, so the key isn't asked again (Windows' `PairingAttempt`).
+    private var kept: (passkey: PairingPasskey, deviceKey: Data)?
 
     init(client: KIFFClient, key: SigningKey, approval: ApprovalMeans, sessions: SessionStore, deviceName: String,
          sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          open: @escaping (URL) -> Void, now: @escaping () -> Date = Date.init, enclave: Bool? = nil,
+         securityKey: PairingSecurityKey? = nil,
          endSession: @escaping (Session, SigningKey) async -> Void = { _, _ in }) {
         self.endSession = endSession
         self.enclave = enclave
+        self.securityKey = securityKey
         self.client = client; self.key = key; self.approval = approval; self.sessions = sessions
         self.deviceName = deviceName; self.sleep = sleep; self.open = open; self.now = now
         session = sessions.load()
@@ -93,7 +116,7 @@ final class SignInModel: ObservableObject {
         let replaced = session
         let store = sessions.store
         do {
-            try store.checkWritable([DeviceKey.account, SessionStore.account])
+            try store.checkWritable([DeviceKey.account, SessionStore.account, SecurityKeyStore.account])
             let pairingKey: SigningKey
             if replaced == nil {
                 pairingKey = key
@@ -105,14 +128,22 @@ final class SignInModel: ObservableObject {
             let nonce = Signing.nonce()
             var approvalDER: Data?
             if case .key(let der) = approval { approvalDER = der }
-            let payload = PairingPayload(deviceKey: pairingKey.publicKeyDER, keyStore: pairingKey.keyStore, approvalKey: approvalDER, name: deviceName,
-                                         nonce: nonce, exp: KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime)))
+            let exp = KIFFMessage.time(now().addingTimeInterval(PairingPayload.lifetime))
+            let offer = try await passkeyOffer(approvalKey: approvalDER, pairingKey: pairingKey, nonce: nonce, exp: exp)
+            guard mine == attempt else {
+                if replaced != nil { DeviceKey.discardNext(in: store) }
+                return
+            }
+            let payload = offer?.payload
+                ?? PairingPayload(deviceKey: pairingKey.publicKeyDER, keyStore: pairingKey.keyStore, approvalKey: approvalDER, name: deviceName,
+                                  nonce: nonce, exp: exp)
             // The check code is made from exactly the keys the code carries.
             step = .pairing(Code(text: try payload.text(), check: Signing.checkCode(deviceKey: pairingKey.publicKeyDER, approvalKey: payload.checkedKeyDER)))
             let proof = try Signing.claimProof(key: pairingKey, nonce: nonce)
             let got = try await Waiting.until(interval: 3, expiresIn: PairingPayload.lifetime, sleep: sleep) {
                 guard self.attempt == mine else { throw CancellationError() }
-                return try await self.client.claimPairing(nonce: nonce, publicKey: payload.pub, proof: proof)
+                return try await self.client.claimPairing(nonce: nonce, publicKey: payload.pub, proof: proof,
+                                                          credentialProof: offer?.claimProof)
             }
             guard mine == attempt else {
                 if replaced != nil { DeviceKey.discardNext(in: store) }
@@ -123,6 +154,7 @@ final class SignInModel: ObservableObject {
                 let oldKey = key
                 try DeviceKey.promoteNext(in: store)
                 try sessions.save(got)
+                try keepSecurityKey(offer)
                 ChatsExport.removeFiles(in: exportFolder)
                 RememberedHome.forget(in: rememberedList)
                 key = pairingKey
@@ -130,6 +162,7 @@ final class SignInModel: ObservableObject {
                 step = .welcome
                 await endSession(replaced, oldKey)
             } else {
+                try keepSecurityKey(offer)
                 try finish(got, mine)
             }
         } catch {
@@ -145,18 +178,65 @@ final class SignInModel: ObservableObject {
     /// Puts the screen on a step, for a screenshot.
     func show(_ step: Step) { self.step = step }
 
-    /// A pairing is on screen: its code, an expired code, or why it didn't work.
+    /// A pairing is on screen: its code, an expired code, why it didn't work, or the security key's
+    /// PIN sheet before the code (so a view-only Mac adding itself sees the sheet over this screen).
     var isPairing: Bool {
+        if pinSheet != nil { return true }
         switch step {
         case .pairing, .codeExpired, .failed(why: _, pairing: true): return true
         default: return false
         }
     }
 
-    /// Back to the start: whatever was waiting stops asking, and a late answer is dropped.
+    /// Back to the start: whatever was waiting stops asking, and a late answer is dropped. A PIN
+    /// sheet still open closes, and nothing is asked of the key.
     func cancel() {
         attempt += 1
+        pinSheet?.cancel()
         step = .welcome
+    }
+
+    /// One attempt's offer with this Mac's security key (`SecurityKeyPairing.offer`), or nil when no
+    /// key is asked: a Mac with an approval key, no key given, or passkey approvals off.
+    private func passkeyOffer(approvalKey: Data?, pairingKey: SigningKey, nonce: String, exp: String) async throws -> PasskeyPairingOffer? {
+        guard approvalKey == nil, let securityKey, securityKey.enabled else { return nil }
+        let deviceKey = pairingKey.publicKeyDER, name = SecurityKeyPairing.userName(email: nil, macName: deviceName)
+        let offer = try await SecurityKeyPairing.offer(
+            deviceKeyDER: deviceKey, keyStore: pairingKey.keyStore, name: deviceName, nonce: nonce, exp: exp,
+            kept: kept?.deviceKey == deviceKey ? kept?.passkey : nil, proving: securityKey.proving,
+            make: { challenge in
+                try await self.askKey(securityKey) { pin in
+                    try await SecurityKeyPairing.make(challenge: challenge, deviceKeyDER: deviceKey, name: name,
+                                                      authenticator: securityKey.authenticator, pin: pin,
+                                                      sha256: PasskeyCrypto.sha256, isOnCurve: P256Curve.contains,
+                                                      enabled: securityKey.enabled)
+                }
+            },
+            sha256: PasskeyCrypto.sha256, random: { Data((0..<32).map { _ in UInt8.random(in: .min ... .max) }) })
+        kept = offer.passkey.map { (passkey: $0, deviceKey: deviceKey) }
+        return offer
+    }
+
+    /// Asks the security key through the PIN sheet, as many tries as the person makes: it answers
+    /// once the key made the credential, or throws `CancellationError` once the sheet is closed.
+    private func askKey(_ key: PairingSecurityKey, _ ask: @escaping (SecurityKeyPIN) async throws -> PairingPasskey) async throws -> PairingPasskey {
+        try await withCheckedThrowingContinuation { continuation in
+            var answer: PairingPasskey?
+            pinSheet = PINSheetModel(words: key.words, attempt: { pin in answer = try await ask(pin) }, readTries: key.readTries,
+                                     done: { [weak self] error in
+                                         self?.pinSheet = nil
+                                         if let error { continuation.resume(throwing: error) }
+                                         else if let answer { continuation.resume(returning: answer) }
+                                         else { continuation.resume(throwing: CancellationError()) }
+                                     })
+        }
+    }
+
+    /// Once a pairing is claimed: the credential its QR named is kept as the security key that goes
+    /// with this Mac; with none, any earlier one is forgotten, as it went with another device key.
+    private func keepSecurityKey(_ offer: PasskeyPairingOffer?) throws {
+        let keys = SecurityKeyStore(store: sessions.store)
+        if let id = offer?.keptCredentialID { try keys.save(id) } else { keys.forget() }
     }
 
     /// Forgets the session on this Mac, and the security key that went with it. Ending it at KIFF

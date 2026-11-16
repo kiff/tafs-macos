@@ -243,4 +243,75 @@ let pairingSecurityKeyTests: [Test] = [
         _ = try await KIFFClient(transport: transport).claimPairing(nonce: "n", publicKey: "PUB", proof: "PROOF")
         try expectEqual(String(decoding: transport.sent[1].body, as: UTF8.self), #"{"nonce":"n","proof":"PROOF","pub":"PUB"}"#)
     }),
+
+    Test("the creation proof is on: a passkey computer's claim proves its credential, as KIFF requires from 1 Dec 2026") {
+        try expectEqual(Features.macPairingPasskeyProof, true)
+        try expectEqual(Features.macPasskeyApprovals, false)
+    },
+    Test("an offer with the key: the QR names its credential, the claim proves it with the pairing's challenge, and its id is the one kept", awaiting: {
+        let key = NewKey()
+        let offer = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "tafs on this Mac", nonce: "N",
+                                                       exp: "2026-11-16T03:05:00Z", kept: nil, proving: true,
+                                                       make: { try await make(key, challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
+        try expectEqual(key.asked.count, 1)
+        try expectEqual(offer.payload.kind, .passkey)
+        try expectEqual(offer.payload.approvalPub, nil)
+        try expectEqual(offer.payload.credential, PairingPayload.Credential(id: Encoding.base64URL(credentialID), publicKey: Encoding.base64URL(keyOnKey)))
+        try expectEqual(offer.payload.checkedKeyDER, keyOnKey)
+        let pairing = PasskeyRegistration.pairingChallenge(nonce: "N", deviceKeyDER: deviceKey, sha256: testSHA256)
+        try expectEqual(offer.claimProof.flatMap(SecurityKeyPairing.proofChallenge), pairing)
+        try expectEqual(offer.claimProof?.attestationObject, AttestationObject.make(format: "none", statement: Data([0xa0]), authenticatorData: made()))
+        try expectEqual(offer.keptCredentialID, credentialID)
+    }),
+    Test("without the proof, the QR still names the credential and the claim proves nothing", awaiting: {
+        let offer = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "tafs on this Mac", nonce: "N",
+                                                       exp: "2026-11-16T03:05:00Z", kept: nil, proving: false,
+                                                       make: { try await make(NewKey(), challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
+        try expect(offer.payload.credential != nil, "the QR names it")
+        try expectEqual(offer.claimProof, nil)
+        try expectEqual(offer.keptCredentialID, credentialID)
+    }),
+    Test("no key asked, or a software device key: no credential in the QR, no proof, nothing to keep", awaiting: {
+        let none = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil,
+                                                      proving: true, make: nil, sha256: testSHA256, random: { Data([1]) })
+        try expectEqual(none.payload.credential, nil)
+        try expectEqual(none.claimProof, nil)
+        try expectEqual(none.keptCredentialID, nil)
+        let key = NewKey()
+        let software = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "software", name: "M", nonce: "N", exp: "E", kept: nil,
+                                                          proving: true, make: { try await make(key, challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
+        try expectEqual(key.asked.count, 0)
+        try expectEqual(software.payload.keyStore, "software")
+        try expectEqual(software.payload.credential, nil)
+        try expectEqual(software.claimProof, nil)
+        try expectEqual(software.keptCredentialID, nil)
+    }),
+    Test("the PIN sheet closed pairs without the key; a pairing that was itself stopped still stops", awaiting: {
+        let closed = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil,
+                                                        proving: true, make: { _ in throw CancellationError() }, sha256: testSHA256, random: { Data([1]) })
+        try expectEqual(closed.payload.credential, nil)
+        try expectEqual(closed.claimProof, nil)
+        let stopped = Task {
+            try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil, proving: true,
+                                               make: { _ in withUnsafeCurrentTask { $0?.cancel() }; throw CancellationError() },
+                                               sha256: testSHA256, random: { Data([1]) })
+        }
+        do { _ = try await stopped.value; throw Failure(description: "a stopped pairing went on") } catch is CancellationError {}
+    }),
+    Test("the claim carries the offer's proof exactly as KIFF reads it: the client data, and none with an empty attStmt", awaiting: {
+        let offer = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil,
+                                                       proving: true, make: { try await make(NewKey(), challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
+        let paired = #"{"access_token":"tok","token_type":"Bearer","expires_in":1,"tenant":"t1","subject":"u1","device_id":"dev_1"}"#
+        let transport = CannedTransport([(200, paired)])
+        _ = try await KIFFClient(transport: transport).claimPairing(nonce: "N", publicKey: offer.payload.pub, proof: "PROOF", credentialProof: offer.claimProof)
+        let sent = try object(transport.sent[0].body)
+        guard let fields = sent["credential_proof"] as? [String: String], fields.count == 2,
+              let clientData = fields["client_data_json"].flatMap(Encoding.fromBase64URL),
+              let attestation = fields["attestation_object"].flatMap(Encoding.fromBase64URL) else {
+            throw Failure(description: "no credential_proof of two fields")
+        }
+        let pairing = PasskeyRegistration.pairingChallenge(nonce: "N", deviceKeyDER: deviceKey, sha256: testSHA256)
+        try expectEqual(clientData, SecurityKeyPairing.clientDataJSON(challenge: pairing))
+        try expectEqual(attestation, AttestationObject.make(format: "none", statement: Data([0xa0]), authenticatorData: made()))
+    }),
 ]
