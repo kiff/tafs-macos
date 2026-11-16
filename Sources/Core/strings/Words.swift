@@ -98,16 +98,45 @@ struct Words {
         }
     }
 
-    /// Puts each value in its `{name}` or `{name|possessive}`, in one pass: a value that holds
-    /// braces is never filled again. A name with no value stays as written.
+    /// "This name" by the language's rule, the one in kiff/tafs's `generate.py` (`THIS`):
+    /// French "ce Mac", "cet appareil"; `capital` opens a sentence ("Cet appareil"). A language
+    /// with no rule keeps the name: its lines write their own word. Right for the device kinds
+    /// the apps name: it takes every h as mute and y as a vowel.
+    static func demonstrative(_ name: String, language: String, capital: Bool = false) -> String {
+        guard let first = name.lowercased().first else { return name }
+        let word: String
+        switch language {
+        case "fr": word = "aeiouyhàâäéèêëîïôöùûüœæ".contains(first) ? "cet " : "ce "
+        default: return name
+        }
+        return (capital ? word.prefix(1).uppercased() + word.dropFirst() : word) + name
+    }
+
+    /// A value as a placeholder's form asks for it: as it is, `possessive`, `this` or `This`.
+    /// A form this app doesn't know gives nil, so its placeholder stays as written and the
+    /// strings test that fills every line fails, rather than the word silently going missing.
+    static func form(_ form: String?, of value: String, language: String) -> String? {
+        switch form {
+        case nil: return value
+        case "possessive"?: return possessive(value, language: language)
+        case "this"?: return demonstrative(value, language: language)
+        case "This"?: return demonstrative(value, language: language, capital: true)
+        default: return nil
+        }
+    }
+
+    /// Puts each value in its `{name}`, `{name|possessive}`, `{name|this}` or `{name|This}`, in
+    /// one pass: a value that holds braces is never filled again. A name with no value, or a form
+    /// this app doesn't know, stays as written.
     private func fill(_ text: String, _ values: [String: String]) -> String {
         var out = ""
         var rest = Substring(text)
         while let open = rest.firstIndex(of: "{"), let close = rest[open...].firstIndex(of: "}") {
             out += rest[..<open]
             let parts = rest[rest.index(after: open)..<close].split(separator: "|", maxSplits: 1).map(String.init)
-            if let name = parts.first, let value = values[name] {
-                out += parts.count == 2 && parts[1] == "possessive" ? Self.possessive(value, language: language) : value
+            if let name = parts.first, let value = values[name],
+               let filled = Self.form(parts.count == 2 ? parts[1] : nil, of: value, language: language) {
+                out += filled
             } else {
                 out += rest[open...close]
             }

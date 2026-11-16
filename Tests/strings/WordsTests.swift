@@ -36,6 +36,79 @@ let wordsTests: [Test] = [
         try expectEqual(Words.possessive("Rae", language: "fr"), "Rae")
         try expectEqual(try words("en")("card.issue_prompt", ["taf": "Refunds"]), "Issue Refunds' Card")
     },
+    Test("\"this\" before a name follows the language's rule, both ways") {
+        let french = ["Mac", "PC", "PC Windows", "appareil", "iPad", "écran", "hôte"].map { Words.demonstrative($0, language: "fr") }
+        try expectEqual(french, ["ce Mac", "ce PC", "ce PC Windows", "cet appareil", "cet iPad", "cet écran", "cet hôte"])
+        try expectEqual(Words.demonstrative("Mac", language: "fr", capital: true), "Ce Mac")
+        try expectEqual(Words.demonstrative("appareil", language: "fr", capital: true), "Cet appareil")
+        try expectEqual(Words.demonstrative("Mac", language: "en"), "Mac")
+        try expectEqual(Words.demonstrative("", language: "fr", capital: true), "")
+        let line = Words(language: "fr", lines: ["a.b": .text("Alertes sur {device|this}"), "a.c": .text("{device|This} est ajouté."),
+                                                 "a.d": .text("Sur {device|that}")])
+        try expectEqual(line("a.b", ["device": "Mac"]), "Alertes sur ce Mac")
+        try expectEqual(line("a.c", ["device": "appareil"]), "Cet appareil est ajouté.")
+        // A form this app doesn't know stays as written, for the test below to catch.
+        try expectEqual(line("a.d", ["device": "Mac"]), "Sur {device|that}")
+    },
+    Test("the \"this\" rule is the pinned generator's THIS table, letter by letter") {
+        // Copied from the shared generate.py's THIS table: once the pin carries it, each language's letters and words must be
+        // this app's, so the copy can't drift. Before the pin carries it, no line may use the form.
+        let source = (try? String(contentsOf: folder.appendingPathComponent("generate.py"), encoding: .utf8)) ?? ""
+        let table = try NSRegularExpression(pattern: #"^THIS = \{(.*)\}\s*$"#, options: .anchorsMatchLines)
+        guard let match = table.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+              let range = Range(match.range(at: 1), in: source) else {
+            for language in try Words.shipped(folder: folder) {
+                for (key, line) in try words(language).lines {
+                    let texts: [String]
+                    switch line {
+                    case .text(let text): texts = [text]
+                    case .forms(let forms): texts = Array(forms.values)
+                    }
+                    try expect(!texts.contains { $0.contains("|this}") || $0.contains("|This}") },
+                               "\(language) \(key) uses |this before the pin has its rule")
+                }
+            }
+            return
+        }
+        let rules = String(source[range])
+        let rule = try NSRegularExpression(pattern: #""(\w+)": \("([^"]*)", "([^"]*)", "([^"]*)"\)"#)
+        let found = rule.matches(in: rules, range: NSRange(rules.startIndex..., in: rules))
+        try expect(!found.isEmpty, "the pinned THIS table has a rule")
+        for m in found {
+            func part(_ i: Int) -> String { Range(m.range(at: i), in: rules).map { String(rules[$0]) } ?? "" }
+            let (language, starts, before, other) = (part(1), part(2), part(3), part(4))
+            for letter in "abcdefghijklmnopqrstuvwxyzàâäçéèêëîïôöùûüœæ" + starts {
+                let name = "\(letter)x"
+                try expectEqual(Words.demonstrative(name, language: language), (starts.contains(letter) ? before : other) + name)
+            }
+        }
+    },
+    Test("every line at the pin fills, in every language, with no brace left") {
+        let placeholder = try NSRegularExpression(pattern: #"\{([a-z][a-z0-9_]*)(\|[^}]*)?\}"#)
+        func names(_ text: String) -> [String] {
+            placeholder.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap {
+                Range($0.range(at: 1), in: text).map { String(text[$0]) }
+            }
+        }
+        for language in try Words.shipped(folder: folder) {
+            let book = try words(language)
+            for (key, line) in book.lines {
+                switch line {
+                case .text(let text):
+                    let values = Dictionary(names(text).map { ($0, "Mac") }, uniquingKeysWith: { first, _ in first })
+                    let filled = book(key, values)
+                    try expect(!filled.contains("{"), "\(language) \(key) left a brace: \(filled)")
+                case .forms(let forms):
+                    let values = Dictionary(forms.values.flatMap(names).filter { $0 != "count" }.map { ($0, "Mac") },
+                                            uniquingKeysWith: { first, _ in first })
+                    for n in 0...25 {
+                        let filled = book.count(key, n, values)
+                        try expect(!filled.contains("{"), "\(language) \(key) (\(n)) left a brace: \(filled)")
+                    }
+                }
+            }
+        }
+    },
     Test("a number takes its language's plural form") {
         let cases: [(String, [Int: String])] = [
             ("en", [0: "other", 1: "one", 2: "other"]),
