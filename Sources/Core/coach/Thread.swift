@@ -90,6 +90,9 @@ enum Thread {
         var tools: [String] = []
         /// On an approval whose connection is already made: tafs cloud's line for it.
         var connectionWords: String?
+        /// tafs cloud marks the card's connection made (`connection.done`), with words or not:
+        /// planque shows it connected, so its sign-in finished (`ConnectReceipt`).
+        var connected = false
         /// A sign-in's app, as tafs cloud names it ("Google Sheets"); nil when it names none.
         var service: String?
         /// A card's note under its words, as Coach wrote it.
@@ -299,6 +302,7 @@ enum Thread {
                     made.tools = (((try? shown.decodeIfPresent([String].self, forKey: .tools)) ?? nil) ?? []).filter { !$0.isEmpty }
                     if let connection = try? shown.nestedContainer(keyedBy: ConnectionKeys.self, forKey: .connection),
                        ((try? connection.decodeIfPresent(Bool.self, forKey: .done)) ?? nil) == true {
+                        made.connected = true
                         made.connectionWords = ((try? connection.decodeIfPresent(String.self, forKey: .words)) ?? nil).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                     }
                     items.append(.card(made, position: position))

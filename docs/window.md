@@ -67,7 +67,7 @@ Which screen draws which, and when, is `ArtBoard` (Core), tested on any machine:
 | 2. No tafs yet | `noTafs` | The Overview with no taf and no job listed, above the empty line (`OverviewView`), once the list is read empty. |
 | 3. Your brief, nothing to do | `briefClear` | Your brief with no decision left to answer (`BriefScreen`), where the decisions go. |
 | 4. All halted | `allHalted` | Halt all (`HaltView` with no taf), once every taf is halted. The sheet grows by its room. |
-| 5. An app connected | `appConnected` | Not on this Mac yet: the iPad draws it on a key's receipt (`ConnectApprovalSheet`), and this Mac doesn't connect an app yet (`ArtBoard.notOnThisMac`). The drawing is here for that screen. |
+| 5. An app connected | `appConnected` | Connecting's receipt (`ConnectReceiptSheet`, over Coach), at the top, at its own width: the iPad's key receipt (`ConnectApprovalSheet`). It shows once Coach's chat marks a connection made that this Mac saw waiting (`ConnectReceipt`, docs/connections.md › The receipt). |
 | 6. Needs you, nothing waiting | `nothingWaiting` | Needs you with nothing waiting (`NeedsYouView`), above its words. |
 | 7. Coach, no taf or one | `coachFirst` | Coach's empty chat once Coach is started (`CoachView`), while the account has no taf or one. |
 | 8. New taf, small | `newTaf` | Beside "Say it in your own words" in the new taf's gallery (`RecipeGallerySheet`). |

@@ -3,7 +3,7 @@
 The account's own connections, then the catalog of apps a taf can use. **This screen lists.**
 An app is connected through Coach, where its Card is approved with it, so the row's Connect
 and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends nothing but
-`GET`.
+`GET`. Once the app is connected, its receipt shows over Coach (below, "The receipt").
 
 ## What is read (`Apps`, `CloudClient.apps(_:cursor:)`)
 
@@ -53,6 +53,35 @@ panels.
 - **Show more apps** reads the next page of the same search. An app already listed isn't
   listed twice.
 - A slower answer to an older search is dropped.
+
+## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
+
+Once an app is connected, a receipt confirms it, as the iPad's `ConnectApprovalSheet.receipt`
+(kiff/tafs `ios/Tafs/Views/ConnectAppsView.swift:952-981`), with board 5, an app connected
+(docs/window.md › Illustrations).
+
+- **When it shows.** On this Mac an app is connected through Coach, and its approval and sign-in
+  are made on the phone. The Mac sees the sign-in finish when Coach's chat, read again, marks a
+  connection card it showed without its connection made as made: tafs cloud's
+  `connection: {done: true}` on an approval or a sign-in card (`Thread.Card.connected`),
+  which it sets only once planque shows the connection connected. The receipt is the newest
+  such card's (`ConnectReceipt.made`). None on a first read, for a card first seen already
+  connected, for a card not made, between two different chats, or in a taf's own chat.
+- **Coach is read again while a connection waits** (`CoachModel.watchConnection`): while
+  Coach's own chat has a connection card not made yet that waits for the person, or whose run
+  is at work (approved on the phone, its sign-in under way), the chat is read every 4 seconds,
+  the phones' pace, at most 75 times, and only while Coach is on screen. A message on its way
+  or an answer being written has its own reads. Only `GET`. Coming back to Coach reads it too,
+  so a sign-in finished meanwhile shows its receipt then.
+- **The sheet** is the iPad's receipt, over Coach, 460 wide: board 5 at its own width (280, 123
+  high), the heading (a green lock, then tafs cloud's title for the card in 22 bold, else the
+  app's name as the card names it), a green check with tafs cloud's line for the connection
+  in 16 semibold ("Qonto is connected (read only)"), else the shared "Connected"
+  (`connect.status.connected`, the iPad's own fallback), and **Done** (`common.done`, the
+  brand's button, Return), which closes it.
+- **Where it differs from the iPad's:** no logo or host in the heading, and no last 4
+  characters in the line: they are the key sheet's, and Coach's card carries neither; no
+  Disconnect, which asks for an approval.
 
 ## Setting planque up (`PlanqueEnrolment`, `PlanqueClient.enrol`)
 
@@ -119,3 +148,11 @@ when the session ends right after its mint, every stop that mints nothing, the c
 KIFF's 403, no device or signer, a session that ends during the first enrolment (no mint), the
 system's cancellation of the hand-over (ended, never "not set up"), each stop's words, and (on a
 Mac) the three signatures checked as planque and KIFF check them, at three different times.
+
+The receipt (`ConnectReceiptTests`, and on a Mac `ConnectReceiptScreenTests`): when it shows
+(an approval or a sign-in made between two reads, in tafs cloud's words or the shared
+"Connected"), when it doesn't (a first read, a card first seen made, one not made, a card that
+isn't a connection, another chat, a taf's chat), the newest of two, board 5, its words in the 8
+languages, when Coach is read again and that it stops (made, at its limit, cancelled, only
+`GET`), Done, and the sheet on the theme's ground in light and dark. It writes
+`build/screenshots/connect-receipt-*.png`, and board 5's `board-5-connect-receipt-*.png`.
