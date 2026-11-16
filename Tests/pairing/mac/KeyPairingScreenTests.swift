@@ -108,6 +108,8 @@ let pairingKeyScreenTests: [Test] = [
         }
         let pairing = Task { await model.pair() }
         let pin = try await sheet(model)
+        // The pairing's sheet adds the key: its own title, lead, action and close.
+        try expectEqual(pin.purpose, .addKey)
         let field = NSSecureTextField()
         pin.reader.field = field
         field.stringValue = "2468"
@@ -138,7 +140,7 @@ let pairingKeyScreenTests: [Test] = [
         model.signedOut()
         try expectEqual(SecurityKeyStore(store: store).load(), nil)
     }),
-    Test("a wrong PIN or no key says why in the sheet, which stays open; closing it pairs without the key and keeps nothing", awaiting: { @MainActor in
+    Test("a wrong PIN or no key says why in the sheet, which stays open; Pair without a key (as closing it) pairs without the key and keeps nothing", awaiting: { @MainActor in
         let store = MemoryStore()
         try SecurityKeyStore(store: store).save(Data("an-earlier-key".utf8))
         let missing = FailingKey()
@@ -241,7 +243,7 @@ let pairingKeyScreenTests: [Test] = [
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for language in ["en", "fr"] {
             let local = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: [language])
-            let sheet = PINSheetModel(words: local, attempt: { _ in }, readTries: { 8 }, done: { _ in })
+            let sheet = PINSheetModel(words: local, purpose: .addKey, attempt: { _ in }, readTries: { 8 }, done: { _ in })
             await sheet.appeared()
             let view = PINSheet(model: sheet).environment(\.words, local)
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 440, height: 300)), let png = Snapshot.png(bitmap) else {
