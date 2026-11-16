@@ -3,10 +3,11 @@ import Foundation
 import SwiftUI
 
 @MainActor
-private func sheet(_ language: String = "en", attempt: @escaping (SecurityKeyPIN) async throws -> Void = { _ in },
+private func sheet(_ language: String = "en", purpose: SecurityKeySheetPurpose = .approve,
+                   attempt: @escaping (SecurityKeyPIN) async throws -> Void = { _ in },
                    tries: Int? = 8, done: @escaping (Error?) -> Void = { _ in }) -> (PINSheetModel, NSSecureTextField) {
     let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: [language])
-    let model = PINSheetModel(words: words, attempt: attempt, readTries: {
+    let model = PINSheetModel(words: words, purpose: purpose, attempt: attempt, readTries: {
         guard let tries else { throw SecurityKeyFailure.noKey }
         return tries
     }, done: done)
@@ -103,6 +104,34 @@ let approvalsPINSheetMacTests: [Test] = [
             guard let bitmap = Snapshot.bitmap(of: PINSheet(model: model).environment(\.words, words), size: CGSize(width: 440, height: 320)),
                   let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for \(name)") }
             try png.write(to: folder.appendingPathComponent(name + ".png"))
+        }
+    }),
+    Test("an approval's sheet is the approval's, unless it's made for adding the key", awaiting: { @MainActor in
+        let (approving, _) = sheet()
+        try expectEqual(approving.purpose, .approve)
+        let (adding, _) = sheet(purpose: .addKey)
+        try expectEqual(adding.purpose, .addKey)
+    }),
+    Test("adding the key: Pair without a key closes the sheet once, as closing it does, and the key is never asked", awaiting: { @MainActor in
+        var asked = 0
+        var heard: [Bool] = []
+        let (model, field) = sheet(purpose: .addKey, attempt: { _ in asked += 1 }, done: { heard.append($0 is CancellationError) })
+        field.stringValue = "4821"
+        model.cancel()
+        try expectEqual(heard, [true])
+        try expectEqual(asked, 0)
+        try expectEqual(field.stringValue.isEmpty, true)
+    }),
+    Test("the screenshots: the sheet adding the key, in English and French", awaiting: { @MainActor in
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for language in ["en", "fr"] {
+            let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: [language])
+            let (adding, _) = sheet(language, purpose: .addKey)
+            adding.triesLine = SecurityKeyWords.triesLeft(8, words: words)
+            guard let bitmap = Snapshot.bitmap(of: PINSheet(model: adding).environment(\.words, words), size: CGSize(width: 440, height: 320)),
+                  let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for pin-sheet-add-\(language)") }
+            try png.write(to: folder.appendingPathComponent("pin-sheet-add-\(language).png"))
         }
     }),
 ]

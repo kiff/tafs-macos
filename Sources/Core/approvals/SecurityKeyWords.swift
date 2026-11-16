@@ -54,3 +54,18 @@ extension ApprovalRoute {
         return of(means)
     }
 }
+
+/// What the PIN sheet is for, and so its title, its lead, its action and its close: approving a
+/// request, or adding the key while this computer pairs (kiff/tafs `docs/computer-passkeys.md`).
+/// Everything else on the sheet (the PIN, the touch, each failure) is the same for both.
+enum SecurityKeySheetPurpose: Equatable {
+    case approve
+    case addKey
+
+    var titleKey: String { self == .approve ? "approval.security_key.title" : "approval.security_key.add_title" }
+    var leadKey: String { self == .approve ? "approval.security_key.enter_pin" : "approval.security_key.add_enter_pin" }
+    var actionKey: String { self == .approve ? "approval.approve" : "approval.security_key.add" }
+    /// Closing the sheet: Cancel for an approval (nothing approved); while pairing, it pairs this
+    /// computer without the key, as closing the sheet always has.
+    var closeKey: String { self == .approve ? "common.cancel" : "approval.security_key.pair_without" }
+}
