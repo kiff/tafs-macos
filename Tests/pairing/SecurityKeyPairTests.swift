@@ -124,7 +124,7 @@ let pairingSecurityKeyTests: [Test] = [
         head.append(0x67)
         head += Array("att".utf8)
         try expectEqual(Array(attestation.prefix(head.count)), head)
-        try expect(!attestation.contains(Data("packed".utf8)), "not the key's own format")
+        try expect(attestation.range(of: Data("packed".utf8)) == nil, "not the key's own format")
     }),
     Test("the attestation object is exactly KIFF's: fmt \"none\", an empty attStmt, the authData, and no other field", awaiting: {
         let got = try await make(NewKey())
@@ -209,7 +209,7 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(enclave.credential, nil)
         try expectEqual(enclave.kind, .enclave)
         let none = PairingPayload(deviceKey: deviceKey, keyStore: "enclave", approvalKey: nil, name: "A Mac", nonce: "N", exp: "E")
-        try expect(!(try none.text()).contains("credential"), "no credential, no field")
+        try expect((try none.text()).range(of: "credential") == nil, "no credential, no field")
     },
     Test("the check code covers the credential's key in the approval key's place: the phones' vector") {
         func code(_ payload: PairingPayload) -> String {
