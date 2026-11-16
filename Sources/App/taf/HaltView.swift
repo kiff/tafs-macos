@@ -122,6 +122,8 @@ struct HaltView: View {
                 Spacer()
                 Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
             }
+            // Board 4, every taf halted (docs/window.md › Illustrations): Halt all, once it holds.
+            if board == .allHalted { Illustration.allHalted.frame(height: Self.artHeight).frame(maxWidth: .infinity) }
             panel {
                 Eyebrow(text: name ?? words("taf.halt.all_tafs"), color: h.state == .running ? Theme.dim : Theme.no)
                 Text(h.headline(words)).font(Theme.display(26)).foregroundColor(Theme.ink)
@@ -169,10 +171,20 @@ struct HaltView: View {
             Spacer(minLength: 0)
         }
         .padding(24)
-        .frame(width: 520, height: 520)
+        // Taller by the drawing's room when it shows, so the parts that hold the halt stay in view.
+        .frame(width: 520, height: Self.height(board))
         .background(Theme.background)
         .task { await model.refresh(); await model.follow() }
     }
+
+    /// The halt's drawing, if any (`ArtBoard.halt`): every taf's, once halted.
+    private var board: ArtBoard? { ArtBoard.halt(all: model.taf == nil, state: model.halt.state) }
+
+    /// How tall the halt's drawing is drawn.
+    static let artHeight: CGFloat = 120
+
+    /// The sheet's height: 520, and the drawing's room above that when it shows.
+    static func height(_ board: ArtBoard?) -> CGFloat { board == nil ? 520 : 520 + artHeight + 16 }
 
     private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10, content: content)

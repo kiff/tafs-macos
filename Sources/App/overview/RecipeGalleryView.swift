@@ -35,8 +35,12 @@ struct RecipeGallerySheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if mode == .create, canHand, !gallery.words.ownWords.isEmpty {
-                        // "Say it in your own words": Coach, with nothing in its box.
-                        OwnWordsRow(title: gallery.words.ownWords, line: gallery.words.ownWordsLine) { choose(.ownWords) }
+                        // "Say it in your own words": Coach, with nothing in its box; beside it, small,
+                        // board 8, a new taf (docs/window.md › Illustrations).
+                        HStack(spacing: 12) {
+                            Illustration.newTaf.frame(width: 100)
+                            OwnWordsRow(title: gallery.words.ownWords, line: gallery.words.ownWordsLine) { choose(.ownWords) }
+                        }
                     }
                     if !gallery.words.all.isEmpty { Eyebrow(text: gallery.words.all) }
                     HomeRecipesView(recipes: recipes, ownWords: nil, canHand: canHand, hand: { _ in }, open: { open = $0 })

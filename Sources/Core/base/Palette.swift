@@ -41,6 +41,9 @@ enum Palette {
     static let coach = Shade(light: 0x2A64F5, dark: 0x7FA2FF)
     static let coachWash = Shade(light: 0xEEF3FF, dark: 0x1A2033)
     static let coachPanel = Shade(light: 0xE3EBFF, dark: 0x232B42)
+    /// The drawings' pink and blue (`Illustration`), the iPad theme's `pink` and `blue`.
+    static let pink = Shade(0xFF4F7B)
+    static let blue = Shade(light: 0x2A64F5, dark: 0x7FA2FF)
     /// The brand's sweep, each stop dark enough for white text.
     static let brand: [UInt32] = [0xB35C00, 0xE8003A, 0x2A64F5]
     /// A taf's colour, by its index: bright, and dark enough for white text.

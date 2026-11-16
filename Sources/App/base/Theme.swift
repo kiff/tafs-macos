@@ -23,6 +23,10 @@ enum Theme {
     static let coachPanel = Color(Palette.coachPanel)
     /// An email door's colour, as the iPad's `Theme.sky`.
     static let sky = Color(Shade(0x3EC2FF))
+    /// The drawings' pink and blue, and the mark on an amber fill (`Illustration`), as the iPad's.
+    static let pink = Color(Palette.pink)
+    static let blue = Color(Palette.blue)
+    static let amberInk = Color.white
 
     static let brand = LinearGradient(colors: Palette.brand.map { Color(Shade($0)) },
                                       startPoint: .topLeading, endPoint: .bottomTrailing)

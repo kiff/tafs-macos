@@ -291,14 +291,18 @@ struct NeedsYouView: View {
     }
 
     private var nothing: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(words("needs_you.nothing")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-            Text(words("needs_you.empty_hint")).font(.system(size: 14)).foregroundColor(Theme.soft)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 16) {
+            // Board 6, nothing waiting (docs/window.md › Illustrations), above its words.
+            Illustration.nothingWaiting.frame(maxWidth: .infinity)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(words("needs_you.nothing")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(words("needs_you.empty_hint")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
     }
 
     /// A step a taf handed its owner, as the iPad's `YourStepCard`: tafs cloud's title, the taf,

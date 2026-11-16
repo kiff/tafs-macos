@@ -162,6 +162,9 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 20) {
                 ScreenTitle(title: words("home.overview.title"), lead: words("home.overview.subtitle"))
                     .padding(.top, 56)
+                // Board 10, the Overview's header (docs/window.md › Illustrations), the iPad's at its
+                // width: always on a Mac, but where no taf yet draws its own below.
+                if board == .overview { Illustration.overview.frame(maxWidth: .infinity) }
                 switch model.state {
                 case .loading:
                     ProgressView().controlSize(.small)
@@ -195,6 +198,14 @@ struct OverviewView: View {
         .task { await model.loadLastResults(words: words) }
     }
 
+    /// The screen's one drawing (`ArtBoard.overview`): no taf yet once the list is read empty and
+    /// no job is listed, else the Overview's own.
+    private var board: ArtBoard {
+        var tafs: Int?
+        if case .loaded(let page) = model.state { tafs = page.tafs.count }
+        return ArtBoard.overview(tafs: tafs, listsRecipes: model.recipes?.homeListsRecipes == true)
+    }
+
     /// With no taf, as the iPad's Home (HomeView.swift:104-125): tafs cloud's recipes under its
     /// line where it lists them; else its empty line, or the app's own when it sent none, and
     /// "Say it in your own words" still leading to Coach.
@@ -202,6 +213,8 @@ struct OverviewView: View {
         if let recipes = model.recipes, recipes.homeListsRecipes {
             HomeRecipesView(recipes: recipes, ownWords: mayUseCoach ? ownWords : nil, canHand: mayUseCoach, hand: hand, sampleLabel: model.gallery?.sampleLabel)
         } else {
+            // Board 2, no tafs yet (docs/window.md › Illustrations), above the empty line.
+            if board == .noTafs { Illustration.noTafs.frame(maxWidth: .infinity) }
             VStack(alignment: .leading, spacing: 6) {
                 if let line = model.recipes?.homeWords {
                     // tafs cloud's empty line, whoever reads it: no words of the app's.
