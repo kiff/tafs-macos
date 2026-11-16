@@ -50,6 +50,39 @@ let wordsTests: [Test] = [
         // A form this app doesn't know stays as written, for the test below to catch.
         try expectEqual(line("a.d", ["device": "Mac"]), "Sur {device|that}")
     },
+    Test("the \"this\" rule is the pinned generator's THIS table, letter by letter") {
+        // Copied from the shared generate.py's THIS table: once the pin carries it, each language's letters and words must be
+        // this app's, so the copy can't drift. Before the pin carries it, no line may use the form.
+        let source = (try? String(contentsOf: folder.appendingPathComponent("generate.py"), encoding: .utf8)) ?? ""
+        let table = try NSRegularExpression(pattern: #"^THIS = \{(.*)\}\s*$"#, options: .anchorsMatchLines)
+        guard let match = table.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+              let range = Range(match.range(at: 1), in: source) else {
+            for language in try Words.shipped(folder: folder) {
+                for (key, line) in try words(language).lines {
+                    let texts: [String]
+                    switch line {
+                    case .text(let text): texts = [text]
+                    case .forms(let forms): texts = Array(forms.values)
+                    }
+                    try expect(!texts.contains { $0.contains("|this}") || $0.contains("|This}") },
+                               "\(language) \(key) uses |this before the pin has its rule")
+                }
+            }
+            return
+        }
+        let rules = String(source[range])
+        let rule = try NSRegularExpression(pattern: #""(\w+)": \("([^"]*)", "([^"]*)", "([^"]*)"\)"#)
+        let found = rule.matches(in: rules, range: NSRange(rules.startIndex..., in: rules))
+        try expect(!found.isEmpty, "the pinned THIS table has a rule")
+        for m in found {
+            func part(_ i: Int) -> String { Range(m.range(at: i), in: rules).map { String(rules[$0]) } ?? "" }
+            let (language, starts, before, other) = (part(1), part(2), part(3), part(4))
+            for letter in "abcdefghijklmnopqrstuvwxyzàâäçéèêëîïôöùûüœæ" + starts {
+                let name = "\(letter)x"
+                try expectEqual(Words.demonstrative(name, language: language), (starts.contains(letter) ? before : other) + name)
+            }
+        }
+    },
     Test("every line at the pin fills, in every language, with no brace left") {
         let placeholder = try NSRegularExpression(pattern: #"\{([a-z][a-z0-9_]*)(\|[^}]*)?\}"#)
         func names(_ text: String) -> [String] {
