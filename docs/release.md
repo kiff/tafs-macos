@@ -13,7 +13,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 3. signs the app, packs the image and signs it (`scripts/dmg.sh`);
 4. sends it to Apple's notary service and waits for its answer, then staples the ticket. If Apple refuses it, the run prints Apple's log and stops;
 5. checks the image as Gatekeeper would, prints its SHA-256, and keeps it as the run's **`tafs-dmg`** artifact for 30 days;
-6. publishes it as a **GitHub pre-release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one.
+6. attaches it to a **draft GitHub release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A draft is seen only by people with push access; publishing it is a separate, deliberate step. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one.
 
 **On a pull request** that changes the packaging (`scripts/dmg.sh`, `scripts/build.sh`, `App/Info.plist` or the workflow), the `check` job builds the image signed ad hoc and opens it, with no secret and no Apple.
 
@@ -23,7 +23,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 scripts/build.sh && scripts/dmg.sh            # signed ad hoc: for a check, not for anyone's Mac
 ```
 
-`dmg.sh` opens the image it made, as a person would, and checks that `tafs.app` and the `Applications` link are there and that the app is still signed.
+`dmg.sh` signs the app with `App/tafs.entitlements`, which holds only the microphone (`com.apple.security.device.audio-input`): under the hardened runtime, dictation needs it. It prints the app's entitlements and stops if that one is missing. It then opens the image it made, as a person would, and checks that `tafs.app` and the `Applications` link are there and that the app is still signed.
 
 ## The secrets
 
@@ -72,5 +72,5 @@ If anything readable ever reaches a log, revoke the certificate at once (develop
 | What | State |
 |---|---|
 | **The first signed, notarized image** | **owed:** after the secrets are stored. Then it's installed on a Mac on macOS 12 to check it opens with no warning. |
-| Where the image is downloaded from | a GitHub pre-release here, for the team (the PM's call). Linking it from kiff.dev/tafs/download for everyone is the owner's yes, later. |
+| Where the image is downloaded from | a draft release here, for the team. Publishing it, and linking it from kiff.dev/tafs/download for everyone, come later. |
 | The version | `App/Info.plist`'s 0.1 (1), as the app has it. |

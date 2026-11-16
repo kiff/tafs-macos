@@ -17,13 +17,20 @@ BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.
 DMG="build/tafs-$VERSION-$BUILD.dmg"
 
 # The app first, then the image around it: a signature covers what's inside it.
+# With the app's entitlements (App/tafs.entitlements): under the hardened runtime, the
+# microphone needs its own, or dictation fails without a word.
+ENTITLEMENTS=App/tafs.entitlements
 if [ "$IDENTITY" = "-" ]; then
-    codesign --force --sign - "$APP"
+    codesign --force --entitlements "$ENTITLEMENTS" --sign - "$APP"
 else
     # The hardened runtime and a secure timestamp, which notarization requires.
-    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+    codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" --sign "$IDENTITY" "$APP"
 fi
 codesign --verify --strict --verbose=2 "$APP"
+echo "The app's entitlements:"
+codesign -d --entitlements :- "$APP" 2>/dev/null
+codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.security.device.audio-input" \
+    || { echo "The app is signed without the microphone entitlement" >&2; exit 1; }
 
 # What the window shows: the app, and Applications to drag it to.
 STAGE=build/dmg

@@ -7,9 +7,9 @@ name: DMG
 # - On a pull request that changes the packaging, `check` builds the image signed
 #   ad hoc and opens it: no secret, no Apple.
 # - By hand, from main, `release` makes the real one, keeps it as the run's
-#   `tafs-dmg` artifact, and publishes it as a GitHub pre-release of this repo,
-#   `v<version>-<build>`, for the team (the PM's call; a public link from
-#   kiff.dev/tafs/download is the owner's, later). It reads the Developer ID certificate (DEVELOPER_ID_P12,
+#   `tafs-dmg` artifact, and attaches it to a draft GitHub release of this repo,
+#   `v<version>-<build>`: a draft is seen only by people with push access, so it
+#   stays the team's until someone publishes it. It reads the Developer ID certificate (DEVELOPER_ID_P12,
 #   DEVELOPER_ID_P12_PASSWORD) and the App Store Connect key notarization uses
 #   (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8), all secrets of the `mac-signing`
 #   environment (main only, a required reviewer), never repository secrets, so no
@@ -17,7 +17,7 @@ name: DMG
 
 on:
   pull_request:
-    paths: ["scripts/dmg.sh", "scripts/build.sh", "App/Info.plist", ".github/workflows/dmg.yml"]
+    paths: ["scripts/dmg.sh", "scripts/build.sh", "App/Info.plist", "App/tafs.entitlements", ".github/workflows/dmg.yml"]
   workflow_dispatch:
 
 permissions:
@@ -132,9 +132,9 @@ jobs:
           path: build/tafs-*.dmg
           retention-days: 30
 
-      # A pre-release, so it's marked as not for everyone. A version already
+      # A draft, seen only by people with push access. A version already
       # released stops the run: App/Info.plist's version or build goes up first.
-      - name: Publish it as a pre-release
+      - name: Attach it to a draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -145,8 +145,8 @@ jobs:
             echo "::error::$tag is already released. Raise the version or build in App/Info.plist."
             exit 1
           fi
-          gh release create "$tag" "$dmg" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "tafs for macOS $tag (pre-release)" \
+          gh release create "$tag" "$dmg" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+            --title "tafs for macOS $tag" \
             --notes "For the team: signed with Developer ID, notarized and stapled. macOS 12 or later, Intel and Apple silicon. SHA-256: $(shasum -a 256 "$dmg" | cut -d' ' -f1)"
 
       - name: Remove the keychain and the key
