@@ -231,9 +231,9 @@ struct AccountView: View {
                             .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
                     }
                     group(words("settings.legal")) {
-                        action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/terms") }
+                        action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage(LegalPages.terms(words.language)) }
                         divider
-                        action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage("https://kiff.dev/tafs/privacy") }
+                        action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage(LegalPages.privacy(words.language)) }
                     }
                     group(words("settings.about")) {
                         row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))
@@ -260,9 +260,10 @@ struct AccountView: View {
         }
     }
 
-    /// The legal pages are in English: a label says so in any other language, as on the iPad.
+    /// The legal pages open in the app's language where kiff.dev has them (`LegalPages`); in any
+    /// other language the label says the page is in English.
     private func legal(_ label: String) -> String {
-        words.language == "en" ? label : words("settings.legal_in_english", ["label": label])
+        LegalPages.saysEnglish(words.language) ? words("settings.legal_in_english", ["label": label]) : label
     }
 
     /// macOS's Language & Region, where a language is chosen for one app.

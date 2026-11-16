@@ -7,7 +7,7 @@ private func client(_ answers: [(Int, String)], sign: ((HTTPRequest) throws -> S
     return (AccountClient(transport: transport, session: session, language: "fr", sign: sign), transport)
 }
 
-let accountTests: [Test] = [
+let accountClientTests: [Test] = [
     Test("every request carries the session and the app's language, and no signature unless asked", awaiting: {
         let (account, transport) = client([(200, #"{"devices":[]}"#)])
         let none = try await account.devices()
