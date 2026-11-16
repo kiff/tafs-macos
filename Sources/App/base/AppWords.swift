@@ -2,12 +2,16 @@ import AppKit
 import SwiftUI
 
 extension Words {
-    /// The words in the app's bundle, in the first language the person prefers that is
-    /// shipped. With no bundle (a test), `folder` says where they are.
-    static func load(folder: URL? = Bundle.main.resourceURL?.appendingPathComponent("strings"),
-                     preferred: [String] = Locale.preferredLanguages) -> Words {
+    /// The shared words in the app's bundle.
+    static var bundleFolder: URL? { Bundle.main.resourceURL?.appendingPathComponent("strings") }
+
+    /// The words in the app's bundle, in the language chosen for this Mac (Account › Language)
+    /// when it's shipped, else the first the person prefers that is shipped. With no bundle (a
+    /// test), `folder` says where they are.
+    static func load(folder: URL? = bundleFolder, preferred: [String] = Locale.preferredLanguages,
+                     chosen: String? = LanguageChoice.saved(.standard)) -> Words {
         guard let folder, let shipped = try? Words.shipped(folder: folder) else { return Words(language: "en", lines: [:]) }
-        let language = Words.language(preferred: preferred, shipped: shipped)
+        let language = LanguageChoice.language(chosen: chosen, preferred: preferred, shipped: shipped)
         return (try? Words(language: language, folder: folder)) ?? Words(language: "en", lines: [:])
     }
 

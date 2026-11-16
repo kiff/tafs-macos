@@ -5,7 +5,7 @@ private let folder = URL(fileURLWithPath: ".shared/app/strings")
 
 private func words(_ language: String) throws -> Words { try Words(language: language, folder: folder) }
 
-let stringsTests: [Test] = [
+let wordsTests: [Test] = [
     Test("every shipped language is read, with English's keys") {
         let shipped = try Words.shipped(folder: folder)
         try expectEqual(shipped.sorted(), ["de", "en", "es", "fr", "it", "nl", "pl", "pt"])

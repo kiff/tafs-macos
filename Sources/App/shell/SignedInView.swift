@@ -68,8 +68,10 @@ struct SignedInView: View {
     @State private var planque: PlanqueClient
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
-         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data(), securityKey: Data? = nil) {
+         addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data(), securityKey: Data? = nil,
+         startOn: Screen = .overview) {
         self.account = account
+        _selection = State(initialValue: startOn)
         let planque = PlanqueClient()
         // As the iPad's `deviceLoader` (AppModel.swift:490-493): only a session with a key,
         // KIFF's `this_device`.

@@ -97,10 +97,17 @@ struct AccountView: View {
     @State private var showingDevices = false
     @State private var showingPeople = false
     @State private var showingAlerts = false
+    @State private var showingLanguage = false
     @State private var confirmingSignOut = false
 
     var body: some View {
-        if showingAlerts {
+        if showingLanguage {
+            VStack(alignment: .leading, spacing: 0) {
+                back { showingLanguage = false }
+                LanguagePickerView()
+            }
+            .background(Theme.background)
+        } else if showingAlerts {
             VStack(alignment: .leading, spacing: 0) {
                 back { showingAlerts = false }
                 if let alerts { AlertsView(model: alerts) }
@@ -213,12 +220,12 @@ struct AccountView: View {
                 }
                 // A builder takes at most 10 views on macOS 12 (Swift 5.7): the last sections are one.
                 Group {
-                    // The language tafs's lines are in, by its own name, and macOS's own setting to
-                    // change it (Language & Region › Applications), as the iPad opens iOS's.
+                    // The language tafs's lines are in, by its own name, and the app's own list to
+                    // change it (Account › Language), not macOS's settings.
                     group(words("settings.language_title")) {
                         row(words("settings.language_title"), value: AppInfo.languageName(words.language))
                         divider
-                        action(words("settings.change_language"), color: Theme.amberText) { Self.openLanguageSettings() }
+                        link(words("settings.change_language")) { showingLanguage = true }
                     }
                     // Their own copy, for their rights of access and portability, as the iPad's.
                     if let exportChats {
@@ -264,12 +271,6 @@ struct AccountView: View {
     /// other language the label says the page is in English.
     private func legal(_ label: String) -> String {
         LegalPages.saysEnglish(words.language) ? words("settings.legal_in_english", ["label": label]) : label
-    }
-
-    /// macOS's Language & Region, where a language is chosen for one app.
-    static func openLanguageSettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.international") else { return }
-        NSWorkspace.shared.open(url)
     }
 
     /// Only tafs' own pages on kiff.dev are opened from here.
