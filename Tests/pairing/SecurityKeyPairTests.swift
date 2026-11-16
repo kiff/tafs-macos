@@ -126,6 +126,22 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(Array(attestation.prefix(head.count)), head)
         try expect(!attestation.contains(Data("packed".utf8)), "not the key's own format")
     }),
+    Test("the attestation object is exactly KIFF's: fmt \"none\", an empty attStmt, the authData, and no other field", awaiting: {
+        let got = try await make(NewKey())
+        guard let attestation = got.proof?.attestationObject else { throw Failure(description: "no proof") }
+        let authData = made()
+        func text(_ string: String) -> [UInt8] { [0x60 | UInt8(string.utf8.count)] + Array(string.utf8) }
+        var want: [UInt8] = [0xa3]                          // a map of exactly three
+        want += text("fmt")
+        want += text("none")
+        want += text("attStmt")
+        want.append(0xa0)                                   // an empty map
+        want += text("authData")
+        try expect((24...255).contains(authData.count), "a byte string with a one-byte length")
+        want += [0x58, UInt8(authData.count)]
+        want += Array(authData)
+        try expectEqual(Array(attestation), want)
+    }),
     Test("a credential is refused when it couldn't approve: no verification, synced, another RP, or the device key itself", awaiting: {
         try await refused(.notVerified) { try await make(NewKey(authData: made(flags: up | at))) }
         try await refused(.canLeave) { try await make(NewKey(authData: made(flags: up | uv | bs | at))) }
