@@ -9,6 +9,8 @@ struct SignedInView: View {
     /// (AppModel.swift:260): Coach's and each taf's chat share it, so only one listens.
     @StateObject private var dictation = Dictation()
     @StateObject private var needsYou: NeedsYouModel
+    /// "Your brief", in Needs you's place once tafs cloud serves it.
+    @StateObject private var brief: BriefModel
     @StateObject private var devices: DevicesModel
     @StateObject private var people: PeopleModel
     @StateObject private var accountHalt: HaltModel
@@ -85,6 +87,7 @@ struct SignedInView: View {
         self.securityKey = securityKey
         self.route = route
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
+        _brief = StateObject(wrappedValue: BriefModel(cloud: cloud))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
@@ -105,14 +108,15 @@ struct SignedInView: View {
     var body: some View {
         // Every choice in the sidebar closes the taf's page, the screen already open too.
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
-        ShellView(selection: choosing, needsYou: needsYou.count, tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+        ShellView(selection: choosing, needsYou: needsYou.count, needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account,
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
-            case .needsYou: return AnyView(NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, openKnocks: { open($0, on: .activity) },
-                                                        answered: { await needsYou.load(); await readTafs() }))
+            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+                                                                                            openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() }),
+                                                       beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
@@ -165,6 +169,7 @@ struct SignedInView: View {
             coach.signedOut()
             tafChat?.signedOut()
             pinSheet?.cancel()
+            brief.endSession()
         }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
@@ -187,7 +192,9 @@ struct SignedInView: View {
     private func readRound() async {
         async let held: Void = needsYou.load()
         async let tafs: Void = readTafs()
-        _ = await (held, tafs)
+        // Your brief with each round, as the iPad's `refresh` reads it with the list.
+        async let read: Void = brief.load()
+        _ = await (held, tafs, read)
         if case .loaded(let calls) = needsYou.state {
             notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
         }
@@ -202,6 +209,20 @@ struct SignedInView: View {
         if case .loaded(let page) = overview.state { needsYou.showSteps(page.yourSteps) }
         guard case .loaded = overview.state, let read = try? await account.myAccess() else { return }
         access = read
+    }
+
+    /// What Needs you holds that the brief doesn't show, matched item by item (`BriefModel`):
+    /// held calls and steps by their ids, and what the brief can't carry counted.
+    private var briefBeyond: Int {
+        guard case .loaded(let calls) = needsYou.state else { return 0 }
+        return brief.needsYouBeyond(heldIDs: calls.map(\.id), stepIDs: needsYou.steps.map(\.handoff), others: needsYou.unproven.count)
+    }
+
+    /// The brief's next move, in Coach's box to edit and send, as the iPad's `startNextMove`.
+    private func startNextMove(_ words: String) {
+        guard mayUseCoach else { return }
+        coach.draft = words
+        selection = .coach
     }
 
     /// The calls held for the person, for the sidebar, each with its taf's name.
@@ -361,6 +382,7 @@ struct SignedInView: View {
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
             // A list read still on its way keeps nothing from here.
             overview.endSession()
+            brief.endSession()
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
             usage.cancelAnswers()

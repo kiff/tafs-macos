@@ -13,6 +13,7 @@ happens in pull requests to `main`.
 - [The window and its sidebar](docs/shell.md)
 - [The signed-in window](docs/window.md)
 - [Needs you: held calls and answers](docs/approvals.md)
+- [Your brief and a mission's log](docs/brief.md)
 - [The signed-in Mac: the session and devices](docs/account.md)
 - [The Overview](docs/overview.md)
 - [The Record](docs/record.md)

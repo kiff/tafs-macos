@@ -23,7 +23,9 @@ let labelChipsMacTests: [Test] = [
         try expectEqual(sent.labelsAll(fr), "All")
         let none = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, labelledHome.replacingOccurrences(of: #""labels_words":{"all":"All"}"#, with: #""labels_words":{}"#)), (404, "")]), session: session))
         await none.load()
-        try expectEqual(none.labelsAll(fr), fr("record.filter.all"))
+        try expectEqual(none.labelsAll(fr), fr("home.labels_all"))
+        // The tafs list's own word, as the iPad's `labelsAllWords`: French says "Tous" here, where the Record's filter says "Tout".
+        try expectEqual(fr("home.labels_all") == fr("record.filter.all"), false)
     }),
     Test("the screenshots: the Overview's label chips, All and one label chosen, in English and French", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

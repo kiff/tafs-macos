@@ -62,7 +62,7 @@ final class OverviewModel: ObservableObject {
     /// The first chip's word: Home's, else the app's own "All".
     func labelsAll(_ words: Words) -> String {
         if case .loaded(let page) = state, let all = page.labelsAll { return all }
-        return words("record.filter.all")
+        return words("home.labels_all")
     }
 
     /// Filters the list to a label, or back to All with nil, as the iPad's `filterList`.
