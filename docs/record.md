@@ -116,9 +116,7 @@ this Mac. Nothing opens outside the app.
 A case's steps drawn as their taf's Activity draws them, with each step's own next step (the
 iPad's `SourceActivityRow`), the only retry: the Mac draws the Record's row, with no next step
 yet. A case read with no steps shows an empty sheet, where the iPad keeps its spinner. A taf's
-detail. A receipt's payment check against the taf's reference. **A day's spend in its title**
-("€640 spent"): `Record.spent` sums it as the iPad's `spent` does, but its words
-(`record.day_spent`) aren't in the shared words at the pin, so the title doesn't draw it yet.
+detail. A receipt's payment check against the taf's reference.
 
 ## Tests
 
@@ -154,8 +152,11 @@ It writes `build/screenshots/record-*.png` and `receipt-*.png`, among them
   Nov 15", "Yesterday · Nov 14", else "Friday · Nov 13" (`AccountTime.dayTitle`,
   `calendar.today_date`, `calendar.yesterday_date`), its date and weekday in the app's language,
   with this Mac's region (`AppDates.locale`), in capitals, 11 medium monospaced, `dim`.
-  A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. The iPad adds the
-  day's spend ("€640 spent"); its words aren't at the pin yet (Not yet, above).
+  A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. Then **what the day
+  spent**, after " · " ("TODAY · 17 NOV · €640 spent"), as the iPad's day heading
+  (`RecordView.swift:48`, `:107-125`): `Record.spentWords` writes each currency's sum from
+  `Record.spent` in the app's language, joins them with " + ", and says it in `record.day_spent`,
+  whose amount's place differs by language. A day that moved no money has none.
 - **A call** is a panel (radius 14, padding 14): its status dot (9), then its taf's dot and
   "Taf · what it did · amount" in 14 semibold with its time at the right in 12 monospaced
   `dim`, then who decided and what became of it, at 13 `soft`.

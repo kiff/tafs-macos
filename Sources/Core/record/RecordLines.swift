@@ -65,6 +65,21 @@ extension Record {
     /// number of decimals of its parts. Empty when none moved money. An amount whose unit isn't a
     /// currency (a count of anything) isn't money, and isn't summed. Not drawn yet: the words for a
     /// day's title, "{amount} spent" (`record.day_spent`), aren't in the shared words at the pin.
+    /// "€640 spent": a day's money moved, a sum for each currency joined with " + ", in the app's
+    /// language (`record.day_spent`, where the amount's place differs by language), as the iPad's
+    /// `RecordView.spent` (RecordView.swift:107-125). Nil when the day moved none.
+    static func spentWords(_ entries: [Entry], words: Words) -> String? {
+        let sums = spent(entries).compactMap { amount -> String? in
+            let parts = amount.value.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count <= 2, let whole = parts.first, !whole.isEmpty else { return nil }
+            let fraction = parts.count == 2 ? String(parts[1]) : ""
+            guard let minor = Int64(String(whole) + fraction) else { return nil }
+            return TafCard.Amount(minor: minor, unit: amount.unit, scale: fraction.count).written(language: words.language)
+        }
+        guard !sums.isEmpty else { return nil }
+        return words("record.day_spent", ["amount": sums.joined(separator: " + ")])
+    }
+
     static func spent(_ entries: [Entry]) -> [Amount] {
         var sums: [String: (minor: Int64, scale: Int)] = [:]
         var order: [String] = []
