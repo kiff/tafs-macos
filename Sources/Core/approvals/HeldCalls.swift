@@ -115,6 +115,14 @@ enum ApprovalRoute: Equatable {
     /// Given by `ApprovalRoute.of(_:securityKey:)` only once `Features.macPasskeyApprovals` is on.
     case passkey
 
+    /// Account › How tafs works: where this Mac's approvals are signed. Only the security key's
+    /// route signs them here ("Your answers are signed on this {device}."); every other Mac
+    /// approves on the phone ("Your approvals are signed on your phone."), as a computer that only
+    /// views.
+    var howItWorksKey: String {
+        self == .passkey ? "sign_in.every_action_taf_takes_goes" : "sign_in.every_action_taf_takes_goes_view"
+    }
+
     static func of(_ means: ApprovalMeans) -> ApprovalRoute {
         switch means {
         case .key: return .touchID
