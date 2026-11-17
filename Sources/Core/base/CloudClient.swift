@@ -25,7 +25,8 @@ struct CloudClient {
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
         ]
-        headers.merge(extra) { _, new in new }
+        // The client's own headers stay: a caller adds, never replaces (the bearer above all).
+        headers.merge(extra) { own, _ in own }
         let request = HTTPRequest(method: "GET", path: path, headers: headers)
         let (status, body) = try await transport.send(request)
         guard (200..<300).contains(status) else {
@@ -55,7 +56,8 @@ struct CloudClient {
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
         ]
-        headers.merge(extra) { _, new in new }
+        // The client's own headers stay: a caller adds, never replaces (the bearer above all).
+        headers.merge(extra) { own, _ in own }
         let request = HTTPRequest(method: "POST", path: path, headers: headers, body: try encoder.encode(fields))
         let (status, body) = try await transport.send(request)
         guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: body) }

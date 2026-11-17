@@ -405,7 +405,34 @@ struct SignedInView: View {
                                doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
                                myEmail: accountModel.me?.email,
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
-                               dictation: dictation, tab: tafTab).id(taf.id))
+                               dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
+                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, tab: tafTab).id(taf.id))
+    }
+
+    /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for
+    /// someone who manages the taf and may use Coach; nil for anyone else.
+    private func improving(_ taf: Home.Taf) -> (() -> Void)? {
+        guard let id = taf.tafID, mayUseCoach, Access.manages(access[taf.id]) else { return nil }
+        let name = taf.name
+        return {
+            coach.improve(CoachModel.Improving(id: id, name: name))
+            openTaf = nil
+            selection = .coach
+        }
+    }
+
+    /// Ask Coach on a taf's `ask_coach` card, as the iPad's `askCoachAbout`: Coach on the taf with
+    /// the card's words in its box, nothing sent; nil for someone who may not.
+    private func askingCoach(_ taf: Home.Taf) -> ((String) -> Void)? {
+        guard let id = taf.tafID, mayUseCoach, Access.manages(access[taf.id]) else { return nil }
+        let name = taf.name
+        let manages = Access.manages(access[taf.id])
+        let may = mayUseCoach
+        return { words in
+            coach.ask(about: CoachModel.Improving(id: id, name: name), words: words, mayUseCoach: may, manages: manages)
+            openTaf = nil
+            selection = .coach
+        }
     }
 
     private var accountScreen: some View {

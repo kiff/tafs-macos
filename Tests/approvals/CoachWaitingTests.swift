@@ -20,6 +20,17 @@ let coachWaitingHome = #"""
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
 let approvalsCoachWaitingTests: [Test] = [
+    Test("a caller's headers are added to tafs cloud's, never in place of the client's own: the bearer stays", awaiting: {
+        let transport = CannedTransport([(200, "{}"), (200, "{}")])
+        let cloud = CloudClient(transport: transport, session: session)
+        let extra = ["Authorization": "Bearer other", "Planque-Device-Signature": "t=1,v1=s,d=dev_1"]
+        _ = try await cloud.post("/v1/home/coach-waiting/s1/set-aside", body: [String: String](), headers: extra)
+        _ = try await cloud.read("/v1/tafs/t1/setup", headers: extra)
+        for request in transport.sent {
+            try expectEqual(request.headers["Authorization"], "Bearer tok")
+            try expectEqual(request.headers["Planque-Device-Signature"], "t=1,v1=s,d=dev_1")
+        }
+    }),
     Test("Home's Coach waiting is read as the iPad reads it: only those with a chat and both lines, its words trimmed") {
         let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(coachWaitingHome.utf8))
         try expectEqual(page.coachWaiting.map(\.session), ["chat/1", "chat-2"])
