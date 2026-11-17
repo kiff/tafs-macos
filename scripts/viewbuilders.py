@@ -59,10 +59,11 @@ def check(path):
         if stack:
             stack[-1]['last_end_continues'] = s.endswith((',', '(', '[', '&&', '||', '+', '=', '?', ':', '->', '.')) if s else stack[-1]['last_end_continues']
     return found
-bad=0
-for p in sys.argv[1:]:
-    for b in check(p):
-        h=b['head']
-        if re.search(r'\b(VStack|HStack|ZStack|LazyVStack|LazyHStack|Group|ScrollView|Section|List|Form|Menu|ToolbarItemGroup|NavigationView|GeometryReader|body|some View|ViewBuilder|overlay|background|safeAreaInset|label|content|header|footer|sheet|popover|alert|confirmationDialog|toolbar|Button|ForEach)\b', h) or h.endswith('in') or h=='{':
-            print(f"{p}:{b['start']}: {b['count']} children > {LIMIT}: {h[:90]}"); bad+=1
-sys.exit(1 if bad else 0)
+if __name__ == '__main__':  # `strip` is also scripts/swift57patterns.py's
+    bad=0
+    for p in sys.argv[1:]:
+        for b in check(p):
+            h=b['head']
+            if re.search(r'\b(VStack|HStack|ZStack|LazyVStack|LazyHStack|Group|ScrollView|Section|List|Form|Menu|ToolbarItemGroup|NavigationView|GeometryReader|body|some View|ViewBuilder|overlay|background|safeAreaInset|label|content|header|footer|sheet|popover|alert|confirmationDialog|toolbar|Button|ForEach)\b', h) or h.endswith('in') or h=='{':
+                print(f"{p}:{b['start']}: {b['count']} children > {LIMIT}: {h[:90]}"); bad+=1
+    sys.exit(1 if bad else 0)

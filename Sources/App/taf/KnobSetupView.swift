@@ -267,21 +267,24 @@ struct StartsWhenView: View {
         return (taf.nextRun, taf.nextRunWords, taf.paused)
     }
 
+    // No `defer` in these tasks: Swift 5.7 reads a `defer` inside a view's `Task` as off the main actor
+    // ("main actor-isolated property 'busy' can not be mutated from the main actor"). Neither call throws,
+    // so `busy` is set back after it, as `setBuiltIn` does.
     private func adjust(_ item: Knob.Item, _ direction: Int) {
         guard !busy else { return }
         busy = true
-        Task {
-            defer { busy = false }
+        Task { @MainActor in
             await model.adjust(item, direction, manages: manages, words: words)
+            busy = false
         }
     }
 
     private func change(_ edit: @escaping (inout Knob.Setting) -> Void) {
         guard !busy else { return }
         busy = true
-        Task {
-            defer { busy = false }
+        Task { @MainActor in
             if await model.changeKnob(edit, manages: manages, words: words) { await model.load(words: words) }
+            busy = false
         }
     }
 
@@ -293,33 +296,16 @@ struct StartsWhenView: View {
             KnobPanel {
                 Eyebrow(text: words("setup.app_events"))
                 ForEach(events) { item in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(verbatim: item.label).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                        if !item.words.isEmpty {
-                            Text(verbatim: item.words).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
-                        }
-                        if item.approval?.state == "needed", item.ok == "approve" {
-                            // Approving signs, behind Face ID on the iPad: here, the line for an
-                            // approval made on another device.
-                            Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } else if item.approval?.state == "approved" || item.on {
-                            HStack {
-                                Label(words("setup.listening"), systemImage: "dot.radiowaves.left.and.right")
-                                    .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ok)
-                                Spacer()
-                                if manages, let trigger = item.trigger {
-                                    Button(words("setup.stop")) { change { $0.wakes.removeAll { $0 == trigger } } }
-                                        .buttonStyle(OutlineButtonStyle(color: Theme.no))
-                                        .fixedSize()
-                                        .disabled(busy || knob.setting == nil)
-                                }
-                            }
-                        }
-                    }
+                    AppEventRow(item: item, stop: stopEvent(item), disabled: busy || knob.setting == nil)
                 }
             }
         }
+    }
+
+    /// Stop on an app event that's listening, for whoever manages the taf.
+    private func stopEvent(_ item: Knob.Item) -> (() -> Void)? {
+        guard manages, let trigger = item.trigger else { return nil }
+        return { change { $0.wakes.removeAll { $0 == trigger } } }
     }
 
     // MARK: Follow-ups
@@ -526,9 +512,50 @@ struct ResultsGoToView: View {
     private func change(_ edit: @escaping (inout Knob.Setting) -> Void) {
         guard !busy else { return }
         busy = true
-        Task {
-            defer { busy = false }
+        Task { @MainActor in
             if await model.changeKnob(edit, manages: manages, words: words) { await model.load(words: words) }
+            busy = false
+        }
+    }
+}
+
+/// One app event the taf starts on: its words, and whether it listens. A view of its own, since Swift 5.7
+/// couldn't type-check the whole row inside `StartsWhenView.events` in reasonable time.
+private struct AppEventRow: View {
+    @Environment(\.words) private var words
+    let item: Knob.Item
+    /// Stop, when the person manages the taf.
+    let stop: (() -> Void)?
+    let disabled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: item.label).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            if !item.words.isEmpty {
+                Text(verbatim: item.words).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+            if item.approval?.state == "needed", item.ok == "approve" {
+                // Approving signs, behind Face ID on the iPad: here, the line for an
+                // approval made on another device.
+                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if item.approval?.state == "approved" || item.on {
+                listening
+            }
+        }
+    }
+
+    private var listening: some View {
+        HStack {
+            Label(words("setup.listening"), systemImage: "dot.radiowaves.left.and.right")
+                .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ok)
+            Spacer()
+            if let stop {
+                Button(words("setup.stop"), action: stop)
+                    .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                    .fixedSize()
+                    .disabled(disabled)
+            }
         }
     }
 }
