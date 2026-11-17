@@ -88,7 +88,6 @@ struct SignedInView: View {
         self.deviceKey = deviceKey
         self.securityKey = securityKey
         self.route = route
-        _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route))
         _brief = StateObject(wrappedValue: BriefModel(cloud: cloud))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
@@ -110,6 +109,8 @@ struct SignedInView: View {
             return try? await planque.grantsReadProof(signedBy: sign)
         }
         _coach = StateObject(wrappedValue: CoachModel(cloud: cloud, streamer: streamer, proof: coachProof))
+        // Set aside sends the same read of this device's connections, as the iPad's `setAsideCoach`.
+        _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route, cloud: cloud, proof: coachProof))
         // Alerts are kept per account, as the iPad keys them by tenant.
         _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
     }
@@ -117,16 +118,19 @@ struct SignedInView: View {
     var body: some View {
         // Every choice in the sidebar closes the taf's page, the screen already open too.
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
-        ShellView(selection: choosing, needsYou: needsYou.count, needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.tafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+        ShellView(selection: choosing, needsYou: needsYou.needsYouCount(onScreen: coachChatOnScreen), needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.listedTafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account,
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
             case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
-                                                                                            openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() }),
+                                                                                            openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
+                                                                                            mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
                                                        beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open, halt: (accountModel.me?.managesCards ?? true) ? accountHalt : nil, halted: { await readTafs() },
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open,
+                                                        needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
+                                                        people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar))
@@ -138,7 +142,8 @@ struct SignedInView: View {
                                                   hints: Dictating.hints(tafs: overview.tafs.map(\.name))))
             case .account: return AnyView(accountScreen)
             }
-        }, startNewTaf: startNewTaf, openCoach: openCoach)
+        }, startNewTaf: startNewTaf, openCoach: openCoach,
+                  haltAll: AccountHalt.shown(managesCards: managesCards, tafs: overview.tafs, halt: accountHalt.halt.state) ? accountHalt : nil, halted: { await readTafs() })
         .sheet(item: $pinSheet) { model in
             PINSheet(model: model).environment(\.words, words)
         }
@@ -214,8 +219,10 @@ struct SignedInView: View {
     /// with the list, once the list has read. A read that fails keeps what was read.
     private func readTafs() async {
         await overview.load()
-        // Home's steps for Needs you, as the iPad's `show` takes them with each read.
-        if case .loaded(let page) = overview.state { needsYou.showSteps(page.yourSteps) }
+        // Home's steps, Coach's waiting chats and its count for Needs you, as the iPad's `show` takes them with each read.
+        if case .loaded(let page) = overview.state { needsYou.show(page) }
+        // The account's halt, read with the list when no taf runs, for the sidebar's Halt all.
+        if AccountHalt.readsWithList(managesCards: managesCards, tafs: overview.tafs) { await accountHalt.refresh() }
         guard case .loaded = overview.state, let read = try? await account.myAccess() else { return }
         access = read
     }
@@ -224,7 +231,23 @@ struct SignedInView: View {
     /// held calls and steps by their ids, and what the brief can't carry counted.
     private var briefBeyond: Int {
         guard case .loaded(let calls) = needsYou.state else { return 0 }
-        return brief.needsYouBeyond(heldIDs: calls.map(\.id), stepIDs: needsYou.steps.map(\.handoff), others: needsYou.unproven.count)
+        let parts = needsYou.countParts()
+        return brief.needsYouBeyond(heldIDs: calls.map(\.id), stepIDs: needsYou.steps.map(\.handoff), others: parts.unproven + parts.cardUnits + parts.coachWaiting)
+    }
+
+    /// Who manages the account's Cards (KIFF's `cards.manage`): Halt all is theirs.
+    private var managesCards: Bool { accountModel.me?.managesCards ?? true }
+
+    /// Coach's chat on screen, which Needs you leaves out, as the iPad's `coachChatOnScreen`.
+    private var coachChatOnScreen: String? { selection == .coach && openTaf == nil ? coach.shownSession : nil }
+
+    /// Needs you's Open Coach, as the iPad's `openCoachWaiting`: Coach on that chat; Coach alone without one.
+    private func openCoachWaiting(_ waiting: CoachWaiting) {
+        guard mayUseCoach else { return }
+        let session = waiting.session
+        if !session.isEmpty { Task { await coach.open(waiting: session) } }
+        openTaf = nil
+        selection = .coach
     }
 
     /// The brief's next move, in Coach's box to edit and send, as the iPad's `startNextMove`.

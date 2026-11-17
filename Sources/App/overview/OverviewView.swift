@@ -22,6 +22,10 @@ final class OverviewModel: ObservableObject {
     @Published private(set) var doorsOffered: [String] = []
     /// The label the tafs list is filtered to; nil is All. The list opens on All every time.
     @Published private(set) var listLabel: String?
+    /// The list's order, settled when its tafs change (`ListOrder`), as the iPad's `listOrder`.
+    @Published private(set) var listOrder = ListOrder()
+    /// Who each taf is shared with, by its KIFF agent, once read: the line under its name.
+    @Published private(set) var shares: [String: [Shares.Share]] = [:]
     private let cloud: CloudClient
     /// Where the list last read is kept for the next launch's first frame; nil keeps none.
     private let remembered: UserDefaults?
@@ -35,8 +39,13 @@ final class OverviewModel: ObservableObject {
         self.remembered = remembered
         if let remembered, let page = RememberedHome.shown(tenant: cloud.session.tenant, in: remembered) {
             state = .loaded(page)
+            listOrder.show(page.tafs)
         }
     }
+
+    /// The tafs as listed, in the sidebar and on the Overview, as the iPad's `listedTafs`: waiting
+    /// on the person first, then the one at work most recently.
+    var listedTafs: [Home.Taf] { listOrder.listed(tafs) }
 
     var tafs: [Home.Taf] {
         if case .loaded(let page) = state { return page.tafs }
@@ -77,6 +86,7 @@ final class OverviewModel: ObservableObject {
         do {
             let read = try await cloud.homeRead()
             state = .loaded(read.page)
+            listOrder.show(read.page.tafs)
             doorsOffered = read.page.doorsOffered ?? []
             readNow = true
             // Kept for the next launch's first frame, as the iPad's `rememberList` after `show`;
@@ -119,16 +129,41 @@ final class OverviewModel: ObservableObject {
         return gallery?.asRecipes(labels: recipes?.labels) ?? recipes ?? Recipes(categories: [], recipes: [], labels: nil)
     }
 
-    /// Reads the Last result of each taf not read yet: its runs, then its newest run's report.
-    /// Only while the Overview is shown, and once a taf; one that can't be read stays "–".
+    /// Reads the Last result of each taf not read yet, in the list's order: its runs, then its
+    /// newest run's report, as the iPad's `loadReport` (AppModel.swift:3189-3203). Only while the
+    /// Overview is shown, and once a taf. Until then the list's `last_run` says it; runs that
+    /// can't be read say so.
     func loadLastResults(words: Words) async {
         let clock = AppDates.formatter(words, time: .short)
-        for taf in tafs {
-            guard let id = taf.tafID, lastResults[id] == nil, let runs = try? await cloud.runs(of: id) else { continue }
+        for taf in listedTafs {
+            guard let id = taf.tafID, lastResults[id] == nil else { continue }
+            let lastRun = taf.lastRun
+            let runs: [Runs.Run]
+            do {
+                runs = try await cloud.runs(of: id)
+            } catch {
+                lastResults[id] = Runs.notRead(NeedsYouModel.why(error), words: words)
+                continue
+            }
             let latest = Runs.latest(runs)
             var report: Runs.Report?
             if let session = latest?.session { report = try? await cloud.report(of: id, session: session) }
-            lastResults[id] = Runs.line(latest: latest, newest: runs.first, report: report, words: words, time: { clock.string(from: $0) })
+            lastResults[id] = Runs.line(latest: latest, newest: runs.first, report: report, lastRun: lastRun, words: words, time: { clock.string(from: $0) })
+        }
+    }
+
+    /// A taf's Last result as the row shows it: read, else by the list's `last_run`, else
+    /// "Nothing yet"; "–" only for an agent tafs doesn't run.
+    func lastResult(_ taf: Home.Taf, words: Words, time: (Date) -> String) -> String {
+        guard let id = taf.tafID else { return "–" }
+        return lastResults[id] ?? Runs.line(lastRun: taf.lastRun, words: words, time: time)
+    }
+
+    /// Reads who uses each taf this person manages, in the list's order, as the iPad's Overview
+    /// does on showing (ShareViews.swift:274-280). One that can't be read shows no line.
+    func loadShares(agents: [String], read: (String) async throws -> [Shares.Share]) async {
+        for agent in agents {
+            if let grants = try? await read(agent) { shares[agent] = grants }
         }
     }
 }
@@ -144,11 +179,14 @@ struct OverviewView: View {
     var openNeedsYou: () -> Void = {}
     /// Opens a taf's page from its line.
     var openTaf: ((Home.Taf) -> Void)?
-    /// Every taf's halt, for whoever manages the account's Cards: offered while a taf runs, and
-    /// whenever the account is halted.
-    var halt: HaltModel?
-    /// Reads the list again after a halt tafs cloud answered; the Overview's own read without one.
-    var halted: (() async -> Void)?
+    /// Needs you's count and line, as the iPad's `needsYouCount` and `needsYouWords`; nil, Home's.
+    var needsCount: Int?
+    var needsWords: String?
+    /// Who uses each taf, under its name, for whoever manages it (`manages`): its grants read by
+    /// its KIFF agent (`readShares`), named from the account's people and groups.
+    var people: PeopleModel?
+    var manages: (Home.Taf) -> Bool = { _ in false }
+    var readShares: ((String) async throws -> [Shares.Share])?
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: without it, no Own words
     /// row and no button that hands a recipe to Coach.
     var mayUseCoach = false
@@ -173,20 +211,19 @@ struct OverviewView: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(let page):
-                    let count = page.needsYouCount ?? 0
-                    if count > 0 || !held.isEmpty { needsYou(count: count, words: page.needsYouWords) }
+                    // Everything Needs you counts, not only the held calls, as the iPad's Overview.
+                    let count = needsCount ?? page.needsYouCount ?? 0
+                    if count > 0 || !held.isEmpty { needsYou(count: count, words: needsWords ?? page.needsYouWords) }
                     // The labels' chips, filtering the table below, as the iPad's Overview
                     // (ShareViews.swift, #1173); none without a labelled taf.
                     if !page.labels.isEmpty {
                         LabelChips(labels: page.labels, selected: model.listLabel, all: model.labelsAll(words)) { model.filterList($0) }
                     }
-                    if page.tafs.isEmpty { noTaf } else { table(model.filtered(page.tafs)) }
+                    // In the iPad's order (`listedTafs`). Halt all is the sidebar's, as on the iPad.
+                    if page.tafs.isEmpty { noTaf } else { table(model.filtered(model.listedTafs)) }
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
-                    // Every taf at once, from its own screen, as the iPad's Home: also with no
-                    // taf, while the account is halted.
-                    if let halt { HaltRow(model: halt, name: nil, whileRunning: !page.tafs.isEmpty, halted: { if let halted { await halted() } else { await model.load() } }) }
                 }
             }
             .padding(.horizontal, Look.inset)
@@ -196,6 +233,19 @@ struct OverviewView: View {
         }
         .background(Theme.background)
         .task { await model.loadLastResults(words: words) }
+        // Read again once KIFF says which tafs this person manages, as the iPad's Overview reads
+        // the shares of each taf it manages when shown.
+        .task(id: managed) { await loadShares() }
+    }
+
+    /// The KIFF agents of the tafs this person manages, in the list's order.
+    private var managed: [String] { model.listedTafs.filter(manages).map(\.kiffAgent) }
+
+    @MainActor private func loadShares() async {
+        guard let read = readShares, !managed.isEmpty else { return }
+        let agents = managed
+        if let people { await people.load() }
+        await model.loadShares(agents: agents, read: read)
     }
 
     /// The screen's one drawing (`ArtBoard.overview`): no taf yet once the list is read empty and
@@ -293,31 +343,62 @@ struct OverviewView: View {
         }
     }
 
-    /// One taf: its name; tafs cloud's line for now; its Card's line; and its last result,
-    /// "–" until it is read. Every cell is centred on the row's height, which the avatar sets,
-    /// so the lines sit level with the taf's name (the owner's ask, from macOS 12).
+    /// One taf: its name, and who uses it; tafs cloud's line for now; its Card's line; and its
+    /// last result, by the list's `last_run` until it is read. Every cell is centred on the row's
+    /// height, which the avatar sets, so the lines sit level with the taf's name (the owner's ask,
+    /// from macOS 12).
     private func row(_ taf: Home.Taf) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            HStack(alignment: .center, spacing: 10) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
-                    .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(.white))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
-                    TafLabelChips(labels: HomeLabels.of(taf, in: model.labels))
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            nameCell(taf).frame(maxWidth: .infinity, alignment: .leading)
             Group {
                 // "Now" by its state, as the iPad's; the sidebar shows what went wrong instead.
                 Text(verbatim: taf.now(words, time: { clock.string(from: $0) })).foregroundColor(Theme.ink)
                 Text(verbatim: taf.cards.first?.line(words) ?? "–").foregroundColor(Theme.ink)
-                Text(verbatim: taf.tafID.flatMap { model.lastResults[$0] } ?? "–").foregroundColor(Theme.soft).lineLimit(2)
+                Text(verbatim: model.lastResult(taf, words: words, time: { clock.string(from: $0) })).foregroundColor(Theme.soft).lineLimit(2)
             }
             .font(.system(size: 13))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// The taf's avatar, its name, who uses it ("Support · 3 people", as the iPad's `usedBy`, for
+    /// whoever manages it), and its labels.
+    private func nameCell(_ taf: Home.Taf) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.tafColor(taf.color)).frame(width: 30, height: 30)
+                .overlay(Text(verbatim: String(taf.name.prefix(1)).uppercased()).font(.system(size: 15, weight: .bold, design: .rounded)).foregroundColor(.white))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
+                if let people, manages(taf) { UsedByLine(people: people, shares: model.shares[taf.kiffAgent]) }
+                TafLabelChips(labels: HomeLabels.of(taf, in: model.labels))
+            }
+        }
+    }
+}
+
+/// "Support · 3 people" under a taf's name on the Overview, as the iPad's `usedBy`: none until its
+/// shares are read.
+private struct UsedByLine: View {
+    @Environment(\.words) private var words
+    @ObservedObject var people: PeopleModel
+    let shares: [Shares.Share]?
+
+    var body: some View {
+        if let line = Shares.usedBy(shares, groups: groups, people: persons, words: words) {
+            Text(verbatim: line).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(1)
+        }
+    }
+
+    private var groups: [People.Group] {
+        if case .loaded(let groups, _) = people.state { return groups }
+        return []
+    }
+
+    private var persons: [People.Person] {
+        if case .loaded(_, let persons) = people.state { return persons }
+        return []
     }
 }
 

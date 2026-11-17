@@ -24,6 +24,27 @@ enum Shares {
         return names.isEmpty ? words("people.not_shared") : words("people.shared_with_prefix") + words.list(names)
     }
 
+    /// Who uses a taf, under its name on the Overview, as the iPad's `usedBy` (ShareViews.swift:378-394):
+    /// "Support, ana@acme.com · 4 people", each group and person it's shared with, and how many
+    /// people that is; "Not shared" with none. Nil until its shares are read: the line is only for
+    /// whoever manages the taf, as on its page.
+    static func usedBy(_ shares: [Share]?, groups: [People.Group], people: [People.Person], words: Words) -> String? {
+        guard let shares else { return nil }
+        if shares.isEmpty { return words("people.not_shared") }
+        var subjects = Set<String>()
+        var names: [String] = []
+        for share in shares {
+            if let id = share.group, let group = groups.first(where: { $0.id == id }) {
+                names.append(group.shownName(words))
+                group.members.forEach { subjects.insert($0.subject) }
+            } else if let subject = share.subject {
+                names.append(People.label(subject, people: people))
+                subjects.insert(subject)
+            }
+        }
+        return names.joined(separator: ", ") + " · " + words.count("people.count", subjects.count)
+    }
+
     /// The same, with the people read from KIFF: the reader is the person KIFF marks as them,
     /// or the one whose email (or subject) is the signed-in email; anyone else by their label.
     static func sharedWith(_ shares: [Share]?, groups: [People.Group], people: [People.Person], email: String?, words: Words) -> String {

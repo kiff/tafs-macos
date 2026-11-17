@@ -37,6 +37,10 @@ struct ShellView: View {
     var startNewTaf: () -> Void = {}
     /// The sidebar's Coach: opens Coach, as the iPad's `openCoach`.
     var openCoach: () -> Void = {}
+    /// The account's halt, for the sidebar's Halt all where the iPad shows it (`AccountHalt.shown`);
+    /// nil, no row. `halted` reads the list again after a halt.
+    var haltAll: HaltModel?
+    var halted: () async -> Void = {}
 
     var body: some View {
         HStack(spacing: 0) {
@@ -69,6 +73,8 @@ struct ShellView: View {
             .padding(.top, 34).padding(.bottom, 22)
 
             ForEach(Screen.list) { item($0) }
+            // Every taf at once, in a section of its own under Connect apps, as the iPad's sidebar.
+            if let haltAll { HaltAllItem(model: haltAll, halted: halted).padding(.top, 8) }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
