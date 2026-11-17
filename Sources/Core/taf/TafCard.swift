@@ -123,8 +123,37 @@ struct TafCard: Decodable, Identifiable, Equatable {
     let rules: [Rule]
     let total: Total<Amount>?
     let calls: Total<Int>?
+    /// How KIFF counts each tool the Card covers, as the owner approved it (`counted`): the
+    /// tool's title and KIFF's lines, as the iPad's `CardCounted`. Empty when KIFF sends none;
+    /// a tool that doesn't read, or has no title or no line, is left out.
+    let counted: [Counted]
 
-    enum CodingKeys: String, CodingKey { case id, title, active, expires, rules, total, calls }
+    /// One tool of a Card, and how KIFF counts it, in KIFF's words.
+    struct Counted: Decodable, Equatable {
+        let tool: String
+        let title: String
+        let lines: [String]
+
+        enum CodingKeys: String, CodingKey { case tool, title, lines }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tool = try c.decode(String.self, forKey: .tool)
+            title = try c.decode(String.self, forKey: .title)
+            lines = try c.decode([String].self, forKey: .lines).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !lines.isEmpty else {
+                throw DecodingError.dataCorrupted(.init(codingPath: c.codingPath, debugDescription: "a tool counted with no words"))
+            }
+        }
+    }
+
+    /// Who issued a taf's Cards, on the Card's face, as the iPad's `issuer(of:)`
+    /// (AppModel.swift:3468-3470): "You" for whoever manages the taf, else the account's name,
+    /// else "The account".
+    static func issuer(manages: Bool, account: String?, _ words: Words) -> String {
+        manages ? words("common.you") : (account ?? words("card.issued_by_account"))
+    }
+
+    enum CodingKeys: String, CodingKey { case id, title, active, expires, rules, total, calls, counted }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -134,6 +163,8 @@ struct TafCard: Decodable, Identifiable, Equatable {
         rules = ((try? c.decodeIfPresent([Rule].self, forKey: .rules)) ?? nil) ?? []
         total = (try? c.decodeIfPresent(Total<Amount>.self, forKey: .total)) ?? nil
         calls = (try? c.decodeIfPresent(Total<Int>.self, forKey: .calls)) ?? nil
+        struct Lenient: Decodable { let tool: Counted?; init(from decoder: Decoder) throws { tool = try? Counted(from: decoder) } }
+        counted = (((try? c.decodeIfPresent([Lenient].self, forKey: .counted)) ?? nil) ?? []).compactMap(\.tool)
     }
 
     /// The Card's large figure: what is left, of its money when it has a total, else of its

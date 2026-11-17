@@ -97,12 +97,24 @@ enum Home {
         let doors: [TafDoors.Light]?
         /// Its labels by id (kiff/tafs `docs/labels.md`), only on a taf that has any.
         let labels: [String]
+        /// tafs cloud's words for the time zone its times are in, and, in amber, for a schedule kept
+        /// in a zone other than the account's: drawn above its Card as sent, as the iPad's
+        /// `CloudTaf.timeZoneWords` and `scheduleTimeZoneWords`. Nil when it sends none.
+        let timeZoneWords: String?
+        let scheduleTimeZoneWords: String?
 
         var id: String { kiffAgent }
+
+        /// Its job in words, as the iPad's `KIFFMapping.taf`: tafs cloud's `job_summary`, else, for an
+        /// agent tafs doesn't run, the Cards it works under ("Works under 2 KIFF Cards.").
+        func job(_ words: Words) -> String {
+            jobSummary ?? words.count("taf.works_under_cards", cards.filter(\.active).count)
+        }
 
         enum CodingKeys: String, CodingKey {
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, status, waiting, jobSummary = "job_summary"
             case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results, doors, labels
+            case timeZoneWords = "time_zone_words", scheduleTimeZoneWords = "schedule_time_zone_words"
         }
         enum WorkKeys: String, CodingKey { case line, attention, status }
         enum FinishKeys: String, CodingKey { case taf, session, words }
@@ -142,6 +154,8 @@ enum Home {
             // As the iPad's `HomeTaf.doors`: a list, or none; each door reads what it can.
             doors = try c.decodeIfPresent([TafDoors.Light].self, forKey: .doors)
             labels = HomeLabels.ids(c, .labels)
+            timeZoneWords = text((try? c.decodeIfPresent(String.self, forKey: .timeZoneWords)) ?? nil)
+            scheduleTimeZoneWords = text((try? c.decodeIfPresent(String.self, forKey: .scheduleTimeZoneWords)) ?? nil)
         }
 
         /// What "now" says, by its state, as the iPad's `KIFFMapping.taf`: waiting for the

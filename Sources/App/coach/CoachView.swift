@@ -937,6 +937,10 @@ struct CoachView: View {
     var dictation: Dictation? = nil
     /// The words the person is likely to say, so dictation spells them right (`Dictating.hints`).
     var hints: [String] = []
+    /// In a taf's chat, Ask Coach on its `ask_coach` cards: Coach on the taf with the card's words
+    /// in its box, nothing sent, as the iPad's `askCoachAbout`. Nil for someone who may not, who
+    /// reads the card alone.
+    var askCoach: ((String) -> Void)? = nil
     @State private var planOpen = false
 
     var body: some View {
@@ -1434,9 +1438,17 @@ struct CoachView: View {
         }
     }
 
+    /// Ask Coach for an `ask_coach` card's words; nil without it.
+    private func askingCoach(_ text: String) -> (() -> Void)? {
+        guard let askCoach else { return nil }
+        return { askCoach(text) }
+    }
+
     /// A card, by its kind, as the iPad draws each.
     @ViewBuilder private func card(_ card: Thread.Card) -> some View {
-        if card.isPlan {
+        if let text = card.askCoach {
+            AskCoachCard(text: text, ask: askingCoach(text))
+        } else if card.isPlan {
             plan(card)
         } else if card.isHandOver {
             handOver(card)
@@ -1781,4 +1793,27 @@ struct WrapRow<Cell: View>: View {
 private struct WrapHeight: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// A taf's card handing a setting to Coach, as the iPad's `AskCoachCardView` (TafChatView.swift:812-826):
+/// the person's request in the taf's words, and Ask Coach, which opens Coach on this taf with them
+/// in the box to send, as written or changed. Nothing is sent. Someone who can't change the taf
+/// reads it alone.
+struct AskCoachCard: View {
+    @Environment(\.words) private var words
+    let text: String
+    let ask: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+            if let ask {
+                Button(words("coach.ask"), action: ask).buttonStyle(OutlineButtonStyle())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
 }
