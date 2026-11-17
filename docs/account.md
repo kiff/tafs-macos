@@ -30,14 +30,27 @@ it is never shown as an empty list.
 | `removeDevice(_:)` | `DELETE /v1/me/devices/{id}` | Signs that device out. Its session and any approval window it opened end at once. |
 | `signOut()` | `POST /v1/auth/device/logout` | Ends this Mac's session. |
 
-The Devices screen (Account) draws this list in its own pull request.
+| `passkeys()` | `GET /v1/me/passkeys` | The account's passkeys, read unsigned as the devices are, as the iPad's `passkeys()`: a person's own (its `id`), or a computer's own (`device_id`, no id), which goes with its computer. |
+| `setTimeZone(_:)` | `PUT /v1/me/time-zone`, signed | Sets the account's time zone (`{"time_zone"}`), signed by the device key, as the iPad's signed setup call. KIFF answers the zone it keeps. |
+
+tafs cloud's side of Account (`CloudClient`, `Core/account/AccountControls.swift`):
+
+| Call | Route | What |
+|---|---|---|
+| `suggestions()`, `setSuggestions(_:)` | `GET`, `PUT /v1/me/suggestions` | Coach's "Show suggestions": `show` and tafs cloud's `words` for it. |
+| `aiConsent()`, `giveAIConsent(version:)`, `withdrawAI()` | `GET`, `POST`, `DELETE /v1/me/ai-consent` | The AI-data consent, read, given for the version of the words read, and withdrawn. A yes to older words is refused (409) with the newer ones. |
+| `timeZones(_:)` | `GET /v1/time-zones?q=` | The picker's zones for a search: each `id` and `title`. |
+| `syncTimeZone()` | `POST /v1/account/time-zone` | tafs cloud takes the account's zone from KIFF again, for the tafs' schedules. |
 
 ## Tests
 
 `scripts/test.sh account`: the headers of each request, the devices list as KIFF sends it
 (with and without each optional field), an unreadable answer, a removed device's path, a
-session that ended, and a signed request checked with the device key. No test reaches the
-network.
+session that ended, and a signed request checked with the device key; the time zone saved
+(confirmed, signed, read again, tafs cloud told), not confirmed, without a key, refused and
+half done; the zones' search; the passkeys as KIFF lists them; the AI-data consent read, given
+and withdrawn, from tafs cloud's own contract, and a yes to older words; Show suggestions; the
+KIFF account page's id and Delete account. No test reaches the network.
 
 ## The Devices screen
 
@@ -47,16 +60,30 @@ network.
   No key fingerprint, as on the iPad: keys are compared at pairing, through the 6-character
   check code both screens show ([pairing.md](pairing.md));
 - "This device" on this Mac's own row.
+- **Every other device has the iPad's red Sign out at its row's end** (`DevicesView.swift:16-40`).
 - **Every row opens its device**, in a sheet with its name and when it was last used, so a
   click is never a dead end.
+- Under the list, the iPad's footer (`settings.devices.note_device`).
+- **Add this Mac**, with the computer mark, while this Mac is view-only with a Secure
+  Enclave key: the Mac's own pairing, in the place of the iPad's **Add a device**, which
+  pairs another computer from the phone (`PairComputerView`, not for macOS 12).
+- **Passkeys** (`DevicesPasskeys`, the iPad's `passkeys` section, `DevicesView.swift:86-128`),
+  read-only: each passkey by its name ("Unnamed" without one), and a computer's own security
+  key saying it goes with its computer (`settings.devices.passkey_with_computer`). Read with
+  the list when Devices opens; a read that fails says why (`settings.devices.passkeys_not_loaded`)
+  and keeps what was read. Drawn only with something in it. Remove and Add are the iPad's, for
+  a session that approves: no Mac does yet.
 
 **Signing another device out is an approval**, since it can take away the account's power
 to approve. So:
 
 - **On a Mac that can't sign an approval** (every Mac today, approving on the phone or with a
-  passkey), another device's sheet has no Sign out. It says the shared line "To sign another
-  device out, use a device that can approve." (`settings.devices.signout_needs_approver`),
-  and the model sends no removal even if asked. KIFF refuses it with `view_only` anyway.
+  passkey), the row's red Sign out is drawn, as on the iPad, and **its click sends nothing**: it
+  says "This device can't approve. Approve on another device signed in to your account."
+  (`approval.device_can_not_approve_approve`) under the list (`signOutClicked`). Another
+  device's sheet has no Sign out: it says "To sign another device out, use a device that can
+  approve." (`settings.devices.signout_needs_approver`), and the model sends no removal even
+  if asked. KIFF refuses it with `view_only` anyway.
 - **Before any Mac may sign another device out,** that removal becomes the iPad's signed
   approval (`prepareRemoveDevice`, then `signApproval`), not a bare `DELETE`. Until then
   `canRemoveOthers` stays off on every Mac, and the `DELETE` is never reached.
@@ -68,7 +95,8 @@ to approve. So:
 **This Mac's own sheet has Sign out**, as Account's: it asks first ("Sign out of KIFF?"),
 then KIFF ends the session and the Mac forgets it. A view-only device can always leave.
 
-`scripts/test.sh account` writes `build/screenshots/devices-*.png`.
+`scripts/test.sh account` writes `build/screenshots/devices-*.png`, and Devices with each Sign
+out clicked and the passkeys as `devices-passkeys-light.png` and `devices-passkeys-dark.png`.
 The screen's own reads (its `.task`, run as often as macOS draws it) are never counted: a
 test that draws the screen draws it from a model of its own, and the model under test sees
 only the calls it makes.
@@ -80,12 +108,17 @@ size on the iPad; each group's heading is 17 semibold in the soft colour.
 
 | Group | Rows |
 |---|---|
-| Your account | Mode ("Signed in with KIFF"); **KIFF account**, the account's name (else its slug); and **Signed in as**, the email, left out when it is the account's own name. From `GET /v1/me`. |
+| Your account | Mode ("Signed in with KIFF"); **KIFF account**, the account's name (else its slug), which opens the KIFF account page (below); and **Signed in as**, the email, left out when it is the account's own name. From `GET /v1/me`. |
 | View only | **Only when KIFF says this session is `view`** (`approval_mode`). On a Mac with a Secure Enclave: what a view-only Mac does, and **Add this Mac**. On a Mac whose device key is a software key, adding it with the phone still leaves it view-only, so there's no Add: the shared line for such a computer, "This computer approves only through your phone or a passkey." (`settings.devices.pair_software_key`). A KIFF that doesn't say, and a session it calls `passkey` or `key`, show no such group. |
 | People & apps | Devices (opens the list), Connect apps. |
 | Plan | Always there. tafs cloud's `plan_line` at 16 semibold in `plan_tone`'s colour (red waiting, amber warning), then "Plan & usage"; just "Plan & usage" when the balance can't be read. It opens Plan & usage. |
+| Coach | **Show suggestions**, its switch at the row's end, with tafs cloud's words under it for what it does now, where the iPad keeps it (`SignInView.swift:330-344`). Only for someone who may use Coach (`mayUseCoach`), once `GET /v1/me/suggestions` has read; enabled for the people who manage the account's Cards (`cards.manage`). A change refused says so (`settings.suggestions_not_changed`) and keeps the switch as it was. |
+| Alerts | A row on its own, which opens Alerts. |
 | Theme | Light, Dark, or System. Kept for the next launch and applied to the whole app. |
 | Language | **Language**, the app's language by its own name ("Français"), then **Change language**, which opens the app's own list (`LanguagePickerView`): This Mac's language first (`settings.language_device`, offered once that shared line is at the pin), then every shipped language by its own name ("Deutsch", "Polski"), the current one marked. Choosing one keeps it for this Mac (`LanguageChoice`, its own key; none kept follows the Mac's preferred languages) and applies it at once, with no relaunch (`AppLanguage`): the words are read again, and the signed-in window is made again on Account, so every request's `Accept-Language` follows and dates follow the new language with this Mac's region. A kept language that is no longer shipped counts as none. macOS's Language & Region is no longer opened from here. The app still declares every shipped language (`CFBundleLocalizations`); a test keeps that list the shipped one. |
+| AI use | The AI-data consent, as the iPad's `AIConsentRow`, every word tafs cloud's: given, its `given` line ("AI use: allowed") and **Withdraw** in red (`DELETE /v1/me/ai-consent`); not given, its title in amber, which opens its screen (`AIConsentSheet`, the iPad's `AIConsentView`: the title, the lines, Not now and Allow). Allow sends the version of the words read; words changed meanwhile come back to be read again. Left out until the consent reads, and when it can't be drawn (`drawable`). |
+| Time zone | **Time zone**, the account's zone (UTC when KIFF hasn't said), which opens the picker (below). |
+| Export my chats | Below. |
 | How it works | The shared line. |
 | Legal | Terms and Privacy policy, on kiff.dev, in the app's language where kiff.dev has them: `kiff.dev/<lang>/tafs/terms` and `/privacy` for German, Spanish, French, Italian, Dutch, Polish and Portuguese, else the English pages (`LegalPages`). The English pages govern. Only those two pages are ever opened from here. In any other language each says "(in English)". |
 | About | **Version**, the version and its build ("0.1 (1)"), then the tagline in dim. |
@@ -154,8 +187,52 @@ Ported from the iPad's `NotificationSettingsView`: Account › Alerts, a row on 
   phones is kept per phone by tafs cloud (`GET /v1/push`, by the phone's token), so it isn't
   listed here. Haptics are the phone's.
 
-Not on the Mac yet: Coach's suggestions, AI use, Time zone, and Export my chats.
-Their rows come with their screens: a row that opens nothing isn't drawn.
+Each switch is at its row's end, as the iPad's list toggles (`NotificationSettingsView.swift:12-31`):
+macOS draws a switch's own label beside it, so the row draws the label, room, then the switch
+(`EndSwitch`), which keeps its label for VoiceOver. Greyed while it can't change.
+
+`scripts/test.sh account` writes `alerts-switches-light.png` and `alerts-switches-dark.png`.
+
+## The KIFF account page (`KiffAccountPage`)
+
+As the iPad's `AccountView` (`SignInView.swift:404-450`), from Account's KIFF account row:
+
+- **KIFF account**, the name; **Account id**, the slug, only when the name isn't it
+  (`Me.accountID`); **Signed in as**.
+- **Time zone**, which opens the picker, and **Use this Mac's: {zone}** when the Mac's zone isn't
+  the account's (`AccountZone.offersDevice`); under them, the shared footer
+  (`settings.time_zone.uses_this`).
+- **Export my chats**, as on Account.
+- **Delete account…**, in red, apart, with what it deletes under it
+  (`sign_in.deletes_every_taf_runs_chats`), only for someone KIFF lets delete it
+  (`account.delete`). On the iPad deleting is signed by the device key behind Face ID, then
+  erases tafs cloud's, planque's and KIFF's sides (`deleteAccount`). This Mac doesn't port that
+  yet, so it keeps the view-only rule: the row is drawn, and **its click sends nothing**: it
+  says "This device can't approve. Approve on another device signed in to your account."
+  (`approval.device_can_not_approve_approve`). There's no Delete account sheet on the Mac.
+
+## The time zone (`TimeZonePicker`, `AccountZone`)
+
+As the iPad's `TimeZonePicker` (`AccountPreferencesView.swift:52-75`): **Use this Mac's:
+{zone}**, then tafs cloud's zones for the search (`GET /v1/time-zones?q=`), the account's
+ticked. The search is a plain field ("Find a time zone"), read again once typing pauses
+(250 ms, as the iPad's `.task(id:)`); only the newest search's answer is kept.
+
+A zone chosen is saved as the iPad's `setAccountTimeZone` (AppModel.swift:356-388):
+
+1. The owner confirms: Touch ID or the Mac's password, saying "Set your account's time zone
+   to {zone}" (`settings.time_zone.prompt`). Closed, it says "Cancelled. Nothing changed.";
+   failed, "Not sent: it wasn't confirmed." Nothing is sent before.
+2. `PUT /v1/me/time-zone`, signed by the device key over the exact bytes sent. A session
+   without a device key sends nothing and says to sign in again. Refused, it says
+   `settings.time_zone.not_changed` with KIFF's plain why, and nothing else is sent.
+3. `GET /v1/me` again, so every time shown is in the new zone.
+4. `POST /v1/account/time-zone`: tafs cloud takes it for the tafs' schedules. When it can't,
+   KIFF has the zone and the page says `settings.account_zone_changed_schedules_could`.
+
+`scripts/test.sh account` writes the page as `account-settings-light.png` and
+`account-settings-dark.png`, the KIFF account page as `account-kiff-light.png` and
+`account-kiff-dark.png`, and the picker as `account-zone-light.png` and `account-zone-dark.png`.
 
 ## Export my chats
 

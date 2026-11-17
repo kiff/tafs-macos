@@ -66,7 +66,9 @@ Laid out as the iPad's: the screen's name small and centred at the top, then pan
 amber with a warning, and the warning takes the same colour.
 
 - **Balance**, a panel: the words (red while the tafs wait), the meter (the iPad's `Meter`: a
-  5-high capsule on ink at 10%, green when fine, amber otherwise), then the detail, the warning and the plan's line.
+  5-high capsule on ink at 10%, green when fine, amber otherwise), then the detail and the warning.
+  **No plan line here**: the iPad draws `plan_line` only on Account's Plan card, and under the
+  headline it said the headline again ("No limit · 9,872 credits used" twice).
 - **Credits**, a panel: its heading, Last period and This period as the iPad's two-part
   switch, and the total.
 - **Each taf's line** is its own panel, with its pace under it.
@@ -95,4 +97,4 @@ that tafs cloud is only ever read (`GET`). For the requests: KIFF's usage as sen
 offered, each route's path, body and signature (only a decline is signed), a decline without
 a key, the prompt closed, KIFF's refusals, the reads after, and the lines both apps share. It
 writes `build/screenshots/usage-*.png`, a member's and an admin's requests and both sheets
-among them.
+among them, and `usage-light.png` and `usage-dark.png` with a plan line the screen leaves out.

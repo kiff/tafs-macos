@@ -212,3 +212,30 @@ extension CloudClient {
         try await get("/v1/calendar?from=\(Self.query(from))&to=\(Self.query(to))")
     }
 }
+
+/// What a week chip keeps in a narrow column: always a few characters of its taf's name; the
+/// dot gives way first, then the ×N. The iPad's chip (CalendarView.swift:393-403) cut the name to
+/// "…" first in a narrow week; the name is what tells one taf from another.
+enum WeekChip {
+    /// The least of the name a chip keeps: a few characters and the ellipsis, at 12 points.
+    static let nameRoom: Double = 34
+    /// The chip's own padding: 6 each side inside its colour, 2 each side outside.
+    static let padding: Double = 16
+    /// The dot and the space after it.
+    static let dot: Double = 12
+    /// The space before the ×N.
+    static let gap: Double = 5
+
+    /// Whether the dot and the ×N fit beside the name's least, in a column `width` wide; `count`
+    /// is the ×N's own width, nil when the event stands for one firing.
+    static func fit(width: Double, count: Double?) -> (dot: Bool, count: Bool) {
+        let room = width - padding
+        let times = count.map { $0 + gap } ?? 0
+        if room >= nameRoom + dot + times { return (true, count != nil) }
+        if count != nil, room >= nameRoom + times { return (false, true) }
+        // The ×N doesn't fit even alone: it goes, and the dot stays wherever it fits beside the
+        // name's least. The dot goes only when the name would go below it.
+        if room >= nameRoom + dot { return (true, false) }
+        return (false, false)
+    }
+}

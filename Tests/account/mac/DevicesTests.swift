@@ -25,20 +25,6 @@ private func sheetDraws<V: View>(_ wanted: UInt32, _ view: V, words: Words) -> B
     return false
 }
 
-/// The colours drawn in a view, to tell whether Sign out's red is among them.
-@MainActor
-private func draws(_ wanted: UInt32, in view: DevicesView, words: Words) -> Bool {
-    let size = CGSize(width: 980, height: 400)
-    guard let bitmap = Snapshot.bitmap(of: view.environment(\.words, words), size: size) else { return false }
-    for y in stride(from: 0, to: Int(size.height), by: 2) {
-        for x in stride(from: 300, to: 740, by: 1) {
-            guard let got = Snapshot.hex(bitmap, x: x, y: y) else { continue }
-            if [16, 8, 0].allSatisfy({ abs(Int((got >> $0) & 0xFF) - Int((wanted >> $0) & 0xFF)) <= 6 }) { return true }
-        }
-    }
-    return false
-}
-
 let accountScreenTests: [Test] = [
     Test("removing another device signs it out at KIFF and reads the list again", awaiting: { @MainActor in
         let (model, transport) = model([(200, two), (204, ""), (200, oneLeft)])
@@ -59,18 +45,23 @@ let accountScreenTests: [Test] = [
         try expectEqual(model.notRemoved, "owner_only")
         try expectEqual(model.state, .loaded(devices))
     }),
-    Test("a Mac that can't approve draws no Sign out for another device, and never sends a removal", awaiting: { @MainActor in
+    Test("a Mac that can't approve draws each device's Sign out, and its click says so and sends nothing", awaiting: { @MainActor in
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
         // The screen is drawn from a model of its own: drawing reads the list again (its
         // `.task`), as often as the system draws, so the model under test sees only its own calls.
         let (drawn, drawnTransport) = model([(200, two), (200, two), (200, two), (200, two)], canRemoveOthers: false)
         await drawn.load()
-        try expect(!draws(Palette.no.light, in: DevicesView(model: drawn), words: words), "no red Sign out is drawn")
+        _ = Snapshot.bitmap(of: DevicesView(model: drawn).environment(\.words, words), size: CGSize(width: 980, height: 400))
         // Only reads, however many the drawing made: drawing never sends a removal.
         try expectEqual(Set(drawnTransport.sent.map(\.method)), ["GET"])
         let (without, transport) = model([(200, two)], canRemoveOthers: false)
         await without.load()
         guard case .loaded(let devices) = without.state else { throw Failure(description: "not loaded") }
+        // The red Sign out on another device's row, clicked: the view-only rule. Nothing to
+        // confirm, the line that it takes a device that can approve, and nothing sent.
+        try expectEqual(without.signOutClicked(devices[1]), false)
+        try expectEqual(without.needsApprover, true)
+        try expectEqual(without.signOutClicked(devices[0]), false)
         await without.remove(devices[1])
         // Its one read, and no removal.
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/devices"])
@@ -82,6 +73,21 @@ let accountScreenTests: [Test] = [
         let (with, _) = model([(200, two)])
         await with.load()
         try expect(sheetDraws(Palette.no.light, DevicesView(model: with).deviceSheet(devices[1]), words: words), "Sign out for another device when it may")
+        // A Mac that may sign one out asks to confirm first.
+        try expectEqual(with.signOutClicked(devices[1]), true)
+        try expectEqual(with.needsApprover, false)
+    }),
+    Test("the account's passkeys are read with the devices, read-only; a read that fails says why and keeps them", awaiting: { @MainActor in
+        let (model, transport) = model([(200, two), (200, passkeysAnswer), (503, "")])
+        await model.load()
+        await model.loadPasskeys()
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/devices", "GET /v1/me/passkeys"])
+        try expectEqual(model.passkeys.map(\.name), ["iPhone", "Mac's security key"])
+        try expectEqual(model.passkeys.map(\.removable), [true, false])
+        try expectEqual(model.passkeysUnread, nil)
+        await model.loadPasskeys()
+        try expectEqual(model.passkeys.count, 2)
+        try expectEqual(model.passkeysUnread, "503")
     }),
     Test("the default is that a Mac may not sign another device out", awaiting: { @MainActor in
         let transport = CannedTransport([])
@@ -113,4 +119,25 @@ let accountScreenTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("devices-\(language).png"))
         }
     }),
+    Test("the screenshots: Devices with each Sign out and the passkeys, view only, light and dark", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for dark in [false, true] {
+            let (model, _) = model([(200, two), (200, passkeysAnswer)], canRemoveOthers: false)
+            await model.load()
+            await model.loadPasskeys()
+            guard case .loaded(let devices) = model.state else { throw Failure(description: "not loaded") }
+            // The red Sign out clicked: the line that it takes a device that can approve.
+            _ = model.signOutClicked(devices[1])
+            let view = DevicesView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800), addThisMac: {})
+                .environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800), dark: dark), let png = Snapshot.png(bitmap) else {
+                throw Failure(description: "no PNG")
+            }
+            try png.write(to: folder.appendingPathComponent("devices-passkeys-\(dark ? "dark" : "light").png"))
+        }
+    }),
 ]
+
+private let passkeysAnswer = #"{"passkeys":[{"id":"pk_1","name":"iPhone","synced":true,"created_at":"2026-11-10T09:00:00Z"},{"name":"Mac's security key","device_id":"dev_1"}]}"#

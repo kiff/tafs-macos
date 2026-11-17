@@ -313,7 +313,8 @@ struct UsageView: View {
                 // Its colour is its tone: red while the tafs wait, else amber.
                 Text(verbatim: warning).font(.system(size: 14, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.amberText)
             }
-            if let plan = balance.planLine { Text(verbatim: plan).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            // No plan line here: the iPad draws `plan_line` only on Account's Plan card, and under
+            // the headline it said the headline again.
         }
     }
 

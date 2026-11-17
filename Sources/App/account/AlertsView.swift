@@ -105,18 +105,21 @@ struct AlertsView: View {
                     sample(words("settings.chargebacks_needs_you"), words("settings.dispute_over_limit"), loud: true)
                     sample(words("settings.refunds_answered_maria"), words("alert.by_email"), loud: false)
                 }
+                // Each switch at its row's end, as the iPad's list toggles.
                 VStack(alignment: .leading, spacing: 0) {
-                    Toggle(words("alert.on_this_device", ["device": words("device.mac")]), isOn: Binding(
+                    EndSwitch(isOn: Binding(
                         get: { model.on },
-                        set: { enabled in if enabled { Task { await model.turnOn(words: words) } } else { model.turnOff() } }))
-                        .disabled(model.turningOn)
-                        .font(.system(size: 17)).padding(.vertical, 12)
+                        set: { enabled in if enabled { Task { await model.turnOn(words: words) } } else { model.turnOff() } })) {
+                        Text(words("alert.on_this_device", ["device": words("device.mac")])).font(.system(size: 17))
+                    }
+                    .disabled(model.turningOn)
+                    .padding(.vertical, 12)
                     if let why = model.why {
                         Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).padding(.bottom, 10)
                     }
                     Rectangle().fill(Theme.line).frame(height: 1)
                     // No alerts, no sound: off and greyed while alerts are off, its choice kept.
-                    Toggle(isOn: Binding(get: { model.on && model.prefs.sound }, set: { model.setSound($0) })) {
+                    EndSwitch(isOn: Binding(get: { model.on && model.prefs.sound }, set: { model.setSound($0) })) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(words("alert.sound")).font(.system(size: 17))
                             Text(words("alert.sound_words")).font(.system(size: 13)).foregroundColor(Theme.dim)
@@ -125,7 +128,6 @@ struct AlertsView: View {
                     .disabled(!model.on)
                     .padding(.vertical, 12)
                 }
-                .toggleStyle(.switch)
                 .foregroundColor(Theme.ink)
                 .padding(.horizontal, 18)
                 .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))

@@ -27,7 +27,8 @@ To the iPad's layout:
   the colours of its tafs with work (`Page.marks(on:)`). The day the screen is on is filled
   amber, today ringed. Its arrows go to the same day a month before or after (the month's
   last when it is shorter), as on the iPad; a click on a day goes to it.
-- Under it, the **agenda**: the days shown that hold work, each under its heading (14
+- **Under the card and the grid, full width**, as the iPad's wide layout
+  (`CalendarView.swift:49-64`), the **agenda**: the days shown that hold work, each under its heading (14
   semibold, amber for today), each event on a panel (radius 10, padding 10): its time 13 mono
   in 46 points, a 9-pt dot, its name 14 semibold and tafs cloud's words 12 dim. tafs cloud's
   own line when there are none.
@@ -47,7 +48,11 @@ To the iPad's layout:
 - **Each hour is a row**, and each day's events in that hour are **stacked** in its cell, as
   on the iPad: two at the same minute both stay readable, and a busy hour grows its row. An
   event is the iPad's chip: its taf's dot and name on its colour, lightly; "09:00 · Name" in
-  Day; "×n" for a repeat, kept whole on the name's line (the name gives way to it).
+  Day; "×n" for a repeat, kept whole on the name's line.
+- **A narrow week keeps a few characters of each name** (`WeekChip`): the chip measures its
+  column (the grid's width, less the hours, by the days), and keeps at least 34 points of the
+  name, a few characters and "…". The dot gives way first, then the ×N; the name never does. A ×N that can't fit even alone goes, and the dot stays wherever it fits beside the name's least, so chips in columns of the same width keep the same dot.
+  The colour stays on the chip's ground, and VoiceOver still says the count.
 - With no event on the days shown, the app's line is centred under the grid.
 - **Today** is the date in the **account's** zone, as tafs cloud names it. The first read
   names that zone: if its today is another day than the Mac's, the screen goes there.
@@ -68,5 +73,7 @@ Opening a taf from an event.
 `scripts/test.sh calendar`: the answer as tafs cloud sends it, an unreadable one, a halt, a
 week across a month's and a year's end, dates that aren't dates, today in the account's zone,
 the six weeks asked for and when moving reads again, a month on, each day's dots and count,
-Day, Week and Month. It writes `build/screenshots/calendar-*.png`, Month as
-`calendar-month-en.png`.
+Day, Week and Month, and what a week chip keeps as its column narrows (`WeekChip.fit`). It
+writes `build/screenshots/calendar-*.png`, Month as `calendar-month-en.png`, and the week with
+its agenda as `calendar-week-light.png`, `calendar-week-dark.png` and, narrow,
+`calendar-week-narrow-light.png`.

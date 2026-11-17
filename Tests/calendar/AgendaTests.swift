@@ -127,4 +127,23 @@ let calendarTests: [Test] = [
         try expectEqual(Days.today(in: "America/New_York", now: lateInParis), "2026-11-14")
         try expectEqual(Days.today(in: "UTC", now: lateInParis), "2026-11-14")
     },
+    Test("a week chip keeps a few characters of its taf's name: the dot gives way first, then the ×N, never the name") {
+        // Wide: the dot, the name and the ×N.
+        try expect(WeekChip.fit(width: 140, count: 24) == (true, true), "all of it")
+        // The dot goes first.
+        let noDot = WeekChip.fit(width: WeekChip.padding + WeekChip.nameRoom + 24 + WeekChip.gap, count: 24)
+        try expect(noDot == (false, true), "no dot, the ×N kept")
+        // Then the ×N: the name keeps its room.
+        try expect(WeekChip.fit(width: 60, count: 24) == (false, false), "the name alone")
+        // A ×N that can't fit even alone goes, and the dot stays wherever it fits beside the name's
+        // least: two chips in columns of the same width keep the same dot, ×N or not.
+        let roomForDot = WeekChip.padding + WeekChip.nameRoom + WeekChip.dot
+        try expect(WeekChip.fit(width: roomForDot, count: 24) == (true, false), "the dot kept, the ×N gone")
+        try expect(WeekChip.fit(width: roomForDot, count: 24).dot == WeekChip.fit(width: roomForDot, count: nil).dot, "the same dot with a ×N or without")
+        // One firing has no ×N: the dot stays while the name keeps its few characters.
+        try expect(WeekChip.fit(width: WeekChip.padding + WeekChip.nameRoom + WeekChip.dot, count: nil) == (true, false), "the dot and the name")
+        try expect(WeekChip.fit(width: 40, count: nil) == (false, false), "the name alone")
+        // The name's room is a few characters, never nothing.
+        try expect(WeekChip.nameRoom >= 30, "a few characters")
+    },
 ]

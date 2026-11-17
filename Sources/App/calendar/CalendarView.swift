@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// What is to come on the days shown, for the Calendar screen: a day, a week or a month.
@@ -102,12 +103,14 @@ final class CalendarModel: ObservableObject {
     }
 }
 
-/// Calendar, to the iPad's layout: the month's card and the agenda on the left, and the
-/// days' hour grid, or the month, on the right.
+/// Calendar, to the iPad's wide layout (CalendarView.swift:49-64): the month's card on the left
+/// and the days' hour grid, or the month, on the right; the agenda under both, full width.
 struct CalendarView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CalendarModel
     @State private var choosingDate = false
+    /// The hour grid's width, for what each week chip keeps (`WeekChip`).
+    @State private var gridWidth: CGFloat = 0
 
     private static let hourHeight: CGFloat = 44
     private static let hoursWidth: CGFloat = 52
@@ -119,11 +122,7 @@ struct CalendarView: View {
                     .frame(maxWidth: .infinity).padding(.top, 18)
                     .accessibilityAddTraits(.isHeader)
                 HStack(alignment: .top, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 22) {
-                        monthCard
-                        agenda
-                    }
-                    .frame(width: 268)
+                    monthCard.frame(width: 268)
                     VStack(alignment: .leading, spacing: 12) {
                         header
                         why
@@ -132,6 +131,7 @@ struct CalendarView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                agenda.padding(.top, 4)
             }
             .padding(.horizontal, Look.inset - 8)
             .padding(.bottom, Look.inset)
@@ -296,6 +296,8 @@ struct CalendarView: View {
                     }
                 }
                 .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .bottom)
+                .background(GeometryReader { geo in Color.clear.preference(key: GridWidthKey.self, value: geo.size.width) })
+                .onPreferenceChange(GridWidthKey.self) { gridWidth = $0 }
                 // The app's line for an empty range, centred under the grid as on the iPad.
                 if shown.isEmpty, !page.halted {
                     Text(words(model.mode == .week ? "calendar.nothing_this_week" : "calendar.nothing_on_day"))
@@ -319,15 +321,18 @@ struct CalendarView: View {
     }
 
     /// One event in its hour's cell, as the iPad's chip: its taf's dot and name on its colour,
-    /// lightly; in Day, "09:00 · Name".
+    /// lightly; in Day, "09:00 · Name". In a narrow column the dot, then the ×N, give way, so a
+    /// few characters of the name always show (`WeekChip`).
     private func block(_ event: Agenda.Event) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7)
+        let times = words.count("calendar.times", event.count)
+        let fit = WeekChip.fit(width: Double(column), count: event.count > 1 ? Self.width(of: times) : nil)
+        return HStack(spacing: 5) {
+            if fit.dot { Circle().fill(Theme.tafColor(event.color)).frame(width: 7, height: 7) }
             Text(verbatim: model.mode == .day ? "\(event.time) · \(event.name)" : event.name)
                 .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
-            // "×N" stays whole on the name's line; the name gives way to it.
-            if event.count > 1 {
-                Text(words.count("calendar.times", event.count)).font(.system(size: 11)).foregroundColor(Theme.soft)
+            // "×N" stays whole on the name's line while it fits beside a few of the name's characters.
+            if fit.count {
+                Text(times).font(.system(size: 11)).foregroundColor(Theme.soft)
                     .lineLimit(1).fixedSize().layoutPriority(1)
             }
         }
@@ -338,6 +343,17 @@ struct CalendarView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(event.count > 1 ? words.count("calendar.slot_times", event.count, ["name": event.name, "first": event.time])
                                             : words("calendar.slot_at", ["name": event.name, "first": event.time]))
+    }
+
+    /// One day's column in the hour grid, as last measured; wide until it is.
+    private var column: CGFloat {
+        guard gridWidth > 0, !model.days.isEmpty else { return 1_000 }
+        return (gridWidth - Self.hoursWidth) / CGFloat(model.days.count)
+    }
+
+    /// The ×N's width at its size, as drawn.
+    private static func width(of text: String) -> Double {
+        Double((text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width.rounded(.up))
     }
 
     // MARK: The month: the card on the left, and the Month view
@@ -469,4 +485,10 @@ struct CalendarView: View {
         return words("calendar.day_heading", ["weekday": words("calendar.weekday.\(p.weekdayKey)"), "day": String(p.day),
                                               "month": words("calendar.month_name.\(p.monthKey)")])
     }
+}
+
+/// The hour grid's width, as laid out.
+private struct GridWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

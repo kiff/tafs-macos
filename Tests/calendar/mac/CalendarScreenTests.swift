@@ -86,4 +86,18 @@ let calendarMacTests: [Test] = [
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 900)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try png.write(to: folder.appendingPathComponent("calendar-month-en.png"))
     }),
+    Test("the screenshots: a week with the agenda full width under it, light and dark, and narrow chips keeping the name", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // Laid out until the grid's width is measured (its chips follow it): answers for every read drawing makes.
+        for (name, width, dark) in [("calendar-week-light", 980.0, false), ("calendar-week-dark", 980.0, true), ("calendar-week-narrow-light", 760.0, false)] {
+            let (model, _) = model(Array(repeating: (200, agendaPage), count: 12))
+            await model.load()
+            let view = CalendarView(model: model).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.settled(of: view, size: CGSize(width: width, height: 900), tries: 6, dark: dark, until: { _ in false }),
+                  let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            try png.write(to: folder.appendingPathComponent("\(name).png"))
+        }
+    }),
 ]
