@@ -127,6 +127,10 @@ enum Thread {
 
         var isPlan: Bool { type == "steps" && !plan.isEmpty }
         var isHandOver: Bool { type == "result" && tafName != nil }
+        /// A taf's card handing a setting to Coach (`ask_coach`), as the iPad's `AskCoachCard`
+        /// (TafsCloud.swift:1178-1195): the person's request in the taf's words, which Ask Coach
+        /// writes into Coach's box on that taf. Nil for any other card, or one with no words.
+        var askCoach: String? { type == "ask_coach" ? text : nil }
         var planDone: Int { plan.filter { $0.status == "done" }.count }
 
         var waitsForPerson: Bool { waits == "owner" && answerState == nil }

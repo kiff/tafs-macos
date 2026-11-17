@@ -121,6 +121,11 @@ struct TafSetup: Decodable, Equatable {
     let workflow: Part?
     let memory: Part?
     let versions: Part?
+    /// Its versions counted, as tafs cloud counts them (`versions.live`, `versions.earlier`): the
+    /// live one's number, nil while it runs its first definition, and how many came before it. The
+    /// app draws tafs cloud's `title` and `summary`, never words of its own from these.
+    let versionsLive: Int?
+    let versionsEarlier: Int?
     /// The apps the taf is connected to, as tafs cloud words them.
     let connections: [Connection]
     /// tafs cloud's words when the taf's own sign-in expired and it must connect again.
@@ -217,7 +222,7 @@ struct TafSetup: Decodable, Equatable {
         case workflow, memory, versions, connections, connectionsError = "connections_error", exceptions = "card_unit_exceptions"
         case connectAgain = "connect_again"
     }
-    enum PartKeys: String, CodingKey { case title, summary, latest }
+    enum PartKeys: String, CodingKey { case title, summary, latest, live, earlier }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -231,6 +236,9 @@ struct TafSetup: Decodable, Equatable {
         workflow = part(.workflow)
         memory = part(.memory, line: .latest)
         versions = part(.versions)
+        let counted = try? c.nestedContainer(keyedBy: PartKeys.self, forKey: .versions)
+        versionsLive = counted.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .live)) ?? nil }
+        versionsEarlier = counted.flatMap { (try? $0.decodeIfPresent(Int.self, forKey: .earlier)) ?? nil }
         connections = ((try? c.decodeIfPresent([Lenient<Connection>].self, forKey: .connections)) ?? nil)?.compactMap(\.value) ?? []
         connectAgain = (try? c.decodeIfPresent(ConnectAgain.self, forKey: .connectAgain)) ?? nil
         connectionsError = Lines.line((try? c.decodeIfPresent(String.self, forKey: .connectionsError)) ?? nil)

@@ -6,6 +6,9 @@ struct CardFace: View {
     @Environment(\.words) private var words
     let card: TafCard
     let color: Color
+    /// Who issued it, at its bottom left, as the iPad's `TafCardFace` (TafDetailView.swift:1270-1283):
+    /// "You" for whoever manages the taf (`TafCard.issuer`).
+    var issuedBy: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -32,6 +35,10 @@ struct CardFace: View {
             if card.rules.count > 1 { Text(words.count("card.tools", card.rules.count)).font(Theme.mono(11)) }
             Spacer(minLength: 8)
             HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(words("card.issued_by")).font(.system(size: 10)).opacity(0.75)
+                    Text(verbatim: issuedBy).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
                     if !card.active {
@@ -77,7 +84,7 @@ struct CardFace: View {
 struct TafView: View {
     /// Whether a taf's Halt shows, as the iPad's `TafDetailView.swift:404`: only for whoever
     /// manages it, as KIFF says, and not for a revoked taf (`KIFFMapping.swift:114-127` maps every
-    /// state Home doesn't name for a live taf to revoked).
+    /// state Home doesn't name for a live taf to revoked). Revoke shows on the same taf.
     static func halts(manages: Bool, state: String) -> Bool {
         manages && ["working", "waiting", "idle", "paused", "halted"].contains(state)
     }
@@ -100,7 +107,8 @@ struct TafView: View {
     var halted: () async -> Void = {}
     /// Plan & usage, from a health fix.
     var openUsage: () -> Void = {}
-    /// Who is signed in: Setup's account time zone and email.
+    /// Who is signed in: Setup's account time zone and email, and the account the Card names
+    /// as its issuer for anyone who doesn't manage the taf.
     var me: Me? = nil
     /// Its doors, for whoever manages it; nil for anyone else, or a taf tafs cloud doesn't run.
     var doors: DoorsModel? = nil
@@ -112,21 +120,21 @@ struct TafView: View {
     var shareLine: ShareLine? = nil
     /// The signed-in app's one dictation, for the taf's chat.
     var dictation: Dictation? = nil
+    /// Coach on this taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: only
+    /// for someone who manages the taf and may use Coach; nil draws no Improve in Coach.
+    var improveInCoach: (() -> Void)? = nil
+    /// Coach on this taf with these words in its box, nothing sent, as the iPad's `askCoachAbout`;
+    /// nil for someone who may not, who reads an `ask_coach` card alone.
+    var askCoach: ((String) -> Void)? = nil
+    /// Connect apps, from the ring's +, for whoever manages the taf; nil draws no +.
+    var openConnect: (() -> Void)? = nil
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // As the iPad's head: its avatar, its name, and tafs cloud's state at the right.
-            HStack(spacing: 10) {
-                TafAvatar(name: taf.name, color: taf.color, size: 34)
-                Text(verbatim: taf.name).font(Theme.display(20)).foregroundColor(Theme.ink).lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 8)
-                if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
-            }
-            .padding(.top, 40)
+            header
             // Under the header, as the iPad's `headerLine`: its live version, which opens
             // Versions, then who it's shared with, for whoever manages the taf.
             if manages {
@@ -135,63 +143,105 @@ struct TafView: View {
                     if let shareLine { shareLine }
                 }
             }
-            HStack(spacing: 0) {
-                ForEach(Tab.allCases) { choice in
-                    let chosen = tab == choice
-                    Button { tab = choice } label: {
-                        Text(words(choice.titleKey)).font(.system(size: 13, weight: chosen ? .semibold : .regular)).foregroundColor(Theme.ink)
-                            .frame(maxWidth: .infinity).padding(.vertical, 7)
-                            .background(Capsule().fill(chosen ? Theme.panel : Color.clear)).contentShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(chosen ? .isSelected : [])
-                }
-            }
-            .padding(2)
-            .background(Capsule().fill(Theme.raised))
-            switch tab {
-            case .chat: chatTab
-            case .card: cardTab
-            case .activity:
-                if let pages {
-                    TafActivityTab(model: pages, taf: taf, openUsage: openUsage, openCard: { tab = .card },
-                                   doors: manages ? doors : nil, doorsOffered: doorsOffered)
-                }
-            case .setup:
-                if let pages {
-                    // An app's week opens the taf's Activity of its calls, as on the iPad.
-                    TafSetupTab(model: pages, openActivity: { query in
-                        pages.show(activityQuery: query)
-                        tab = .activity
-                    }, tafName: taf.name, halts: Self.halts(manages: manages, state: taf.state), halted: halted,
-                       doors: manages ? doors : nil, taf: taf, manages: manages, me: me, myEmail: myEmail)
-                }
-            }
+            tabs
+            tabContent
         }
         .padding(.horizontal, Look.inset - 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.background)
     }
 
+    /// As the iPad's head: its avatar, its name, and tafs cloud's state at the right.
+    private var header: some View {
+        HStack(spacing: 10) {
+            TafAvatar(name: taf.name, color: taf.color, size: 34)
+            Text(verbatim: taf.name).font(Theme.display(20)).foregroundColor(Theme.ink).lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
+        }
+        .padding(.top, 40)
+    }
+
+    /// The four tabs, as the iPad's switch.
+    private var tabs: some View {
+        HStack(spacing: 0) {
+            ForEach(Tab.allCases) { choice in
+                let chosen = tab == choice
+                Button { tab = choice } label: {
+                    Text(words(choice.titleKey)).font(.system(size: 13, weight: chosen ? .semibold : .regular)).foregroundColor(Theme.ink)
+                        .frame(maxWidth: .infinity).padding(.vertical, 7)
+                        .background(Capsule().fill(chosen ? Theme.panel : Color.clear)).contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(chosen ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Theme.raised))
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .chat: chatTab
+        case .card: cardTab
+        case .activity: activityTab
+        case .setup: setupTab
+        }
+    }
+
+    /// Who issued its Cards, on their faces, as the iPad's `issuer(of:)`.
+    private var issuedBy: String { TafCard.issuer(manages: manages, account: me?.account, words) }
+
     /// The chat, with the Card beside it as on the iPad.
     private var chatTab: some View {
         HStack(alignment: .top, spacing: 20) {
-            CoachView(model: chat, embedded: true, dictation: dictation)
+            CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if !taf.cards.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Eyebrow(text: words.count("card.heading", taf.cards.count))
-                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
-                    Button { tab = .card } label: {
-                        Text(words.count("card.all_of", taf.cards.count)).font(.system(size: 14)).foregroundColor(Theme.ink)
-                            .frame(maxWidth: .infinity).frame(height: 40)
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.soft.opacity(0.5))).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .frame(width: 360)
-                .padding(.top, 8)
+            cardColumn
+        }
+    }
+
+    /// The Activity, with the Card beside it in the same column as the chat's, as the iPad's
+    /// wide page (`TafDetailView.swift:66-72, 121-124`), never a bar above it.
+    @ViewBuilder private var activityTab: some View {
+        if let pages {
+            HStack(alignment: .top, spacing: 20) {
+                TafActivityTab(model: pages, taf: taf, openUsage: openUsage,
+                               doors: manages ? doors : nil, doorsOffered: doorsOffered)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                cardColumn
             }
+        }
+    }
+
+    @ViewBuilder private var setupTab: some View {
+        if let pages {
+            // An app's week opens the taf's Activity of its calls, as on the iPad.
+            TafSetupTab(model: pages, openActivity: { query in
+                pages.show(activityQuery: query)
+                tab = .activity
+            }, halted: halted, doors: manages ? doors : nil, taf: taf, manages: manages, me: me, myEmail: myEmail,
+               improveInCoach: improveInCoach, openConnect: manages ? openConnect : nil)
+        }
+    }
+
+    /// The side column, as the iPad's `side`: "Card" or "Cards", the wallet, and a button to all
+    /// of them on the Card tab.
+    @ViewBuilder private var cardColumn: some View {
+        if !taf.cards.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Eyebrow(text: words.count("card.heading", taf.cards.count))
+                CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), issuedBy: issuedBy, front: $frontCard)
+                Button { tab = .card } label: {
+                    Text(words.count("card.all_of", taf.cards.count)).font(.system(size: 14)).foregroundColor(Theme.ink)
+                        .frame(maxWidth: .infinity).frame(height: 40)
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.soft.opacity(0.5))).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(width: 360)
+            .padding(.top, 8)
         }
     }
 
@@ -215,57 +265,12 @@ struct TafView: View {
             .background(Capsule().fill(color.opacity(0.15)))
     }
 
-    /// The Card itself, then each thing it lets the taf do and what happens outside it.
+    /// The Card tab, as the iPad's `card(_:)` (TafDetailView.swift:380-462).
     private var cardTab: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // No Card listed says nothing: tafs cloud sends no field that says one was revoked.
-                // The Cards as the iPad's wallet: a click brings one to the front, and the panel
-                // is the front Card's.
-                if !taf.cards.isEmpty {
-                    CardStack(cards: taf.cards, color: Theme.tafColor(taf.color), front: $frontCard)
-                    // A Card with no rules has no panel under it, never an empty one.
-                    if let shown = CardStack.front(of: taf.cards, frontCard), !shown.rules.isEmpty { rules(shown) }
-                }
-            }
-            .padding(.bottom, Look.inset)
-        }
-    }
-
-    /// Each thing a Card lets the taf do, and what happens outside it.
-    private func rules(_ card: TafCard) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(card.rules.enumerated()), id: \.offset) { _, rule in
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: rule.label).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                        if let outside = outsideWords(rule.outside) { Text(outside).font(.system(size: 12)).foregroundColor(Theme.soft) }
-                    }
-                    Spacer()
-                    // Its limits as the iPad's summary: held or refused above them.
-                    let summary = rule.summary(words)
-                    if !summary.isEmpty {
-                        Text(verbatim: summary).font(Theme.mono(12)).foregroundColor(Theme.ink).multilineTextAlignment(.trailing)
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
-    }
-
-    /// What happens outside a rule, in the shared words; nothing for a word tafs cloud may
-    /// send that this app doesn't know.
-    private func outsideWords(_ outside: TafCard.Rule.Outside) -> String? {
-        switch outside {
-        case .refuse: return words("card.outside_refused")
-        case .hold: return words("card.outside_held")
-        case .unknown: return nil
-        }
+        TafCardTab(taf: taf, pages: pages, manages: manages, issuedBy: issuedBy, front: $frontCard, halted: halted)
     }
 }
+
 
 /// A taf's Cards as the iPad's `CardStack`: as in a wallet, the furthest back on top, each a band
 /// of 26 points above the one in front, a shade darker so Cards of one colour read apart. A click
@@ -276,6 +281,8 @@ struct CardStack: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let cards: [TafCard]
     let color: Color
+    /// Who issued them, on each face.
+    let issuedBy: String
     /// The Card in front; nil for the first, the live one.
     @Binding var front: String?
 
@@ -304,7 +311,7 @@ struct CardStack: View {
                     // As the iPad's `withMotion`: the spring, unless motion is reduced.
                     withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)) { front = card.id }
                 } label: {
-                    CardFace(card: card, color: color)
+                    CardFace(card: card, color: color, issuedBy: issuedBy)
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .fill(Color.black.opacity(Self.shade(depth: ordered.count - 1 - index))))
                         .shadow(color: .black.opacity(0.16), radius: 4, y: -2)

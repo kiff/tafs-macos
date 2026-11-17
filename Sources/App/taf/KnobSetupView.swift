@@ -184,8 +184,8 @@ private struct KnobSheet<Content: View>: View {
 }
 
 /// Setup › Starts when, as the iPad's `StartsWhenView` (`Views/TafSetupViews.swift:15-237`):
-/// its schedule, the app events it listens to and the follow-ups it set itself, then Pause
-/// every start. Every line is tafs cloud's (`GET …/knob` `wakes`); a change makes its next
+/// its schedule, the app events it listens to, its doors and the follow-ups it set itself, then
+/// Change when it starts with Coach and Pause every start. Every line is tafs cloud's (`GET …/knob` `wakes`); a change makes its next
 /// version. A change waiting to go live and approving an app event are signed: here, the line
 /// for an approval made on another device.
 struct StartsWhenView: View {
@@ -197,6 +197,13 @@ struct StartsWhenView: View {
     var timeZone: String? = nil
     /// Reads the tafs again after a pause or a resume.
     var refreshed: () async -> Void = {}
+    /// The taf's doors, for whoever manages it, as the iPad's (`TafSetupViews.swift:35`); nil for
+    /// anyone else.
+    var doors: DoorsModel? = nil
+    /// This person's sign-in email: their own key on a door reads "You".
+    var myEmail: String? = nil
+    /// Coach on this taf, a new conversation; nil draws no Change when it starts with Coach.
+    var improveInCoach: (() -> Void)? = nil
     let close: () -> Void
     @State private var busy = false
 
@@ -206,7 +213,9 @@ struct StartsWhenView: View {
                 KnobPendingPanel(knob: knob, manages: manages)
                 schedule(knob)
                 events(knob)
+                if let doors { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
                 followUps(knob)
+                changeWithCoach
                 pause(knob)
             } else {
                 Text(words("setup.reading_starts")).font(.system(size: 15)).foregroundColor(Theme.dim)
@@ -348,6 +357,18 @@ struct StartsWhenView: View {
     }
 
 
+    /// Change when it starts with Coach, as the iPad's (`TafSetupViews.swift:37-40`): Coach on the
+    /// taf, for someone who manages it and may use Coach. The sheet closes for Coach.
+    @ViewBuilder private var changeWithCoach: some View {
+        if manages, let improveInCoach {
+            Button(words("setup.change_starts")) {
+                close()
+                improveInCoach()
+            }
+            .buttonStyle(OutlineButtonStyle())
+        }
+    }
+
     // MARK: Pause every start
 
     @ViewBuilder private func pause(_ knob: Knob) -> some View {
@@ -378,13 +399,14 @@ struct SizeStepper: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // As wide as the iPad's: the outlined button fills its third of the row.
             Button { move(-1) } label: { Image(systemName: "minus").frame(width: 44, height: 36) }
-                .buttonStyle(OutlineButtonStyle()).frame(width: 60).disabled(!canLower)
+                .buttonStyle(OutlineButtonStyle()).disabled(!canLower)
                 .accessibilityLabel(words("common.less"))
             Text(verbatim: label).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
                 .frame(maxWidth: .infinity)
             Button { move(1) } label: { Image(systemName: "plus").frame(width: 44, height: 36) }
-                .buttonStyle(OutlineButtonStyle()).frame(width: 60).disabled(!canRaise)
+                .buttonStyle(OutlineButtonStyle()).disabled(!canRaise)
                 .accessibilityLabel(words("common.more"))
         }
         .accessibilityElement(children: .contain)
@@ -405,6 +427,8 @@ struct ResultsGoToView: View {
     var email: String? = nil
     /// Reads the tafs again after tafs' own places changed.
     var refreshed: () async -> Void = {}
+    /// Coach on this taf, a new conversation; nil draws no Add a place from a connected app.
+    var improveInCoach: (() -> Void)? = nil
     let close: () -> Void
     @State private var busy = false
 
@@ -476,6 +500,7 @@ struct ResultsGoToView: View {
                             if let choice = Self.toggled(item) { change { $0 = choice.setting } }
                         }
                     }
+                    addPlace
                 }
             } else {
                 Text(words("setup.reading_results")).font(.system(size: 15)).foregroundColor(Theme.dim)
@@ -484,8 +509,21 @@ struct ResultsGoToView: View {
         .task { await model.load(words: words) }
     }
 
-    private func placeRow(title: String, line: String, on: Bool, disabled: Bool, set: @escaping (Bool) -> Void) -> some View {
-        Toggle(isOn: Binding(get: { on }, set: set)) {
+    /// Add a place from a connected app…, as the iPad's (`TafSetupViews.swift:370-376`): Coach on
+    /// the taf, for someone who manages it and may use Coach. The sheet closes for Coach.
+    @ViewBuilder private var addPlace: some View {
+        if manages, let improveInCoach {
+            Button(words("setup.add_place")) {
+                close()
+                improveInCoach()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+        }
+    }
+
+    @ViewBuilder private func placeRow(title: String, line: String, on: Bool, disabled: Bool, set: @escaping (Bool) -> Void) -> some View {
+        let toggle = Toggle(isOn: Binding(get: { on }, set: set)) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 if !line.isEmpty {
@@ -494,9 +532,13 @@ struct ResultsGoToView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .toggleStyle(.switch)
-        .tint(Theme.ok)
-        .disabled(disabled)
+        // A switch that is on and can't be turned off stays green, as the iPad's tinted switch:
+        // macOS draws a disabled switch grey, so it is drawn as one here.
+        if on && disabled {
+            toggle.toggleStyle(LockedOnSwitchStyle()).disabled(true)
+        } else {
+            toggle.toggleStyle(.switch).tint(Theme.ok).disabled(disabled)
+        }
     }
 
     /// tafs' own places change at once, from the live taf's; the last one on can't be turned off.
@@ -580,5 +622,22 @@ struct KnobPendingPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// A switch that is on and can't be changed, as the iPad's disabled switch tinted green
+/// (`TafSetupViews.swift:403-414`): the place's words, and a green switch at the end, dimmed.
+struct LockedOnSwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 12) {
+            configuration.label
+            Capsule().fill(Theme.ok)
+                .frame(width: 38, height: 22)
+                .overlay(Circle().fill(Color.white).padding(2), alignment: .trailing)
+                .opacity(0.6)
+                .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isSelected)
     }
 }
