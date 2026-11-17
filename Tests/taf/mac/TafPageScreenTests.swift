@@ -6,7 +6,7 @@ private let pageSession = Session(accessToken: "tok", expiresIn: 60, tenant: "t1
 
 /// A taf with tafs cloud's time zone words and a Card that says how KIFF counts its tool.
 private let pageTaf = #"""
-{"tafs":[{"id":"taf-1","name":"Unanswered emails","kiff_agent":"a1","color":0,"state":"idle",
+{"tafs":[{"id":"taf-1","name":"Unanswered emails","kiff_agent":"a1","color":2,"state":"idle",
   "job_summary":"Every weekday at 9, lists inbox emails you haven't answered.",
   "time_zone_words":"Times are in Paris time.","schedule_time_zone_words":"Its schedule runs on New York time.",
   "card":{"cards":[{"id":"c1","title":"Inbox","active":true,
@@ -66,7 +66,7 @@ private func shoot<V: View>(_ view: V, _ name: String, size: CGSize = CGSize(wid
 
 /// Whether the taf's colour is drawn anywhere in a box of the bitmap.
 private func tafColour(_ bitmap: NSBitmapImageRep, x: ClosedRange<Int>, y: ClosedRange<Int>) -> Bool {
-    let colour = Palette.tafColor(0)
+    let colour = Palette.tafColor(2)
     return x.contains { px in stride(from: y.lowerBound, through: y.upperBound, by: 4).contains { Snapshot.hexes(bitmap, x: px, y: $0).contains(colour) } }
 }
 
@@ -86,8 +86,8 @@ let tafPageMacTests: [Test] = [
     }),
     Test("a Card's face says who issued it, at its bottom left", awaiting: { @MainActor in
         let card = try pageHomeTaf().cards[0]
-        let you = CardFace(card: card, color: Theme.tafColor(0), issuedBy: pageWords()("common.you")).environment(\.words, pageWords())
-        let account = CardFace(card: card, color: Theme.tafColor(0), issuedBy: "Acme").environment(\.words, pageWords())
+        let you = CardFace(card: card, color: Theme.tafColor(2), issuedBy: pageWords()("common.you")).environment(\.words, pageWords())
+        let account = CardFace(card: card, color: Theme.tafColor(2), issuedBy: "Acme").environment(\.words, pageWords())
         let size = CGSize(width: 300, height: 190)
         let shots = try shoot(you, "taf-card-face", size: size)
         guard let other = Snapshot.bitmap(of: account, size: size) else { throw Failure(description: "no bitmap") }
