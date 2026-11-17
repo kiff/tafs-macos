@@ -41,6 +41,10 @@ final class TafPagesModel: ObservableObject {
     let halt: HaltModel
     /// The taf's dial, for Setup's Starts when and Results go to.
     let knob: TafKnobModel
+    /// Its credits and runs this period, for the Card tab's Usage.
+    let credits: TafCreditsModel
+    /// What it remembers, for the Setup's See all.
+    let memory: TafMemoryModel
     private var asked = 0
 
     /// This device's planque proof for the Setup read; nil reads without it.
@@ -53,6 +57,8 @@ final class TafPagesModel: ObservableObject {
         self.proof = proof
         halt = HaltModel(cloud: cloud, taf: taf)
         knob = TafKnobModel(cloud: cloud, taf: taf)
+        credits = TafCreditsModel(cloud: cloud, taf: taf)
+        memory = TafMemoryModel(cloud: cloud, taf: taf)
         self.runs = runs ?? RunNowModel(cloud: cloud)
         // The page draws Run now from the app's model: it changes when that does.
         following = self.runs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
@@ -161,16 +167,15 @@ final class TafPagesModel: ObservableObject {
     }
 }
 
-/// A taf's Activity, as the iPad's: its Card's line, tafs cloud's filters as pills, then its
-/// calls by day, each drawn as sent.
+/// A taf's Activity, as the iPad's `TafActivityList`: what needs the person, its work and runs,
+/// tafs cloud's filters as pills, then its calls by day, each drawn as sent. Its Cards are beside
+/// it, in the page's side column (`TafView`).
 struct TafActivityTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let taf: Home.Taf
     /// Plan & usage, from the credits fix.
     var openUsage: () -> Void = {}
-    /// Opens the Card tab, from the Card's line.
-    let openCard: () -> Void
     /// The taf's doors, for whoever manages it: their knocks come first, as the iPad's
     /// `TafActivityList.parts`; nil for anyone else.
     var doors: DoorsModel? = nil
@@ -183,7 +188,6 @@ struct TafActivityTab: View {
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
                 if let doors { TafKnocksPanel(taf: taf, doors: doors, offered: doorsOffered) }
-                if let card = taf.cards.first { cardLine(card) }
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
@@ -207,8 +211,9 @@ struct TafActivityTab: View {
                         }
                     }
                     ForEach(page.groups) { group in
+                        // A day's title as the iPad's: "Today", soft, never in capitals.
                         if !group.title.isEmpty {
-                            Text(verbatim: group.title.uppercased()).font(Theme.mono(11)).tracking(1.5).foregroundColor(Theme.soft).padding(.top, 6)
+                            Text(verbatim: group.title).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim).padding(.top, 6)
                         }
                         ForEach(group.entries) { row($0) }
                     }
@@ -273,79 +278,41 @@ struct TafActivityTab: View {
         }
     }
 
-    /// The taf's first Card in one line: what is left, and the Card's title. It opens the Card.
-    private func cardLine(_ card: TafCard) -> some View {
-        Button(action: openCard) {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 8).fill(Theme.tafColor(taf.color)).frame(width: 48, height: 32)
-                    .overlay(Image(systemName: "creditcard").font(.system(size: 14, weight: .semibold)).foregroundColor(.white))
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    if let left = card.line(words) { Text(verbatim: left).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink) }
-                    Text(verbatim: card.title).font(.system(size: 13)).foregroundColor(Theme.soft)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
-            }
-            .padding(14)
-            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// One call: its kind's dot, tafs cloud's title and detail, and its time.
+    /// One call, as the iPad's `SourceActivityRow` (TafPresentationViews.swift:328-363): a plain
+    /// row, not boxed: tafs cloud's title and detail, and its time with its amount under it.
     private func row(_ entry: TafActivity.Entry) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Circle().fill(color(entry.tone)).frame(width: 9, height: 9).accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                if let detail = entry.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
+                if let detail = entry.detail { Text(verbatim: detail).font(.system(size: 13)).foregroundColor(Theme.soft) }
             }
             Spacer()
-            // Its time, and under it its amount in tafs cloud's words, as the iPad's row.
-            VStack(alignment: .trailing, spacing: 3) {
-                if let time = entry.time { Text(verbatim: time).font(Theme.mono(12)).foregroundColor(Theme.soft) }
+            VStack(alignment: .trailing) {
+                if let time = entry.time { Text(verbatim: time).font(.system(size: 12)).foregroundColor(Theme.dim) }
                 if let amount = entry.amountText { Text(verbatim: amount).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink) }
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
-    }
-
-    /// The iPad's kind colours (`TafActivity.Entry.tone`).
-    private func color(_ tone: TafActivity.Entry.Tone) -> Color {
-        switch tone {
-        case .ok: return Theme.ok
-        case .amber: return Theme.amber
-        case .no: return Theme.no
-        }
     }
 }
 
-/// A taf's Setup, as tafs cloud sends it: what waits on its Card first, then each part with
-/// its line. It only reads here: changing a part is done with Coach, with its approval.
+/// A taf's Setup, in the iPad's order (`TafDetailView.swift:305-358`): what waits on its Card and
+/// its own Connect again first, then the job, Starts when, its connected apps as the iPad's ring
+/// with its workflow inside, Results go to, what it remembers, and removing it. Its halt is on the
+/// Card tab, as on the iPad.
 struct TafSetupTab: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     /// Opens the taf's Activity with tafs cloud's query for one app's calls.
     var openActivity: (String) -> Void = { _ in }
-    /// The app whose sheet is open.
-    @State private var chosen: TafSetup.Node?
-    /// The taf's name, for its halt.
-    var tafName: String? = nil
-    /// Whether its halt is offered: to whoever manages the taf, as KIFF says, and not for a
-    /// taf whose Card is no longer active, as the iPad's `TafDetailView`.
-    var halts = false
-    /// Reads the list again after a halt tafs cloud answered, or a pause or a change of where
-    /// its results go.
+    /// Reads the list again after a pause or a change of where its results go.
     var halted: () async -> Void = {}
-    /// The taf's doors, for whoever manages it, as the iPad's Setup › Starts when › Doors;
-    /// nil for anyone else.
+    /// The taf's doors, for whoever manages it; nil for anyone else. On the iPad they are in
+    /// Setup › Starts when; here they stay at the top of the Setup until Starts when has them.
     var doors: DoorsModel? = nil
-    /// The taf, for Starts when and Results go to; nil leaves them out.
+    /// The taf, for the job, Starts when and Results go to; nil leaves them out.
     var taf: Home.Taf? = nil
     /// Whether this person manages the taf, as KIFF says: changing what starts it and where
     /// its results go is theirs.
@@ -354,53 +321,31 @@ struct TafSetupTab: View {
     var me: Me? = nil
     /// This person's sign-in email: their own key reads "You".
     var myEmail: String? = nil
+    /// Coach on this taf, a new conversation; nil draws no Improve in Coach.
+    var improveInCoach: (() -> Void)? = nil
+    /// Connect apps, from the ring's +; nil draws no +.
+    var openConnect: (() -> Void)? = nil
     @State private var startsOpen = false
     @State private var resultsOpen = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if let doors, let taf { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
-                switch model.setup {
-                case .loading:
-                    ProgressView().controlSize(.small)
-                    // Starts when and Results go to don't wait on the Setup read, as the iPad's
-                    // (TafDetailView.swift:302-317): only on the taf being tafs cloud's.
-                    dialLinks
-                case .unread(let why):
-                    Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
-                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    Button(words("common.try_again")) { Task { await model.loadSetup() } }
-                    dialLinks
-                case .loaded(let setup):
-                    // Halting is a job of its own: its row opens its screen, for whoever manages the taf.
-                    if halts { HaltRow(model: model.halt, name: tafName, halted: halted) }
-                    ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
-                    if let again = setup.connectAgain { connectAgain(again) }
-                    if let workflow = setup.workflow { part(workflow) }
-                    // Starts when, then the apps, then Results go to, as the iPad's Setup.
-                    if taf != nil { link(words("setup.starts_when"), symbol: "clock") { startsOpen = true } }
-                    let nodes = TafSetup.nodes(setup.connections)
-                    if !nodes.isEmpty {
-                        // One row per app, as the iPad's `ConnectedToolsRing` has one node per app.
-                        Eyebrow(text: words("connect.connected_tools")).padding(.top, 6)
-                        ForEach(nodes) { node($0) }
-                    }
-                    if let error = setup.connectionsError {
-                        // In red with Try again, as the iPad says it.
-                        HStack(spacing: 10) {
-                            Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
-                            Button(words("common.try_again")) { Task { await model.loadSetup() } }
-                                .buttonStyle(.plain).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                    if taf != nil { link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true } }
-                    if let versions = setup.versions { part(versions) }
-                    if let memory = setup.memory {
-                        Eyebrow(text: words("taf.memory.title")).padding(.top, 6)
-                        part(memory)
-                    }
+                first
+                if let taf {
+                    jobPanel(taf)
+                    PanelLink(action: { startsOpen = true }) { linkLabel(words("setup.starts_when"), "clock") }
+                    ConnectedToolsRing(model: model, taf: taf, manages: manages, openActivity: openActivity,
+                                       openConnect: openConnect, improveInCoach: improveInCoach)
+                    PanelLink(action: { resultsOpen = true }) { linkLabel(words("setup.results_go_to"), "paperplane") }
+                }
+                MemorySummaryPanel(model: model)
+                if manages {
+                    // Removing a taf is signed on the iPad (`removeTaf`), which this Mac can't do:
+                    // as another device's Sign out, no button, the shared line in its place.
+                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("setup.remove")
                 }
             }
             .padding(.bottom, Look.inset)
@@ -422,62 +367,35 @@ struct TafSetupTab: View {
                     .environment(\.words, words)
             }
         }
-        .sheet(item: $chosen) { node in
-            ConnectedAppSheet(node: node, close: { chosen = nil }, openActivity: { query in
-                chosen = nil
-                openActivity(query)
-            })
+    }
+
+    /// The taf's doors, then what waits on its Card for want of a unit, and its own Connect again.
+    @ViewBuilder private var first: some View {
+        if let doors, let taf { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
+        if case .loaded(let setup) = model.setup {
+            ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
+            if let again = setup.connectAgain { connectAgain(again) }
         }
     }
 
-    /// A Setup screen's way in, as the iPad's `PanelLink`: its mark and name in amber, and the
-    /// caret that says it opens.
-    /// Starts when and Results go to, while the Setup is read or couldn't be.
-    @ViewBuilder private var dialLinks: some View {
-        if taf != nil {
-            link(words("setup.starts_when"), symbol: "clock") { startsOpen = true }
-            link(words("setup.results_go_to"), symbol: "paperplane") { resultsOpen = true }
-        }
-    }
-
-    private func link(_ title: String, symbol: String, _ open: @escaping () -> Void) -> some View {
-        Button(action: open) {
-            HStack {
-                Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+    /// THE JOB, as the iPad's: its job in words, and Improve in Coach for whoever may.
+    private func jobPanel(_ taf: Home.Taf) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Eyebrow(text: words("setup.job"))
+            Text(verbatim: taf.job(words)).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            if let improveInCoach {
+                Button(words("setup.improve_in_coach"), action: improveInCoach)
+                    .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
     }
 
-    /// An app, as the iPad's node: its name, and its actions in words, green while the taf uses
-    /// it. It opens the app's sheet.
-    private func node(_ node: TafSetup.Node) -> some View {
-        Button { chosen = node } label: {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(verbatim: node.app.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    if let actions = node.app.actionWords {
-                        Text(verbatim: actions).font(.system(size: 13)).foregroundColor(node.app.running ? Theme.ok : Theme.soft)
-                    }
-                }
-                Spacer()
-                if let status = node.app.statusWords {
-                    Text(verbatim: status).font(.system(size: 13, weight: .semibold)).foregroundColor(node.app.reconnect ? Theme.amberText : Theme.soft)
-                }
-                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+    /// A Setup screen's way in, as the iPad's `PanelLink` label: its mark and name in amber.
+    private func linkLabel(_ title: String, _ symbol: String) -> some View {
+        Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
     }
 
     /// The taf's own sign-in expired: tafs cloud's words for it, edged in amber. Connecting again
@@ -492,17 +410,46 @@ struct TafSetupTab: View {
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.7)))
     }
+}
 
-    private func part(_ part: TafSetup.Part) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: part.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-            if let summary = part.summary { Text(verbatim: summary).font(.system(size: 14)).foregroundColor(Theme.soft) }
+/// WHAT IT REMEMBERS, as the iPad's `MemorySummaryPanel` (TafPresentationViews.swift:485-501): tafs
+/// cloud's count of its notes ("3 notes"), the latest, and See all, which opens every note.
+struct MemorySummaryPanel: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Eyebrow(text: words("taf.memory.title"))
+            switch model.setup {
+            case .loaded(let setup):
+                if let memory = setup.memory { summary(memory) }
+            case .loading:
+                ProgressView().controlSize(.small)
+            case .unread:
+                EmptyView()
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        // Notes forgotten there change the count here: the Setup is read again, as the iPad's.
+        .sheet(isPresented: $open, onDismiss: { Task { await model.loadSetup() } }) {
+            TafMemoryView(model: model.memory) { open = false }.environment(\.words, words)
+        }
+    }
+
+    private func summary(_ memory: TafSetup.Part) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: memory.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            if let latest = memory.summary { Text(verbatim: latest).font(.system(size: 14)).foregroundColor(Theme.soft).lineLimit(2) }
+            Button(words("taf.memory.see_all")) { open = true }
+                .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+        }
     }
 }
+
 
 /// A call refused for want of a limit in its unit: tafs cloud's title, words and history,
 /// edged in amber. What to do about it is Coach's, with its approval: no button here.

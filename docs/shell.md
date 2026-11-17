@@ -26,6 +26,11 @@ Top to bottom, as on the iPad:
 - NEEDS YOU's heading is amber as text (`amberText`), not the amber itself: the amber is
   under 4.5:1 on the raised ground. The rows' words are KIFF's and the taf's, drawn as sent.
 - The tafs in the sidebar don't open anything yet: a taf's own page arrives in its pull request.
+- **From a taf's page**, as the iPad's Coach mode opens over it: Improve in Coach and Change
+  the workflow with Coach open Coach on a new conversation about the taf, and an `ask_coach`
+  card's Ask Coach opens it with the card's words in its box, nothing sent. Each is only for
+  someone who manages the taf and may use Coach, and Coach's Back returns to the screen open
+  before the taf. The ring's + opens Connect apps (docs/taf.md).
 
 ## Reading at launch, and how long it takes
 
