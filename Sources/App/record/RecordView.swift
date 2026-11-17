@@ -23,6 +23,13 @@ final class RecordModel: ObservableObject {
     @Published var taf: String?
 
     var shown: [Record.Group] { Record.only(taf: taf, in: filter.keeping(groups)) }
+    /// The days whose reads are shown, not folded, as the iPad's `openReads`.
+    @Published var openReads: Set<Date> = []
+    /// What this person may do with each taf, by KIFF agent, as KIFF answers it: Export receipts
+    /// is for whoever sees every taf's Record. Nil until read.
+    @Published private(set) var access: [String: Access]?
+    /// Export receipts, its range and where it stands.
+    let exports: ReceiptsExportModel
 
     /// A search across the Record, kept apart from the list as the iPad's `RecordSearch`: its
     /// words, its pages as tafs cloud sent them, and where it stands.
@@ -66,6 +73,19 @@ final class RecordModel: ObservableObject {
     init(cloud: CloudClient, account: AccountClient? = nil) {
         self.cloud = cloud
         self.account = account
+        exports = ReceiptsExportModel(cloud: cloud)
+    }
+
+    /// Reads what this person may do with each taf from KIFF, as the iPad's `access`. Unread, Export
+    /// receipts isn't shown.
+    func loadAccess() async {
+        guard let account, let read = try? await account.myAccess() else { return }
+        access = read
+    }
+
+    /// Shows a day's reads, or folds them again.
+    func toggleReads(_ day: Date) {
+        if openReads.contains(day) { openReads.remove(day) } else { openReads.insert(day) }
     }
 
     /// Reads the Record's list again from the first page. A slower answer is dropped.
@@ -251,6 +271,10 @@ struct RecordView: View {
                 .padding(.horizontal, 14).frame(height: 40)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+                // Export receipts, for whoever sees every taf's Record, as the iPad's.
+                if Record.seesEveryTaf(tafs, access: model.access) {
+                    ExportReceiptsRow(model: model.exports, timeZone: timeZone)
+                }
                 // While a search is shown it stands in for the list, as on the iPad: its calls as
                 // tafs cloud found them, never narrowed by the list's chips.
                 if let found = model.found {
@@ -265,6 +289,7 @@ struct RecordView: View {
         }
         .background(Theme.background)
         .task { await model.load() }
+        .task { await model.loadAccess() }
         .sheet(isPresented: Binding(get: { model.caseAbout != nil }, set: { if !$0 { model.closeCase() } })) { caseSheet }
         .background(EmptyView().sheet(isPresented: Binding(get: { model.receiptEntry != nil }, set: { if !$0 { model.closeReceipt() } })) {
             if let entry = model.receiptEntry { ReceiptSheet(model: model, entry: entry) }
@@ -286,18 +311,11 @@ struct RecordView: View {
                 Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
             }
             // By day in the account's calendar, newest first, each titled as the iPad's
-            // `dayTitle`: "TODAY · NOV 15", in 11 medium monospaced capitals.
+            // `dayTitle`: "TODAY · NOV 15", in 11 medium monospaced capitals. Under All, a day's
+            // reads fold into one line, as the iPad's.
             let time = AccountTime(timeZone)
-            ForEach(Record.days(model.shown, calendar: time.calendar)) { day in
-                Text(verbatim: time.dayTitle(day.start, words: words).uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
-                VStack(spacing: 8) {
-                    ForEach(day.entries) { entry in
-                        row(entry)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                }
+            ForEach(Record.days(model.shown, calendar: time.calendar, foldingReads: model.filter == .all)) { day in
+                dayView(day, time: time)
             }
             if model.canContinue {
                 ProgressView().controlSize(.small).task { await model.more() }
@@ -305,6 +323,33 @@ struct RecordView: View {
                 Text(end).font(.system(size: 13)).foregroundColor(Theme.soft)
             }
         }
+    }
+
+    /// One day: its title, its calls, then its reads folded into one line, "· 3 reads of data,
+    /// within its Card · Show", which shows them (Hide folds them again), as the iPad's list.
+    @ViewBuilder private func dayView(_ day: Record.Day, time: AccountTime) -> some View {
+        Text(verbatim: time.dayTitle(day.start, words: words).uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+        let open = model.openReads.contains(day.start)
+        VStack(spacing: 8) {
+            ForEach(day.entries + (open ? day.reads : [])) { entry in
+                panel(entry)
+            }
+        }
+        if !day.reads.isEmpty {
+            Button { model.toggleReads(day.start) } label: {
+                Text(verbatim: "· " + words.count("record.reads", day.reads.count) + " · " + (open ? words("record.hide") : words("record.show")))
+                    .font(.system(size: 13)).foregroundColor(Theme.ok).padding(.horizontal, 4)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// A call in its panel.
+    private func panel(_ entry: Record.Entry) -> some View {
+        row(entry)
+            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     /// What a search found, as the iPad's `RecordResults`: each page's groups as tafs cloud sent
@@ -334,12 +379,7 @@ struct RecordView: View {
                 Text(verbatim: group.title).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim).padding(.top, 4)
             }
             VStack(spacing: 8) {
-                ForEach(group.entries) { entry in
-                    row(entry)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.panel))
-                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
+                ForEach(group.entries) { entry in panel(entry) }
             }
         }
     }
@@ -362,7 +402,8 @@ struct RecordView: View {
     }
 
     /// One call, as the iPad's `RecordRow`: its status dot; then its taf's dot and "Taf · what it
-    /// did · amount", with its time at the right; then what it was about and how it went.
+    /// did · amount", with its time at the right; then who decided and what became of it at the
+    /// tool, "within its Card · done", as the iPad's `detail`.
     private func row(_ entry: Record.Entry, opensCase: Bool = true) -> some View {
         let taf = tafs.first { $0.tafID == entry.taf.id }
         let head = [entry.taf.name, entry.title, entry.amountText].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
@@ -375,8 +416,7 @@ struct RecordView: View {
                     Spacer()
                     Text(verbatim: entry.time).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
                 }
-                Text(verbatim: [entry.about, entry.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 13)).foregroundColor(Theme.soft)
+                Text(verbatim: entry.line(words)).font(.system(size: 13)).foregroundColor(Theme.soft)
                 // KIFF's receipt, opened in its sheet and checked there, as the iPad's row opens it.
                 // Not from inside a case's own sheet: a window shows one sheet at a time.
                 if opensCase, entry.receipt != nil {
