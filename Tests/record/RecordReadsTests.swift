@@ -95,6 +95,26 @@ let recordReadsTests: [Test] = [
         let untitled = try entry(call("x", amount: nil, call: #"{"proposal_id":"p","amount":{"value":"9","unit":"EUR"}}"#))
         try expectEqual(Record.spent([untitled]), [])
     },
+    Test("a day's title says what it spent, in the app's language, as the iPad's day heading") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        func money(_ id: String, value: String, unit: String) -> String {
+            call(id, kind: "done", call: #"{"proposal_id":"p","read_only":false,"amount":{"value":"\#(value)","unit":"\#(unit)"}}"#)
+        }
+        let entries = try [money("a", value: "150.00", unit: "EUR"), money("b", value: "20.5", unit: "EUR"), money("c", value: "80", unit: "USD")].map(entry)
+        let en = try Words(language: "en", folder: folder)
+        guard let line = Record.spentWords(entries, words: en) else { throw Failure(description: "no spent line") }
+        try expect(line.hasSuffix(" spent") && line.contains("170.50") && line.contains("80") && line.contains(" + "), line)
+        try expect(line.firstIndex(of: "€")! < line.firstIndex(of: "$")!, "each currency in the order it came: \(line)")
+        let fr = try Words(language: "fr", folder: folder)
+        guard let french = Record.spentWords(entries, words: fr) else { throw Failure(description: "no French spent line") }
+        try expect(!french.contains("spent") && french.contains("170,50"), french)
+        try expectEqual(Record.spentWords([], words: en), nil)
+        // The heading is the iPad's: title and spend joined, the whole in capitals.
+        let heading = Record.dayHeading(title: "Today · 17 Nov", spent: line, language: "en")
+        try expect(heading.hasPrefix("TODAY · 17 NOV · ") && heading.hasSuffix(" SPENT"), heading)
+        try expect(Record.dayHeading(title: "Aujourd'hui · 17 nov.", spent: french, language: "fr").contains("DÉPENSES"), "French in capitals")
+        try expectEqual(Record.dayHeading(title: "Yesterday · 16 Nov", spent: nil, language: "en"), "YESTERDAY · 16 NOV")
+    },
     Test("a row's second line is the iPad's: who decided, then what became of it, in the shared words") {
         let en = try Words(language: "en", folder: strings)
         func line(_ kind: String, _ extra: String = "", detail: String = "tafs cloud's line") throws -> String {

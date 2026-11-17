@@ -8,7 +8,9 @@ private let shots = URL(fileURLWithPath: "build/screenshots")
 /// A call with a KIFF receipt; `read` marks it a read of data, as KIFF's `call.read_only`.
 private func call(_ id: String, at: String, kind: String = "done", title: String, amount: String? = nil, taf: String = "taf_1", name: String = "Refunds", read: Bool = false) -> String {
     let text = amount.map { #","amount_text":"\#($0)""# } ?? ""
-    return #"{"id":"\#(id)","at":"\#(at)","kind":"\#(kind)","title":"\#(title)","detail":"Done, within its Card","time":"\#(at.dropFirst(11).prefix(5))","taf":{"id":"\#(taf)","name":"\#(name)"},"call":{"proposal_id":"\#(id)","read_only":\#(read),"receipt":{"trace_id":"01K\#(id)","status":"signed"}}\#(text)}"#
+    // KIFF's own amount on the call, as the euros the line says: what a day's spend sums.
+    let money = amount.map { #","amount":{"value":"\#($0.dropFirst())","unit":"EUR"}"# } ?? ""
+    return #"{"id":"\#(id)","at":"\#(at)","kind":"\#(kind)","title":"\#(title)","detail":"Done, within its Card","time":"\#(at.dropFirst(11).prefix(5))","taf":{"id":"\#(taf)","name":"\#(name)"},"call":{"proposal_id":"\#(id)","read_only":\#(read),"receipt":{"trace_id":"01K\#(id)","status":"signed"}\#(money)}\#(text)}"#
 }
 
 /// Two days of calls, each with its reads.

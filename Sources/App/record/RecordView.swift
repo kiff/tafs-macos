@@ -325,10 +325,17 @@ struct RecordView: View {
         }
     }
 
+    /// A day's heading: its title, then what it spent, all in capitals (`Record.dayHeading`).
+    private func dayHeading(_ day: Record.Day, time: AccountTime) -> String {
+        Record.dayHeading(title: time.dayTitle(day.start, words: words),
+                          spent: Record.spentWords(day.entries + day.reads, words: words), language: words.language)
+    }
+
     /// One day: its title, its calls, then its reads folded into one line, "· 3 reads of data,
     /// within its Card · Show", which shows them (Hide folds them again), as the iPad's list.
     @ViewBuilder private func dayView(_ day: Record.Day, time: AccountTime) -> some View {
-        Text(verbatim: time.dayTitle(day.start, words: words).uppercased()).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
+        // The day's title, then what it spent ("€640 spent"), as the iPad's (RecordView.swift:48).
+        Text(verbatim: dayHeading(day, time: time)).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundColor(Theme.dim).padding(.top, 6)
         let open = model.openReads.contains(day.start)
         VStack(spacing: 8) {
             ForEach(day.entries + (open ? day.reads : [])) { entry in
