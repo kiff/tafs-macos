@@ -6,11 +6,25 @@
 #
 # Where it runs: a self-hosted runner on a Mac with macOS 12 and its Command Line Tools
 # (Swift 5.7), labelled `macos12`. It's off until the runner exists and the repository variable
-# MACOS12_RUNNER is `on`.
+# MACOS12_RUNNER is `on`. Turning it on is the owner's act, at that Mac.
 #
-# When it runs: only on pushes to main and by hand, never on a pull request. This repository is
-# public, so a pull request from anyone must never run code on that Mac. main holds only
-# reviewed code. Run it by hand on a branch (workflow_dispatch) to check one before it merges.
+# What this file can't promise: that no pull request reaches that Mac. It runs on pushes to main
+# and by hand only, but for a pull request GitHub runs the workflow files at the pull request's
+# own head, so a fork could add a workflow of its own for `[self-hosted, macos12]`. The
+# `if` below lives in a file it can rewrite. And `workflow_dispatch` on a branch runs that
+# branch's copy, which is any code a collaborator with write access pushed.
+#
+# What keeps pull requests off the Mac is how the runner is set up. All four come before it's
+# registered:
+#   1. Settings › Actions › General: approval required for workflows from every outside
+#      contributor, not only first-time ones.
+#   2. An organization runner group limited to kiff/tafs-macos and, where the plan allows, to
+#      this workflow on main only (kiff/tafs-macos/.github/workflows/macos12.yml@refs/heads/main),
+#      never a plain repository runner.
+#   3. Registered `--ephemeral`, so each job starts on a clean runner.
+#   4. A dedicated Mac or VM, run as a standard user (not an admin) with no keychain items, no
+#      SSH keys, no signing identity and no gh, cloud or other sign-ins.
+
 name: macOS 12 build
 
 on:
