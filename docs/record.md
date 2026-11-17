@@ -10,6 +10,7 @@ answer as sent.
 |---|---|---|
 | `record(_:cursor:)` | `GET /v1/record?q=&cursor=` | One page of a search: entries, tafs cloud's groups, and its own words for the search box, "nothing matched" and the end. |
 | `recordCase(_:)` | `GET /v1/record/cases/{about}` | Every call about one thing, oldest first, with the step that failed in tafs cloud's words. |
+| `exportReceipts(from:to:)` | `GET /v1/record/receipts?from=&to=` | The receipts of some days (YYYY-MM-DD, at most 92), for an accountant: tafs cloud's answer byte for byte, its CSV, and how many calls have no receipt yet. |
 
 - tafs cloud is at `https://cloud.tafs.kiff.dev` and takes the person's KIFF session.
 - What is typed is escaped and cut at 100 characters, tafs cloud's limit.
@@ -40,7 +41,34 @@ answer as sent.
   amount), Stopped (refused, not done, revoked) and Waiting (held, sending, unknown). They
   choose among the calls already read; a group left with none is left out.
 - The list is by day (below); each row has a dot for how it went, in the iPad's kind
-  colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf and what it is about, its amount and its time.
+  colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf, its amount and its time,
+  then the iPad's second line (below).
+- **A day's reads fold into one line**, as the iPad's list (`RecordView.swift:44-63`): a call KIFF
+  marks a read (`call.read_only`, as the iPad's `ActivityCall.readOnly`) goes under its day's
+  calls as "· 3 reads of data, within its Card · Show" (`record.reads`, `record.show`), in 13 `ok`
+  green; Show draws them under the day's calls and Hide (`record.hide`) folds them again. Only
+  under All, as on the iPad: a filter shows reads as calls. A day of reads alone is its title and
+  the fold.
+- **A row's second line is the iPad's** (`RecordRow.detail`, `decidedLine`, `resultLine`,
+  RecordView.swift:216-259, 314-329): for a call with a KIFF receipt or an owner's answer, who
+  decided, then what became of it at the tool, "within its Card · done", "refused by its Card ·
+  nothing sent", "approved by you · done", "refused by an admin · nothing sent" (`record.decided.*`,
+  `record.result.*`, `record.nothing_sent`, `card.card_revoked`, the answerer as `record.answerer.*`
+  or `people.role_phrase.*`). Any other call reads as tafs cloud words it. **Held** keeps tafs
+  cloud's line: the iPad says "no longer waiting" once KIFF holds it no more, which the Record
+  doesn't tell this Mac. What the call acted on (the iPad's `onText`, "payment …QbstR") isn't drawn:
+  it needs the taf's reference, which the Record doesn't carry.
+- **Export receipts** (`ExportReceiptsRow`, the iPad's, RecordSearchViews.swift:128-191 and
+  RecordView.swift:19-23): under the search box, in 15 semibold `amberText`, for whoever oversees or
+  manages every taf on tafs cloud (`Record.seesEveryTaf`, the iPad's `seesEveryTaf`, from KIFF's
+  `GET /v1/me/access`; unread, it isn't shown; tafs cloud still decides, 403). It opens Last 7, 30
+  and 90 days (`record.export_last_days`), the account's calendar days with today; "Preparing
+  receipts…" while tafs cloud makes them; then **a save panel** asks where, and a folder named
+  `receipts-<from>-to-<to>` gets the two files the iPad shares, `.json` (tafs cloud's answer as it
+  came, so KIFF's receipts are as issued) and `.csv`. Nothing else in the folder is touched, and
+  nothing is kept elsewhere on this Mac. Calls with no receipt yet are counted under it
+  (`record.export_missing`); a refusal says why (`record.export_not_exported`, with tafs cloud's
+  words). It only reads: nothing is signed or sent.
 - The list (not a search) reads its next page when its end comes into view, and joins its group.
 - A cursor tafs cloud no longer takes (a call was made since) starts the search again.
 - A slower answer to an older search is dropped.
@@ -88,9 +116,9 @@ this Mac. Nothing opens outside the app.
 A case's steps drawn as their taf's Activity draws them, with each step's own next step (the
 iPad's `SourceActivityRow`), the only retry: the Mac draws the Record's row, with no next step
 yet. A case read with no steps shows an empty sheet, where the iPad keeps its spinner. A taf's
-detail, exporting receipts (for someone who sees every taf's Record), and folding a
-day's reads into one line, as the iPad's list does. A receipt's payment check against the
-taf's reference.
+detail. A receipt's payment check against the taf's reference. **A day's spend in its title**
+("€640 spent"): `Record.spent` sums it as the iPad's `spent` does, but its words
+(`record.day_spent`) aren't in the shared words at the pin, so the title doesn't draw it yet.
 
 ## Tests
 
@@ -105,7 +133,15 @@ python-ecdsa's signatures. On a Mac, libsecp256k1 and the oracle agree on the fi
 v as 0–1 or 27–28) and on 1,600 random inputs, and both refuse r or s at n, zero or all ones; the
 fixture checks out through libsecp256k1 and each failure fails; and the read, a refusal, and when
 what happened shows.
-It writes `build/screenshots/record-*.png` and `receipt-*.png`. There is no fixture for the Record in kiff/tafs's
+Reads: `call.read_only` decoded (absent or not a bool is a call), the pinned Activity contract's
+entry read as a Record line, a day's reads folded apart under All and not under a filter, and
+Show and Hide; a day's spend summed per currency at the larger decimals; each row's second line
+by kind and answer, its words in all 8 languages; Export's request (`/v1/record/receipts`, the
+account's days), its bytes kept, both files written beside what's there, a cancel saving nothing,
+a refusal's words; and who sees it.
+It writes `build/screenshots/record-*.png` and `receipt-*.png`, among them
+`record-reads-folded-{light,dark}.png`, `record-reads-shown-{light,dark}.png`,
+`record-export-{light,dark}.png` and `record-export-row-{light,dark}.png`. There is no fixture for the Record in kiff/tafs's
 `contracts/` yet: the shape is taken from kiff/tafs's `docs/api.md` and the iPad app's reader.
 
 ## The layout, as the iPad's
@@ -119,9 +155,8 @@ It writes `build/screenshots/record-*.png` and `receipt-*.png`. There is no fixt
   `calendar.today_date`, `calendar.yesterday_date`), its date and weekday in the app's language,
   with this Mac's region (`AppDates.locale`), in capitals, 11 medium monospaced, `dim`.
   A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. The iPad adds the
-  day's spend ("€640 spent"); the Record sends each call's amount as text only, so the Mac
-  doesn't add them up.
+  day's spend ("€640 spent"); its words aren't at the pin yet (Not yet, above).
 - **A call** is a panel (radius 14, padding 14): its status dot (9), then its taf's dot and
   "Taf · what it did · amount" in 14 semibold with its time at the right in 12 monospaced
-  `dim`, then what it was about and how it went, at 13 `soft`.
+  `dim`, then who decided and what became of it, at 13 `soft`.
 
