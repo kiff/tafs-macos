@@ -269,7 +269,8 @@ struct AccountView: View {
         group(words("settings.language_title")) {
             row(words("settings.language_title"), value: AppInfo.languageName(words.language))
             divider
-            link(words("settings.change_language")) { pages.append(.language) }
+            // In the accent, as the iPad's (SignInView.swift:364).
+            AccountRow.link(words("settings.change_language"), color: Theme.amberText) { pages.append(.language) }
         }
         // The AI-data consent: given, with Withdraw; not given, its screen. tafs cloud's words.
         if let consent = model.consent, consent.drawable {

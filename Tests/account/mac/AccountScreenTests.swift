@@ -181,7 +181,11 @@ let accountControlsMacTests: [Test] = [
                 let (model, _, _) = try await owner()
                 let devices = DevicesModel(account: AccountClient(transport: CannedTransport([]), session: session))
                 let exportChats = ExportChatsModel(cloud: CloudClient(transport: CannedTransport([]), session: session))
-                let view = AccountView(model: model, devices: devices, exportChats: exportChats, open: { _ in }, addThisMac: {}, mayUseCoach: true, signOut: {}, pages: opened)
+                // People & groups and Alerts, as the iPad's Account lists them, so every row is drawn.
+                let people = PeopleModel(account: AccountClient(transport: CannedTransport([]), session: session))
+                let alerts = AlertsModel(account: "t-shot", defaults: UserDefaults(suiteName: "tafs.tests.\(UUID().uuidString)")!)
+                let view = AccountView(model: model, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
+                                       open: { _ in }, addThisMac: {}, mayUseCoach: true, signOut: {}, pages: opened)
                     .environment(\.words, Words.load(folder: strings, preferred: ["en"]))
                 guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: height), dark: dark), let png = Snapshot.png(bitmap) else {
                     throw Failure(description: "no PNG")

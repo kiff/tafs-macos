@@ -164,10 +164,10 @@ enum AccountRow {
     }
 
     /// A row that opens a page: its title, its value when it has one, and the chevron.
-    static func link(_ title: String, value: String? = nil, _ action: @escaping () -> Void) -> some View {
+    static func link(_ title: String, value: String? = nil, color: Color = Theme.ink, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Text(title).font(.system(size: 17)).foregroundColor(Theme.ink)
+                Text(title).font(.system(size: 17)).foregroundColor(color)
                 Spacer()
                 if let value { Text(verbatim: value).font(.system(size: 17)).foregroundColor(Theme.soft).lineLimit(1) }
                 chevron

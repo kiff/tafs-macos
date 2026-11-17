@@ -51,7 +51,7 @@ To the iPad's layout:
   Day; "×n" for a repeat, kept whole on the name's line.
 - **A narrow week keeps a few characters of each name** (`WeekChip`): the chip measures its
   column (the grid's width, less the hours, by the days), and keeps at least 34 points of the
-  name, a few characters and "…". The dot gives way first, then the ×N; the name never does.
+  name, a few characters and "…". The dot gives way first, then the ×N; the name never does. A ×N that can't fit even alone goes, and the dot stays wherever it fits beside the name's least, so chips in columns of the same width keep the same dot.
   The colour stays on the chip's ground, and VoiceOver still says the count.
 - With no event on the days shown, the app's line is centred under the grid.
 - **Today** is the date in the **account's** zone, as tafs cloud names it. The first read

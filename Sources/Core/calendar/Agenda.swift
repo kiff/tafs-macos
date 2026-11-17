@@ -233,6 +233,9 @@ enum WeekChip {
         let times = count.map { $0 + gap } ?? 0
         if room >= nameRoom + dot + times { return (true, count != nil) }
         if count != nil, room >= nameRoom + times { return (false, true) }
+        // The ×N doesn't fit even alone: it goes, and the dot stays wherever it fits beside the
+        // name's least. The dot goes only when the name would go below it.
+        if room >= nameRoom + dot { return (true, false) }
         return (false, false)
     }
 }

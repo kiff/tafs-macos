@@ -135,6 +135,11 @@ let calendarTests: [Test] = [
         try expect(noDot == (false, true), "no dot, the ×N kept")
         // Then the ×N: the name keeps its room.
         try expect(WeekChip.fit(width: 60, count: 24) == (false, false), "the name alone")
+        // A ×N that can't fit even alone goes, and the dot stays wherever it fits beside the name's
+        // least: two chips in columns of the same width keep the same dot, ×N or not.
+        let roomForDot = WeekChip.padding + WeekChip.nameRoom + WeekChip.dot
+        try expect(WeekChip.fit(width: roomForDot, count: 24) == (true, false), "the dot kept, the ×N gone")
+        try expect(WeekChip.fit(width: roomForDot, count: 24).dot == WeekChip.fit(width: roomForDot, count: nil).dot, "the same dot with a ×N or without")
         // One firing has no ×N: the dot stays while the name keeps its few characters.
         try expect(WeekChip.fit(width: WeekChip.padding + WeekChip.nameRoom + WeekChip.dot, count: nil) == (true, false), "the dot and the name")
         try expect(WeekChip.fit(width: 40, count: nil) == (false, false), "the name alone")
