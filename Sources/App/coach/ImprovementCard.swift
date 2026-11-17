@@ -15,7 +15,10 @@ struct ImprovementCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Eyebrow(text: words("coach.result.new_version", ["taf": card.tafName ?? ""]), color: Theme.ok)
-            Text(verbatim: card.text ?? "").font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            // What it does now, in tafs cloud's words; none leaves no gap.
+            if let text = card.text, !text.isEmpty {
+                Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            }
             // What changed, in tafs cloud's words.
             if let note = card.tafNote {
                 Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
