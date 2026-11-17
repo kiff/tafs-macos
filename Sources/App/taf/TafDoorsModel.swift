@@ -49,7 +49,10 @@ final class DoorsModel: ObservableObject {
                 return
             } catch {
                 guard attempt < retryDelays.count else { break }
-                do { try await Task.sleep(nanoseconds: retryDelays[attempt]) } catch { return }
+                // Read before the await: Swift 5.7 refuses an actor's property passed into an async call
+                // ("cannot be passed 'inout' to 'async' function call").
+                let delay = retryDelays[attempt]
+                do { try await Task.sleep(nanoseconds: delay) } catch { return }
             }
         }
         error = Words.app("door.not_read")
