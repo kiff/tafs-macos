@@ -341,10 +341,10 @@ struct TafSetupTab: View {
                 }
                 MemorySummaryPanel(model: model)
                 if manages {
-                    // Removing a taf is signed on the iPad (`removeTaf`), which this Mac can't do:
-                    // as another device's Sign out, no button, the shared line in its place.
-                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Remove for good, as the iPad draws it for whoever manages the taf (not behind its
+                    // ApprovalGate). It's signed with the approval key there (`removeTaf`), which this
+                    // Mac can't do: a click says to approve on another device and sends nothing.
+                    ApprovalElsewhereButton(title: words("setup.remove_for_good"))
                         .accessibilityIdentifier("setup.remove")
                 }
             }
