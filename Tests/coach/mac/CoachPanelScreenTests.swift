@@ -31,8 +31,6 @@ private func coach(_ answers: [(Int, String)]) async -> (CoachModel, CannedTrans
     return (model, transport)
 }
 
-/// The window as it is signed in, with the Overview under Coach.
-@MainActor
 /// A recognizer with two languages, so the composer draws the mic and its language, as the app's.
 @MainActor
 private final class PanelSpeech: SpeechEngine {
@@ -45,6 +43,7 @@ private final class PanelSpeech: SpeechEngine {
     func stop() {}
 }
 
+/// The window as it is signed in, with the Overview under Coach.
 @MainActor
 private func window(_ panel: CoachPanelModel, coach: CoachModel, overview: OverviewModel, language: String) -> some View {
     Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
