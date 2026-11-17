@@ -1,1 +1,1 @@
-let recordTests: [Test] = recordListTests + receiptCheckTests
+let recordTests: [Test] = recordListTests + receiptCheckTests + recordReadsTests

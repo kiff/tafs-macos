@@ -38,22 +38,48 @@ enum Record {
         let amount: Amount?
         /// The owner's answer to a held call, from its `call` ("approved_once", "refused").
         let answer: String?
+        /// Who answered it, by KIFF's role for them ("admin"), never who they are; nil when KIFF
+        /// doesn't say. `answeredByYou`: the person reading answered it themselves.
+        let answerBy: String?
+        let answeredByYou: Bool
+        /// A read of data, as KIFF marks the call (`call.read_only`): a day's reads fold into one line.
+        let readOnly: Bool
+        /// The owner approved it, a held call that KIFF then allowed, whatever the tool did: the
+        /// iPad's `ownerApproved` (`outcome` allowed and `held`), or a call tafs cloud names approved.
+        let ownerApproved: Bool
 
         enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call }
 
         /// The part of KIFF's call the receipt sheet reads. Each part that doesn't read is left out, and
         /// the line still reads.
         private struct Call: Decodable {
-            struct Answer: Decodable { let decision: String }
+            struct Answer: Decodable {
+                let decision: String
+                var by: String?
+                var you: Bool?
+                enum CodingKeys: String, CodingKey { case decision, by, you }
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    decision = try c.decode(String.self, forKey: .decision)
+                    by = (try? c.decodeIfPresent(String.self, forKey: .by)) ?? nil
+                    you = (try? c.decodeIfPresent(Bool.self, forKey: .you)) ?? nil
+                }
+            }
             var receipt: Receipt?
             var amount: Amount?
             var answer: Answer?
-            enum CodingKeys: String, CodingKey { case receipt, amount, answer }
+            var readOnly: Bool?
+            var outcome: String?
+            var held: Bool?
+            enum CodingKeys: String, CodingKey { case receipt, amount, answer, readOnly = "read_only", outcome, held }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
                 receipt = (try? c.decodeIfPresent(Receipt.self, forKey: .receipt)) ?? nil
                 amount = (try? c.decodeIfPresent(Amount.self, forKey: .amount)) ?? nil
                 answer = (try? c.decodeIfPresent(Answer.self, forKey: .answer)) ?? nil
+                readOnly = (try? c.decodeIfPresent(Bool.self, forKey: .readOnly)) ?? nil
+                outcome = (try? c.decodeIfPresent(String.self, forKey: .outcome)) ?? nil
+                held = (try? c.decodeIfPresent(Bool.self, forKey: .held)) ?? nil
             }
         }
 
@@ -76,6 +102,10 @@ enum Record {
             receipt = call?.receipt.flatMap { $0.traceID.isEmpty ? nil : $0 }
             amount = call?.amount
             answer = call?.answer?.decision
+            answerBy = call?.answer?.by
+            answeredByYou = call?.answer?.you == true
+            readOnly = call?.readOnly == true
+            ownerApproved = kind == "approved" || (call?.outcome == "allowed" && call?.held == true)
         }
     }
 
@@ -178,24 +208,28 @@ enum Record {
         }
     }
 
-    /// One day of the Record: its start, in the account's calendar, and its calls, newest first.
+    /// One day of the Record: its start, in the account's calendar, and its calls, newest first;
+    /// with its reads apart, to fold into one line, as the iPad's `Day.lines` and `Day.reads`.
     struct Day: Identifiable, Equatable {
         let start: Date
-        let entries: [Entry]
+        var entries: [Entry]
+        var reads: [Entry] = []
         var id: Date { start }
     }
 
-    /// The calls by day, newest first, as the iPad's `RecordView.days` (RecordView.swift:134-144):
+    /// The calls by day, newest first, as the iPad's `RecordView.days` (RecordView.swift:126-144):
     /// every call shown, whichever group tafs cloud sent it in, under the day it was made in the
-    /// account's calendar.
-    static func days(_ groups: [Group], calendar: Calendar) -> [Day] {
+    /// account's calendar. With `foldingReads` (the iPad folds them under All only), a day's reads
+    /// go apart, in `reads`.
+    static func days(_ groups: [Group], calendar: Calendar, foldingReads: Bool = false) -> [Day] {
         var out: [Day] = []
         for entry in groups.flatMap(\.entries).sorted(by: { $0.at > $1.at }) {
             let start = calendar.startOfDay(for: entry.at)
-            if out.last?.start == start {
-                out[out.count - 1] = Day(start: start, entries: out[out.count - 1].entries + [entry])
+            if out.last?.start != start { out.append(Day(start: start, entries: [])) }
+            if foldingReads && entry.readOnly {
+                out[out.count - 1].reads.append(entry)
             } else {
-                out.append(Day(start: start, entries: [entry]))
+                out[out.count - 1].entries.append(entry)
             }
         }
         return out
