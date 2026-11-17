@@ -1,1 +1,1 @@
-let overviewTests: [Test] = overviewHomeTests + homeLabelsTests
+let overviewTests: [Test] = overviewHomeTests + homeLabelsTests + overviewListOrderTests

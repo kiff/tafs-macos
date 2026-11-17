@@ -28,6 +28,25 @@ final class NeedsYouModel: ObservableObject {
     private var answeredSteps: Set<String> = []
     /// The answers on their way: cancelled at sign-out, so none outlives its session.
     private var stepAnswers: [String: Task<Void, Never>] = [:]
+    /// Of tafs cloud's count, the steps answered here that it still counts, as the iPad's.
+    private var answeredStillCounted = 0
+    /// Coach's chats waiting on the person, as Home last listed them (`coach_waiting`), and its
+    /// "Set all aside" (`coach_waiting_clear`).
+    @Published private(set) var coachWaitingListed: [CoachWaiting] = []
+    @Published private(set) var coachWaitingClear: CoachWaitingClear?
+    /// The chats being set aside now: one call per chat at a time, so a second click sends
+    /// nothing until tafs cloud answers.
+    @Published private(set) var settingAside: Set<String> = []
+    /// Why the last Set aside wasn't taken, in tafs cloud's words.
+    @Published private(set) var setAsideNotDone: String?
+    /// What Home counted for Needs you (`needs_you`), and the Card unit requests it listed.
+    @Published private(set) var homeCount: Int?
+    @Published private(set) var homeWords: String?
+    @Published private(set) var cardUnits = 0
+    /// tafs cloud, for Set aside; nil where nothing is set aside.
+    private let cloud: CloudClient?
+    /// This device's signed read of its connections, sent with Set aside, as the iPad's.
+    private let proof: (() async -> String?)?
 
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
@@ -37,10 +56,13 @@ final class NeedsYouModel: ObservableObject {
     /// confirmed; the prompt's words are tafs cloud's for the answer and the step.
     let confirm: (String) async throws -> Void
 
-    init(account: AccountClient, route: ApprovalRoute, confirm: @escaping (String) async throws -> Void = NeedsYouModel.confirmOwner) {
+    init(account: AccountClient, route: ApprovalRoute, confirm: @escaping (String) async throws -> Void = NeedsYouModel.confirmOwner,
+         cloud: CloudClient? = nil, proof: (() async -> String?)? = nil) {
         self.account = account
         self.route = route
         self.confirm = confirm
+        self.cloud = cloud
+        self.proof = proof
     }
 
     /// The owner's presence, as the iPad's `authenticate(reason:)` with `.deviceOwnerAuthentication`.
@@ -85,7 +107,70 @@ final class NeedsYouModel: ObservableObject {
     /// an answered step Home no longer lists is forgotten.
     func showSteps(_ listed: [YourStep]) {
         answeredSteps.formIntersection(listed.map(\.handoff))
+        answeredStillCounted = answeredSteps.count
         steps = listed.filter { !answeredSteps.contains($0.handoff) }
+    }
+
+    /// What Home lists for Needs you, as the iPad's `show` (AppModel.swift:2302-2310): its steps,
+    /// Coach's waiting chats and Set all aside, its count, and its Card unit requests.
+    func show(_ page: Home.Page) {
+        showSteps(page.yourSteps)
+        coachWaitingListed = page.coachWaiting
+        coachWaitingClear = page.coachWaitingClear
+        homeCount = page.needsYouCount
+        homeWords = page.needsYouWords
+        cardUnits = page.cardUnits
+    }
+
+    /// Coach's waiting chats as Needs you draws them: less the one open in Coach (`onScreen`), and
+    /// less those being set aside.
+    func coachWaiting(onScreen: String? = nil) -> [CoachWaiting] {
+        NeedsYouCount.shown(coachWaitingListed, onScreen: onScreen, settingAside: settingAside)
+    }
+
+    /// "Set all aside", above two or more waiting chats, when tafs cloud sent it, as the iPad's `setAllAside`.
+    func setAllAside(onScreen: String? = nil) -> CoachWaitingClear? {
+        coachWaiting(onScreen: onScreen).count > 1 ? coachWaitingClear : nil
+    }
+
+    /// What Needs you's count is made of, as the iPad's `needsYouCount` reads it.
+    func countParts(onScreen: String? = nil) -> NeedsYouCount.Parts {
+        let shown = coachWaiting(onScreen: onScreen).count
+        return NeedsYouCount.Parts(home: homeCount, homeWords: homeWords, held: count, cardUnits: cardUnits, steps: steps.count,
+                                   unproven: unproven.count, coachWaiting: shown, coachWaitingHidden: coachWaitingListed.count - shown,
+                                   answeredStillCounted: answeredStillCounted)
+    }
+
+    /// Needs you's number in the sidebar and on the Overview, as the iPad's `needsYouCount`.
+    func needsYouCount(onScreen: String? = nil) -> Int { NeedsYouCount.count(countParts(onScreen: onScreen)) }
+
+    /// Sets a waiting Coach chat aside, or every one with nil, as the iPad's `setAsideCoach`
+    /// (AppModel.swift:7781-7814): tafs cloud's "not now", never an approval, and nothing is
+    /// signed: only this device's read of its connections goes with it, as with Coach's thread.
+    /// One call per chat at a time. The row goes once tafs cloud says so; a refusal keeps it and
+    /// says why, in tafs cloud's words. `done` gets the chats it ended, then the lists are read again.
+    func setAside(_ session: String?, done: (Set<String>) async -> Void = { _ in }) async {
+        guard let cloud = self.cloud else { return }
+        // Set all aside ends every chat tafs cloud listed, so it's guarded by all of them.
+        let sessions = session.map { Set([$0]) } ?? Set(coachWaitingListed.map(\.session))
+        guard !sessions.isEmpty, settingAside.isDisjoint(with: sessions) else { return }
+        settingAside.formUnion(sessions)
+        setAsideNotDone = nil
+        let make = proof
+        var signed: String?
+        if let make { signed = await make() }
+        let answer: CoachSetAside
+        do {
+            answer = try await cloud.setAsideCoach(session, proof: signed)
+        } catch {
+            settingAside.subtract(sessions)
+            setAsideNotDone = Self.why(error)
+            return
+        }
+        settingAside.subtract(sessions)
+        let ended = Set(answer.setAside)
+        coachWaitingListed.removeAll { ended.contains($0.session) }
+        await done(ended)
     }
 
     /// Whether this Mac can answer a step, as the iPad's `canAnswerSteps`: KIFF checks the device
@@ -168,6 +253,7 @@ final class NeedsYouModel: ObservableObject {
     /// Takes an answered or ended step off Needs you at once, while Home still lists it.
     private func drop(_ step: YourStep) {
         answeredSteps.insert(step.handoff)
+        if steps.contains(where: { $0.handoff == step.handoff }) { answeredStillCounted += 1 }
         steps.removeAll { $0.handoff == step.handoff }
     }
 
@@ -253,6 +339,12 @@ struct NeedsYouView: View {
     var openKnocks: (Home.Taf) -> Void = { _ in }
     /// Reads the lists again once a step is answered: the taf's run goes on.
     var answered: () async -> Void = {}
+    /// Whether this person may use Coach: a waiting chat's Open Coach is theirs alone.
+    var mayUseCoach = false
+    /// Opens Coach on a waiting chat.
+    var openCoach: (CoachWaiting) -> Void = { _ in }
+    /// What follows chats set aside: Coach leaves them, and the lists are read again.
+    var setAsideDone: (Set<String>) async -> Void = { _ in }
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -265,6 +357,9 @@ struct NeedsYouView: View {
                 }
                 // A step a taf handed its owner comes first, oldest first, as the iPad's.
                 ForEach(model.steps) { step($0) }
+                // Coach waits on the person in a chat, after the steps, as on the iPad
+                // (NeedsYouView.swift:16-19): Set all aside above them, with two or more.
+                coachWaiting
                 // A money call whose outcome KIFF can't prove: the owner says whether it happened.
                 ForEach(model.unproven) { happened($0) }
                 switch model.state {
@@ -273,7 +368,7 @@ struct NeedsYouView: View {
                 case .unread(let why):
                     Text(words("needs_you.request_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                 case .loaded(let calls) where calls.isEmpty && knocked.isEmpty:
-                    if model.unproven.isEmpty, model.steps.isEmpty { nothing }
+                    if model.unproven.isEmpty, model.steps.isEmpty, model.coachWaiting().isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
                 }
@@ -290,6 +385,18 @@ struct NeedsYouView: View {
         .task {
             await model.load()
             await model.loadUnproven(answersHolds: answersHolds)
+        }
+    }
+
+    /// Coach's waiting chats, as the iPad's: tafs cloud's words, its way in, and Set aside; why
+    /// the last Set aside wasn't taken over them.
+    @ViewBuilder private var coachWaiting: some View {
+        if let why = model.setAsideNotDone {
+            Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+        }
+        if let clear = model.setAllAside() { SetAllAsideButton(model: model, clear: clear, done: setAsideDone) }
+        ForEach(model.coachWaiting()) { waiting in
+            CoachWaitingCard(model: model, waiting: waiting, mayUseCoach: mayUseCoach, open: openCoach, done: setAsideDone)
         }
     }
 

@@ -166,14 +166,42 @@ final class CoachModel: ObservableObject {
     @Published private(set) var archivedChats: [CoachChat] = []
 
     /// The chat shown, by its session: the one opened, else the live chat's, as the iPad's
-    /// `setupChat ?? setupThread.session`; nil for a new conversation.
-    private var shownSession: String? {
+    /// `setupChat ?? setupThread.session`; nil for a new conversation. Needs you leaves a waiting chat
+    /// shown here out while Coach is open (`NeedsYouCount.shown`).
+    var shownSession: String? {
         if let chat { return chat }
         guard !fresh, case .loaded(_, let page) = state else { return nil }
         for item in page.items.reversed() {
             if case .message(let message, _) = item, let session = message.session { return session }
         }
         return nil
+    }
+
+    /// The chats set aside from Needs you this session, as the iPad's `setAsideChats`: Coach never
+    /// goes on in one by itself. Kept in memory only.
+    private var setAsideChats: Set<String> = []
+
+    /// Coach's waiting chat, from Needs you's Open Coach, as the iPad's `openCoachWaiting`
+    /// (AppModel.swift:7756-7760): Coach opens on that chat, where its card waits. Before Coach is
+    /// read, it's the chat Coach opens on once read.
+    func open(waiting session: String) async {
+        guard isCoach, !session.isEmpty else { return }
+        guard case .loaded = state else {
+            chat = session
+            fresh = false
+            improveWhenRead = nil
+            newWhenRead = false
+            return
+        }
+        await open(chat: session)
+    }
+
+    /// Chats Needs you set aside, as the iPad's `setAsideCoach` after tafs cloud took it
+    /// (AppModel.swift:7807-7812): one shown here gives way to a new conversation, since its next
+    /// message would go on in the ended session, and Coach never opens one by itself again.
+    func setAside(chats ended: Set<String>) {
+        setAsideChats.formUnion(ended)
+        if let shown = shownSession, ended.contains(shown) { newChat() }
     }
 
     /// Archives one of Coach's chats, as the iPad's `archiveSetupChat` (AppModel.swift:7533-7551):
@@ -877,7 +905,9 @@ final class CoachModel: ObservableObject {
             let mine = conversation
             if isCoach, chat == nil, !fresh, let chats = try? await cloud.chats(of: coach.id), mine == conversation,
                let newest = chats.max(by: { $0.updated < $1.updated }) {
-                chat = newest.session
+                // A chat set aside here is never the one Coach goes on in: a new conversation
+                // instead, as the iPad's `loadSetupThread` (AppModel.swift:8036-8037).
+                if setAsideChats.contains(newest.session) { newWhenRead = true } else { chat = newest.session }
             }
             guard mine == conversation else { return }
             show(coach, try await read(coach) ?? .empty)

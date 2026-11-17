@@ -83,6 +83,9 @@ enum Home {
         /// Its next run, in tafs cloud's words ("Next run Mon 08:00"), and as a time.
         let nextRunWords: String?
         let nextRun: Date?
+        /// When it last ran, as the list says (`last_run`): the Overview's Last result before its
+        /// runs are read, and its place in the list, as the iPad's `CloudTaf.lastRun`.
+        let lastRun: Date?
         let health: Health?
         /// A taf with no schedule: it works from its chat.
         let unscheduled: Bool
@@ -112,6 +115,7 @@ enum Home {
         }
 
         enum CodingKeys: String, CodingKey {
+            case lastRun = "last_run"
             case kiffAgent = "kiff_agent", tafID = "id", card, name, color, state, status, waiting, jobSummary = "job_summary"
             case work, nextRunWords = "next_run_words", nextRun = "next_run", health, unscheduled, finish, results, doors, labels
             case timeZoneWords = "time_zone_words", scheduleTimeZoneWords = "schedule_time_zone_words"
@@ -144,6 +148,7 @@ enum Home {
             attention = work.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .attention)) ?? nil } ?? false
             health = (try? c.decodeIfPresent(Health.self, forKey: .health)) ?? nil
             nextRun = (try? c.decodeIfPresent(Date.self, forKey: .nextRun)) ?? nil
+            lastRun = (try? c.decodeIfPresent(Date.self, forKey: .lastRun)) ?? nil
             unscheduled = ((try? c.decodeIfPresent(Bool.self, forKey: .unscheduled)) ?? nil) ?? false
             workStatus = text(work.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .status)) ?? nil })
             // One the app can show: its chat and its words, as the iPad's `Finish.usable`.
@@ -203,10 +208,18 @@ enum Home {
         let labels: [HomeLabel]
         /// Home's word for the labels' first chip (`labels_words.all`).
         let labelsAll: String?
+        /// Coach's chats waiting on the person (`coach_waiting`), oldest first, only those Needs you
+        /// can draw; and "Set all aside" (`coach_waiting_clear`) when it can be drawn.
+        let coachWaiting: [CoachWaiting]
+        let coachWaitingClear: CoachWaitingClear?
+        /// How many requests for a currency the Card has no limit for Home lists
+        /// (`card_unit_exceptions`), for Needs you's own count.
+        let cardUnits: Int
 
         enum CodingKeys: String, CodingKey {
             case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps", labels
             case labelsWords = "labels_words"
+            case coachWaiting = "coach_waiting", coachWaitingClear = "coach_waiting_clear", cardUnits = "card_unit_exceptions"
         }
         enum WordsKeys: String, CodingKey { case words, count }
 
@@ -224,6 +237,10 @@ enum Home {
             yourSteps = try c.decodeIfPresent([YourStep].self, forKey: .yourSteps) ?? []
             labels = HomeLabels.list(c, .labels)
             labelsAll = HomeLabels.all(c, .labelsWords)
+            coachWaiting = CoachWaiting.listed(c, .coachWaiting)
+            coachWaitingClear = CoachWaitingClear.read(c, .coachWaitingClear)
+            struct Unit: Decodable { let unit: CardUnitException?; init(from decoder: Decoder) throws { unit = try? CardUnitException(from: decoder) } }
+            cardUnits = (((try? c.decodeIfPresent([Unit].self, forKey: .cardUnits)) ?? nil) ?? []).compactMap(\.unit).count
         }
     }
 }

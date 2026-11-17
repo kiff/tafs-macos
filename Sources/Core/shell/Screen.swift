@@ -34,6 +34,8 @@ enum Screen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The items under the app's name. The name itself opens the Overview.
+    /// The items under the app's name. The name itself opens the Overview. Halt all follows them,
+    /// in a section of its own, where the iPad shows it (`AccountHalt.shown`): it opens a sheet,
+    /// not a screen of the sidebar.
     static let list: [Screen] = [.needsYou, .record, .calendar, .usage, .connectApps]
 }
