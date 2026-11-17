@@ -60,21 +60,9 @@ extension Record.Entry {
 }
 
 extension Record {
-    /// The money a day moved, as the iPad's `RecordView.spent` (RecordView.swift:107-124): a sum for
-    /// each currency, in the order first met, of the calls Money moved keeps, each at the larger
-    /// number of decimals of its parts. Empty when none moved money. An amount whose unit isn't a
-    /// currency (a count of anything) isn't money, and isn't summed. Not drawn yet: the words for a
-    /// day's title, "{amount} spent" (`record.day_spent`), aren't in the shared words at the pin.
     /// "€640 spent": a day's money moved, a sum for each currency joined with " + ", in the app's
     /// language (`record.day_spent`, where the amount's place differs by language), as the iPad's
     /// `RecordView.spent` (RecordView.swift:107-125). Nil when the day moved none.
-    /// A day's heading, as the iPad's (`RecordView.swift:48-49`): its title, then what it spent,
-    /// joined with " · ", and the whole in capitals in the app's language (the iPad's
-    /// `.textCase(.uppercase)` on the joined text): "TODAY · 17 NOV · €640 SPENT".
-    static func dayHeading(title: String, spent: String?, language: String) -> String {
-        [title, spent].compactMap { $0 }.joined(separator: " · ").uppercased(with: Locale(identifier: language))
-    }
-
     static func spentWords(_ entries: [Entry], words: Words) -> String? {
         let sums = spent(entries).compactMap { amount -> String? in
             let parts = amount.value.split(separator: ".", omittingEmptySubsequences: false)
@@ -87,6 +75,17 @@ extension Record {
         return words("record.day_spent", ["amount": sums.joined(separator: " + ")])
     }
 
+    /// A day's heading, as the iPad's (`RecordView.swift:48-49`): its title, then what it spent,
+    /// joined with " · ", and the whole in capitals in the app's language (the iPad's
+    /// `.textCase(.uppercase)` on the joined text): "TODAY · 17 NOV · €640 SPENT".
+    static func dayHeading(title: String, spent: String?, language: String) -> String {
+        [title, spent].compactMap { $0 }.joined(separator: " · ").uppercased(with: Locale(identifier: language))
+    }
+
+    /// The money a day moved, as the iPad's `RecordView.spent` (RecordView.swift:107-124): a sum for
+    /// each currency, in the order first met, of the calls Money moved keeps, each at the larger
+    /// number of decimals of its parts. Empty when none moved money. An amount whose unit isn't a
+    /// currency (a count of anything) isn't money, and isn't summed.
     static func spent(_ entries: [Entry]) -> [Amount] {
         var sums: [String: (minor: Int64, scale: Int)] = [:]
         var order: [String] = []
