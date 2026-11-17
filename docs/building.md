@@ -15,7 +15,20 @@ written in Swift with SwiftUI and AppKit.
   - **no SwiftUI builder holds more than 10 views** (`scripts/viewbuilders.py`). The macOS 12
     and 13 SDKs' `ViewBuilder` takes at most 10 in one block; a newer SDK takes any number,
     so a newer build never says. Put the views past 10 in a `Group { … }` or a view of their
-    own.
+    own;
+  - **no app code has a shape Swift 5.7 refused on a Mac on macOS 12** (`scripts/swift57patterns.py`):
+    - a weak `self` read by a `Task` inside the closure that took it ("reference to captured
+      var 'self' in concurrently-executing code"). Hold the object in a `WeakBox`, a constant, and
+      read it on its actor (`me.object?`). A weak capture is a var, which Swift 5.7 refuses in a
+      `@Sendable` closure too;
+    - a `defer` inside a `Task` in a view ("main actor-isolated property … can not be mutated
+      from the main actor"). Set what it sets after the awaited call.
+
+  **The app's code isn't type-checked with Swift 5.7 on CI.** The `swift57` job runs in a Linux
+  container, with no SwiftUI or AppKit, and no Mac runner has the macOS 12 or 13 SDK that Swift 5.7
+  can read. So a long view that Swift 5.7 can't type-check "in reasonable time" isn't caught
+  there: keep a view's rows in views of their own (`AppEventRow`). The code that needs no Mac
+  is built and tested with Swift 5.7 on every change (the `core` job).
 
   A full Swift 5.7 build needs Xcode 14 or the Command Line Tools of macOS 12. The Mac job
   lists the Xcodes its runner has; the build on a Mac with macOS 12 stays the final check.
@@ -117,7 +130,8 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
   part, **on the Mac too**: the pin brings new words and contracts every screen reads. `strings` and `contracts`
   always run.
 - **The tests that need no Mac run on Linux** with Swift 5.7.
-- **The Swift 5.7 checks** (`swift57`) run on every change, on Linux.
+- **The Swift 5.7 checks** (`swift57`) run on every change, on Linux. A step first checks that
+  the shape check catches both shapes it looks for.
 - **A Mac job** builds the app for both architectures, with the native libraries (above),
   checks the libraries' licences are in it, and runs the parts' Mac tests. It runs
   when `Sources/App/`, `App/`, a `mac/` test folder, shared code, the runner, a script, the

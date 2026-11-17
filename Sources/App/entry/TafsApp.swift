@@ -18,9 +18,14 @@ struct TafsApp: App {
         WindowGroup {
             Group {
                 if let session = signIn.session, !signIn.isPairing {
+                    // Every read the window makes is watched: one KIFF or tafs cloud refuses with 401
+                    // ends the session once, and sign-in opens (`SessionWatch`).
+                    let watch = signIn.sessionWatch(session)
                     // The session's own key: after a pairing it is the new one.
-                    SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language),
-                                 cloud: CloudClient(transport: NetworkTransport(base: URL(string: CloudClient.base)!), session: session, language: words.language),
+                    SignedInView(account: AccountClient(session: session, key: signIn.key, language: words.language,
+                                                        transport: WatchedTransport(inner: NetworkTransport(), watch: watch)),
+                                 cloud: CloudClient(transport: WatchedTransport(inner: NetworkTransport(base: URL(string: CloudClient.base)!), watch: watch),
+                                                    session: session, language: words.language),
                                  route: ApprovalRoute.of(.passkey, securityKey: securityKey != nil), streamer: NetworkLineStream(),
                                  signedOut: { signIn.signedOut() }, addThisMac: { Task { await signIn.pair() } },
                                  softwareKey: signIn.key.keyStore == "software", deviceKey: signIn.key.publicKeyDER, securityKey: securityKey,
@@ -36,6 +41,8 @@ struct TafsApp: App {
             // A session just gained, on either path: celebrated once, over home.
             .overlay(Group { if signIn.justConnected { ConnectedView { signIn.justConnected = false } } })
             .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
+            // The iPad's frame at first launch, remembered after (`WindowSize`).
+            .background(WindowFrame())
             .environment(\.words, words)
             // The theme the person chose, from the last launch.
             .onAppear { ThemeChoice.saved().apply() }

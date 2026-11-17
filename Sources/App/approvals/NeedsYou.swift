@@ -227,6 +227,9 @@ final class NeedsYouModel: ObservableObject {
     static func why(_ error: Error) -> String {
         switch error {
         case let refusal as CloudRefusal: return refusal.why(Words.app)
+        // KIFF no longer accepts the sign-in: its words, never KIFF's code ("unauthorized"). The window
+        // ends and sign-in opens (`SessionWatch`).
+        case KIFFError.refused(401, _): return Words.app("error.signed_out")
         case KIFFError.refused(_, let code) where !code.isEmpty: return code
         case KIFFError.refused(let status, _): return String(status)
         case let error as KIFFError: return String(describing: error)

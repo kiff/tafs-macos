@@ -3,6 +3,17 @@
 The window is the iPad app's full-width layout: a sidebar on the raised ground, and the
 screen it opens beside it.
 
+## The window's size
+
+- **At first launch it opens at the iPad's landscape frame,** 1366 by 1024, in the middle of the
+  screen (`WindowSize`, `WindowFrame`). On a smaller screen it takes nine tenths of the screen's
+  visible area, and never less than its minimum.
+- **Its minimum is 900 by 600:** the sidebar and one readable column.
+- **After that, it opens where and as large as it was left.** AppKit keeps its frame under
+  "tafs main window" in this Mac's defaults.
+- **Why it's set by hand:** macOS 12's SwiftUI gives a window no default size (`defaultSize` is
+  macOS 13's), so the first window opened at its minimum.
+
 ## The sidebar
 
 Top to bottom, as on the iPad:

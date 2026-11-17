@@ -112,12 +112,16 @@ final class Dictation: ObservableObject {
     }
 
     private func listen() throws {
-        try engine.start(language: language, hints: hints, onText: { [weak self] heard, done in
-            Task { @MainActor in self?.heard(heard, done: done) }
-        }, onLevel: { [weak self] level in
-            Task { @MainActor in self?.heard(level: level) }
-        }, onEnd: { [weak self] why in
-            Task { @MainActor in self?.ended(why) }
+        // The callbacks hold this model weakly through a box, a constant: Swift 5.7 refuses a weak
+        // `self`, a var, captured by a `@Sendable` closure or its hop to the main actor ("reference to
+        // captured var 'self' in concurrently-executing code"). The box is read on the main actor.
+        let me = WeakBox(self)
+        try engine.start(language: language, hints: hints, onText: { heard, done in
+            Task { @MainActor in me.object?.heard(heard, done: done) }
+        }, onLevel: { level in
+            Task { @MainActor in me.object?.heard(level: level) }
+        }, onEnd: { why in
+            Task { @MainActor in me.object?.ended(why) }
         })
     }
 
