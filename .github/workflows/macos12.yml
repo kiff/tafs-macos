@@ -1,0 +1,71 @@
+# The app built with macOS 12's own Swift 5.7, on a Mac that runs macOS 12 (docs/building.md).
+#
+# Why: the other jobs can't type-check the app with Swift 5.7. `swift57` runs on Linux, with no
+# SwiftUI or AppKit, and GitHub's Mac runners have Xcode 16 only (Swift 6). Swift 5.7 refused code
+# on a real macOS 12 Mac that every one of them took. Only that Mac's own compiler is the check.
+#
+# Where it runs: a self-hosted runner on a Mac with macOS 12 and its Command Line Tools
+# (Swift 5.7), labelled `macos12`. It's off until the runner exists and the repository variable
+# MACOS12_RUNNER is `on`. Turning it on is the owner's act, at that Mac.
+#
+# What this file can't promise: that no pull request reaches that Mac. It runs on pushes to main
+# and by hand only, but for a pull request GitHub runs the workflow files at the pull request's
+# own head, so a fork could add a workflow of its own for `[self-hosted, macos12]`. The
+# `if` below lives in a file it can rewrite. And `workflow_dispatch` on a branch runs that
+# branch's copy, which is any code a collaborator with write access pushed.
+#
+# What keeps pull requests off the Mac is how the runner is set up. All four come before it's
+# registered:
+#   1. Settings › Actions › General: approval required for workflows from every outside
+#      contributor, not only first-time ones.
+#   2. An organization runner group limited to kiff/tafs-macos and, where the plan allows, to
+#      this workflow on main only (kiff/tafs-macos/.github/workflows/macos12.yml@refs/heads/main),
+#      never a plain repository runner.
+#   3. Registered `--ephemeral`, so each job starts on a clean runner.
+#   4. A dedicated Mac or VM, run as a standard user (not an admin) with no keychain items, no
+#      SSH keys, no signing identity and no gh, cloud or other sign-ins.
+
+name: macOS 12 build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos12-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'kiff/tafs-macos' && vars.MACOS12_RUNNER == 'on'
+    runs-on: [self-hosted, macOS, macos12]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: This Mac is on macOS 12, with Swift 5.7
+        run: |
+          sw_vers
+          swift --version
+          case "$(sw_vers -productVersion)" in 12.*) ;; *) echo "::error::not macOS 12"; exit 1;; esac
+          swift --version 2>&1 | grep -q 'Swift version 5\.7' || { echo "::error::not Swift 5.7"; exit 1; }
+      # What scripts/fido.sh needs to build the native libraries from their checked sources.
+      - name: The tools the libraries' build needs
+        run: |
+          for tool in cmake pkg-config clang make perl git curl shasum; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool is missing on this Mac"; exit 1; }
+          done
+      # The whole app, type-checked and compiled by this Mac's Swift 5.7, for Intel and Apple
+      # silicon, as the DMG ships it.
+      - name: Build with Swift 5.7
+        run: |
+          scripts/build.sh
+          test "$(lipo -archs build/tafs.app/Contents/MacOS/tafs)" = "x86_64 arm64"
+      # The tests that need no Mac, also with this Swift: the app's own logic, as it runs here.
+      - name: Core, with Swift 5.7
+        run: scripts/test.sh --core
