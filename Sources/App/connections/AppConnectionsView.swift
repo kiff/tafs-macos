@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// "Your {app} connections", as the iPad's `AppConnectionsView` (kiff/tafs
-/// `ios/Tafs/Views/ConnectAppsView.swift:488-660`): a section per taf the app's connections were
+/// `ios/Tafs/Views/ConnectAppsView.swift:488-722`): a section per taf the app's connections were
 /// made for, those needing attention first, then the removed tafs', then "Other connections".
 /// This page only reads. What would change a connection (Sign in again, Replace the key, Remove
 /// access, Cancel, Clear these connections) is drawn as on the iPad for whoever manages the Cards,
@@ -137,7 +137,7 @@ private struct GatedAction: View {
     }
 }
 
-/// A connection, as the iPad's `entry` and `row` (`ConnectAppsView.swift:577-660`): planque's row
+/// A connection, as the iPad's `entry` and `row` (`ConnectAppsView.swift:594-683`): planque's row
 /// when it draws one (its name, the tafs on it, its health); else its name, planque's words for
 /// its status, how to fix it and Remove access (or Cancel while its sign-in waits).
 private struct ConnectionRow: View {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// "Your {app} connections": a connected app's connections, as the iPad's `AppConnectionsView`
-/// (kiff/tafs `ios/Tafs/Views/ConnectAppsView.swift:488-660`) and the model it reads
+/// (kiff/tafs `ios/Tafs/Views/ConnectAppsView.swift:488-722`) and the model it reads
 /// (`AppModel.swift:7025-7083`). This Mac reads them from planque with its own signed read, as
 /// the iPad's `PlanqueClient.grants(signedBy:)`, and only reads: anything that changes a
 /// connection is approved on another device (docs/connections.md).

@@ -93,7 +93,7 @@ points, docs/overview.md).
 
 ## Your {app} connections (`AppConnections`, `ConnectionsSource`, `AppConnectionsView`)
 
-A connected app's connections, as the iPad's `AppConnectionsView` (`ConnectAppsView.swift:488-660`)
+A connected app's connections, as the iPad's `AppConnectionsView` (`ConnectAppsView.swift:488-722`)
 and its model (`AppModel.swift:7025-7083`). It only reads.
 
 - **Read** from planque, as the iPad's `PlanqueClient.grants(signedBy:)`:
