@@ -160,6 +160,16 @@ let recordReadsTests: [Test] = [
         try expectEqual(try String(contentsOf: files[1], encoding: .utf8), export.csv)
         try expectEqual(try String(contentsOf: folder.appendingPathComponent("notes.txt"), encoding: .utf8), "mine")
         try? FileManager.default.removeItem(at: folder)
+        // An answer's own days never name the files: "../" or "/" in them writes nothing outside the folder.
+        let hostile = #"{"from":"../../../Library/x","to":"2026/11/17","csv":"","missing":0}"#
+        let named = try await CloudClient(transport: CannedTransport([(200, hostile)]), session: session).exportReceipts(from: range.from, to: range.to)
+        try expectEqual(named.stem, "receipts-2026-11-11-to-2026-11-17")
+        let odd = Record.ReceiptsExport(from: "../../x", to: "2026/11/17", json: Data(), csv: "", missing: 0)
+        try expectEqual(odd.stem, "receipts--to-20261117")
+        let box = FileManager.default.temporaryDirectory.appendingPathComponent("record-export-\(UUID().uuidString)")
+        let written = try Record.write(odd, to: box)
+        try expect(written.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL.path == box.standardizedFileURL.path }, "inside the folder chosen")
+        try? FileManager.default.removeItem(at: box)
         // tafs cloud decides who may: a refusal keeps its words.
         do { _ = try await client.exportReceipts(from: "2026-11-11", to: "2026-11-17"); throw Failure(description: "exported") } catch let refusal as CloudRefusal {
             try expectEqual(refusal.status, 403)
