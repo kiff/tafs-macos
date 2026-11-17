@@ -24,11 +24,11 @@ struct SignedInView: View {
     /// Run now for every taf, kept while signed in, as the iPad's app model keeps it.
     @StateObject private var runs: RunNowModel
     @StateObject private var coach: CoachModel
+    /// Coach mode over the window, as the iPad's `CoachPanel`: open or not, its width and ⤢.
+    @StateObject private var panel = CoachPanelModel()
     @StateObject private var alerts: AlertsModel
+    /// The screen under Coach: Coach opens over it, never in its place.
     @State private var selection: Screen = .overview
-    /// The screen shown last, and the one Coach opened over: Coach's Back returns there.
-    @State private var shown: Screen = .overview
-    @State private var beforeCoach: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
     @State private var tafChat: CoachModel?
@@ -116,34 +116,9 @@ struct SignedInView: View {
     }
 
     var body: some View {
-        // Every choice in the sidebar closes the taf's page, the screen already open too.
-        let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
-        ShellView(selection: choosing, needsYou: needsYou.needsYouCount(onScreen: coachChatOnScreen), needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.listedTafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
-                  held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
-                  accountLine: accountModel.me?.email ?? accountModel.me?.account,
-                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
-            switch screen {
-            // A taf's knocks are answered on its Activity, so its row opens there.
-            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
-                                                                                            openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
-                                                                                            mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
-                                                       beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
-            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open,
-                                                        needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
-                                                        people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
-                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
-            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
-            case .calendar: return AnyView(CalendarView(model: calendar))
-            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
-            case .connectApps: return AnyView(ConnectAppsView(model: connect, tafs: overview.tafs, connectable: overview.tafs.filter { $0.tafID != nil && Access.manages(access[$0.id]) }, managesCards: managesCards, openCoach: { selection = .coach }))
-            case .coach: return AnyView(CoachView(model: coach, canApprove: false,
-                                                  openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
-                                                  listed: Set(overview.tafs.map(\.id)), tafCount: overview.tafs.count, managesCards: accountModel.me?.managesCards ?? true, openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach, dictation: dictation,
-                                                  hints: Dictating.hints(tafs: overview.tafs.map(\.name))))
-            case .account: return AnyView(accountScreen)
-            }
-        }, startNewTaf: startNewTaf, openCoach: openCoach,
-                  haltAll: AccountHalt.shown(managesCards: managesCards, tafs: overview.tafs, halt: accountHalt.halt.state) ? accountHalt : nil, halted: { await readTafs() })
+        // Coach over the window's screen, as the iPad's Coach mode: the screen stays in view.
+        CoachPanelHost(panel: panel, leading: ShellView.sidebarWidth) { shell } coach: { coachPanel }
+        .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
         .sheet(item: $pinSheet) { model in
             PINSheet(model: model).environment(\.words, words)
         }
@@ -167,13 +142,8 @@ struct SignedInView: View {
             notifier.account = account.session.tenant
             LaunchClock.mark("first window")
         }
-        // A screen chosen from elsewhere (a notification) closes it too. Coach remembers the
-        // screen it opened over, for its Back.
-        .onChange(of: selection) { screen in
-            openTaf = nil
-            if screen == .coach, shown != .coach { beforeCoach = shown }
-            shown = screen
-        }
+        // A screen chosen from elsewhere (a notification) closes it too. Coach, over it, stays.
+        .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
@@ -197,6 +167,59 @@ struct SignedInView: View {
         .onChange(of: scenePhase) { phase in
             if phase == .active { Task { await readRound() } }
         }
+    }
+
+    /// The window's sidebar and the screen chosen in it, under Coach.
+    private var shell: some View {
+        // Every choice in the sidebar closes the taf's page, the screen already open too.
+        let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
+        return ShellView(selection: choosing, needsYou: needsYou.needsYouCount(onScreen: coachChatOnScreen), needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.listedTafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
+                  accountLine: accountModel.me?.email ?? accountModel.me?.account,
+                  gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
+            switch screen {
+            // A taf's knocks are answered on its Activity, so its row opens there.
+            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+                                                                                            openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
+                                                                                            mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
+                                                       beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
+            case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open,
+                                                        needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
+                                                        people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
+                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
+            case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
+            case .calendar: return AnyView(CalendarView(model: calendar))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
+            case .connectApps: return AnyView(ConnectAppsView(model: connect, tafs: overview.tafs, connectable: overview.tafs.filter { $0.tafID != nil && Access.manages(access[$0.id]) }, managesCards: managesCards, openCoach: openCoach))
+            // Coach is never a screen of its own: it opens over the one chosen (`coachPanel`).
+            case .coach: return nil
+            case .account: return AnyView(accountScreen)
+            }
+        }, startNewTaf: startNewTaf, openCoach: openCoach,
+                  coachOpen: panel.open,
+                  haltAll: AccountHalt.shown(managesCards: managesCards, tafs: overview.tafs, halt: accountHalt.halt.state) ? accountHalt : nil, halted: { await readTafs() })
+    }
+
+    /// Coach, in its panel: Back closes it, ⤢ fills the window. A hand-over's taf, and Plan &
+    /// usage, open under it with Coach closed, as the iPad's `requestedTaf` with `coachOpen = false`.
+    private var coachPanel: some View {
+        CoachView(model: coach, canApprove: false, openTaf: openHandedOver,
+                  listed: Set(overview.tafs.map(\.id)), tafCount: overview.tafs.count, managesCards: accountModel.me?.managesCards ?? true,
+                  openUsage: { panel.close(); selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach,
+                  fullScreen: $panel.full, tafs: overview.tafs, versions: versionsModel, dictation: dictation,
+                  hints: Dictating.hints(tafs: overview.tafs.map(\.name)))
+    }
+
+    /// A hand-over's See it on: the taf's page under Coach, which closes; the Overview when the
+    /// list doesn't have it.
+    private func openHandedOver(_ agent: String?) {
+        panel.close()
+        if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { openTaf = nil; selection = .overview }
+    }
+
+    /// A taf's versions, for a new version's See version in Coach.
+    private func versionsModel(_ tafID: String) -> TafPagesModel? {
+        TafPagesModel(cloud: cloud, taf: tafID, proof: { await setupProof() }, runs: runs)
     }
 
     /// One round: the held calls and the tafs side by side, as the iPad's `refresh`
@@ -239,22 +262,20 @@ struct SignedInView: View {
     private var managesCards: Bool { accountModel.me?.managesCards ?? true }
 
     /// Coach's chat on screen, which Needs you leaves out, as the iPad's `coachChatOnScreen`.
-    private var coachChatOnScreen: String? { selection == .coach && openTaf == nil ? coach.shownSession : nil }
+    private var coachChatOnScreen: String? { panel.open ? coach.shownSession : nil }
 
     /// Needs you's Open Coach, as the iPad's `openCoachWaiting`: Coach on that chat; Coach alone without one.
     private func openCoachWaiting(_ waiting: CoachWaiting) {
         guard mayUseCoach else { return }
         let session = waiting.session
-        if !session.isEmpty { Task { await coach.open(waiting: session) } }
-        openTaf = nil
-        selection = .coach
+        let chat = coach
+        Task { await panel.openWaiting(session, in: chat) }
     }
 
     /// The brief's next move, in Coach's box to edit and send, as the iPad's `startNextMove`.
     private func startNextMove(_ words: String) {
         guard mayUseCoach else { return }
-        coach.draft = words
-        selection = .coach
+        panel.hand(words, to: coach)
     }
 
     /// The calls held for the person, for the sidebar, each with its taf's name.
@@ -336,27 +357,18 @@ struct SignedInView: View {
         openTaf = taf.id
     }
 
-    /// Closes Coach, back to the screen it opened over, as the iPad's Coach mode's Back.
-    private func closeCoach() {
-        openTaf = nil
-        selection = beforeCoach == .coach ? .overview : beforeCoach
-    }
+    /// Closes Coach, back to the screen under it, as the iPad's Coach mode's Back: that screen,
+    /// a taf's page and its tab too, is as it was.
+    private func closeCoach() { panel.close() }
 
     /// The sidebar's Coach, as the iPad's `openCoach` (AppModel.swift:6767-6778): it only opens
-    /// Coach. Coach closes from its own Back (Esc too).
-    private func openCoach() {
-        openTaf = nil
-        selection = .coach
-    }
+    /// Coach, over the screen. Coach closes from its own Back (Esc too).
+    private func openCoach() { panel.openCoach() }
 
     /// Start a new taf, as the iPad's `startNewTaf` (AppModel.swift:6801-6804): a new
     /// conversation in Coach, so Coach mode's start shows, whether Coach was open or not. Own
     /// words and the gallery's own words come here, and the sidebar's + without a gallery.
-    private func startNewTaf() {
-        coach.startNewTaf()
-        openTaf = nil
-        selection = .coach
-    }
+    private func startNewTaf() { panel.startNewTaf(in: coach) }
 
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: KIFF's answer for Setup,
     /// else an account admin.
@@ -386,8 +398,7 @@ struct SignedInView: View {
     /// (AppModel.swift:7274-7280): its words in Coach's box, to edit and send. Nothing is sent.
     private func handToCoach(_ recipe: Recipes.Recipe) {
         guard mayUseCoach else { return }
-        coach.draft = recipe.say
-        selection = .coach
+        panel.hand(recipe.say, to: coach)
     }
 
     /// Plan & usage in place of the taf's page, as the iPad's `usageRequested` from a health fix.
@@ -414,11 +425,8 @@ struct SignedInView: View {
     private func improving(_ taf: Home.Taf) -> (() -> Void)? {
         guard let id = taf.tafID, mayUseCoach, Access.manages(access[taf.id]) else { return nil }
         let name = taf.name
-        return {
-            coach.improve(CoachModel.Improving(id: id, name: name))
-            openTaf = nil
-            selection = .coach
-        }
+        // Over the taf's page, which stays under Coach.
+        return { panel.improve(CoachModel.Improving(id: id, name: name), in: coach) }
     }
 
     /// Ask Coach on a taf's `ask_coach` card, as the iPad's `askCoachAbout`: Coach on the taf with
@@ -429,9 +437,7 @@ struct SignedInView: View {
         let manages = Access.manages(access[taf.id])
         let may = mayUseCoach
         return { words in
-            coach.ask(about: CoachModel.Improving(id: id, name: name), words: words, mayUseCoach: may, manages: manages)
-            openTaf = nil
-            selection = .coach
+            panel.ask(about: CoachModel.Improving(id: id, name: name), words: words, mayUseCoach: may, manages: manages, in: coach)
         }
     }
 
