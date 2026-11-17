@@ -95,8 +95,11 @@ Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `Recip
   `sample` are trimmed, so `say` goes in Coach's box as sent.
 - **Listed** (`home.shown`, the sheet's `labels`, a category with a recipe): tafs cloud's line
   (also in the sidebar), **Say it in your own words**, a chip per category in its colour, and
-  each recipe led by the problem it ends, its line and its apps (one mark each), on an edge in
-  its category's colour. Its sheet: what it ends, what that costs today, its Card in zones,
+  each recipe led by the problem it ends, its line and its apps, on an edge in its category's
+  colour. Each app is its logo, 18 points, then its name, as the iPad's `AppMarks` and `AppMark`
+  (`HomeRecipes.swift:134-165`): the logo only from tafs cloud's own `/v1/logos/` path
+  (`Recipes.App.logo`, `Apps.logoPath`), read as Connect apps reads its logos (`AppLogos`,
+  docs/connections.md › Logos). With none, or one refused or that doesn't decode, the name alone. Its sheet: what it ends, what that costs today, its Card in zones,
   where its proof run passed and what it reported, and **Hand it to Coach**, which puts `say`
   in Coach's box. Nothing is sent until the person sends it.
 - **Not listed:** tafs cloud's `home.words`, else the app's own line ("No tafs yet." and, by
@@ -115,7 +118,8 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 - **Read** (`GET /v1/recipes/gallery`) with each list read, with tafs or without; a read that
   fails keeps what was read, and a tafs cloud without it (404) leaves none. Everything reads
   leniently, as on the iPad: a category or job that doesn't read is left out, never the
-  gallery; missing words are none.
+  gallery; missing words are none. Each job's apps carry their logos, drawn as the Overview's
+  recipes draw them (above), in Start a new taf and in Explore jobs.
 - **Start a new taf** opens the gallery where tafs cloud sends it, else Coach as before. It
   leads with **Say it in your own words** (Coach with nothing in its box), for someone who may
   use Coach, then tafs cloud's "All jobs" and every job by category, as the recipes on the
@@ -136,7 +140,6 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 
 - Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`): its words
   go in the box of the conversation Coach shows.
-- The apps' logos beside their names.
 - A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
 - Reading the list again by itself, apart from the window's round. It is read when the screen
   opens, with each 30-second round, and at once when the app comes back to the front.
@@ -152,3 +155,8 @@ with only its required fields, an unreadable list, a malformed headline. It writ
 `overview-parity-en.png` and its `-dark` twin: the rows in the iPad's order, with who uses each
 taf and its Last result before its runs are read. The order, `usedBy`, `last_run` and Halt all's
 rule are tested with no Mac.
+
+The apps' logos (`RecipeLogosTests`, and on a Mac `AppMarksScreenTests`): only tafs cloud's own
+path is kept, in the recipes and the gallery; a job's app draws its logo, then its name, and a
+refused or dropped logo the name alone. It writes `explore-jobs-logos-en.png` and
+`gallery-logos-en.png`, each with its `-dark` twin.

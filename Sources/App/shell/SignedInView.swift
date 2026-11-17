@@ -99,7 +99,7 @@ struct SignedInView: View {
         _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
-        _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud))
+        _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud, connections: ConnectionsSource(account: account, planque: planque, transport: NetworkTransport(base: URL(string: PlanqueClient.baseURL)!))))
         _runs = StateObject(wrappedValue: RunNowModel(cloud: cloud))
         // Coach's thread is read with this device's planque proof, as the iPad's `loadSetupThread`, so
         // tafs cloud marks its approval and sign-in cards (`wider`). Signed with no prompt: it reads only.
@@ -135,7 +135,7 @@ struct SignedInView: View {
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
-            case .connectApps: return AnyView(ConnectAppsView(model: connect, openCoach: { selection = .coach }))
+            case .connectApps: return AnyView(ConnectAppsView(model: connect, tafs: overview.tafs, connectable: overview.tafs.filter { $0.tafID != nil && Access.manages(access[$0.id]) }, managesCards: managesCards, openCoach: { selection = .coach }))
             case .coach: return AnyView(CoachView(model: coach, canApprove: false,
                                                   openTaf: { agent in if let taf = overview.tafs.first(where: { $0.id == agent }) { open(taf) } else { selection = .overview } },
                                                   listed: Set(overview.tafs.map(\.id)), tafCount: overview.tafs.count, managesCards: accountModel.me?.managesCards ?? true, openUsage: { selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach, dictation: dictation,
