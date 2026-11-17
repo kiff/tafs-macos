@@ -19,6 +19,7 @@ private let notYet = [
     "connect-apps-search.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-next.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-removed.json": "Connect apps' pages and search, read against these with that screen",
+    "coach-wording.json": "Coach's wording rules, for tafs cloud's Setup and kiff/agents: no app draws a screen from it",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
