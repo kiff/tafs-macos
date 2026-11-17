@@ -109,6 +109,11 @@ let recordReadsTests: [Test] = [
         guard let french = Record.spentWords(entries, words: fr) else { throw Failure(description: "no French spent line") }
         try expect(!french.contains("spent") && french.contains("170,50"), french)
         try expectEqual(Record.spentWords([], words: en), nil)
+        // The heading is the iPad's: title and spend joined, the whole in capitals.
+        let heading = Record.dayHeading(title: "Today · 17 Nov", spent: line, language: "en")
+        try expect(heading.hasPrefix("TODAY · 17 NOV · ") && heading.hasSuffix(" SPENT"), heading)
+        try expect(Record.dayHeading(title: "Aujourd'hui · 17 nov.", spent: french, language: "fr").contains("DÉPENSES"), "French in capitals")
+        try expectEqual(Record.dayHeading(title: "Yesterday · 16 Nov", spent: nil, language: "en"), "YESTERDAY · 16 NOV")
     },
     Test("a row's second line is the iPad's: who decided, then what became of it, in the shared words") {
         let en = try Words(language: "en", folder: strings)

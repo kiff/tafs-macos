@@ -153,7 +153,7 @@ It writes `build/screenshots/record-*.png` and `receipt-*.png`, among them
   `calendar.today_date`, `calendar.yesterday_date`), its date and weekday in the app's language,
   with this Mac's region (`AppDates.locale`), in capitals, 11 medium monospaced, `dim`.
   A search's results keep tafs cloud's groups, as the iPad's `RecordResults`. Then **what the day
-  spent**, after " · " ("TODAY · 17 NOV · €640 spent"), as the iPad's day heading
+  spent**, after " · ", the whole heading in capitals in the app's language ("TODAY · 17 NOV · €640 SPENT"), as the iPad's day heading
   (`RecordView.swift:48`, `:107-125`): `Record.spentWords` writes each currency's sum from
   `Record.spent` in the app's language, joins them with " + ", and says it in `record.day_spent`,
   whose amount's place differs by language. A day that moved no money has none.

@@ -68,6 +68,13 @@ extension Record {
     /// "€640 spent": a day's money moved, a sum for each currency joined with " + ", in the app's
     /// language (`record.day_spent`, where the amount's place differs by language), as the iPad's
     /// `RecordView.spent` (RecordView.swift:107-125). Nil when the day moved none.
+    /// A day's heading, as the iPad's (`RecordView.swift:48-49`): its title, then what it spent,
+    /// joined with " · ", and the whole in capitals in the app's language (the iPad's
+    /// `.textCase(.uppercase)` on the joined text): "TODAY · 17 NOV · €640 SPENT".
+    static func dayHeading(title: String, spent: String?, language: String) -> String {
+        [title, spent].compactMap { $0 }.joined(separator: " · ").uppercased(with: Locale(identifier: language))
+    }
+
     static func spentWords(_ entries: [Entry], words: Words) -> String? {
         let sums = spent(entries).compactMap { amount -> String? in
             let parts = amount.value.split(separator: ".", omittingEmptySubsequences: false)

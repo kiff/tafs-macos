@@ -325,11 +325,10 @@ struct RecordView: View {
         }
     }
 
-    /// A day's heading: its title in capitals, then what it spent, joined with " · ".
+    /// A day's heading: its title, then what it spent, all in capitals (`Record.dayHeading`).
     private func dayHeading(_ day: Record.Day, time: AccountTime) -> String {
-        let title = time.dayTitle(day.start, words: words).uppercased()
-        guard let spent = Record.spentWords(day.entries + day.reads, words: words) else { return title }
-        return title + " · " + spent
+        Record.dayHeading(title: time.dayTitle(day.start, words: words),
+                          spent: Record.spentWords(day.entries + day.reads, words: words), language: words.language)
     }
 
     /// One day: its title, its calls, then its reads folded into one line, "· 3 reads of data,
