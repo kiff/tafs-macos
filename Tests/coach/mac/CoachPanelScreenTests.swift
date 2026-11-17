@@ -33,6 +33,19 @@ private func coach(_ answers: [(Int, String)]) async -> (CoachModel, CannedTrans
 
 /// The window as it is signed in, with the Overview under Coach.
 @MainActor
+/// A recognizer with two languages, so the composer draws the mic and its language, as the app's.
+@MainActor
+private final class PanelSpeech: SpeechEngine {
+    func authorize() async -> String? { nil }
+    func languages() -> [Dictation.Language] { [.english, .spanish] }
+    var noLanguage: String { "no language" }
+    func unavailable(_ language: Dictation.Language) -> String? { nil }
+    func start(language: Dictation.Language, hints: [String], onText: @escaping @Sendable (String, Bool) -> Void,
+               onLevel: @escaping @Sendable (Float) -> Void, onEnd: @escaping @Sendable (String?) -> Void) throws {}
+    func stop() {}
+}
+
+@MainActor
 private func window(_ panel: CoachPanelModel, coach: CoachModel, overview: OverviewModel, language: String) -> some View {
     Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
     let full = Binding(get: { panel.full }, set: { panel.full = $0 })
@@ -40,7 +53,8 @@ private func window(_ panel: CoachPanelModel, coach: CoachModel, overview: Overv
         ShellView(selection: .constant(.overview), tafs: overview.listedTafs, accountLine: "you@example.com",
                   screen: { _ in AnyView(OverviewView(model: overview)) }, coachOpen: panel.open)
     } coach: {
-        CoachView(model: coach, tafCount: 2, close: { panel.close() }, fullScreen: full, tafs: overview.tafs, versions: { _ in nil })
+        CoachView(model: coach, tafCount: 2, close: { panel.close() }, fullScreen: full, tafs: overview.tafs, versions: { _ in nil },
+                  dictation: Dictation(engine: PanelSpeech(), language: .english))
     }
     .environment(\.words, Words.load(folder: strings, preferred: [language]))
 }

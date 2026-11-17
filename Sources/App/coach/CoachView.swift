@@ -1028,11 +1028,13 @@ struct CoachView: View {
         }
     }
 
-    /// Coach's title row, as the iPad's Coach mode: Back on the left, which closes Coach (Esc
+    /// Coach's title row, as the iPad's Coach mode: ⤢ and Back on the left, Back closing Coach (Esc
     /// too), and on the right New conversation (the pencil) and the conversations' menu with
     /// Previous conversations (`CoachMode.swift:13-31`, `SetupChatView.swift:105-110`).
     private var header: some View {
         HStack(spacing: 14) {
+            // ⤢ first, then Back, as the iPad's Coach mode orders them (`CoachMode.swift:13-31`).
+            if let fullScreen { fullScreenButton(fullScreen) }
             if let close {
                 Button(action: close) {
                     HStack(spacing: 4) {
@@ -1045,7 +1047,6 @@ struct CoachView: View {
                 .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(words("common.back"))
             }
-            if let fullScreen { fullScreenButton(fullScreen) }
             Spacer(minLength: 0)
             // New conversation, as the iPad's `newConversation`: an empty chat is already one.
             Button { if !model.chatIsEmpty { model.newChat() } } label: {
