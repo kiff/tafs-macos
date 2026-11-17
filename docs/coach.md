@@ -23,9 +23,10 @@ The app draws the list as it comes. It places and folds nothing itself.
 | Questions (`questions`) | The iPad's `QuestionsCard`: Coach's words, its title as an eyebrow with "{n} of {total} answered", each question numbered with its options and **Something else…**, then **Send answers** and **Chat about this**. Answered: one folded line, "Your answers · {tafs cloud's words}" |
 | An approval that waits | Edged in amber: "Needs you · approve", what it asks, tafs cloud's wider line when it sends one, **Decline**, and where to approve |
 | A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, tafs cloud's wider line when it sends one, where to sign in, and **Not now** |
-| An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus |
+| An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus. A ⌄ at its end: a click opens the card again, as the iPad's `SetupApproval` (`SetupChatView.swift:1513-1530`), edged in green (amber once declined), "Approved" or "Declined" with **Fold**, then its title, its words and the connection's line. Nothing on it answers again |
 | A note (`notice`) | A panel in its tone's colour, its title in that colour |
-| The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools, and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
+| The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools in words ("list emails", never `list_emails`), and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
+| A new version (`result` whose taf `improves` one) | As the iPad's `improvement` (`SetupChatView.swift:1380-1420`): edged in green, "New version · the taf's name", what it does, tafs cloud's note of what changed ("Can now list your Google Calendar events."), and no tools. Made: **See version {n}**, which opens that taf's Versions; "Version {n} is made." when the taf isn't listed. Being made: the same button, greyed, "Preparing the new version…" with a spinner. Not made: "{taf}'s new version wasn't made: {why}." and "Coach knows, and hands it over again." Nothing goes live from it |
 | A call KIFF held | "Needs you · approve". It is answered in Needs you. |
 | Anything else (a drive's end, a kind this app doesn't know) | Nothing |
 
@@ -56,7 +57,13 @@ The app draws the list as it comes. It places and folds nothing itself.
 - **A decline** is known only by tafs cloud's words for the answer, which it writes in the
   app's language: "Declined". An approval or sign-in answered another way (`wrote`,
   `no_answer`) draws nothing.
-- **See it on** opens the taf's own page, or the Overview when the list doesn't have it.
+- **See it on** opens the taf's own page, or the Overview when the list doesn't have it, and
+  closes Coach, as the iPad's `requestedTaf` with `coachOpen = false`. **Choose a plan** closes it
+  too, for Plan & usage.
+- **See version {n}** opens the Versions of the taf the new version is for, as a sheet over Coach,
+  as the iPad pushes its `VersionsScreen`: the taf tafs cloud knows by `improves`, else the one
+  whose agent it names, else the result's own taf's (`Thread.Card.improvedTaf`, the iPad's
+  `improvedTaf`, `AppModel.swift:9807-9811`).
 - A card is known by its `key`, which is unique in the thread, never only by the name the
   model gave it: the model may reuse a name.
 - An item that doesn't read is left out. An answer with no ordered list is unreadable, never
@@ -86,6 +93,8 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
 | A plan | a `steps` component's `steps[]` (`label`, `status`) and `line` | Each step and where it stands, and tafs cloud's line for it ("Step 2 of 3: …"). |
 | A notice | a component's `tone` | `info`, `success`, `warning` or `error`. |
 | A hand-over | a `result` component's `taf` (`name`, `agent`) and `tools`; the card's `answer.outcome` | The taf it is about, by its agent, and its tools in KIFF's words; once tafs cloud answered it, what came of it: the taf made (`taf_id`), a `version`, why it `failed`, or `plan_needed`. A component's own `taf_id` is a dial card's, never the hand-over's. |
+| A new version | a `result` component's `taf.improves` and `taf.note`; the card's `answer.outcome` (`version`, `failed`) | As the iPad's `SetupComponent.Taf`: `improves`, the tafs cloud id of the taf this is the next version of, makes the result a new version, never a new taf; `note` is what changed, in the owner's language (blank is none). What came of it is `Thread.Card.improvement`, as the iPad's `SetupThread.improvement`: `failed` first, then the `version` made, else being made. |
+| How an answered card folds | the card's `type` and `answer` (`Thread.Card.fold`) | As the iPad's: an approval approved or declined folds to a line that opens again; a choice, a sign-in and questions to a line; a plan, a note, a hand-over and a taf's ask stay whole, as does any card with no answer the person chose (`wrote`, `no_answer`). |
 | An answer | the card's `answer.state` and `words` | Shown as answered only when the person chose (`answered`). One they wrote past (`wrote`) or that stopped waiting (`no_answer`) waits no more, and shows no answer. |
 | A connection already made | an approval component's `connection`, when `done` | tafs cloud's line for it. |
 | A sign-in wider than the job | an approval's or a sign-in's `wider.words` | tafs cloud's words, as sent (`Thread.Card.widerWords`), read leniently as the iPad's `SetupComponent.Wider`: missing, `null`, blank words, words that aren't text, or a `wider` that isn't an object are no line, and the card reads as before. |
@@ -138,8 +147,9 @@ As the iPad's Coach mode (`CoachMode.swift:13-31`), its toolbar (`SetupChatView.
 and `loadSetupThread` (`:7328-7375`):
 
 - **Coach's title row:** Back on the left, which closes Coach (Esc too), back to the screen
-  it opened over; on the right, New conversation (the pencil, which does nothing on an empty
-  chat) and the conversations' menu, with Previous conversations.
+  under it; then ⤢, which makes Coach fill the window and brings it back to its width ("Full
+  screen", "Back to its width"); on the right, New conversation (the pencil, which does nothing
+  on an empty chat) and the conversations' menu, with Previous conversations.
 - **The sidebar's Coach** only opens Coach, as `openCoach`. Coach closes from its own Back.
 - **Previous conversations** lists Coach's chats (`GET /v1/tafs/{id}/chats`) as tafs cloud
   lists them: each by its title and when it was last written to, the one shown marked. One
@@ -166,14 +176,40 @@ and `loadSetupThread` (`:7328-7375`):
   `docs/overview.md`), opens a new conversation in Coach, so Coach mode's start shows, whether
   Coach was open or not. Asked before Coach is read, Coach opens on a new conversation once it is.
 
+## Coach mode: the panel over the screen (`CoachPanelHost`, `CoachPanelModel`, `CoachPanelWidth`)
+
+As the iPad's `CoachPanel` and `CoachView` (`CoachMode.swift:8-111`):
+
+- **Coach slides in from the right over the screen**, which stays in view: the Overview, a
+  taf's page with its tab, any screen. It sits on the background with a shadow to its left; the
+  sidebar is never under it unless it fills the window.
+- **Every way in opens it, on the right chat:** the sidebar's Coach (the chat it had), Start a
+  new taf (a new conversation), Needs you's Open Coach (that chat), Improve in Coach and Change
+  the workflow (a new conversation on the taf, over its page), an `ask_coach` card's Ask Coach
+  (the same, with the card's words in the box, nothing sent), a job handed from the Overview
+  and the brief's next move (their words in the box). Connect apps' Not listed? opens it too.
+  A connection made while it's open shows its receipt over it, as before.
+- **Its left edge drags it** wider or narrower: never narrower than 380 points, and never so
+  wide that less than 240 points of the screen stays in view (`CoachPanelWidth`). It opens at
+  440. The width chosen, and whether it fills the window, are kept on this Mac (`coach.width`,
+  `coach.full`, as the iPad's `@AppStorage`), for the next time.
+- **⤢ fills the window,** the sidebar too, and brings it back to the width it had.
+- **Back** (Esc) closes it, back to the screen under it as it was, a taf's page and its tab
+  too. Closing never ends a conversation.
+- **The sidebar's Coach** is the chosen one while Coach is open. Needs you leaves out the chat
+  Coach shows while it's open (`NeedsYouCount.shown`).
+- With Reduce Motion on, it fades in and out rather than slide, as the iPad's.
+
 ### Mac differences
 
-- **Back doesn't return to a taf page.** Back goes to the screen Coach opened over; opening
-  Coach closes a taf's page first, so Back from there lands on the screen under it.
+- **The screen beside Coach stays usable:** nothing dims it, and a click on it doesn't close
+  Coach, where the iPad dims its screen and a tap outside closes Coach. Back and Esc close it.
+- **The edge doesn't close it:** dragged past its narrowest, it stays at its narrowest (the
+  iPad's closes). It keeps points, not the iPad's share of the screen, since a Mac's window is
+  any size.
+- **See version opens Versions as a sheet,** where the iPad pushes it inside Coach.
 - **No swipe:** Archive and Put back are each row's own button at its end, and its right-click
-  menu.
-- **Coach is a screen of the window, not a panel over it,** so there's no edge to drag to
-  resize it: the window itself is resized.
+  menu; and no swipe of the conversation closes Coach.
 
 ## Starting Coach (`CoachStart`, `PasskeySession`, `CoachModel.startSetup`, `followStart`)
 

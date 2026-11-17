@@ -26,7 +26,7 @@ Top to bottom, as on the iPad:
 | NEEDS YOU | Only when calls are held: each one with an amber dot, its taf's name and what it asks, as the iPad names the call ("Deploys: Run migration 0042 · migrate", see `docs/approvals.md`), then KIFF's reason and the time to answer by. A call whose taf isn't listed shows what it asks alone. A row opens Needs you. |
 | YOUR TAFS | In the iPad's order (`listedTafs`, docs/overview.md). Each taf as the iPad's row: its 34-point avatar (`TafAvatar`: its colour, corners at 0.3 of its size, its initial in rounded bold at half its size), its name in 15 semibold, and in 13, as the iPad's `tafRow`: what went wrong last (`healthNow`), red when failing and amber otherwise; a setup stopped partway, amber; else Now by its state (docs/overview.md). With none, tafs cloud's own line for that ("Pick a job for your first taf."), and nothing when it sends none. |
 | Start a new taf | The brand's gradient button. It opens Coach, where a taf is made. |
-| Coach | The dark button under it. |
+| Coach | The dark button under it. It opens Coach over the screen (below), and is the chosen one while Coach is open. |
 | Account | With who is signed in under it. Its symbol is the iPad's: an outlined person in the soft colour, filled and amber (`amberText`) while Account is open. |
 
 - The order, the symbols and the names are the iPad app's (`Screen`, in `Sources/Core/shell`).
@@ -41,8 +41,26 @@ Top to bottom, as on the iPad:
 - **From a taf's page**, as the iPad's Coach mode opens over it: Improve in Coach and Change
   the workflow with Coach open Coach on a new conversation about the taf, and an `ask_coach`
   card's Ask Coach opens it with the card's words in its box, nothing sent. Each is only for
-  someone who manages the taf and may use Coach, and Coach's Back returns to the screen open
-  before the taf. The ring's + opens Connect apps (docs/taf.md).
+  someone who manages the taf and may use Coach. The taf's page stays under Coach, on its tab,
+  and Coach's Back closes Coach back to it. The ring's + opens Connect apps (docs/taf.md).
+
+## Coach over the screen
+
+Coach isn't a screen of the sidebar: it opens over whichever screen is open, as the iPad's Coach
+mode (`CoachPanel`, `CoachMode.swift:34-111`), from the sidebar's Coach, Start a new taf, Needs
+you, a taf's page, the Overview's jobs, the brief and Connect apps (docs/coach.md › Coach mode).
+
+- **A panel at the window's right** (`CoachPanelHost`), on the background with a shadow to its
+  left, over the screen's right side. The rest of the screen and the sidebar stay drawn and
+  usable: a click there works as ever, and choosing another screen changes what's under Coach,
+  which stays open. Nothing dims them.
+- **Its left edge drags it** between 380 points and what leaves 240 of the screen in view; it
+  opens at 440. ⤢ in its title row fills the window, the sidebar too, and brings it back. The
+  width and ⤢ are kept on this Mac (`coach.width`, `coach.full`).
+- **Back** (Esc) closes it. The screen under it is as it was.
+- **A hand-over's See it on** opens its taf's page and closes Coach; Choose a plan opens Plan &
+  usage and closes it.
+- **The window's minimum size is kept** with Coach open: 900 by 600, Coach at its narrowest.
 
 ## Reading at launch, and how long it takes
 
