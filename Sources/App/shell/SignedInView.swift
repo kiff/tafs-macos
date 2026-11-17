@@ -388,7 +388,7 @@ struct SignedInView: View {
     private var accountScreen: some View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
-                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, signOut: {
+                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, signOut: {
             // A list read still on its way keeps nothing from here.
             overview.endSession()
             brief.endSession()

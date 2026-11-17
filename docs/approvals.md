@@ -55,6 +55,25 @@ makes an answer count only for the hold as the person saw it.
 
 Approving with Touch ID, on the phone and with a passkey each arrive in their own pull request.
 
+## Nothing is approved at planque from this Mac
+
+This Mac signs one request at planque: its own enrolment (`PlanqueClient.routes`), armed only
+inside Coach's Start after its approval and cleared when it ends. It never calls a grant's
+`approve` or `confirm`. `send` refuses any other path before anything is signed or sent, and
+`PlanqueRoutesTests` pins it four ways:
+- the list of routes is only the enrolment;
+- the enrolment is one POST, signed once;
+- no file under `Sources` names a grant's route, `/approve` or `/confirm`;
+- the client is made in one place and armed only around the enrolment.
+
+The grants proof (`grantsReadProof`) is a read: it signs `GET …/grants` and nothing else.
+
+**Account › How tafs works** says where approvals are signed (`ApprovalRoute.howItWorksKey`).
+Only the security key's route keeps "Your answers are signed on this Mac."
+(`sign_in.every_action_taf_takes_goes`). Every other Mac, which is every Mac while
+`macPasskeyApprovals` is off, says "Your approvals are signed on your phone."
+(`sign_in.every_action_taf_takes_goes_view`), as a computer that only views.
+
 ## Did this happen?
 
 As the iPad's `DidThisHappenCard` and `loadUnproven` (`NeedsYouView.swift:22-23, 95-136`,

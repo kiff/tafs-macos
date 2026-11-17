@@ -93,6 +93,8 @@ struct AccountView: View {
     /// This Mac's device key is a software key (no Secure Enclave): adding it with the phone
     /// still leaves it view-only, so it isn't offered, and the line says where approvals go.
     var softwareKey = false
+    /// How this Mac's approvals are signed: How tafs works says where (`howItWorksKey`).
+    var route: ApprovalRoute = .phoneOrPasskey
     let signOut: () -> Void
     @State private var showingDevices = false
     @State private var showingPeople = false
@@ -234,7 +236,7 @@ struct AccountView: View {
                             .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 18)
                     }
                     group(words("sign_in.how_works")) {
-                        Text(words("sign_in.every_action_taf_takes_goes", ["device": words("device.mac")]))
+                        Text(words(route.howItWorksKey, ["device": words("device.mac")]))
                             .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
                     }
                     group(words("settings.legal")) {

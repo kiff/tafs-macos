@@ -4,7 +4,8 @@ import Foundation
 /// agent or KIFF, as the iPad's `PlanqueClient`. This Mac asks two things of it: its proof
 /// that this device reads its own account's grants (`grantsReadProof`), which tafs cloud
 /// forwards with a taf's Setup read; and this device's enrolment (`enrol`), each request
-/// signed by the device key with this device's id (`Planque-Device-Signature`).
+/// signed by the device key with this device's id (`Planque-Device-Signature`). It never
+/// approves or confirms a grant (`routes`).
 final class PlanqueClient {
     enum PlanqueError: Error, Equatable {
         case notSigning
@@ -18,6 +19,12 @@ final class PlanqueClient {
         /// person when it sends some, as the iPad's `PlanqueError.server`.
         case server(status: Int, message: String, words: String?)
     }
+
+    /// The only routes under the account this Mac signs at planque: its enrolment. Never a
+    /// grant's `approve` or `confirm`, the iPad's two routes under a grant: this Mac
+    /// approves nothing at planque, so `send` refuses any other path before anything is signed or
+    /// sent. Adding one is a change to this list, which `PlanqueRoutesTests` pins.
+    static let routes: Set<String> = ["enrolment"]
 
     /// planque's address, as the iPad's `baseURL`.
     static let baseURL = "https://planque.kiff.dev"
@@ -80,6 +87,8 @@ final class PlanqueClient {
     /// body's hash and the time, with this device's id; never a key alone. A refusal keeps
     /// planque's `code`; `409 needs_key` is `needsKey`.
     private func send<Answer: Decodable>(_ method: String, _ path: String, body: [String: String]) async throws -> Answer {
+        // Only the routes this Mac may sign (`routes`): never a grant's approve or confirm.
+        guard Self.routes.contains(path) else { throw PlanqueError.notSigning }
         guard let tenant else { throw PlanqueError.notSigning }
         guard let signer, let bodyHash, let transport else { throw PlanqueError.notSigning }
         let account = "/v1/accounts/\(CloudClient.escaped(tenant))"
