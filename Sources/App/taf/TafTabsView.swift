@@ -309,8 +309,8 @@ struct TafSetupTab: View {
     var openActivity: (String) -> Void = { _ in }
     /// Reads the list again after a pause or a change of where its results go.
     var halted: () async -> Void = {}
-    /// The taf's doors, for whoever manages it; nil for anyone else. On the iPad they are in
-    /// Setup › Starts when; here they stay at the top of the Setup until Starts when has them.
+    /// The taf's doors, for whoever manages it, in Setup › Starts when as on the iPad; nil for
+    /// anyone else.
     var doors: DoorsModel? = nil
     /// The taf, for the job, Starts when and Results go to; nil leaves them out.
     var taf: Home.Taf? = nil
@@ -357,21 +357,22 @@ struct TafSetupTab: View {
         .onChange(of: taf?.results) { _ in model.knob.homeRead() }
         .sheet(isPresented: $startsOpen) {
             if let taf {
-                StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted) { startsOpen = false }
+                StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted,
+                               doors: doors, myEmail: myEmail, improveInCoach: improveInCoach) { startsOpen = false }
                     .environment(\.words, words)
             }
         }
         .sheet(isPresented: $resultsOpen) {
             if let taf {
-                ResultsGoToView(model: model.knob, taf: taf, manages: manages, email: me?.email, refreshed: halted) { resultsOpen = false }
+                ResultsGoToView(model: model.knob, taf: taf, manages: manages, email: me?.email, refreshed: halted,
+                                improveInCoach: improveInCoach) { resultsOpen = false }
                     .environment(\.words, words)
             }
         }
     }
 
-    /// The taf's doors, then what waits on its Card for want of a unit, and its own Connect again.
+    /// What waits on its Card for want of a unit, and its own Connect again.
     @ViewBuilder private var first: some View {
-        if let doors, let taf { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
         if case .loaded(let setup) = model.setup {
             ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
             if let again = setup.connectAgain { connectAgain(again) }

@@ -49,6 +49,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | SignInView.swift | 333 | `SignInView`, and Account (`SettingsView`, `PlanRow`, `AccountView`, `AccountLines`) | Sign in in the browser (`pairing/SignInView.swift`, `SignInModel.swift`); Account's groups and rows, `PlanRow`, `AccountLines.people`, Sign out confirmed first (`account/AccountView.swift`) | Coach's suggestions; AI use; Time zone; Delete account |
 | TafChatView.swift | 826 | A taf's chat | The taf's conversation drawn as Coach's, its box, its Cards beside it, its `ask_coach` cards with Ask Coach (`taf/TafView.swift`, `coach/CoachView.swift`, `Core/coach/Thread.swift`) | What Coach's conversation also misses (attachments, questions); `SteadyMarkdown` |
 | TafDetailView.swift | 1474 | A taf's page: head, tabs, Card, Activity, Setup, panels | The head and its state chip, the version line and Versions, the share line with Share, the four tabs, the Cards beside the Chat and the Activity, the Card wallet (`CardStack`) with its issuer, the Card tab's time zone words, How this is counted (`CountedView`), Halt, its versions, Usage and Revoke (whose click says to approve elsewhere), the Setup in the iPad's order with the job and Improve in Coach, `MemoryPanel` with Forget, `RunsPanel` (`taf/TafView.swift`, `TafCardTab.swift`, `TafTabsView.swift`, `TafMemoryView.swift`, `Core/taf/TafCard.swift`, `TafTabs.swift`, `TafVersions.swift`, `TafMemory.swift`) | The rest of `WorkPanel`; the Card tab's `each_item`, `pending` and `unit_words` lines; Remove for good and Revoke themselves (each signed); the workflow steps' rows; Connect again; folding the header while the chat scrolls |
+| TafSetupViews.swift | 512 | Starts when, Results go to, the knob's pending changes | `StartsWhenView` (its schedule with −/+ as wide as the iPad's, app events, its doors, follow-ups, Change when it starts with Coach, Pause), `ResultsGoToView` (tafs' own places, places in apps, Add a place from a connected app, a locked-on switch green), `KnobPendingPanel`, `SizeStepper`, `DoorsList` (`taf/KnobSetupView.swift`, `TafDoorsViews.swift`, `Core/taf/TafKnob.swift`) | Not sent with Send again (the taf's work); Make it live and approving an app event, each signed |
 | TafPresentationViews.swift | 492 | A taf's Activity list and Setup panels | `CardUnitExceptionPanel`; `ConnectedToolsRing` as the iPad's ring, with its workflow and `ConnectedAppSheet`; `TafActivityList`'s filters, groups and pages, each call a plain row as `SourceActivityRow`; `MemorySummaryPanel` with See all; `RetainedRuns`; `TafKnocksPanel` (`taf/TafToolsRing.swift`, `taf/TafTabsView.swift`, `taf/TafRunsView.swift`, `taf/TafDoorsViews.swift`, `Core/taf/TafTabs.swift`) | `NextStepRow`'s buttons; a call's receipt from its row; the workflow's steps |
 | UsageView.swift | 348 | Plan & usage: the balance, buying, who bills, members' requests | The balance and its meter, the credits, each half read on its own; KIFF's usage read; `askPanel` (a member's request waiting with Withdraw, the last answer, Ask an admin) and `requestsPanel` (members' requests with Decline) (`usage/UsageView.swift`, `PlanRequestsView.swift`, `Core/usage/Usage.swift`, `KIFFUsage.swift`) | Raise the limit (an approval), also as a raise request's answer; who bills the plan (`billingPanel`) and Manage. Buying credits and Solo are not for macOS 12 (`PlanViews.swift`'s store views) |
 | WorkLog.swift | 181 | What a taf does while it answers | `WorkLog.rows`, the live line with its steps, `StepList`, "Worked for" opening the steps (`Core/coach/WorkRows.swift`, `coach/CoachView.swift`) | `SteadyMarkdown` |
@@ -68,7 +69,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
-| TafSetupViews.swift | 512 | Starts when, Results go to, the knob's pending changes | |
 | TrialViews.swift | 214 | Trials of a new version | |
 
 ## Not for macOS 12
@@ -99,5 +99,5 @@ merges.
 
 ## Counts
 
-Ported 5, partial 28, not started 13, not for macOS 12 4: the 50 view files at the pin
+Ported 5, partial 29, not started 12, not for macOS 12 4: the 50 view files at the pin
 (`da55768`).

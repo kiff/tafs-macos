@@ -201,4 +201,54 @@ let tafPageMacTests: [Test] = [
         // Drawn last: the sheet reads again when it shows.
         _ = try shoot(TafMemoryView(model: model, close: {}).environment(\.words, pageWords()), "taf-memory", size: CGSize(width: 520, height: 520))
     }),
+    Test("Starts when has its doors, then Change when it starts with Coach between the follow-ups and Pause, for whoever may", awaiting: { @MainActor in
+        let words = pageWords()
+        let transport = CannedTransport([(200, knobAnswer)])
+        let cloud = CloudClient(transport: transport, session: pageSession)
+        let knob = TafKnobModel(cloud: cloud, taf: "taf-1")
+        await knob.load(words: words)
+        let taf = try pageHomeTaf()
+        let doors = DoorsModel(cloud: cloud, taf: "taf-1")
+        let size = CGSize(width: 520, height: 900)
+        var improved = 0
+        let full = StartsWhenView(model: knob, taf: taf, manages: true, timeZone: "Europe/Paris", doors: doors, myEmail: "zoe@example.com",
+                                  improveInCoach: { improved += 1 }, close: {}).environment(\.words, words)
+        let bare = StartsWhenView(model: knob, taf: taf, manages: true, timeZone: "Europe/Paris", close: {}).environment(\.words, words)
+        let shots = try shoot(full, "taf-starts-when", size: size)
+        guard let without = Snapshot.bitmap(of: bare, size: size) else { throw Failure(description: "no bitmap") }
+        try expect(Snapshot.png(shots[0]) != Snapshot.png(without), "its doors and Change when it starts with Coach")
+        try expectEqual(improved, 0)
+        try expect(transport.sent.allSatisfy { $0.method == "GET" }, "only reads: \(transport.sent.map(\.method))")
+    }),
+    Test("− and + are as wide as the iPad's: each fills its third of the row", awaiting: { @MainActor in
+        let stepper = SizeStepper(label: "How often", canLower: true, canRaise: true, move: { _ in })
+            .environment(\.words, pageWords()).background(Color.white)
+        guard let bitmap = Snapshot.bitmap(of: stepper, size: CGSize(width: 480, height: 60)) else { throw Failure(description: "no bitmap") }
+        // The − button's outline crosses the row's first third, well past 60 points.
+        let drawn = (80...140).contains { x in (0...59).contains { y in Snapshot.hexes(bitmap, x: x, y: y).contains { $0 != 0xFFFFFF } } }
+        try expect(drawn, "the − button reaches past the old 60 points")
+    }),
+    Test("Results go to: Add a place from a connected app for whoever may, and a switch on that can't change stays green", awaiting: { @MainActor in
+        let words = pageWords()
+        let transport = CannedTransport([(200, knobAnswer)])
+        let knob = TafKnobModel(cloud: CloudClient(transport: transport, session: pageSession), taf: "taf-1")
+        await knob.load(words: words)
+        let taf = try AccountClient.decoder.decode(Home.Page.self, from: Data(#"{"tafs":[{"kiff_agent":"a","id":"taf-1","name":"Refunds","state":"working","results":["app"]}]}"#.utf8)).tafs[0]
+        let size = CGSize(width: 520, height: 600)
+        let managed = ResultsGoToView(model: knob, taf: taf, manages: true, email: "you@example.com", improveInCoach: {}, close: {}).environment(\.words, words)
+        let plain = ResultsGoToView(model: knob, taf: taf, manages: true, email: "you@example.com", close: {}).environment(\.words, words)
+        let shots = try shoot(managed, "taf-results-go-to", size: size)
+        guard let without = Snapshot.bitmap(of: plain, size: size) else { throw Failure(description: "no bitmap") }
+        try expect(Snapshot.png(shots[0]) != Snapshot.png(without), "Add a place from a connected app")
+        // Alert our phones is the one place on: it can't be turned off, and stays green.
+        for bitmap in shots {
+            let green = (400...510).contains { x in stride(from: 60, through: 590, by: 2).contains { y in
+                Snapshot.hexes(bitmap, x: x, y: y).contains { c in
+                    let r = Int(c >> 16 & 0xFF), g = Int(c >> 8 & 0xFF), b = Int(c & 0xFF)
+                    return g - r > 40 && g - b > 15
+                }
+            } }
+            try expect(green, "a locked-on switch drawn green")
+        }
+    }),
 ]
