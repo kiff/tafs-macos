@@ -94,7 +94,13 @@ jobs:
         run: |
           printf 'struct V: View {\n var body: some View {\n VStack {\n%s }\n }\n}\n' "$(for i in $(seq 11); do printf '  Text("%s")\n' $i; done)" > /tmp/eleven.swift
           if python3 scripts/viewbuilders.py /tmp/eleven.swift; then echo "a builder of 11 passed"; exit 1; fi
-      - name: Every file parses with Swift 5.7, and no builder holds more than 10 views
+      - name: The shape check catches what Swift 5.7 refused on macOS 12
+        run: |
+          printf 'func a() {\n x.start { [weak self] v in\n  Task { @MainActor in self?.got(v) }\n }\n}\n' > /tmp/weak.swift
+          if python3 scripts/swift57patterns.py /tmp/weak.swift; then echo "a weak self in a Task passed"; exit 1; fi
+          printf 'func b() {\n Task {\n  defer { busy = false }\n  await go()\n }\n}\n' > /tmp/defer.swift
+          if python3 scripts/swift57patterns.py /tmp/defer.swift; then echo "a defer in a Task passed"; exit 1; fi
+      - name: Every file parses with Swift 5.7, no builder holds more than 10 views, and no shape Swift 5.7 refuses
         run: scripts/swift57.sh
 
   core:

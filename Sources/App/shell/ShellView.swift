@@ -4,7 +4,7 @@ import SwiftUI
 /// the screen it opens beside it on the background.
 struct ShellView: View {
     static let sidebarWidth: CGFloat = 300
-    static let minimumSize = CGSize(width: 900, height: 600)
+    static let minimumSize = WindowSize.minimum
 
     @Environment(\.words) private var words
     @Binding var selection: Screen

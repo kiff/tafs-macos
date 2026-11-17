@@ -26,6 +26,29 @@ let pairingModelTests: [Test] = [
         model.signedOut()
         try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
     }),
+    Test("a read KIFF refuses with 401 forgets the session once, and sign-in opens; a newer session stays", awaiting: { @MainActor in
+        let store = MemoryStore()
+        let (signIn, _) = try model([(200, startAnswer), (200, sessionAnswer)], store: store)
+        await signIn.signIn()
+        guard let session = signIn.session else { throw Failure(description: "no session") }
+        let watch = signIn.sessionWatch(session)
+        try expect(signIn.sessionWatch(session) === watch, "one watch for the session, however often the window is made")
+        // The window's reads, through the watch: KIFF refuses the stored sign-in.
+        let reads = WatchedTransport(inner: CannedTransport([(401, #"{"error":"unauthorized"}"#), (401, "{}")]), watch: watch)
+        let header = ["Authorization": "Bearer \(session.accessToken)"]
+        _ = try await reads.send(HTTPRequest(method: "GET", path: "/v1/me", headers: header))
+        _ = try await reads.send(HTTPRequest(method: "GET", path: "/v1/home", headers: header))
+        for _ in 0..<50 where signIn.session != nil { await Task.yield() }
+        try expect(signIn.session == nil, "signed out")
+        try expect(SessionStore(store: store).load() == nil, "and forgotten in the store")
+        try expectEqual(signIn.step, .welcome)
+
+        // A refusal for a session this Mac has since replaced changes nothing.
+        let (other, _) = try model([(200, startAnswer), (200, sessionAnswer)])
+        await other.signIn()
+        other.sessionRefused("an older token")
+        try expect(other.session != nil)
+    }),
     Test("signing in opens KIFF's page, waits, and keeps the session", awaiting: { @MainActor in
         var opened: [URL] = []
         let store = MemoryStore()

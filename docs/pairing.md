@@ -74,6 +74,27 @@ pairs as today, with no credential, and approves on the phone.
 - it stops at the code's expiry, and never waits more than 10 minutes;
 - any other answer ends the wait and is shown to the person.
 
+## A sign-in KIFF no longer accepts
+
+A session can end while the Mac still keeps it: signed out on another device, this Mac removed
+from the account, or kept from an older build. KIFF then refuses every read with 401, and
+tafs cloud says "KIFF did not accept this sign-in".
+
+- **The first refused read ends it** (`SessionWatch`, `WatchedTransport`). Every read the signed-in
+  window makes, to KIFF or tafs cloud, goes through the session's watch. The first read sent with
+  the stored session that's refused with 401 forgets the session, as Sign out does, and sign-in
+  opens, once (`SignInModel.sessionRefused`).
+- **Nothing is ended at KIFF,** which ended it already.
+- **Only reads count.** A request that changes something can be refused for its own signature,
+  which says nothing about the session.
+- **A newer session stays:** a read refused for a session the Mac has since replaced (a new
+  pairing) changes nothing.
+- **No screen says "unauthorized".** Until the window ends, Needs you says "Signed out of KIFF.
+  Sign in again." (`error.signed_out`), never KIFF's code.
+- **Account never says Signed in** while reads are refused, since the signed-in window ends.
+
+The iPad does the same (kiff/tafs#1307, `AppModel.refresh`).
+
 ## What is never kept or shown
 
 - The session's token is kept in the Keychain only.

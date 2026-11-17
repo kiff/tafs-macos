@@ -279,6 +279,31 @@ final class SignInModel: ObservableObject {
         do { try keys.save(id) } catch { keys.forget() }
     }
 
+    /// The watch on the signed-in window's reads, for the session it was made for.
+    private var watching: SessionWatch?
+
+    /// The watch for `session`'s window: the same one while the session is, so a window rebuilt
+    /// (a new language) keeps it.
+    func sessionWatch(_ session: Session) -> SessionWatch {
+        if let watching, watching.token == session.accessToken { return watching }
+        let token = session.accessToken
+        // Held weakly through a box, a constant: Swift 5.7 refuses a weak `self` in a `@Sendable` closure.
+        let me = WeakBox(self)
+        let watch = SessionWatch(token: token) {
+            Task { @MainActor in me.object?.sessionRefused(token) }
+        }
+        watching = watch
+        return watch
+    }
+
+    /// KIFF refused the stored sign-in (`SessionWatch`): it's forgotten, as Sign out forgets it, and
+    /// sign-in opens. Nothing is ended at KIFF, which already ended it. A session that has moved
+    /// on since (a new pairing) stays.
+    func sessionRefused(_ token: String) {
+        guard session?.accessToken == token else { return }
+        signedOut()
+    }
+
     /// Forgets the session on this Mac, and the security key that went with it. Ending it at KIFF
     /// is the caller's, with the session.
     func signedOut() {
