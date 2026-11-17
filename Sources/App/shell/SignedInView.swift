@@ -383,7 +383,7 @@ struct SignedInView: View {
                                myEmail: accountModel.me?.email,
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
-                               openConnect: { openTaf = nil; selection = .connectApps }, tab: tafTab).id(taf.id))
+                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, tab: tafTab).id(taf.id))
     }
 
     /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for
