@@ -1,0 +1,57 @@
+# The app built with macOS 12's own Swift 5.7, on a Mac that runs macOS 12 (docs/building.md).
+#
+# Why: the other jobs can't type-check the app with Swift 5.7. `swift57` runs on Linux, with no
+# SwiftUI or AppKit, and GitHub's Mac runners have Xcode 16 only (Swift 6). Swift 5.7 refused code
+# on a real macOS 12 Mac that every one of them took. Only that Mac's own compiler is the check.
+#
+# Where it runs: a self-hosted runner on a Mac with macOS 12 and its Command Line Tools
+# (Swift 5.7), labelled `macos12`. It's off until the runner exists and the repository variable
+# MACOS12_RUNNER is `on`.
+#
+# When it runs: only on pushes to main and by hand, never on a pull request. This repository is
+# public, so a pull request from anyone must never run code on that Mac. main holds only
+# reviewed code. Run it by hand on a branch (workflow_dispatch) to check one before it merges.
+name: macOS 12 build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos12-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.repository == 'kiff/tafs-macos' && vars.MACOS12_RUNNER == 'on'
+    runs-on: [self-hosted, macOS, macos12]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: This Mac is on macOS 12, with Swift 5.7
+        run: |
+          sw_vers
+          swift --version
+          case "$(sw_vers -productVersion)" in 12.*) ;; *) echo "::error::not macOS 12"; exit 1;; esac
+          swift --version 2>&1 | grep -q 'Swift version 5\.7' || { echo "::error::not Swift 5.7"; exit 1; }
+      # What scripts/fido.sh needs to build the native libraries from their checked sources.
+      - name: The tools the libraries' build needs
+        run: |
+          for tool in cmake pkg-config clang make perl git curl shasum; do
+            command -v "$tool" >/dev/null || { echo "::error::$tool is missing on this Mac"; exit 1; }
+          done
+      # The whole app, type-checked and compiled by this Mac's Swift 5.7, for Intel and Apple
+      # silicon, as the DMG ships it.
+      - name: Build with Swift 5.7
+        run: |
+          scripts/build.sh
+          test "$(lipo -archs build/tafs.app/Contents/MacOS/tafs)" = "x86_64 arm64"
+      # The tests that need no Mac, also with this Swift: the app's own logic, as it runs here.
+      - name: Core, with Swift 5.7
+        run: scripts/test.sh --core
