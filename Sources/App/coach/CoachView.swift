@@ -956,6 +956,16 @@ struct CoachView: View {
     var close: (() -> Void)? = nil
     /// Coach's own screen has its name at the top and its wash; a taf's chat sits in its page.
     var embedded = false
+    /// Coach over the screen fills the window while this is on, as the iPad's ⤢; nil draws no ⤢.
+    var fullScreen: Binding<Bool>? = nil
+    /// The tafs listed, for the taf a new version's card is about (`Thread.Card.improvedTaf`).
+    var tafs: [Home.Taf] = []
+    /// A taf's versions, by its tafs cloud id, for a new version's See version; nil opens none.
+    var versions: ((String) -> TafPagesModel?)? = nil
+    /// The Versions sheet a new version's card opened.
+    @State private var versionsShown: CoachVersions?
+    /// The answered approvals opened again from their folded line, by card key.
+    @State private var opened: Set<String> = []
     /// The answers whose work is unfolded, and the plan.
     @State private var unfolded: Set<Int> = []
     /// The answer being reported, in its sheet.
@@ -1018,11 +1028,13 @@ struct CoachView: View {
         }
     }
 
-    /// Coach's title row, as the iPad's Coach mode: Back on the left, which closes Coach (Esc
+    /// Coach's title row, as the iPad's Coach mode: ⤢ and Back on the left, Back closing Coach (Esc
     /// too), and on the right New conversation (the pencil) and the conversations' menu with
     /// Previous conversations (`CoachMode.swift:13-31`, `SetupChatView.swift:105-110`).
     private var header: some View {
         HStack(spacing: 14) {
+            // ⤢ first, then Back, as the iPad's Coach mode orders them (`CoachMode.swift:13-31`).
+            if let fullScreen { fullScreenButton(fullScreen) }
             if let close {
                 Button(action: close) {
                     HStack(spacing: 4) {
@@ -1061,6 +1073,31 @@ struct CoachView: View {
                 .accessibilityAddTraits(.isHeader)
                 .allowsHitTesting(false)
         }
+    }
+
+    /// ⤢, as the iPad's (CoachMode.swift:19-26): Coach fills the window, and goes back to the
+    /// width it had.
+    private func fullScreenButton(_ full: Binding<Bool>) -> some View {
+        Button { full.wrappedValue.toggle() } label: {
+            Image(systemName: full.wrappedValue ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.coach)
+                .frame(width: 24, height: 24).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(words(full.wrappedValue ? "coach.back_width" : "coach.full_screen"))
+    }
+
+    /// A new version's card, with See version opening that taf's Versions here.
+    private func improvement(_ card: Thread.Card) -> some View {
+        let taf = card.improvedTaf(in: tafs)
+        let make = versions
+        var open: ((Home.Taf) -> Void)?
+        if let make, taf?.tafID != nil {
+            open = { chosen in
+                if let id = chosen.tafID, let model = make(id) { versionsShown = CoachVersions(model: model) }
+            }
+        }
+        return ImprovementCard(card: card, taf: taf, openVersions: open)
     }
 
     private var thread: some View {
@@ -1105,6 +1142,10 @@ struct CoachView: View {
             }
             .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        // A new version's See version: that taf's Versions, as the iPad's `VersionsScreen`.
+        .sheet(item: $versionsShown) { shown in
+            VersionsView(model: shown.model) { versionsShown = nil }.environment(\.words, words)
         }
     }
 
@@ -1480,6 +1521,8 @@ struct CoachView: View {
             AskCoachCard(text: text, ask: askingCoach(text))
         } else if card.isPlan {
             plan(card)
+        } else if card.isImprovement {
+            improvement(card)
         } else if card.isHandOver {
             handOver(card)
         } else if card.type == "sign_in" {
@@ -1556,7 +1599,8 @@ struct CoachView: View {
     }
 
     /// An answered card, folded into one line, as the iPad's `OutcomeLine`.
-    private func outcomeLine(_ symbol: String, _ color: Color, _ text: String, detail: String? = nil) -> some View {
+    /// `more`: a click opens the card again, which the iPad marks with a ⌄ at the line's end.
+    private func outcomeLine(_ symbol: String, _ color: Color, _ text: String, detail: String? = nil, more: Bool = false) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: symbol).font(.system(size: 14)).foregroundColor(color).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
@@ -1564,6 +1608,7 @@ struct CoachView: View {
                 if let detail { Text(verbatim: detail).font(.system(size: 12)).foregroundColor(Theme.soft) }
             }
             Spacer(minLength: 0)
+            if more { Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).foregroundColor(Theme.dim).accessibilityHidden(true) }
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.raised.opacity(0.6)))
@@ -1577,7 +1622,8 @@ struct CoachView: View {
             Text(words("coach.result.set_up", ["taf": name]).uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.ok)
             if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
             if !card.tools.isEmpty {
-                Text(verbatim: card.tools.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                // In words, as the iPad's (`KIFFMapping.toolWords`), never a tool's own name.
+                Text(verbatim: card.toolWords.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             if let failed = card.outcome?.failed {
                 Text(words("coach.not_set_up", ["name": name, "why": failed])).font(.system(size: 14)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
@@ -1650,16 +1696,17 @@ struct CoachView: View {
         }
     }
 
-    /// An approval or a sign-in. Answered: one folded line of what it was. Waiting: what it
+    /// An approval or a sign-in. Answered: one folded line of what it was, with a ⌄, which a click
+    /// opens again, as the iPad's `SetupApproval` (SetupChatView.swift:1513-1530). Waiting: what it
     /// asks, Decline, and Approve only on a Mac that can sign one; otherwise where to approve.
     @ViewBuilder private func approval(_ card: Thread.Card) -> some View {
-        if let answered = card.answered {
-            // tafs cloud's words for the answer are the only sign of a decline in the thread:
-            // the shared "Declined" in the app's language, which tafs cloud writes in too.
-            if answered == words("coach.answer.declined_short") {
-                outcomeLine("minus.circle.fill", Theme.dim, card.title.map { words("coach.answer.declined_title", ["title": $0]) } ?? answered)
+        if card.fold == .opens, let answered = card.answered {
+            if opened.contains(card.key) {
+                answeredApproval(card, declined: declined(answered))
             } else {
-                outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.title].compactMap { $0 }.joined(separator: " · "), detail: card.connectionWords)
+                Button { opened.insert(card.key) } label: { approvalLine(card, answered).contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(words("coach.shows_approval"))
             }
         } else if card.waitsForPerson {
             VStack(alignment: .leading, spacing: 12) {
@@ -1689,6 +1736,45 @@ struct CoachView: View {
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
         }
+    }
+
+    /// tafs cloud's words for the answer are the only sign of a decline in the thread: the shared
+    /// "Declined" in the app's language, which tafs cloud writes in too.
+    private func declined(_ answered: String) -> Bool { answered == words("coach.answer.declined_short") }
+
+    /// An answered approval, folded: what was answered, then what it was, and a ⌄.
+    private func approvalLine(_ card: Thread.Card, _ answered: String) -> some View {
+        Group {
+            if declined(answered) {
+                outcomeLine("minus.circle.fill", Theme.dim, card.title.map { words("coach.answer.declined_title", ["title": $0]) } ?? answered, more: true)
+            } else {
+                outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.title].compactMap { $0 }.joined(separator: " · "), detail: card.connectionWords, more: true)
+            }
+        }
+    }
+
+    /// An answered approval opened again, as the iPad's card in its answered state: Approved or
+    /// Declined, with Fold, then what it asked. Nothing on it answers again.
+    private func answeredApproval(_ card: Thread.Card, declined: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Eyebrow(text: words(declined ? "coach.answer.declined_short" : "coach.answer.approved_short"), color: declined ? Theme.dim : Theme.ok)
+                Spacer()
+                Button { opened.remove(card.key) } label: {
+                    Text(words("coach.plan.fold_short")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
+                .buttonStyle(.plain)
+            }
+            if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
+            if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
+            if let connection = card.connectionWords {
+                Label(connection, systemImage: "checkmark.circle.fill").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(declined ? Theme.amber : Theme.ok))
     }
 
     /// Several questions at once, as the iPad's `QuestionsCard` (QuestionsCard.swift:17-24):

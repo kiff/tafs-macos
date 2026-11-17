@@ -50,6 +50,18 @@ for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped
 done
 [ -d "$STRINGS/en" ] || { echo "No words were copied into the app" >&2; exit 1; }
 cp .shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png "$APP/Contents/Resources/mascot.png"
+# The app's icon: the iPad's artwork on macOS's icon grid (App/AppIcon.png, 1024 square), at
+# every size Finder and the Dock ask for. Info.plist names it (CFBundleIconFile).
+SET="$OUT/tafs.iconset"
+rm -rf "$SET"
+mkdir -p "$SET"
+for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" App/AppIcon.png --out "$SET/icon_${size}x${size}.png" > /dev/null
+    sips -z $((size * 2)) $((size * 2)) App/AppIcon.png --out "$SET/icon_${size}x${size}@2x.png" > /dev/null
+done
+iconutil -c icns "$SET" -o "$APP/Contents/Resources/tafs.icns"
+rm -rf "$SET"
+[ -s "$APP/Contents/Resources/tafs.icns" ] || { echo "The app's icon wasn't made" >&2; exit 1; }
 # The licenses of the libraries linked in: libfido2, libcbor, OpenSSL and libsecp256k1.
 mkdir -p "$APP/Contents/Resources/licenses"
 cp build/fido/licenses/*.txt "$APP/Contents/Resources/licenses/"

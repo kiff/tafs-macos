@@ -121,7 +121,13 @@ let accountClientTests: [Test] = [
         let declared = info["CFBundleLocalizations"] as? [String] ?? []
         let shipped = try Words.shipped(folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(Set(declared), Set(shipped))
-        try expectEqual(AppInfo.version(info), "0.1 (3)")
+        try expectEqual(AppInfo.version(info), "0.1 (4)")
+        // The Dock and Finder show the app's own icon: Info.plist names it, and its 1024-point source is there.
+        try expectEqual(info["CFBundleIconFile"] as? String ?? "", "tafs")
+        let icon = try Data(contentsOf: URL(fileURLWithPath: "App/AppIcon.png"))
+        try expectEqual(Array(icon.prefix(8)), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let side = { (at: Int) in icon[at..<at + 4].reduce(0) { $0 << 8 | Int($1) } }
+        try expectEqual([side(16), side(20)], [1024, 1024])
     },
     Test("people and groups are read as KIFF lists them and kept as the iPad keeps them; only read", awaiting: {
         let groups = #"{"groups":[{"id":"g2","name":"finance","members":[{"subject":"u2","role":"member"}],"agents":[]},{"id":"g1","name":"Everyone","everyone":true,"members":[{"subject":"u1","role":"member"},{"subject":"u2","role":"manager"}],"agents":["refunds","gone"]},{"id":"g3","name":"Accounts","members":[],"agents":[]}]}"#
