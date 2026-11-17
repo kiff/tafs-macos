@@ -46,9 +46,11 @@ enum Runs {
     /// The run whose report is the last result: the newest with a chat.
     static func latest(_ runs: [Run]) -> Run? { runs.first { $0.session != nil } }
 
-    /// The Last result's line, by the iPad's rule: the report's first line, without its marks;
-    /// else why the run stopped; else when it last ran; else "Nothing yet".
-    static func line(latest run: Run?, newest: Run?, report: Report?, words: Words, time: (Date) -> String) -> String {
+    /// The Last result's line, by the iPad's rule (ShareViews.swift:410-418): the report's first
+    /// line, without its marks; else why the run stopped; else when it last ran, by the list's
+    /// `last_run` (`lastRun`) where it says, else by the run; else "Nothing yet". Before its runs
+    /// are read, the list's `last_run` alone (`line(lastRun:)`).
+    static func line(latest run: Run?, newest: Run?, report: Report?, lastRun: Date? = nil, words: Words, time: (Date) -> String) -> String {
         if let report {
             let first = report.text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
             if let first {
@@ -56,9 +58,17 @@ enum Runs {
             }
         }
         if let error = (run ?? newest)?.error { return error }
-        if let at = (run ?? newest)?.at { return words("people.last_ran", ["time": time(at)]) }
-        return words("overview.nothing_yet")
+        return line(lastRun: lastRun ?? (run ?? newest)?.at, words: words, time: time)
     }
+
+    /// The Last result from the list alone, as the iPad's before its runs are read: "Last ran at
+    /// {time}" by `last_run`, else "Nothing yet". Never "–" for a taf tafs cloud runs.
+    static func line(lastRun: Date?, words: Words, time: (Date) -> String) -> String {
+        lastRun.map { words("people.last_ran", ["time": time($0)]) } ?? words("overview.nothing_yet")
+    }
+
+    /// The line when its runs couldn't be read, as the iPad's `loadReport` (AppModel.swift:3198-3201).
+    static func notRead(_ why: String, words: Words) -> String { words("report.runs_not_loaded", ["why": why]) }
 }
 
 extension CloudClient {

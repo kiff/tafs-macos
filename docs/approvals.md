@@ -296,4 +296,45 @@ After a refusal the list is read again from KIFF: its list is the truth, not the
 A refusal KIFF doesn't take stays on the card with KIFF's reason, and the call stays listed.
 A list that can't be read says so and is never shown as "Nothing needs you."
 
-`scripts/test.sh approvals` writes `build/screenshots/needs-you-*.png`.
+### Coach waiting (`CoachWaiting`, `CoachWaitingCard`, `SetAllAsideButton`)
+
+Ported from the iPad's `TafsCloud+CoachWaiting.swift` and `NeedsYouView.swift:16-19, 484-600`.
+A Coach chat paused on a card its person answers (an approval, a sign-in, questions, a
+confirm) is listed by Home (`coach_waiting`), oldest first, and counted in Needs you.
+
+- **Read** with each list read, leniently: only one with its chat (`session`) and both of
+  tafs cloud's lines (`words.line`, `words.open`) is drawn; one that doesn't read, or a
+  `coach_waiting` that isn't a list, is left out, never Home with it.
+- **Drawn** after the steps, on a panel edged in amber: Coach's sparkle and tafs cloud's line
+  ("Support: Coach is waiting for your approval since 09:12."), then **Open Coach**, for
+  someone who may use Coach, which opens the Mac's Coach on that chat (on Coach alone with no
+  chat). Before Coach is read, it opens on that chat once read.
+- **Set aside**, an outlined button, only when tafs cloud sends its words (`words.set_aside`).
+  The iPad also has a swipe; the button is its other way. **Set all aside**
+  (`coach_waiting_clear`), above two or more, asks once in tafs cloud's words (its title names
+  the count it ends), then ends every chat Home listed in one call. "Cancel" is the app's own
+  (`common.cancel`) when tafs cloud sends no `no`.
+- **Neither is signed.** Setting aside is tafs cloud's "not now", never an approval: the iPad
+  signs nothing (`POST /v1/home/coach-waiting/{session}/set-aside`, or `…/set-aside` for all,
+  the session escaped). Only this device's signed read of its connections goes with it
+  (`Planque-Device-Signature`, the same no-prompt proof as Coach's thread read), so tafs cloud
+  can withdraw a connection the chat asked for. So this Mac sends it as the iPad does.
+- **One call per chat at a time:** a second click, or Set all aside over a chat already on its
+  way, sends nothing. The row goes once tafs cloud says it ended; Coach leaves a chat shown
+  that was set aside for a new conversation, and never opens on one by itself again this
+  session; then the list is read again for its count. A refusal keeps the row and says tafs
+  cloud's words above the chats.
+- **The chat open in Coach** is left out of the rows and the count while Coach shows it.
+
+### Needs you's count
+
+The sidebar's number, the Overview's NEEDS YOU and the brief's link are the iPad's
+`needsYouCount` (`AppModel.swift:73-84`, `NeedsYouCount`): tafs cloud's `needs_you.count` when
+it sends one, less the steps answered here it still counts and the Coach chats left out; else
+the app's own count of held calls, Card unit requests (`card_unit_exceptions`), steps, "Did
+this happen?" and Coach's waiting chats. Its line is tafs cloud's words while they still say
+what's counted, else "N need you." or "Nothing needs you.". What the brief doesn't show counts
+Card unit requests and Coach's chats too, as the iPad's `briefNeedsYouLine` (`:2478-2483`).
+
+`scripts/test.sh approvals` writes `build/screenshots/needs-you-*.png`, with
+`needs-you-coach-waiting-en.png` and its `-dark` twin for Coach's waiting chats.

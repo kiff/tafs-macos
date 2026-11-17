@@ -10,7 +10,8 @@ name, at the top of the sidebar.
 | Drawn | From |
 |---|---|
 | The first line ("1 taf working.") | `headline.words` |
-| What waits for the person ("2 need you.") | `needs_you.words`, shown when `needs_you.count` is above 0 |
+| What waits for the person ("2 need you.") | Needs you's count and line, the iPad's `needsYouCount` and `needsYouWords` (docs/approvals.md): `needs_you`, else the app's own count |
+| When it last ran (`Home.Taf.lastRun`) | `last_run` |
 | A taf's name and colour | `name`, `color` |
 | What it does | `job_summary` |
 | **Now** | By its `state`, as the iPad's `KIFFMapping.taf` (`Home.Taf.now`): waiting, "Waiting for you"; paused, "Paused"; halted, "Halted · resume it from Halt"; working and `unscheduled`, "Works from its chat"; working, `next_run_words`, else "Next run {time}" from `next_run`, else "Running"; idle, "Acting under KIFF"; any other, "Card not active". A setup stopped partway (`finish`, with its chat and words) says tafs cloud's words instead. |
@@ -33,7 +34,18 @@ columns' headings in plain 11 bold; and plain rows with no panel behind them.
   asks" and "answer by {time}", on the raised ground. When tafs cloud counts more than the held
   calls (Coach's chats, steps), a last row has its `needs_you.words` and a chevron. Every row
   opens Needs you.
-- **A taf's row:** its coloured square and name; **Now**, by its state (above); **Card**,
+- **The order** is the iPad's `listedTafs` (`AppModel.swift:546-557, 615-641`, `ListOrder`): a
+  taf waiting on the person first (a call held, as tafs cloud counts it), then the one at work
+  most recently, then tafs cloud's order. It is settled when the list's tafs change, not on
+  every read, so it doesn't move while the person looks at it; a taf newly waiting goes to the
+  top at once. The iPad knows "most recently" from KIFF's record and each taf's chat, which this
+  Mac doesn't read for every taf: it goes by the list's `last_run`. The sidebar's tafs are in
+  the same order. tafs cloud sends no `relevant_now` on `/v1/home` at the pin (`home.json`).
+- **A taf's row:** its coloured square and name; under its name, for whoever manages the taf,
+  who uses it, as the iPad's `usedBy` (`ShareViews.swift:378-394`, `Shares.usedBy`): each
+  group and person it's shared with, then how many people ("Support, ana@acme.com · 4 people"),
+  or "Not shared"; read from KIFF's grants when the Overview shows, once KIFF says which tafs
+  the person manages; **Now**, by its state (above); **Card**,
   the first Card's one line ("€1,960 left today of €2,000", `TafCard.line`, from KIFF's numbers
   as #39 reads them), else "–"; **Last result**, as the iPad's (below). **A row opens its
   taf's page**, and "Each line opens the taf." says so under the table.
@@ -63,9 +75,12 @@ apps only filter by it.
 
 While the Overview is shown, each taf's runs are read once (`GET /v1/tafs/{id}/runs`), then
 the report of its newest run with a chat (`GET /v1/tafs/{id}/runs/{session}`). The column
-says, by the iPad's rule: the report's first line without Markdown's marks; else why the run
-stopped, from the runs list (a report never says); else "Last ran at {time}"; else "Nothing
-yet". A taf whose runs can't be read keeps "–". The shapes are tafs cloud's contracts,
+says, by the iPad's rule (`ShareViews.swift:410-418`): the report's first line without
+Markdown's marks; else why the run stopped, from the runs list (a report never says); else
+"Last ran at {time}", by the list's `last_run`; else "Nothing yet". Before its runs are read,
+the list's `last_run` says it ("Last ran at {time}", else "Nothing yet"), never "–". A taf
+whose runs can't be read says so ("Its runs couldn't be loaded. {why}"), as the iPad's
+`loadReport`. Only an agent tafs doesn't run has "–". The shapes are tafs cloud's contracts,
 `taf-runs.json` and `taf-run-report*.json`, read by `scripts/test.sh contracts`.
 
 ## With no taf: the recipes (`Recipes`, `HomeRecipesView`, `RecipeSheet`)
@@ -123,7 +138,6 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
   go in the box of the conversation Coach shows.
 - The apps' logos beside their names.
 - A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
-- Who uses a taf, under its name, for someone who manages it.
 - Reading the list again by itself, apart from the window's round. It is read when the screen
   opens, with each 30-second round, and at once when the app comes back to the front.
 
@@ -133,5 +147,8 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
 `taf` part), what Now falls back to, a taf
 with only its required fields, an unreadable list, a malformed headline. It writes
 `build/screenshots/overview-*.png` (with `overview-labels-en`, `overview-labels-money-en` and
-`overview-labels-fr` for the chips), and `overview-contract-en.png` from tafs cloud's own
-`home.json`, whose taf has a Card, so the Card column shows its line.
+`overview-labels-fr` for the chips), `overview-contract-en.png` from tafs cloud's own
+`home.json`, whose taf has a Card, so the Card column shows its line, and
+`overview-parity-en.png` and its `-dark` twin: the rows in the iPad's order, with who uses each
+taf and its Last result before its runs are read. The order, `usedBy`, `last_run` and Halt all's
+rule are tested with no Mac.

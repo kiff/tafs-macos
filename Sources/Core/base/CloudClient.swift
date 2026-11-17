@@ -47,14 +47,16 @@ struct CloudClient {
         try await post(path, body: fields)
     }
 
-    /// The same, with any body that encodes.
-    func post<Body: Encodable>(_ path: String, body fields: Body) async throws -> Data {
+    /// The same, with any body that encodes. `extra` headers go with it.
+    func post<Body: Encodable>(_ path: String, body fields: Body, headers extra: [String: String] = [:]) async throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let request = HTTPRequest(method: "POST", path: path, headers: [
+        var headers = [
             "Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
             "Accept-Language": language, "User-Agent": "tafs-macos",
-        ], body: try encoder.encode(fields))
+        ]
+        headers.merge(extra) { _, new in new }
+        let request = HTTPRequest(method: "POST", path: path, headers: headers, body: try encoder.encode(fields))
         let (status, body) = try await transport.send(request)
         guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: body) }
         return body
