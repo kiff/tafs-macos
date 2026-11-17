@@ -28,10 +28,17 @@ enum Apps {
         /// The app's own icon on tafs cloud, when it has one: only a `/v1/logos/<32 hex>` path
         /// is kept, so no other address is ever fetched for a row.
         let logo: String?
+        /// The connection tafs cloud named for this app, when it names one: its page lists it too.
+        let grant: String?
+        /// The tafs that need this app, by tafs cloud's id and name (`needed_by`), as the iPad's
+        /// `neededBy`: nil when tafs cloud doesn't say, or sent a list this app can't read.
+        let neededBy: [Named]?
+        /// The live connections of this app made for a taf that doesn't use it (`misplaced`).
+        let misplaced: [Misplaced]
 
         var id: String { entry }
 
-        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, logo, usedBy = "used_by" }
+        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, logo, grant, usedBy = "used_by", neededBy = "needed_by", misplaced }
         private struct User: Decodable { let name: String? }
         private struct LenientUser: Decodable {
             let name: String?
@@ -61,6 +68,10 @@ enum Apps {
             // A user that doesn't read is left out, never the row.
             let users = ((try? c.decodeIfPresent([LenientUser].self, forKey: .usedBy)) ?? nil) ?? []
             usedBy = users.compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            grant = text(.grant)
+            // A list it can't read is none sent, as the iPad's: never a guess from half a list.
+            neededBy = ((try? c.decodeIfPresent([Named].self, forKey: .neededBy)) ?? nil)?.filter { !$0.taf.isEmpty }
+            misplaced = ((try? c.decodeIfPresent([Misplaced].self, forKey: .misplaced)) ?? nil) ?? []
         }
 
         /// The shared key for how it connects, by the iPad's rule: a key when tafs cloud says
@@ -80,6 +91,53 @@ enum Apps {
         var logoURL: URL? { logo.flatMap { URL(string: CloudClient.base + $0) } }
     }
 
+    /// A taf as tafs cloud names it beside an app (`needed_by`, a removed taf's connection's
+    /// `used_by`): its id at tafs cloud and its name, as the iPad's `UsedBy`.
+    struct Named: Decodable, Equatable {
+        let taf: String
+        let name: String
+        init(taf: String, name: String) { self.taf = taf; self.name = name }
+        enum CodingKeys: String, CodingKey { case taf, name }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            taf = try c.decodeIfPresent(String.self, forKey: .taf) ?? ""
+            name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        }
+    }
+
+    /// A live connection of an app made for a taf that doesn't use it, as the iPad's `Misplaced`.
+    struct Misplaced: Decodable, Equatable {
+        let grant: String
+        let taf: String
+        let name: String
+        enum CodingKeys: String, CodingKey { case grant, taf, name }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            grant = try c.decode(String.self, forKey: .grant)
+            taf = try c.decodeIfPresent(String.self, forKey: .taf) ?? ""
+            name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        }
+    }
+
+    /// A taf removed since, by its KIFF agent (`removed_tafs`), as the iPad's `RemovedTaf`: a
+    /// connection whose agent is one is a removed taf's. `grants` only with this Mac's signed
+    /// read of its connections, and only when tafs cloud could read them: nil, nothing is cleared.
+    struct RemovedTaf: Decodable, Equatable {
+        /// A removed taf's live connection, with the live tafs whose Cards still use it.
+        struct Grant: Decodable, Equatable {
+            let grant: String
+            let usedBy: [Named]
+            enum CodingKeys: String, CodingKey { case grant, usedBy = "used_by" }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                grant = try c.decode(String.self, forKey: .grant)
+                usedBy = try c.decodeIfPresent([Named].self, forKey: .usedBy) ?? []
+            }
+        }
+        let agent: String
+        let grants: [Grant]?
+    }
+
     struct Page: Decodable, Equatable {
         let apps: [App]
         let nextCursor: String?
@@ -88,8 +146,11 @@ enum Apps {
         /// Coach can connect an app that isn't listed, from its own docs, with a key: the
         /// screen then ends with "Not listed? Ask Coach", as on the iPad.
         let byKey: Bool
+        /// The tafs removed since (`removed_tafs`); none from a tafs cloud without it, or one that
+        /// sent a list this app can't read.
+        let removedTafs: [RemovedTaf]
 
-        enum CodingKeys: String, CodingKey { case apps, nextCursor = "next_cursor", partial, byKey = "by_key" }
+        enum CodingKeys: String, CodingKey { case apps, nextCursor = "next_cursor", partial, byKey = "by_key", removedTafs = "removed_tafs" }
         private struct Lenient: Decodable {
             let app: App?
             init(from decoder: Decoder) throws { app = try? App(from: decoder) }
@@ -101,6 +162,7 @@ enum Apps {
             nextCursor = (try? c.decodeIfPresent(String.self, forKey: .nextCursor)) ?? nil
             partial = ((try? c.decodeIfPresent(Bool.self, forKey: .partial)) ?? nil) ?? false
             byKey = ((try? c.decodeIfPresent(Bool.self, forKey: .byKey)) ?? nil) ?? false
+            removedTafs = ((try? c.decodeIfPresent([RemovedTaf].self, forKey: .removedTafs)) ?? nil) ?? []
         }
     }
 
@@ -115,13 +177,58 @@ enum Apps {
         guard key.count == 32, key.allSatisfy({ (0x30...0x39).contains($0) || (0x61...0x66).contains($0) }) else { return nil }
         return path
     }
+
+    /// Whom a Discover row's button connects for, as the iPad's `ConnectRow.ConnectFor`.
+    enum ConnectFor: Equatable {
+        /// The taf the list was opened from.
+        case taf(String)
+        /// The person picks the taf.
+        case ask
+        /// No taf needs it: Coach sets one up.
+        case askCoach
+        /// No taf can have it.
+        case noTaf
+    }
+
+    /// The iPad's `ConnectRow.connectFor` (`ConnectAppsView.swift:345-367`): only a taf the person
+    /// named, among those that need the app when tafs cloud says (`needed`). With `needed_by`,
+    /// none, or a taf opened from that doesn't need it, is Ask Coach. Without it, every taf
+    /// they manage. `connectable` is tafs cloud's ids.
+    static func connectFor(openedFrom taf: String?, connectable: [String], needed: Bool = false) -> ConnectFor {
+        guard needed else {
+            if let taf { return .taf(taf) }
+            return connectable.isEmpty ? .noTaf : .ask
+        }
+        if let taf { return connectable.contains(taf) ? .taf(taf) : .askCoach }
+        return connectable.isEmpty ? .askCoach : .ask
+    }
+
+    /// The tafs an app can be connected for, as the iPad's `connectableTafs(_:needed:cloudID:)`
+    /// (`AppModel.swift:2809-2812`): of the tafs on tafs cloud this person manages, the ones tafs
+    /// cloud says need it, in its order; without `needed_by`, every one.
+    static func connectable(_ tafs: [Home.Taf], needed: [Named]?) -> [Home.Taf] {
+        guard let needed else { return tafs }
+        return needed.compactMap { n in tafs.first { $0.tafID == n.taf } }
+    }
+
+    /// The words of a row's button, as the iPad's `trailing` (`ConnectAppsView.swift:195-220`):
+    /// "Ask Coach" where no taf needs the app, else Sign in again or Connect. Here every one of
+    /// them opens Coach, where an app is connected on this Mac.
+    static func buttonKey(_ app: App, connectable: [Home.Taf]) -> String {
+        let route = connectFor(openedFrom: nil, connectable: Self.connectable(connectable, needed: app.neededBy).compactMap(\.tafID),
+                               needed: app.neededBy != nil)
+        if route == .askCoach { return "coach.ask" }
+        return app.needsReconnect ? "connect.sign_in_again" : "connect.apps.connect"
+    }
 }
 
 extension CloudClient {
-    /// One page of the catalog, searched by `q`; `cursor` continues the same search.
-    func apps(_ q: String = "", cursor: String? = nil) async throws -> Apps.Page {
+    /// One page of the catalog, searched by `q`; `cursor` continues the same search. `proof` is
+    /// this Mac's signed read of its connections (`Planque-Device-Signature`), as the iPad's
+    /// `connectApps(_:proof:)`: with it, tafs cloud says which removed taf's connections there are.
+    func apps(_ q: String = "", cursor: String? = nil, proof: String? = nil) async throws -> Apps.Page {
         var query = ["q=\(Self.query(String(q.prefix(Apps.longestSearch))))"]
         if let cursor { query.append("cursor=\(Self.query(cursor))") }
-        return try await get("/v1/connect/apps?" + query.joined(separator: "&"))
+        return try await get("/v1/connect/apps?" + query.joined(separator: "&"), headers: proof.map { ["Planque-Device-Signature": $0] } ?? [:])
     }
 }

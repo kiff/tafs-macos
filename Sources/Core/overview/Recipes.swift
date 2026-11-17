@@ -24,9 +24,20 @@ struct Recipes: Decodable, Equatable {
         }
     }
 
-    /// One of the apps a recipe's taf uses, as tafs cloud names it.
+    /// One of the apps a recipe's taf uses, as tafs cloud names it, with its logo, as the iPad's
+    /// `Recipes.App` (`TafsCloud.swift:1943-1953`): only tafs cloud's own `/v1/logos/` path is
+    /// kept (`Apps.logoPath`); anything else is none, and the name stands alone.
     struct App: Decodable, Equatable {
         let name: String
+        let logo: String?
+
+        init(name: String, logo: String? = nil) { self.name = name; self.logo = logo.flatMap(Apps.logoPath) }
+        enum CodingKeys: String, CodingKey { case name, logo }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            logo = ((try? c.decodeIfPresent(String.self, forKey: .logo)) ?? nil).flatMap(Apps.logoPath)
+        }
     }
 
     /// The Card a recipe's taf would have: what it does on its own, asks first, and never does.

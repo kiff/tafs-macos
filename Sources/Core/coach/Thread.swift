@@ -84,6 +84,11 @@ enum Thread {
         /// The taf a hand-over (`result`) is about: its name, and its KIFF agent.
         var tafName: String?
         var tafAgent: String?
+        /// The tafs cloud id of the taf a result is the next version of (`taf.improves`), as the
+        /// iPad's `SetupComponent.Taf.improves`: an improvement, never a new taf.
+        var improves: String?
+        /// What changed, in the owner's language (`taf.note`), on an improvement.
+        var tafNote: String?
         /// What came of a hand-over, once tafs cloud answered it.
         var outcome: Outcome?
         /// The tools a hand-over lists, in KIFF's words for them.
@@ -127,6 +132,66 @@ enum Thread {
 
         var isPlan: Bool { type == "steps" && !plan.isEmpty }
         var isHandOver: Bool { type == "result" && tafName != nil }
+        /// A result that is a taf's next version, as the iPad's `result(_:)` tells them apart
+        /// (`c.taf?.improves != nil`, SetupChatView.swift:1376-1378): drawn as the new version's card.
+        var isImprovement: Bool { type == "result" && improves != nil }
+
+        /// What became of an improvement, from tafs cloud's answer to it, as the iPad's
+        /// `SetupThread.improvement` (SetupComponent.swift:464-478): the version made, why none was
+        /// (Coach hears it from tafs cloud), or not answered yet.
+        enum Improvement: Equatable {
+            case made(Int)
+            case failed(String)
+            case preparing
+        }
+
+        var improvement: Improvement {
+            if let why = outcome?.failed { return .failed(why) }
+            if let n = outcome?.version { return .made(n) }
+            return .preparing
+        }
+
+        /// The taf an improvement is the next version of, among those listed, as the iPad's
+        /// `improvedTaf` (AppModel.swift:9807-9811): the one tafs cloud knows by `improves`, else
+        /// the one whose agent it names, else the result's own taf's agent. Nil when none is listed.
+        func improvedTaf(in tafs: [Home.Taf]) -> Home.Taf? {
+            if let improves {
+                if let taf = tafs.first(where: { $0.tafID == improves }) { return taf }
+                if let taf = tafs.first(where: { $0.id == improves }) { return taf }
+            }
+            return tafAgent.flatMap { agent in tafs.first { $0.id == agent } }
+        }
+
+        /// tafs cloud's why for a version not made, without its own ending, as the iPad's
+        /// `SetupThread.notImproved` trims it before the shared line adds one.
+        static func notImprovedWhy(_ why: String) -> String {
+            why.trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+        }
+
+        /// A hand-over's tools in words, as the iPad's `KIFFMapping.toolWords`, never a tool's
+        /// own name ("list_emails" is "list emails").
+        var toolWords: [String] { tools.map(CallNames.toolWords) }
+
+        /// How a card is drawn once it is answered, as the iPad's: an approval approved or
+        /// declined folds to one line with a ⌄ that opens it again (`SetupApproval`,
+        /// SetupChatView.swift:1513-1530); a choice, a sign-in and questions fold to one line
+        /// (`OutcomeLine`, :1302, :1335, QuestionsCard.swift:18). A plan, a note, a hand-over, a
+        /// card with no answer the person chose, are drawn whole.
+        enum Fold: Equatable {
+            case whole
+            case line
+            case opens
+        }
+
+        var fold: Fold {
+            switch type {
+            case "approval": return answered != nil ? .opens : .whole
+            case "questions": return answerState == "answered" ? .line : .whole
+            // A plan, a note, a hand-over and a taf's ask show what they are, answered or not.
+            case "steps", "notice", "result", "ask_coach": return .whole
+            default: return answered != nil ? .line : .whole
+            }
+        }
         /// A taf's card handing a setting to Coach (`ask_coach`), as the iPad's `AskCoachCard`
         /// (TafsCloud.swift:1178-1195): the person's request in the taf's words, which Ask Coach
         /// writes into Coach's box on that taf. Nil for any other card, or one with no words.
@@ -182,7 +247,7 @@ enum Thread {
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
         enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider }
         enum PlanKeys: String, CodingKey { case label, status }
-        enum TafKeys: String, CodingKey { case name, agent }
+        enum TafKeys: String, CodingKey { case name, agent, improves, note }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
         enum ConnectionKeys: String, CodingKey { case done, words }
         enum WiderKeys: String, CodingKey { case words }
@@ -300,6 +365,11 @@ enum Thread {
                         func named(_ key: TafKeys) -> String? { ((try? taf.decodeIfPresent(String.self, forKey: key)) ?? nil).flatMap { $0.isEmpty ? nil : $0 } }
                         made.tafName = named(.name)
                         made.tafAgent = named(.agent)
+                        // As the iPad's `SetupComponent.Taf`: an improvement names the taf it
+                        // makes the next version of, and what changed.
+                        made.improves = named(.improves)
+                        made.tafNote = ((try? taf.decodeIfPresent(String.self, forKey: .note)) ?? nil)
+                            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                     }
                     if let o = try? answer?.nestedContainer(keyedBy: OutcomeKeys.self, forKey: .outcome) {
                         var outcome = Card.Outcome()

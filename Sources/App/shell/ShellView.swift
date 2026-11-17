@@ -37,6 +37,8 @@ struct ShellView: View {
     var startNewTaf: () -> Void = {}
     /// The sidebar's Coach: opens Coach, as the iPad's `openCoach`.
     var openCoach: () -> Void = {}
+    /// Coach is open over the screen (`CoachPanelHost`): its button is the chosen one.
+    var coachOpen = false
     /// The account's halt, for the sidebar's Halt all where the iPad shows it (`AccountHalt.shown`);
     /// nil, no row. `halted` reads the list again after a halt.
     var haltAll: HaltModel?
@@ -234,8 +236,8 @@ struct ShellView: View {
             // A new taf, as the iPad's + New (`HomeSplitView.startNewTaf`, HomeSplitView.swift:434-438):
             // the gallery where tafs cloud sends it, else a new conversation in Coach.
             footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { if let newTaf { newTaf() } else { startNewTaf() } }
-            // Coach opens, as the iPad's `openCoach`; it closes from its own Back.
-            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: selection == .coach && openTaf == nil) { openCoach() }
+            // Coach opens over the screen, as the iPad's `openCoach`; it closes from its own Back.
+            footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: coachOpen) { openCoach() }
             Button { selection = .account } label: {
                 HStack(spacing: 10) {
                     // As the iPad's: soft, and filled amber while Account is chosen.
