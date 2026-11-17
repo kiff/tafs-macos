@@ -1,13 +1,15 @@
 # Connect apps
 
 The account's own connections, then the catalog of apps a taf can use. **This screen lists.**
-An app is connected through Coach, where its Card is approved with it, so the row's Connect
-and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends nothing but
-`GET`. Once the app is connected, its receipt shows over Coach (below, "The receipt").
+An app is connected through Coach, where its Card is approved with it, so the row's Connect,
+Ask Coach and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends nothing
+but `GET`. A connected app's chevron opens "Your {app} connections", which only reads. Once the app is connected, its receipt shows over Coach (below, "The receipt").
 
 ## What is read (`Apps`, `CloudClient.apps(_:cursor:)`)
 
-`GET /v1/connect/apps?q=&cursor=` on tafs cloud.
+`GET /v1/connect/apps?q=&cursor=` on tafs cloud, with this Mac's signed read of its connections
+(`Planque-Device-Signature`), as the iPad's `loadConnectApps` sends it (`AppModel.swift:2756-2761`),
+so tafs cloud names the removed tafs' connections. A fresh one each read: planque takes each once.
 
 | Drawn | From |
 |---|---|
@@ -18,7 +20,10 @@ and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends no
 | How it connects | `method`, else `how`, through the shared lines `connect.how.*` |
 | Which tafs use it | `used_by[].name`, through `connect.apps.used_by`; a user that doesn't read is left out |
 | Which list it is in | `state`: `connected` and `needs_reconnect` are **Yours**, the rest **Discover** |
-| The app's icon | `logo`, only as tafs cloud's own `/v1/logos/` and 32 lowercase hex digits (`Apps.logoPath`), as the iPad keeps it; any other address is dropped |
+| The app's icon | `logo`, only as tafs cloud's own `/v1/logos/` and 32 lowercase hex digits (`Apps.logoPath`), as the iPad keeps it; any other address is dropped. Read through `AppLogos` (below, "Logos") |
+| Which tafs need it | `needed_by[]` (`taf`, `name`), for the button's words; a list that doesn't read is none sent |
+| Its connection, and those made for a taf that doesn't use it | `grant`, `misplaced[]`, for its page |
+| The tafs removed since | `removed_tafs[]` (`agent`, `grants[].used_by`), for its page |
 | "Not listed? Ask Coach" | `by_key`: `true` only; anything else reads as false |
 
 - A connection to sign in again has its line in amber.
@@ -43,16 +48,84 @@ panels.
   cloud's `words` in its Status cell.
 
 - **Each row ends as the iPad's** (`trailing`): a green check for a connected app; nothing
-  for one an operator sets up first; else an outlined **Connect**, or **Sign in again**, as
-  wide as its words (`OutlineButtonStyle`: 15 medium, at least 48 high, a 14-radius stroke at
-  40%). The iPad's chevron on a connected row is left out: a connection has no page of its
-  own here yet.
+  for one an operator sets up first; else an outlined button as wide as its words
+  (`OutlineButtonStyle`: 15 medium, at least 48 high, a 14-radius stroke at 40%), in the iPad's
+  words (`connectFor`, `ConnectAppsView.swift:195-220`, `:345-367`; `Apps.buttonKey`): **Ask
+  Coach** where tafs cloud says which tafs need the app (`needed_by`) and none of them is a taf
+  this person manages on tafs cloud; else **Sign in again**, or **Connect**. Each opens Coach,
+  where an app is connected on this Mac. The iPad's Connect for no taf at all is disabled, with
+  "Make one first" over Discover; here it opens Coach, which makes the taf too.
+- **The chevron** past Status, on a row whose connections open (`AppConnections.opens`, the
+  iPad's `opensConnections`: connected, or holding a connection on this account), opens "Your
+  {app} connections" in the screen's place; so does a click anywhere on a connected row.
 - **"Not listed? Ask Coach"** ends the screen only while tafs cloud says Coach can connect an
   app by key (`by_key`). A new search asks again; the next page of one keeps it.
 - Search by name; Return searches. What is typed is escaped and cut at 100 characters.
 - **Show more apps** reads the next page of the same search. An app already listed isn't
   listed twice.
 - A slower answer to an older search is dropped.
+
+## Logos (`AppLogos`, `AppLogoImages`, `AppLogo`)
+
+Each app's logo, beside its name in Connect apps (24 points) and in the jobs' apps (`AppMark`, 18
+points, docs/overview.md).
+
+- **Why they were empty on macOS 12.** The rows asked for `logoURL` with SwiftUI's `AsyncImage`,
+  as the iPad does. Neither suspect is the cause: tafs cloud's route takes no session
+  (`runtime/src/cloud/handler.ts:653-654`, "no session, as image loaders send none"; asked
+  without one, it answers 404 for a key it doesn't keep, never 401), and it answers `image/png`,
+  a PNG tafs cloud drew itself, from an SVG source too (`handler.ts:10443-10456`,
+  `logos.ts:149-165`). What differs from every read that works on that Mac is `AsyncImage`
+  itself: it reads outside the app's own transport, through `URLSession.shared`, and a load that
+  fails or is ended early stays in its failure phase, never asked again, which the row draws as
+  nothing. That wasn't seen on a Mac on macOS 12 here; the logos no longer depend on it.
+- **Read through the app's own transport** (`AppLogos`), to tafs cloud's address only
+  (`NetworkTransport` refuses any other host): `GET /v1/logos/<key>` with
+  `Accept: image/png, image/jpeg`, and **no session**, as the route asks and the iPad sends.
+- **Only `/v1/logos/` and 32 lowercase hex** (`Apps.logoPath`); any other address is dropped,
+  and nothing is asked for it.
+- **Kept in memory per path** for the session; one being read isn't asked again meanwhile. A
+  PNG or a JPEG (by its first bytes, at most 512 KB) is decoded once into an `NSImage`
+  (`AppLogoImages`), and drawn in the first frame after.
+- **A refusal (tafs cloud's 404), bytes that aren't a PNG or a JPEG, or an image that doesn't
+  decode keep nothing:** the square stays empty in Connect apps, and a job's app is its name
+  alone. It is asked again the next time it shows.
+
+## Your {app} connections (`AppConnections`, `ConnectionsSource`, `AppConnectionsView`)
+
+A connected app's connections, as the iPad's `AppConnectionsView` (`ConnectAppsView.swift:488-722`)
+and its model (`AppModel.swift:7025-7083`). It only reads.
+
+- **Read** from planque, as the iPad's `PlanqueClient.grants(signedBy:)`:
+  `GET /v1/accounts/{tenant}/grants` on planque, the tenant escaped (`CloudClient.escaped`),
+  with this Mac's signed read (`Planque-Device-Signature`, `PlanqueClient.grantsReadProof`,
+  signed by the device key with this device's id, asking no one, as Coach's read of the same
+  proof is). Read with Connect apps' first page, as the iPad's `loadConnectApps` does. A grant
+  that doesn't read is left out. An answer with no list, a refusal, or a session with no device
+  key reads none, and the page says "Start from Connected apps on this Mac first."
+  (`connect.start_connected_tools_first`), never an empty list.
+- **An app's connections** are those with its entry, or the grant tafs cloud named for it,
+  never a disconnected or failed one.
+- **Grouped** by the taf each was made for (a listed taf, by its KIFF agent): one needing
+  attention (waiting on its sign-in, or signed out) first, then by name; then **From removed
+  tafs**, only for agents tafs cloud names as removed; then **Other connections**, whose taf
+  this Mac can't name.
+- **A connection's row**: planque's own row when it sends one (its name, "Used by …", its
+  health in its words, amber when it isn't ok); else its name (planque's `title`, else the
+  account it names, else the app's), planque's words for its status or "Waiting for the sign-in
+  at …", and "Made for {taf}, which doesn't use {app}." for one tafs cloud names `misplaced`.
+- **What would change a connection** is drawn as on the iPad, for whoever manages the Cards:
+  **Sign in again** or **Replace the key** (a provider's connection says to remove it and connect
+  it again), **Remove access**, **Cancel the request** or **Cancel**, and **Clear these
+  connections** under the removed tafs' (only when tafs cloud lists one with no live taf's Card
+  using it; a kept one says whose Card uses it). This Mac can't sign them: a click shows "This
+  device can't approve. Approve on another device signed in to your account."
+  (`approval.device_can_not_approve_approve`) under it, and sends nothing.
+- The footer, "Removing access takes its tools from that taf only, …", shows for whoever
+  manages Cards when a connection here is a taf's.
+- **Back** ("Connect apps") returns to the list.
+- **Left out:** a connection's own page (`ConnectionDetailView`), its last failed call (KIFF's
+  calls aren't read here), and "Also on …'s Card" (the Cards aren't read here).
 
 ## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
 
@@ -146,9 +219,9 @@ KIFF. It gets this device's key, and a KIFF key that connects tools and does not
 
 ## Not yet
 
-Connecting and signing in again from this screen, removing access, and a connection's
-detail.
-Each of the first three changes what a taf may do, so each comes with its approval.
+Connecting and signing in again from this screen, removing access, clearing the removed tafs'
+connections, and a connection's own page. Each but the last changes what a taf may do, so each
+comes with its approval.
 
 ## Tests
 
@@ -170,3 +243,17 @@ languages, when Coach is read again and that it stops (made, at its limit, cance
 `GET`), Done, the heading never empty, Disconnect only for whoever manages the Cards and its tap
 saying to approve on another device, and the sheet on the theme's ground in light and dark. It writes
 `build/screenshots/connect-receipt-*.png` (with `connect-receipt-disconnect-*`), and board 5's `board-5-connect-receipt-*.png`.
+
+Logos and a connected app's page (`AppLogosTests`, `AppConnectionsTests`, and on a Mac
+`AppConnectionsScreenTests`): a logo read from tafs cloud's own path with what asks for an image
+and no session; any other address dropped, with nothing sent; a logo kept per path and read
+once, at the same time too; a refusal, an SVG, JSON, nothing, too much or a failed read keeping
+nothing, and asked again; a PNG that doesn't decode keeping nothing; the logo drawn in its square
+while a refused one leaves it empty. The connections read from planque with this Mac's signed
+read (the tenant escaped, no session, no read without a proof, a refusal and an answer with no
+list never "no connections"), signed over planque's message with the device id; an app's
+connections; the groups in the iPad's order; the removed tafs' and Clear; each connection's end;
+the catalog read with the proof, `needed_by` and `misplaced`; and the button's words in the 8
+languages. It writes `connect-apps-logos-en.png` and `connect-app-connections-en.png` (each with
+its `-dark` twin), `connect-app-connections-gated-en.png` (Remove access clicked) and
+`connect-app-connections-opened-en.png`.

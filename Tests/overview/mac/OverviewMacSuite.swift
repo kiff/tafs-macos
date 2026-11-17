@@ -1,1 +1,1 @@
-let overviewMacTests: [Test] = overviewScreenTests + labelChipsMacTests + overviewParityScreenTests
+let overviewMacTests: [Test] = overviewScreenTests + labelChipsMacTests + overviewParityScreenTests + appMarksMacTests

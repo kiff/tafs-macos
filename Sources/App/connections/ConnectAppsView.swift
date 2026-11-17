@@ -16,12 +16,25 @@ final class ConnectAppsModel: ObservableObject {
     /// Coach can connect an app that isn't listed: the screen ends with "Not listed? Ask Coach".
     @Published private(set) var byKey = false
     @Published var search = ""
+    /// The account's connections at planque, as this Mac last read them (`AppConnections`).
+    @Published private(set) var grants: [AppConnections.Grant] = []
+    /// Whether this Mac read them: without, a connected app's page says so, never an empty list.
+    @Published private(set) var readsConnections = false
+    /// The tafs removed since, as tafs cloud names them (`removed_tafs`).
+    @Published private(set) var removedTafs: [Apps.RemovedTaf] = []
+    /// The app whose connections are open ("Your {app} connections"), from its row's chevron.
+    @Published var opened: Apps.App?
 
     private let cloud: CloudClient
+    /// Where this Mac reads its connections; nil reads none.
+    private let connections: ConnectionsSource?
     private var cursor: String?
     private var asked = 0
 
-    init(cloud: CloudClient) { self.cloud = cloud }
+    init(cloud: CloudClient, connections: ConnectionsSource? = nil) {
+        self.cloud = cloud
+        self.connections = connections
+    }
 
     var yours: [Apps.App] { apps.filter(\.isYours) }
     var discover: [Apps.App] { apps.filter { !$0.isYours } }
@@ -30,11 +43,20 @@ final class ConnectAppsModel: ObservableObject {
     func load() async {
         asked += 1
         let mine = asked
+        let q = search
+        // The account's connections too, as the iPad's `loadConnectApps`, so a connected app
+        // lists each one.
+        if q.isEmpty { await readConnections() }
         do {
-            let page = try await cloud.apps(search)
+            // This Mac's signed read with it, as the iPad sends it: tafs cloud then names the
+            // removed tafs' connections. A fresh one each time: planque takes each once.
+            let source = connections
+            let proof = await source?.proof()
+            let page = try await cloud.apps(q, proof: proof)
             guard mine == asked else { return }
             apps = page.apps
             byKey = false
+            removedTafs = page.removedTafs
             show(page)
         } catch {
             guard mine == asked else { return }
@@ -46,8 +68,11 @@ final class ConnectAppsModel: ObservableObject {
     func more() async {
         guard let cursor else { return }
         let mine = asked
+        let q = search
         do {
-            let page = try await cloud.apps(search, cursor: cursor)
+            let source = connections
+            let proof = await source?.proof()
+            let page = try await cloud.apps(q, cursor: cursor, proof: proof)
             guard mine == asked else { return }
             let listed = Set(apps.map(\.entry))
             apps += page.apps.filter { !listed.contains($0.entry) }
@@ -55,6 +80,20 @@ final class ConnectAppsModel: ObservableObject {
         } catch {
             guard mine == asked else { return }
             state = .unread(why: NeedsYouModel.why(error))
+        }
+    }
+
+    /// Reads the account's connections from planque. One that can't be read leaves none, and the
+    /// page says this Mac doesn't read them.
+    func readConnections() async {
+        guard let source = connections else { return }
+        do {
+            let read = try await source.grants()
+            grants = read
+            readsConnections = true
+        } catch {
+            grants = []
+            readsConnections = false
         }
     }
 
@@ -68,11 +107,19 @@ final class ConnectAppsModel: ObservableObject {
 }
 
 /// Connect apps: the account's own connections, then the catalog. This screen lists; an
-/// app is connected through Coach, where its Card is approved with it, so Connect, Sign in
-/// again and "Not listed? Ask Coach" open Coach.
+/// app is connected through Coach, where its Card is approved with it, so Connect, Ask Coach,
+/// Sign in again and "Not listed? Ask Coach" open Coach. A connected app's chevron opens its
+/// connections (`AppConnectionsView`), which only read.
 struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
+    /// The tafs listed, by KIFF agent: a connection's page names the taf it was made for.
+    var tafs: [Home.Taf] = []
+    /// The tafs on tafs cloud this person manages: a row's button says "Ask Coach" where none
+    /// needs the app (`Apps.buttonKey`), as the iPad's `connectFor`.
+    var connectable: [Home.Taf] = []
+    /// Whoever manages the account's Cards (KIFF's `cards.manage`) sees a connection's actions.
+    var managesCards = true
     var openCoach: () -> Void = {}
 
     /// The columns' widths, the same for the headings and every row, as the iPad's
@@ -81,8 +128,18 @@ struct ConnectAppsView: View {
     private static let whose: CGFloat = 130
     private static let status: CGFloat = 230
     private static let gap: CGFloat = 12
+    /// The chevron's place at each row's end, past Status, as the iPad's list draws its link's.
+    private static let chevron: CGFloat = 14
 
     var body: some View {
+        if let app = model.opened {
+            AppConnectionsView(app: app, model: model, tafs: tafs, managesCards: managesCards) { model.opened = nil }
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top) {
@@ -164,6 +221,7 @@ struct ConnectAppsView: View {
             column(words("connect.apps.column_how")).frame(width: Self.how, alignment: .leading)
             column(words("connect.apps.column_whose")).frame(width: Self.whose, alignment: .leading)
             column(words("connect.apps.column_status")).frame(width: Self.status, alignment: .leading)
+            Color.clear.frame(width: Self.chevron, height: 1)
         }
         .padding(.vertical, 12)
     }
@@ -181,13 +239,8 @@ struct ConnectAppsView: View {
         return HStack(alignment: .center, spacing: Self.gap) {
             HStack(spacing: 10) {
                 // The app's own icon, only when tafs cloud sends one; nothing in its place otherwise.
-                if let url = app.logoURL {
-                    AsyncImage(url: url) { phase in
-                        if case .success(let image) = phase { image.resizable().interpolation(.high).scaledToFit() }
-                    }
-                    .frame(width: 24, height: 24)
-                    .accessibilityHidden(true)
-                }
+                // Read from tafs cloud through `AppLogos` (docs/connections.md › Logos).
+                if app.logo != nil { AppLogo(logo: app.logo, side: 24, holdsPlace: true) }
                 VStack(alignment: .leading, spacing: 2) {
                     // An app an operator sets up first is named in the soft colour, as on the iPad.
                     Text(verbatim: app.name).font(.system(size: 16, weight: .semibold)).foregroundColor(setup ? Theme.soft : Theme.ink)
@@ -218,15 +271,20 @@ struct ConnectAppsView: View {
                 trailing(app)
             }
             .frame(width: Self.status, alignment: .leading)
+            chevron(app)
         }
         .frame(minHeight: 52)
         .padding(.vertical, 8)
+        // A connected app opens its connections from anywhere on its row, as the iPad's link.
+        .contentShape(Rectangle())
+        .onTapGesture { if app.isConnected { model.opened = app } }
         .accessibilityElement(children: .contain)
     }
 
     /// The row's end, as the iPad's `trailing`: a green check for a connected app; nothing for
-    /// one an operator sets up first; else Connect, or Sign in again, as wide as its words. No
-    /// chevron yet: a connection has no page of its own on the Mac.
+    /// one an operator sets up first; else its button, as wide as its words, in the iPad's words
+    /// (`Apps.buttonKey`: "Ask Coach" where no taf needs it, else Sign in again or Connect),
+    /// which opens Coach.
     @ViewBuilder private func trailing(_ app: Apps.App) -> some View {
         if app.needsSetup {
             EmptyView()
@@ -235,10 +293,25 @@ struct ConnectAppsView: View {
                 .accessibilityLabel(words("connect.status.connected"))
         } else {
             Button(action: openCoach) {
-                Text(words(app.needsReconnect ? "connect.sign_in_again" : "connect.apps.connect")).padding(.horizontal, 16)
+                Text(words(Apps.buttonKey(app, connectable: connectable))).padding(.horizontal, 16)
             }
             .buttonStyle(OutlineButtonStyle())
             .fixedSize()
+        }
+    }
+
+    /// The chevron of an app whose connections open ("Your {app} connections"), as the iPad's link
+    /// (`AppConnections.opens`): connected, or holding a connection on this account.
+    @ViewBuilder private func chevron(_ app: Apps.App) -> some View {
+        if AppConnections.opens(app, in: model.grants) {
+            Button { model.opened = app } label: {
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+                    .frame(width: Self.chevron, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(words("connect.apps.your_connections", ["app": app.name]))
+        } else {
+            Color.clear.frame(width: Self.chevron, height: 1)
         }
     }
 }

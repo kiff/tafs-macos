@@ -73,12 +73,7 @@ struct HomeRecipesView: View {
                     Text(verbatim: recipe.line).font(.system(size: 14)).foregroundColor(Theme.soft)
                         .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
                 }
-                // As the iPad's `AppMarks`: each app its own mark, by name (the logos aren't here yet).
-                if !recipe.apps.isEmpty {
-                    WrapRow(count: recipe.apps.count, spacing: 8) { index in
-                        Text(verbatim: recipe.apps[index].name).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize()
-                    }
-                }
+                if !recipe.apps.isEmpty { AppMarks(apps: recipe.apps) }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,6 +83,30 @@ struct HomeRecipesView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The apps a job uses, by name, each after its logo when tafs cloud serves one, as the iPad's
+/// `AppMarks` (`HomeRecipes.swift:134-147`). With no logo, or one that doesn't load, the name alone.
+struct AppMarks: View {
+    let apps: [Recipes.App]
+
+    var body: some View {
+        WrapRow(count: apps.count, spacing: 8) { index in AppMark(app: apps[index]) }
+    }
+}
+
+/// One app: its logo from tafs cloud (`AppLogo`, 18 points), then its name, as the iPad's
+/// `AppMark` (`HomeRecipes.swift:149-165`).
+struct AppMark: View {
+    let app: Recipes.App
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if app.logo != nil { AppLogo(logo: app.logo, side: 18) }
+            Text(verbatim: app.name).font(.system(size: 12)).foregroundColor(Theme.dim)
+        }
+        .fixedSize()
     }
 }
 
