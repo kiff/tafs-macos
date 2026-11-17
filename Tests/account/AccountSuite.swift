@@ -1,1 +1,1 @@
-let accountTests: [Test] = accountClientTests + legalPagesTests
+let accountTests: [Test] = accountClientTests + legalPagesTests + accountControlsTests

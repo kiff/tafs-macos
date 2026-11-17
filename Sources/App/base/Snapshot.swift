@@ -18,11 +18,11 @@ enum Snapshot {
     /// in a window off screen, the run loop turned between: a screen whose scrolled content is
     /// laid out a turn later (as on a test runner) is seen once it has been. The last drawing is
     /// answered either way, for the caller's check.
-    static func settled<V: View>(of view: V, size: CGSize, tries: Int = 20,
+    static func settled<V: View>(of view: V, size: CGSize, tries: Int = 20, dark: Bool = false,
                                  until drawn: (NSBitmapImageRep) -> Bool) -> NSBitmapImageRep? {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
         host.frame = CGRect(origin: .zero, size: size)
-        host.appearance = NSAppearance(named: .aqua)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         // A window needs the app object, which a test run doesn't start on its own.
         _ = NSApplication.shared
         let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: size.width, height: size.height),

@@ -36,6 +36,8 @@ struct Me: Decodable, Equatable {
     let email: String?
     /// The account's name, else its slug.
     let account: String?
+    /// The account's id (its slug), as the iPad's `Account.slug`.
+    let slug: String?
     /// How this session approves, in KIFF's word: `view`, `key`, `passkey`. Nil from a KIFF
     /// that doesn't say: the app then claims nothing about it.
     let approvalMode: String?
@@ -54,6 +56,7 @@ struct Me: Decodable, Equatable {
         }
         email = text(.email)
         account = text(.name) ?? text(.slug)
+        slug = text(.slug)
         approvalMode = text(.approvalMode)
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
         timeZone = try c.decodeIfPresent(String.self, forKey: .timeZone)
@@ -67,6 +70,18 @@ struct Me: Decodable, Equatable {
     /// `managesBilling` (AppModel.swift:1089-1091): they answer members' requests; anyone else
     /// asks an admin. A KIFF that doesn't say lists no capabilities, and may.
     var managesBilling: Bool { capabilities.map { $0.contains("billing.manage") } ?? true }
+
+    /// The KIFF account page's "Account id": the slug, only when the name isn't it, as the
+    /// iPad's `AccountView` (SignInView.swift:443-445).
+    var accountID: String? {
+        guard let slug, slug != account else { return nil }
+        return slug
+    }
+
+    /// Whether this person may delete the account (KIFF's `account.delete`), as the iPad's
+    /// `mayDeleteAccount`: it's offered only then. A KIFF that doesn't say lists no
+    /// capabilities, and may.
+    var mayDeleteAccount: Bool { capabilities.map { $0.contains("account.delete") } ?? true }
 
     /// The session reads everything and approves nothing here: exactly when KIFF says `view`.
     var viewOnly: Bool { approvalMode == "view" }

@@ -61,4 +61,20 @@ let usageScreenTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("usage-\(language).png"))
         }
     }),
+    Test("the screenshots: Plan & usage with the headline once, light and dark", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // A plan line as tafs cloud sends one with no limit: Account's Plan card draws it, this screen doesn't.
+        let noLimit = #"{"balance":{"state":"ok","meter_pct":null,"words":"No limit · 9,872 credits used"},"plan_line":"No limit · 9,872 credits used","plan_tone":"ok"}"#
+        for dark in [false, true] {
+            let (model, _) = model([(200, noLimit), (200, creditsAnswer)])
+            await model.load()
+            guard case .loaded(let balance) = model.balance else { throw Failure(description: "no balance") }
+            try expectEqual(balance.planLine, "No limit · 9,872 credits used")
+            let view = UsageView(model: model).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 700), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            try png.write(to: folder.appendingPathComponent("usage-\(dark ? "dark" : "light").png"))
+        }
+    }),
 ]

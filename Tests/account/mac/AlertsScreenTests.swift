@@ -63,4 +63,19 @@ let accountAlertsTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("alerts-\(language).png"))
         }
     }),
+    Test("the screenshots: Alerts with each switch at its row's end, light and dark", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let (defaults, name) = scratch()
+        defer { defaults.removePersistentDomain(forName: name) }
+        AlertPrefs(on: true, sound: true).save(to: defaults, account: "t-a")
+        let model = AlertsModel(account: "t-a", defaults: defaults, permission: FakePermission(true))
+        await model.refresh()
+        for dark in [false, true] {
+            let view = AlertsView(model: model).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            try png.write(to: folder.appendingPathComponent("alerts-switches-\(dark ? "dark" : "light").png"))
+        }
+    }),
 ]
