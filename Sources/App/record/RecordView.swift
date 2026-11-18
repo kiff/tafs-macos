@@ -256,6 +256,9 @@ struct RecordView: View {
     var tafs: [Home.Taf] = []
     /// The account's time zone, as KIFF says it: the days are the account's, as the iPad's.
     var timeZone: String? = nil
+    /// The moment "Today" and "Yesterday" are told from: this Mac's clock, or a fixed one for the
+    /// Store's screenshots.
+    var now: Date? = nil
 
     var body: some View {
         ScrollView {
@@ -327,7 +330,7 @@ struct RecordView: View {
 
     /// A day's heading: its title, then what it spent, all in capitals (`Record.dayHeading`).
     private func dayHeading(_ day: Record.Day, time: AccountTime) -> String {
-        Record.dayHeading(title: time.dayTitle(day.start, words: words),
+        Record.dayHeading(title: time.dayTitle(day.start, words: words, now: now ?? Date()),
                           spent: Record.spentWords(day.entries + day.reads, words: words), language: words.language)
     }
 

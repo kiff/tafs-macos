@@ -11,9 +11,9 @@ import SwiftUI
 private let storeSession = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
 private let storeSize = CGSize(width: 1440, height: 900)
 
-/// The moment every frame is drawn at, and a time that many minutes before it, as tafs cloud
-/// and KIFF write them.
-private let storeNow = Date()
+/// The moment every frame is drawn at, fixed so every run draws the same frames: a Tuesday
+/// morning. And a time that many minutes before it, as tafs cloud and KIFF write them.
+private let storeNow = ISO8601DateFormatter().date(from: "2026-11-17T09:30:00Z") ?? Date()
 private func storeAt(minutesAgo: Double) -> String {
     ISO8601DateFormatter().string(from: storeNow.addingTimeInterval(-minutesAgo * 60))
 }
@@ -36,9 +36,9 @@ private let storeHome = #"""
    "job_summary":"Tells customers when a parcel runs late.","card":\#(storeCard("c-parcels", "Delay messages", limit: 100, used: 1))},
   {"id":"taf-support","name":"Support replies","kiff_agent":"agent_support","color":4,"state":"waiting","waiting":1,
    "job_summary":"Answers the support tickets it can.","card":\#(storeCard("c-support", "Support replies · Zendesk", limit: 40, used: 12))},
-  {"id":"taf-leads","name":"Lead follow-up","kiff_agent":"agent_leads","color":0,"state":"working","waiting":0,"next_run_words":"Next run 14:00",
+  {"id":"taf-leads","name":"Lead follow-up","kiff_agent":"agent_leads","color":0,"state":"working","waiting":0,"next_run_words":"Next run 2:00 PM",
    "job_summary":"Replies to new leads and books the first call.","card":\#(storeCard("c-leads", "First replies", limit: 50, used: 2))},
-  {"id":"taf-access","name":"Access","kiff_agent":"agent_access","color":2,"state":"idle","waiting":0,
+  {"id":"taf-access","name":"Access","kiff_agent":"agent_access","color":2,"state":"working","waiting":0,"next_run_words":"Next run 5:00 PM",
    "job_summary":"Gives and takes away access as people join and leave.","card":\#(storeCard("c-access", "Approved roles", limit: 40, used: 1))}
 ],"headline":{"words":"5 tafs, 3 waiting for you."},"needs_you":{"count":3,"words":"3 need you."}}
 """#
@@ -59,8 +59,12 @@ private func storeHeld() -> String {
 
 /// Today's Record, newest first: each taf's second round, its first, and each taf's start.
 private func storeRecord() -> String {
+    // The Record's times in the clock the Overview shows (this Mac's, 12-hour on the CI's en-US),
+    // so one frame set uses one clock.
     let clock = DateFormatter()
-    clock.dateFormat = "HH:mm"
+    clock.locale = Locale(identifier: "en_US_POSIX")
+    clock.timeZone = TimeZone.current
+    clock.dateFormat = "h:mm a"
     func entry(_ id: String, _ ago: Double, _ kind: String, _ title: String, _ detail: String, _ taf: String, _ name: String) -> String {
         let time = clock.string(from: storeNow.addingTimeInterval(-ago * 60))
         return #"{"id":"\#(id)","at":"\#(storeAt(minutesAgo: ago))","kind":"\#(kind)","title":"\#(title)","detail":"\#(detail)","time":"\#(time)","taf":{"id":"\#(taf)","name":"\#(name)"}}"#
@@ -84,6 +88,40 @@ private func storeRecord() -> String {
         entry("r15", 18, "started", "Lead follow-up started", issued, "taf-leads", "Lead follow-up"),
     ].joined(separator: ",")
     return #"{"q":"","entries":[\#(entries)],"groups":[{"id":"today","title":"Today","entries":[\#(entries)]}],"end_words":"That's everything."}"#
+}
+
+/// Each taf's last run and its report's first line, which the Overview shows as Last result: the
+/// same work the Record shows.
+private let storeLastResults: [(taf: String, line: String)] = [
+    ("taf-deploys", "Deployed api v2.14.1"),
+    ("taf-parcels", "Told order #5120 it's running late"),
+    ("taf-support", "Replied to ticket #7781"),
+    ("taf-leads", "Confirmed the call with Nord Atelier"),
+    ("taf-access", "Gave Ana the Sales role"),
+]
+
+/// tafs cloud as the Overview reads it, answered by path: the list, then each taf's runs and
+/// its newest run's report, in whatever order the Overview asks.
+private final class StoreCloud: Transport, @unchecked Sendable {
+    private let routes: [String: String]
+    init() {
+        var routes = ["/v1/home": storeHome]
+        for (i, r) in storeLastResults.enumerated() {
+            let at = ISO8601DateFormatter().string(from: storeNow.addingTimeInterval(Double(-(10 + i)) * 60))
+            routes["/v1/tafs/\(r.taf)/runs"] = #"{"runs":[{"session":"s-\#(r.taf)","at":"\#(at)"}]}"#
+            routes["/v1/tafs/\(r.taf)/runs/s-\(r.taf)"] = #"{"report":{"status":"idle","text":"\#(r.line)"}}"#
+        }
+        self.routes = routes
+    }
+    func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
+        let path = request.path.split(separator: "?").first.map(String.init) ?? request.path
+        guard let body = routes[path] else { return (404, Data(#"{"error":"not_found"}"#.utf8)) }
+        return (200, Data(body.utf8))
+    }
+    func exchange(_ request: HTTPRequest) async throws -> (status: Int, body: Data, etag: String?) {
+        let (status, body) = try await send(request)
+        return (status, body, nil)
+    }
 }
 
 /// Support replies' Activity: its held promise, its reply, and its start.
@@ -159,8 +197,13 @@ let storeScreenshotMacTests: [Test] = [
         }
 
         // 1. The Overview: the three waiting calls, and each taf's line and Card.
-        let overview = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, storeHome), (404, ""), (404, ""), (404, "")]), session: storeSession))
+        let overview = OverviewModel(cloud: CloudClient(transport: StoreCloud(), session: storeSession))
         await overview.load()
+        await overview.loadLastResults(words: words)
+        for (taf, line) in storeLastResults {
+            guard let listed = page.tafs.first(where: { $0.tafID == taf }) else { throw Failure(description: "no \(taf)") }
+            try expectEqual(overview.lastResult(listed, words: words, time: { _ in "" }), line)
+        }
         let one = try storeShot(shell(.overview) { _ in AnyView(OverviewView(model: overview, held: held, needsCount: held.count)) }, "store-1-overview")
 
         // 2. Needs you: the three calls, each with its reason and the time left.
@@ -181,7 +224,7 @@ let storeScreenshotMacTests: [Test] = [
         // 4. The Record: today's fifteen lines, with each taf's chip.
         let record = RecordModel(cloud: CloudClient(transport: CannedTransport([(200, storeRecord())]), session: storeSession))
         await record.load()
-        let four = try storeShot(shell(.record) { _ in AnyView(RecordView(model: record, tafs: page.tafs)) }, "store-4-record")
+        let four = try storeShot(shell(.record) { _ in AnyView(RecordView(model: record, tafs: page.tafs, now: storeNow)) }, "store-4-record")
 
         // 5. Start a new taf: the jobs, and Coach for your own words.
         let gallery = try JSONDecoder().decode(Gallery.self, from: Data(storeGallery.utf8))
