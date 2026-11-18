@@ -52,7 +52,7 @@ private func storeHeld() -> String {
     return #"{"exceptions":["#
         + [call("exc_deploys", "agent_deploys", "migration", "Run migration 0042_orders_index", "Schema migrations: always asks you", "api, production", "Adds an index, 3M rows", 3),
            call("exc_parcels", "agent_parcels", "send_parcel", "Send a new parcel for order #5098", "Reships: always asks you", "Order #5098", "Lost in transit, 10 days without a scan", 2),
-           call("exc_support", "agent_support", "promise", "Promise a replacement on ticket #7802", "Promises: always asks you", "Ticket #7802", "The mug arrived broken", 1)]
+           call("exc_support", "agent_support", "promise", "Promise a replacement on ticket #7802", "Promises: always asks you", "Ticket #7802", "Arrived broken, photo attached", 1)]
             .joined(separator: ",")
         + "]}"
 }
