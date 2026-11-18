@@ -15,6 +15,7 @@ private let notYet = [
     "setup-coach.json": "Coach's own read, with the Coach screens",
     "coach-chats.json": "Coach's conversations, with the pull request that reads them",
     "coach-conversation.json": "Coach's conversations, with the pull request that reads them",
+    "conversation-failed.json": "a run that ended refused says so in the chat (failed), with the Coach screens",
     "connect-apps.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-search.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-next.json": "Connect apps' pages and search, read against these with that screen",
@@ -59,7 +60,7 @@ let contractsTests: [Test] = [
         try expect(!marked.isEmpty, "a card marked wider")
         for card in marked {
             try expectEqual(card.type, "approval")
-            try expect(card.widerWords?.contains("can't be narrowed") == true, "tafs cloud's words, as sent: \(card.widerWords ?? "")")
+            try expect(card.widerWords?.contains("can only use the tools allowed on its Card") == true, "tafs cloud's words, as sent: \(card.widerWords ?? "")")
         }
     },
     Test("the AI consent reads as tafs cloud answers it") {
