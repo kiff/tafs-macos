@@ -35,7 +35,7 @@ private let storeHome = #"""
   {"id":"taf-parcels","name":"Late parcels","kiff_agent":"agent_parcels","color":3,"state":"waiting","waiting":1,
    "job_summary":"Tells customers when a parcel runs late.","card":\#(storeCard("c-parcels", "Delay messages", limit: 100, used: 1))},
   {"id":"taf-support","name":"Support replies","kiff_agent":"agent_support","color":4,"state":"waiting","waiting":1,
-   "job_summary":"Answers the support tickets it can.","card":\#(storeCard("c-support", "Replies", limit: 40, used: 1))},
+   "job_summary":"Answers the support tickets it can.","card":\#(storeCard("c-support", "Support replies · Zendesk", limit: 40, used: 12))},
   {"id":"taf-leads","name":"Lead follow-up","kiff_agent":"agent_leads","color":0,"state":"working","waiting":0,"next_run_words":"Next run 14:00",
    "job_summary":"Replies to new leads and books the first call.","card":\#(storeCard("c-leads", "First replies", limit: 50, used: 2))},
   {"id":"taf-access","name":"Access","kiff_agent":"agent_access","color":2,"state":"idle","waiting":0,
@@ -51,7 +51,7 @@ private func storeHeld() -> String {
     }
     return #"{"exceptions":["#
         + [call("exc_deploys", "agent_deploys", "migration", "Run migration 0042_orders_index", "Schema migrations: always asks you", "api, production", "Adds an index, 3M rows", 3),
-           call("exc_parcels", "agent_parcels", "reship", "Send a new parcel for order #5098", "Reships: always asks you", "Order #5098", "Lost in transit, 10 days without a scan", 2),
+           call("exc_parcels", "agent_parcels", "send_parcel", "Send a new parcel for order #5098", "Reships: always asks you", "Order #5098", "Lost in transit, 10 days without a scan", 2),
            call("exc_support", "agent_support", "promise", "Promise a replacement on ticket #7802", "Promises: always asks you", "Ticket #7802", "The mug arrived broken", 1)]
             .joined(separator: ",")
         + "]}"
@@ -59,8 +59,11 @@ private func storeHeld() -> String {
 
 /// Today's Record, newest first: each taf's second round, its first, and each taf's start.
 private func storeRecord() -> String {
+    let clock = DateFormatter()
+    clock.dateFormat = "HH:mm"
     func entry(_ id: String, _ ago: Double, _ kind: String, _ title: String, _ detail: String, _ taf: String, _ name: String) -> String {
-        #"{"id":"\#(id)","at":"\#(storeAt(minutesAgo: ago))","kind":"\#(kind)","title":"\#(title)","detail":"\#(detail)","taf":{"id":"\#(taf)","name":"\#(name)"}}"#
+        let time = clock.string(from: storeNow.addingTimeInterval(-ago * 60))
+        return #"{"id":"\#(id)","at":"\#(storeAt(minutesAgo: ago))","kind":"\#(kind)","title":"\#(title)","detail":"\#(detail)","time":"\#(time)","taf":{"id":"\#(taf)","name":"\#(name)"}}"#
     }
     let within = "Within the Card", issued = "Card issued by You"
     let entries = [
@@ -161,7 +164,7 @@ let storeScreenshotMacTests: [Test] = [
         let one = try storeShot(shell(.overview) { _ in AnyView(OverviewView(model: overview, held: held, needsCount: held.count)) }, "store-1-overview")
 
         // 2. Needs you: the three calls, each with its reason and the time left.
-        let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([(200, storeHeld())]), session: storeSession), route: .phoneOrPasskey)
+        let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([(200, storeHeld())]), session: storeSession), route: .touchID)
         await needsYou.load()
         let two = try storeShot(shell(.needsYou) { _ in AnyView(NeedsYouView(model: needsYou, tafs: page.tafs, now: storeNow)) }, "store-2-needs-you")
 
