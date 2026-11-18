@@ -91,11 +91,12 @@ private func storeRecord() -> String {
 }
 
 /// Each taf's last run and its report's first line, which the Overview shows as Last result: the
-/// same work the Record shows.
+/// same work the Record shows. The Overview takes a report's marks out, "#" included, so no line
+/// names an order or a ticket by its number.
 private let storeLastResults: [(taf: String, line: String)] = [
     ("taf-deploys", "Deployed api v2.14.1"),
-    ("taf-parcels", "Told order #5120 it's running late"),
-    ("taf-support", "Replied to ticket #7781"),
+    ("taf-parcels", "Told a customer their parcel is late"),
+    ("taf-support", "Answered 12 tickets today"),
     ("taf-leads", "Confirmed the call with Nord Atelier"),
     ("taf-access", "Gave Ana the Sales role"),
 ]
