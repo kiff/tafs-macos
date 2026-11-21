@@ -8,7 +8,7 @@ private func words(_ language: String) throws -> Words { try Words(language: lan
 let wordsTests: [Test] = [
     Test("every shipped language is read, with English's keys") {
         let shipped = try Words.shipped(folder: folder)
-        try expectEqual(shipped.sorted(), ["de", "en", "es", "fr", "it", "nl", "pl", "pt"])
+        try expectEqual(shipped.sorted(), ["de", "en", "es", "fr", "it", "ko", "nl", "pl", "pt", "pt-BR"])
         let english = Set(try words("en").lines.keys)
         try expect(english.count > 1000, "more than 1000 keys, got \(english.count)")
         for language in shipped {

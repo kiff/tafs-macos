@@ -24,6 +24,8 @@
 		<string>pt</string>
 		<string>nl</string>
 		<string>pl</string>
+		<string>pt-BR</string>
+		<string>ko</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>tafs</string>
