@@ -92,10 +92,10 @@ let connectReceiptTests: [Test] = [
         try expectEqual(card.connected, false)
         try expectEqual(card.connectionWords, nil)
     },
-    Test("the receipt's words are shared keys, in each of the 8 languages: nothing is worded here") {
+    Test("the receipt's words are shared keys, in every shipped language: nothing is worded here") {
         let folder = URL(fileURLWithPath: ".shared/app/strings")
         let languages = try Words.shipped(folder: folder)
-        try expectEqual(Set(languages), ["en", "de", "es", "fr", "it", "nl", "pl", "pt"])
+        try expectEqual(Set(languages), ["en", "de", "es", "fr", "it", "ko", "nl", "pl", "pt", "pt-BR"])
         for language in languages {
             let words = try Words(language: language, folder: folder)
             for key in ["connect.status.connected", "common.done", "connect.disconnect_button", "approval.device_can_not_approve_approve"] {

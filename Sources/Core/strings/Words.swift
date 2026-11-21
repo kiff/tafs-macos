@@ -22,15 +22,26 @@ struct Words {
         self.lines = lines
     }
 
-    /// Reads a language's lines from the shared folder (`app/strings`): every file of `<language>/`.
+    /// Reads a language's lines from the shared folder (`app/strings`): every file of `<language>/`. A regional
+    /// variant (`languages.json`'s "variants": "pt-BR" over "pt") is its base's lines with its own on top, as
+    /// kiff/tafs's apps read it: it holds only the lines that read differently there.
     init(language: String, folder: URL) throws {
+        var lines: [String: Line] = [:]
+        if let base = try Self.variants(folder: folder)[language] {
+            lines = try Self.read(base, folder: folder)
+        }
+        lines.merge(try Self.read(language, folder: folder)) { _, own in own }
+        self.init(language: language, lines: lines)
+    }
+
+    private static func read(_ language: String, folder: URL) throws -> [String: Line] {
         let files = try FileManager.default.contentsOfDirectory(at: folder.appendingPathComponent(language), includingPropertiesForKeys: nil)
         var lines: [String: Line] = [:]
         for file in files where file.pathExtension == "json" {
             let read = try JSONDecoder().decode([String: Line].self, from: Data(contentsOf: file))
             lines.merge(read) { first, _ in first }
         }
-        self.init(language: language, lines: lines)
+        return lines
     }
 
     /// The languages the apps ship, as `languages.json` lists them.
@@ -39,11 +50,21 @@ struct Words {
         return try JSONDecoder().decode(Languages.self, from: Data(contentsOf: folder.appendingPathComponent("languages.json"))).shipped
     }
 
-    /// The language the app is in: the first the person prefers ("pt-BR", "fr-FR") that is
-    /// shipped, else English.
+    /// Each regional variant's base, as `languages.json` lists them ("pt-BR": "pt"); none when it lists none.
+    static func variants(folder: URL) throws -> [String: String] {
+        struct Languages: Decodable { let variants: [String: String]? }
+        return try JSONDecoder().decode(Languages.self, from: Data(contentsOf: folder.appendingPathComponent("languages.json"))).variants ?? [:]
+    }
+
+    /// The language the app is in: the first the person prefers that is shipped, as its regional variant when that's
+    /// shipped ("pt-BR"), else its language ("pt-PT" reads "pt", "fr-FR" reads "fr"); else English.
     static func language(preferred: [String], shipped: [String]) -> String {
         for tag in preferred {
-            let code = tag.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? ""
+            let parts = tag.split(whereSeparator: { $0 == "-" || $0 == "_" }).map(String.init)
+            let code = parts.first?.lowercased() ?? ""
+            if parts.count > 1, parts[1].count == 2, shipped.contains(code + "-" + parts[1].uppercased()) {
+                return code + "-" + parts[1].uppercased()
+            }
             if shipped.contains(code) { return code }
         }
         return "en"
@@ -152,8 +173,11 @@ enum Plural {
         let n = abs(n)
         let million = n != 0 && n % 1_000_000 == 0
         switch language {
-        case "fr", "pt":
+        case "fr", "pt", "pt-BR":
             return n <= 1 ? "one" : million ? "many" : "other"
+        // Korean and Japanese have one form for every number.
+        case "ko", "ja":
+            return "other"
         case "es", "it":
             return n == 1 ? "one" : million ? "many" : "other"
         case "pl":
