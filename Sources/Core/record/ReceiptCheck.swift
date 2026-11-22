@@ -125,7 +125,10 @@ enum ReceiptSigner {
 /// A receipt's signed steps and its facts, as the sheet shows them (the iPad's `ReceiptView.steps`).
 struct ReceiptSteps: Equatable {
     struct Step: Equatable {
+        /// What "What happened" shows: KIFF's `step_words` for this step when it sent some, else `message`.
         let words: String
+        /// KIFF's signed message for it, in KIFF's English, else its kind in words: what the full receipt shows.
+        var message: String = ""
         let at: Date?
         /// The step's data hash, shortened as the iPad shows it ("aa12…ef34").
         let hash: String
@@ -149,15 +152,20 @@ struct ReceiptSteps: Equatable {
             steps = []
             return
         }
-        steps = list.map { s in
+        let stepWords = ReceiptStepWords.read(from: raw)
+        // Each step's own whole-number sequence, read as `step_words`' are: never a boolean or a fraction.
+        let sequences = ReceiptStepWords.sequences(of: chain)
+        steps = list.enumerated().map { i, s in
             let kind = s["kind"] as? String ?? ""
-            let message = (s["message"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let signed = (s["message"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let message = signed ?? kind.replacingOccurrences(of: "_", with: " ")
+            let sequence = i < sequences.count ? sequences[i] : nil
             let hash = s["data_hash"] as? String ?? ""
             let data = s["data"] as? [String: Any]
             let amount = (data?["amount"] as? [String: Any]).flatMap { a in
                 (a["value"] as? String).map { Record.Amount(value: $0, unit: a["unit"] as? String) }
             }
-            return Step(words: message ?? kind.replacingOccurrences(of: "_", with: " "),
+            return Step(words: sequence.flatMap { stepWords[$0] } ?? message, message: message,
                         at: (s["occurred_at"] as? String).flatMap(Self.date),
                         hash: hash.count > 8 ? "\(hash.prefix(4))…\(hash.suffix(4))" : hash,
                         kind: kind, amount: amount, answer: data?["answer"] as? String)
@@ -182,5 +190,45 @@ struct ReceiptSteps: Equatable {
         let precise = ISO8601DateFormatter()
         precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return precise.date(from: s) ?? ISO8601DateFormatter().date(from: s)
+    }
+}
+
+/// KIFF's own words for a receipt's steps, sent beside the receipt and outside its signature (`step_words`:
+/// `[{sequence, code, words}]`, in the reader's language), as the iPad's `ReceiptStepWords` (tafs#1709). Only an entry
+/// with a whole-number `sequence` and words that aren't blank counts; the signed message is what a step reads as
+/// without one. Read with `Decodable`, which refuses `true` and `1.5` as an `Int` on a Mac and on Linux alike.
+enum ReceiptStepWords {
+    private struct Entry: Decodable {
+        let sequence: Int?
+        let words: String?
+        init(from decoder: Decoder) throws {
+            enum Keys: String, CodingKey { case sequence, words }
+            let c = try? decoder.container(keyedBy: Keys.self)
+            sequence = (try? c?.decodeIfPresent(Int.self, forKey: .sequence)) ?? nil
+            words = (try? c?.decodeIfPresent(String.self, forKey: .words)) ?? nil
+        }
+    }
+    private struct Top: Decodable {
+        let stepWords: [Entry]?
+        enum CodingKeys: String, CodingKey { case stepWords = "step_words" }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            stepWords = (try? c.decodeIfPresent([Entry].self, forKey: .stepWords)) ?? nil
+        }
+    }
+
+    /// Each step's `sequence` in a `causal_chain`, in order: nil where it isn't a whole number.
+    static func sequences(of chain: Data) -> [Int?] {
+        ((try? JSONDecoder().decode([Entry].self, from: chain)) ?? []).map(\.sequence)
+    }
+
+    static func read(from raw: Data) -> [Int: String] {
+        guard let top = try? JSONDecoder().decode(Top.self, from: raw) else { return [:] }
+        var words: [Int: String] = [:]
+        for entry in top.stepWords ?? [] {
+            guard let n = entry.sequence, let text = entry.words?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { continue }
+            words[n] = text
+        }
+        return words
     }
 }

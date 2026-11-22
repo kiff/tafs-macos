@@ -201,3 +201,26 @@ let receiptCheckTests: [Test] = [
         try expectEqual(plain.title, "Refund")
     },
 ]
+
+/// KIFF's step words beside a receipt (tafs#1709), as the iPad's `ReceiptCheckTests`: matched by the step's sequence,
+/// outside the signature, the signed message kept for the full receipt.
+let receiptStepWordsTests: [Test] = [
+    Test("a step reads KIFF's words for it in the reader's language; the full receipt keeps the signed message") {
+        let raw = Data(#"""
+        {"causal_chain":[{"sequence":1,"kind":"decision","message":"Allowed"},{"sequence":2,"kind":"hold_settled","message":"Approved once"},
+                         {"sequence":3,"kind":"tool_result","message":"Done"}],
+         "step_words":[{"sequence":1,"code":"decision.allowed","words":"Erlaubt"},{"sequence":2,"code":"x","words":"   "},
+                       {"sequence":true,"words":"nein"},{"sequence":3.5,"words":"nein"},{"words":"no sequence"}]}
+        """#.utf8)
+        let steps = ReceiptSteps(raw).steps
+        try expectEqual(steps.map(\.words), ["Erlaubt", "Approved once", "Done"])
+        try expectEqual(steps.map(\.message), ["Allowed", "Approved once", "Done"])
+        try expectEqual(ReceiptStepWords.read(from: raw), [1: "Erlaubt"])
+        // No step_words: every step reads as signed, as before.
+        let plain = ReceiptSteps(Data(#"{"causal_chain":[{"sequence":1,"kind":"decision","message":"Allowed"}]}"#.utf8)).steps
+        try expectEqual(plain.map(\.words), ["Allowed"])
+        // A step whose own sequence isn't a whole number takes no words.
+        let odd = ReceiptSteps(Data(#"{"causal_chain":[{"sequence":true,"kind":"decision","message":"Allowed"}],"step_words":[{"sequence":1,"words":"Erlaubt"}]}"#.utf8)).steps
+        try expectEqual(odd.map(\.words), ["Allowed"])
+    },
+]
