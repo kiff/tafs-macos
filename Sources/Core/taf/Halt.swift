@@ -66,6 +66,13 @@ extension CloudClient {
         return answer.halt
     }
 
+    /// Lets kiff/agents run it again once KIFF has resumed it, as the iPad's `releaseHalt`: the taf's halt, or with
+    /// none the account's. tafs cloud checks that KIFF resumed it first.
+    func releaseHalt(_ taf: String?) async throws -> Halt {
+        struct Answer: Decodable { let halt: Halt }
+        return (try decoded(try await delete(Self.haltPath(taf))) as Answer).halt
+    }
+
     /// Halts the taf, or with none every taf of the account, in kiff/agents and KIFF at once.
     func halt(_ taf: String?) async throws -> Halt {
         struct Answer: Decodable { let halt: Halt }

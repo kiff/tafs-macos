@@ -150,6 +150,7 @@ struct SignedInView: View {
         .onAppear {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
+            accountHalt.approveWithKey = approveWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
@@ -367,7 +368,12 @@ struct SignedInView: View {
         guard let id = taf.tafID else { return }
         tafTab = tab
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
+        let pages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
+        // Resume on this Mac's security key, when it has one (kiff/cloud#96), for this taf's KIFF agent.
+        pages.halt.approveWithKey = approveWithKey
+        pages.halt.agent = taf.kiffAgent
+        pages.halt.name = taf.name
+        tafPages = pages
         openTaf = taf.id
     }
 

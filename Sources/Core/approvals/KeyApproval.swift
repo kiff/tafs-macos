@@ -25,11 +25,15 @@ enum KeyAct: Equatable {
     case signOutDevice(id: String)
     /// The account's time zone (the iPad's `setTimeZone`): `PUT /v1/me/time-zone` with `{"time_zone": zone}`.
     case timeZone(String)
+    /// Resuming a halted KIFF agent, or with none the whole account (the iPad's `KIFFClient.resume`):
+    /// `POST /v1/agents/{agent}/resume` or `POST /v1/resume`, with `{}`.
+    case resume(agent: String?)
 
     var method: String {
         switch self {
         case .signOutDevice: return "DELETE"
         case .timeZone: return "PUT"
+        case .resume: return "POST"
         }
     }
 
@@ -37,6 +41,7 @@ enum KeyAct: Equatable {
         switch self {
         case .signOutDevice(let id): return "/v1/me/devices/\(CloudClient.escaped(id))"
         case .timeZone: return "/v1/me/time-zone"
+        case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         }
     }
 
@@ -48,6 +53,7 @@ enum KeyAct: Equatable {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             return (try? encoder.encode(["time_zone": zone])) ?? Data()
+        case .resume: return Data("{}".utf8)
         }
     }
 
@@ -56,6 +62,8 @@ enum KeyAct: Equatable {
         switch self {
         case .signOutDevice: return words("settings.devices.sign_out_prompt", ["device": device])
         case .timeZone(let zone): return words("settings.time_zone.prompt", ["zone": zone])
+        // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
+        case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
         }
     }
 }

@@ -196,6 +196,20 @@ let approvalsPasskeyTests: [Test] = [
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(act.title(words, device: "MacBook"), "Sign MacBook out of your account")
     }),
+    Test("Resume on the key: KIFF's agent or the whole account, with {}, named as the iPad's reason; tafs cloud's release is a DELETE", awaiting: {
+        let one = KeyAct.resume(agent: "agent_1"), all = KeyAct.resume(agent: nil)
+        try expectEqual(one.method + " " + one.path, "POST /v1/agents/agent_1/resume")
+        try expectEqual(all.method + " " + all.path, "POST /v1/resume")
+        try expectEqual(String(decoding: one.body, as: UTF8.self), "{}")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(one.title(words, device: "Refunds"), "Resume Refunds")
+        try expectEqual(all.title(words), "Resume all your tafs")
+        let transport = CannedTransport([(200, #"{"halt":{"state":"running"}}"#)])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
+        _ = try? await CloudClient(transport: transport, session: session).releaseHalt("taf-1")
+        try expectEqual(transport.sent.first.map { $0.method + " " + $0.path }, "DELETE /v1/tafs/taf-1/halt")
+        try expectEqual(transport.sent.first?.headers["Authorization"], "Bearer tok")
+    }),
     Test("switched off, nothing is asked of the security key: one request or the pair; on by default since kiff/cloud#96", awaiting: {
         try expectEqual(Features.macPasskeyApprovals, true)
         let key = FakeKey()
