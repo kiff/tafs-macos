@@ -68,6 +68,8 @@ enum PasskeyRefusal: Error, Equatable {
     case unreadable
     /// A new credential that isn't ES256 on P-256, the only key KIFF takes.
     case notES256
+    /// A held call's answer that grants nothing (a refusal), which is never the key's: nothing was asked.
+    case notAnApproval
 }
 
 /// What the authenticator returns for one assertion.
@@ -129,6 +131,13 @@ struct PasskeyApprover {
     /// reach it: one request (`approve`) and the pair (`RequestsTogether.approve`), each with the
     /// `signedAt` that went into its message. Switched off, it refuses before the key is asked.
     fileprivate func sign(_ message: Data, signedAt: String, pin: SecurityKeyPIN?) async throws -> String {
+        "t=\(signedAt),a=\(Encoding.base64URL(try await assertion(message, pin: pin)))"
+    }
+
+    /// One fresh assertion over `message`, as the JSON object KIFF reads by name (`auth.Assertion`):
+    /// `credential_id`, `client_data_json`, `authenticator_data` and `signature`, each base64url.
+    /// Only this file's three shapes reach it: `sign`'s two, and a held call's answer (`answer`).
+    fileprivate func assertion(_ message: Data, pin: SecurityKeyPIN?) async throws -> Data {
         guard enabled else { throw PasskeyRefusal.off }
         let clientData = Self.clientDataJSON(message, sha256: sha256)
         let assertion = try await authenticator.getAssertion(clientDataHash: sha256(clientData), credentialID: credentialID, pin: pin)
@@ -139,8 +148,7 @@ struct PasskeyApprover {
             ("credential_id", credentialID), ("client_data_json", clientData),
             ("authenticator_data", assertion.authenticatorData), ("signature", assertion.signatureDER),
         ].map { #""\#($0.0)":"\#(Encoding.base64URL($0.1))""# }
-        let json = Data(("{" + fields.joined(separator: ",") + "}").utf8)
-        return "t=\(signedAt),a=\(Encoding.base64URL(json))"
+        return Data(("{" + fields.joined(separator: ",") + "}").utf8)
     }
 
     /// Approves one request: its `kiff.request.v1`, at a signing time never used twice.
@@ -149,6 +157,22 @@ struct PasskeyApprover {
         let message = KIFFMessage.request(tenant: tenant, method: method, path: path,
                                           bodyHash: Encoding.hex(sha256(body)), signedAt: signedAt)
         return try await sign(Data(message.utf8), signedAt: signedAt, pin: pin)
+    }
+}
+
+extension PasskeyApprover {
+    /// Answers a held call with the key, as KIFF's `checkPasskeyAnswer` reads it (kiff/cloud,
+    /// `mandate_exceptions.go`): one fresh assertion over the answer's `kiff.answer.v1`, the hold as the
+    /// person saw it (its accounting version), with no next step and no note. Only an answer that grants
+    /// authority (Approve once, a change to the Card) is the key's: a refusal is the device key's, as for
+    /// any device, so it's refused here before the key is asked. The assertion's JSON object goes in the
+    /// answer's `signature.passkey`, beside the same `signed_at`.
+    func answer(tenant: String, callID: String, answer: Answer, accountingVersion: Int, signedAt: String,
+                pin: SecurityKeyPIN?) async throws -> Data {
+        guard answer.grants else { throw PasskeyRefusal.notAnApproval }
+        let message = KIFFMessage.answer(tenant: tenant, callID: callID, answer: answer, nextStep: nil,
+                                         accountingVersion: accountingVersion, signedAt: signedAt)
+        return try await assertion(Data(message.utf8), pin: pin)
     }
 }
 

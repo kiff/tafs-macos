@@ -48,6 +48,9 @@ private func made(flags: UInt8 = up | uv | at, rp: String = "kiff.dev", id: Data
         + Data([UInt8(id.count >> 8), UInt8(id.count & 0xff)]) + id + cose
 }
 
+/// One held call, as KIFF lists it.
+private func heldCall(_ json: String) throws -> HeldCall { try AccountClient.decoder.decode(HeldCall.self, from: Data(json.utf8)) }
+
 private func refused(_ expected: PasskeyRefusal, _ run: () async throws -> Any) async throws {
     do { _ = try await run(); throw Failure(description: "not refused, expected \(expected)") } catch let refusal as PasskeyRefusal {
         try expectEqual(refusal, expected)
@@ -259,4 +262,63 @@ let approvalsPasskeyTests: [Test] = [
         try expect(ApprovalRoute.passkey != .touchID && ApprovalRoute.passkey != .phoneOrPasskey, "its own route")
         try expectEqual(ApprovalRoute.of(.passkey), .phoneOrPasskey)
     },
+    Test("Approve once on the key: one assertion over the answer's kiff.answer.v1, sent in signature.passkey beside its signed_at", awaiting: {
+        let key = FakeKey()
+        let transport = CannedTransport([(200, "{}")])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+        let passkey = PasskeySession(transport: transport, session: session, approver: approver(key))
+        let call = try heldCall(#"{"id":"exc/1","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"Refund","accounting_version":3}"#)
+        let now = Date(timeIntervalSince1970: 1_794_679_800)
+        try await passkey.approveOnce(call, pin: nil, now: now)
+        let signedAt = KIFFMessage.time(now)
+        // The key was asked once, over the clientDataJSON whose challenge is the answer message's hash.
+        let message = "kiff.answer.v1\nt1\nexc/1\napprove-once\n\n\n3\n" + signedAt
+        try expectEqual(key.asked, [testSHA256(PasskeyApprover.clientDataJSON(Data(message.utf8), sha256: testSHA256))])
+        try expectEqual(transport.sent.count, 1)
+        let sent = transport.sent[0]
+        try expectEqual(sent.method + " " + sent.path, "POST /v1/me/card-exceptions/exc%2F1/approve-once")
+        try expectEqual(sent.headers["Authorization"], "Bearer tok")
+        // No header assertion and no device key's signature: the answer's body carries the key's approval.
+        try expectEqual(sent.headers[Passkeys.headerName], nil)
+        struct Body: Decodable {
+            struct Signature: Decodable {
+                struct Passkey: Decodable { let credential_id: String; let client_data_json: String; let authenticator_data: String; let signature: String }
+                let signed_at: String
+                let passkey: Passkey
+                let value: String?
+            }
+            let signature: Signature
+        }
+        let body = try JSONDecoder().decode(Body.self, from: sent.body)
+        try expectEqual(body.signature.signed_at, signedAt)
+        try expectEqual(body.signature.value, nil)
+        try expectEqual(body.signature.passkey.credential_id, Encoding.base64URL(credential))
+        try expectEqual(body.signature.passkey.client_data_json, Encoding.base64URL(PasskeyApprover.clientDataJSON(Data(message.utf8), sha256: testSHA256)))
+        try expectEqual(body.signature.passkey.signature, Encoding.base64URL(Data("SIG".utf8)))
+    }),
+    Test("Approve once asks nothing of the key for a hold KIFF can't approve once, one without its version, or a refusal", awaiting: {
+        let key = FakeKey()
+        let transport = CannedTransport([])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+        let passkey = PasskeySession(transport: transport, session: session, approver: approver(key))
+        let cannot = try heldCall(#"{"id":"e1","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T","accounting_version":3,"can_approve_once":false}"#)
+        let unversioned = try heldCall(#"{"id":"e2","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T"}"#)
+        for call in [cannot, unversioned] {
+            do { try await passkey.approveOnce(call, pin: nil); throw Failure(description: "\(call.id) was sent") } catch is KIFFError {}
+        }
+        try await refused(.notAnApproval) {
+            try await approver(key).answer(tenant: "t1", callID: "e1", answer: .reject, accountingVersion: 3, signedAt: "t", pin: nil)
+        }
+        try expectEqual(key.asked, [])
+        try expectEqual(transport.sent.count, 0)
+    }),
+    Test("KIFF's refusal of an Approve once comes back as KIFF's, for the card's line", awaiting: {
+        let transport = CannedTransport([(403, #"{"error":"passkey_not_this_device"}"#)])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+        let passkey = PasskeySession(transport: transport, session: session, approver: approver(FakeKey()))
+        let call = try heldCall(#"{"id":"e1","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T","accounting_version":3}"#)
+        do { try await passkey.approveOnce(call, pin: nil); throw Failure(description: "taken") } catch KIFFError.refused(status: 403, code: let code) {
+            try expectEqual(code, "passkey_not_this_device")
+        }
+    }),
 ]
