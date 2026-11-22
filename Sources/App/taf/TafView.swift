@@ -267,7 +267,7 @@ struct TafView: View {
 
     /// The Card tab, as the iPad's `card(_:)` (TafDetailView.swift:380-462).
     private var cardTab: some View {
-        TafCardTab(taf: taf, pages: pages, manages: manages, issuedBy: issuedBy, front: $frontCard, halted: halted)
+        TafCardTab(taf: taf, pages: pages, manages: manages, issuedBy: issuedBy, improveInCoach: improveInCoach, front: $frontCard, halted: halted)
     }
 }
 

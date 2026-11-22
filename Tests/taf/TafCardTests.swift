@@ -105,3 +105,26 @@ let tafCardTests: [Test] = [
         }
     },
 ]
+
+/// The lines under a Card, as the iPad's (TafDetailView.swift:405-446): each item's totals, what's pending for a live
+/// and active Card, and why its total has no currency.
+let tafCardLinesTests: [Test] = [
+    Test("a Card reads each item's totals, what's pending (live and active only) and why it has no currency") {
+        let json = #"""
+        {"id":"c1","title":"Refunds","active":true,"live":true,"rules":[],
+         "total":{"limit":{"minor":5000,"unit":"EUR","scale":2},"used":{"minor":100,"unit":"EUR","scale":2},"pending_text":"€1 pending: a refusal counts until KIFF confirms","unit_words":" "},
+         "calls":{"limit":10,"used":2,"pending_text":"  "},
+         "each_item":["1 call in any 7 days for each invoice id","  "]}
+        """#
+        let card = try JSONDecoder().decode(TafCard.self, from: Data(json.utf8))
+        try expectEqual(card.eachItem, ["1 call in any 7 days for each invoice id"])
+        try expectEqual(card.pending, ["€1 pending: a refusal counts until KIFF confirms"])
+        try expectEqual(card.unitWords, nil)
+        try expectEqual(card.countsForReal, true)
+        let test = try JSONDecoder().decode(TafCard.self, from: Data(#"{"id":"c2","title":"T","active":true,"rules":[],"total":{"limit":{"minor":1,"scale":0},"unit_words":"Its currency comes from Stripe, which isn't connected."}}"#.utf8))
+        try expectEqual(test.live, false)
+        try expectEqual(test.countsForReal, false)
+        try expectEqual(test.unitWords, "Its currency comes from Stripe, which isn't connected.")
+        try expectEqual(test.eachItem, [])
+    },
+]
