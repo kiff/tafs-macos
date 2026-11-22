@@ -104,7 +104,7 @@ final class AccountModel: ObservableObject {
 
 /// A page of Account, opened from its row: Back returns to the page before.
 enum AccountPage: Equatable {
-    case language, alerts, people, devices, kiffAccount, timeZone
+    case language, alerts, people, devices, kiffAccount, timeZone, files
 }
 
 /// Account, to the iPad's layout: a large title and grouped panels of rows.
@@ -118,6 +118,8 @@ struct AccountView: View {
     var exportChats: ExportChatsModel? = nil
     /// Alerts on this Mac, for this account; nil leaves its row out.
     var alerts: AlertsModel? = nil
+    /// Files, every file the account's tafs delivered; nil leaves its row out.
+    var files: FilesModel? = nil
     /// A taf's name by its KIFF agent, for what each group uses.
     var tafName: (String) -> String? = { _ in nil }
     /// Opens another screen of the sidebar from its row.
@@ -155,6 +157,7 @@ struct AccountView: View {
         case .devices: DevicesView(model: devices, signOutThisMac: signOut, addThisMac: addsThisMac ? addThisMac : nil)
         case .kiffAccount: KiffAccountPage(model: model, exportChats: exportChats, openZone: { pages.append(.timeZone) })
         case .timeZone: TimeZonePicker(model: model)
+        case .files: if let files { FilesView(model: files, zone: model.me?.timeZone.flatMap(TimeZone.init(identifier:)) ?? .current) }
         }
     }
 
@@ -212,6 +215,11 @@ struct AccountView: View {
             link(words("settings.devices.title")) { pages.append(.devices) }
             divider
             link(words("connect.apps.title")) { open(.connectApps) }
+            // Files: every file the account's tafs delivered, as the iPad's row after Connect apps.
+            if files != nil {
+                divider
+                link(words("files.title")) { pages.append(.files) }
+            }
         }
         // The Plan card always, as on the iPad: tafs cloud's plan line in its tone's
         // colour when it is read, else Plan & usage alone.

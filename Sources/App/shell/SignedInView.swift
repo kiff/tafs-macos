@@ -15,6 +15,8 @@ struct SignedInView: View {
     @StateObject private var people: PeopleModel
     @StateObject private var accountHalt: HaltModel
     @StateObject private var exportChats: ExportChatsModel
+    /// Files, the account's: Account's row opens them.
+    @StateObject private var files: FilesModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -93,6 +95,7 @@ struct SignedInView: View {
         _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
+        _files = StateObject(wrappedValue: FilesModel(cloud: cloud))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
@@ -498,7 +501,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
             // A list read still on its way keeps nothing from here.
