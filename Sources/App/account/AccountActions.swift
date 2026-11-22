@@ -100,8 +100,8 @@ extension AccountModel {
         guard !savingZone else { return }
         savingZone = true
         zoneError = nil
-        let account = self.account, cloud = self.cloud, confirm = self.confirm
-        let saved = await AccountZone.save(zone, account: account, cloud: cloud, words: words, confirm: confirm)
+        let account = self.account, cloud = self.cloud, confirm = self.confirm, approveWithKey = self.approveWithKey
+        let saved = await AccountZone.save(zone, account: account, cloud: cloud, words: words, confirm: confirm, approveWithKey: approveWithKey)
         if let me = saved.me { took(me) }
         zoneError = saved.why
         savingZone = false

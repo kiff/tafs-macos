@@ -15,6 +15,9 @@ struct TafCardTab: View {
     @State private var counting: TafCard?
     @State private var versionsOpen = false
     @State private var usageOpen = false
+    @State private var confirmRevoke = false
+    /// Why KIFF didn't revoke the Card, in the shared line.
+    @State private var revokeFailed: String?
 
     var body: some View {
         ScrollView {
@@ -78,9 +81,31 @@ struct TafCardTab: View {
             }
         }
         if live {
-            // Revoking a Card is signed on the iPad, which this Mac can't do yet: drawn as the
-            // iPad's, a click says where it's done, and nothing is sent.
-            ApprovalElsewhereButton(title: words("taf.revoke"))
+            if pages?.viewOnly == true {
+                // A view-only session isn't offered Revoke, on every device alike (the iPad's TafDetailView.swift:468-473).
+                Text(words("taf.revoke_needs_approver")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if let revoke = pages?.revokeCards {
+                // A plain session call, as the iPad's: it only takes authority away, so no key is asked.
+                Button(words("taf.revoke")) { confirmRevoke = true }
+                    .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                    .alert(words("taf.revoke_title", ["taf": taf.name]), isPresented: $confirmRevoke) {
+                        Button(words("taf.revoke_and_stop"), role: .destructive) {
+                            Task {
+                                do {
+                                    try await revoke(taf.cards.map(\.id))
+                                    revokeFailed = nil
+                                } catch {
+                                    revokeFailed = words("card.revoke_failed", ["why": NeedsYouModel.why(error)])
+                                }
+                            }
+                        }
+                        Button(words("common.cancel"), role: .cancel) {}
+                    } message: { Text(words("taf.revoke_body")) }
+                if let why = revokeFailed {
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 }
@@ -152,6 +177,9 @@ struct ApprovalElsewhereButton: View {
             Button(title) { said = true }
                 .buttonStyle(OutlineButtonStyle(color: Theme.no))
             if said {
+                // This Mac has no security key: what one is, then where to approve (tafs#1718).
+                Text(words("approval.security_key.none_paired")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }

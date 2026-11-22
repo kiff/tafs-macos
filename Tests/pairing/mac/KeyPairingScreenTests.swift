@@ -7,7 +7,9 @@ import SwiftUI
 /// The pairing screen with this Mac's security key: the PIN sheet asks, the QR names the key's
 /// credential, the claim proves it, and its id is kept only once the pairing is claimed.
 
-private let paired = #"{"access_token":"tok","token_type":"Bearer","expires_in":60,"tenant":"t1","subject":"u1","device_id":"dev_1"}"#
+private let paired = #"{"access_token":"tok","token_type":"Bearer","expires_in":60,"tenant":"t1","subject":"u1","device_id":"dev_1","approval_mode":"passkey"}"#
+/// A claim KIFF answers as view: no security key is kept, whatever the QR named.
+private let pairedView = #"{"access_token":"tok","token_type":"Bearer","expires_in":60,"tenant":"t1","subject":"u1","device_id":"dev_1","approval_mode":"view"}"#
 private let pending = (400, #"{"error":"authorization_pending"}"#)
 
 /// A device key whose private half is in hardware, as a Secure Enclave Mac's: only such a Mac's
@@ -138,6 +140,21 @@ let pairingKeyScreenTests: [Test] = [
         try expectEqual(model.session?.deviceID, "dev_1")
         try expectEqual(SecurityKeyStore(store: store).load(), key.id)
         model.signedOut()
+        try expectEqual(SecurityKeyStore(store: store).load(), nil)
+    }),
+    Test("KIFF answers the claim as view: the session is taken, but no security key is kept, whatever the QR named (kiff/cloud#96)", awaiting: { @MainActor in
+        let store = MemoryStore()
+        let key = PairingKey()
+        let (model, _, _) = model([(200, pairedView)], store: store, key: key)
+        let pairing = Task { await model.pair() }
+        let pin = try await sheet(model)
+        let field = NSSecureTextField()
+        pin.reader.field = field
+        field.stringValue = "2468"
+        await pin.approve()
+        await pairing.value
+        try expectEqual(key.asked.count, 1)
+        try expectEqual(model.session?.approvalMode, "view")
         try expectEqual(SecurityKeyStore(store: store).load(), nil)
     }),
     Test("a wrong PIN or no key says why in the sheet, which stays open; Pair without a key (as closing it) pairs without the key and keeps nothing", awaiting: { @MainActor in

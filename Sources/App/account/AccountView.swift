@@ -29,6 +29,9 @@ enum ThemeChoice: String, CaseIterable, Identifiable {
 
 @MainActor
 final class AccountModel: ObservableObject {
+    /// This Mac's security key, when it approves with one (kiff/cloud#96): the time zone is then approved by the key,
+    /// named in its sheet. Set by the window once its session is known.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
     /// Who is signed in, once KIFF has said; nil until then, and if it can't be read.
     @Published private(set) var me: Me?
     /// The balance, for the Plan card: tafs cloud's `plan_line` in `plan_tone`'s colour.

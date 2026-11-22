@@ -159,16 +159,18 @@ struct PasskeyPairingOffer {
 extension SecurityKeyPairing {
     /// The offer for one attempt, with `nonce`:
     ///
-    /// - **The key is asked** (`make`, through the PIN sheet) only when it's given, and never for a
-    ///   software device key, which pairs as view with no credential (`PairingPayload`).
+    /// - **The key is asked** (`make`, through the PIN sheet) only when it's given. A software device key
+    ///   is asked too (kiff/cloud#96): with the credential, that key alone approves for this Mac.
     /// - **Its credential** is `credential(kept:proving:…)`'s: kept without the proof, made again with it.
-    /// - **The claim proves it** only with the proof on and a credential in the QR.
+    /// - **The claim proves it** with the proof on and a credential in the QR, and **always** for a
+    ///   software device key: KIFF requires `credential_proof` there whatever the date.
     static func offer(deviceKeyDER: Data, keyStore: String, name: String, nonce: String, exp: String,
                       kept: PairingPasskey?, proving: Bool = Features.macPairingPasskeyProof,
                       make: ((_ challenge: String) async throws -> PairingPasskey)?,
                       sha256: (Data) -> Data, random: () -> Data) async throws -> PasskeyPairingOffer {
         var made: PairingPasskey?
-        if let make, keyStore != "software" {
+        let proving = proving || keyStore == "software"
+        if let make {
             made = try await credential(kept: kept, proving: proving, nonce: nonce, deviceKeyDER: deviceKeyDER,
                                         make: make, sha256: sha256, random: random)
         }

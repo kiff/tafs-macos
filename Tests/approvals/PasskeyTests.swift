@@ -172,10 +172,48 @@ let approvalsPasskeyTests: [Test] = [
             "644f3b501cf306af2c63c032848fd13d2056bdd8ef04cafe891f9c718041efad", "3cc16020d315b4eb9a8afac14484dd7047044a4c5385e74c065e6dde0d23deff"), sha256: testSHA256),
             "7UWb8NtnHMqAVlenob3dXQXSWSVUwZC3NoYVsDtim2A")
     }),
-    Test("switched off, as by default, nothing is asked of the security key: one request or the pair", awaiting: {
-        try expectEqual(Features.macPasskeyApprovals, false)
+    Test("one act on the security key alone: one fresh assertion over its own request, sent with only the passkey header (kiff/cloud#96)", awaiting: {
+        let key = FakeKey(usedCredential: credential)
+        let transport = CannedTransport([(204, ""), (403, #"{"error":"passkey_required"}"#)])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1", approvalMode: "passkey")
+        let passkey = PasskeySession(transport: transport, session: session, language: "fr", approver: approver(key))
+        let act = KeyAct.signOutDevice(id: "dev/2")
+        try expectEqual(act.method + " " + act.path, "DELETE /v1/me/devices/dev%2F2")
+        _ = try await passkey.approved(method: act.method, path: act.path, body: act.body, pin: nil)
+        let sent = transport.sent[0]
+        try expectEqual(sent.method + " " + sent.path, "DELETE /v1/me/devices/dev%2F2")
+        try expectEqual(sent.body, Data())
+        try expectEqual(sent.headers["Authorization"], "Bearer tok")
+        try expect(sent.headers[Passkeys.headerName]?.hasPrefix("t=") == true, "the assertion")
+        try expect(sent.headers[Passkeys.headerName]?.contains("with=") == false, "one request, never a pair")
+        try expectEqual(sent.headers["KIFF-Device-Signature"], nil)
+        try expectEqual(sent.headers["Content-Type"], nil)
+        try expectEqual(key.asked.count, 1)
+        // A second act asks the key again: never a window, never a kept assertion. KIFF's refusal is its own.
+        do { _ = try await passkey.approved(method: act.method, path: act.path, body: act.body, pin: nil); throw Failure(description: "taken") }
+        catch KIFFError.refused(status: 403, code: let code) { try expectEqual(code, "passkey_required") }
+        try expectEqual(key.asked.count, 2)
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(act.title(words, device: "MacBook"), "Sign MacBook out of your account")
+    }),
+    Test("Resume on the key: KIFF's agent or the whole account, with {}, named as the iPad's reason; tafs cloud's release is a DELETE", awaiting: {
+        let one = KeyAct.resume(agent: "agent_1"), all = KeyAct.resume(agent: nil)
+        try expectEqual(one.method + " " + one.path, "POST /v1/agents/agent_1/resume")
+        try expectEqual(all.method + " " + all.path, "POST /v1/resume")
+        try expectEqual(String(decoding: one.body, as: UTF8.self), "{}")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(one.title(words, device: "Refunds"), "Resume Refunds")
+        try expectEqual(all.title(words), "Resume all your tafs")
+        let transport = CannedTransport([(200, #"{"halt":{"state":"running"}}"#)])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
+        _ = try? await CloudClient(transport: transport, session: session).releaseHalt("taf-1")
+        try expectEqual(transport.sent.first.map { $0.method + " " + $0.path }, "DELETE /v1/tafs/taf-1/halt")
+        try expectEqual(transport.sent.first?.headers["Authorization"], "Bearer tok")
+    }),
+    Test("switched off, nothing is asked of the security key: one request or the pair; on by default since kiff/cloud#96", awaiting: {
+        try expectEqual(Features.macPasskeyApprovals, true)
         let key = FakeKey()
-        let off = PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256)
+        let off = PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256, enabled: false)
         try await refused(.off) { try await off.approve(tenant: "t1", method: "POST", path: "/v1/cards", body: Data(), signedAt: "t") }
         let pair = RequestsTogether.Request(method: "POST", path: "/v1/x", body: Data())
         try await refused(.off) { try await RequestsTogether.approve(off, tenant: "t1", pair, pair, signedAt: "t") }

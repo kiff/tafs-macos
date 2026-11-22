@@ -53,8 +53,9 @@ struct PairingPayload: Codable, Equatable {
     /// `software` when the device key isn't in hardware (only with `passkey`), absent otherwise.
     /// The phone's signature covers it, so KIFF never lets that key approve.
     var keyStore: String?
-    /// This Mac's security key, which the pairing registers for it (only with `passkey`, never with
-    /// a software device key): its credential id and public key, base64url, the key as SPKI DER.
+    /// This Mac's security key, which the pairing registers for it (only with `passkey`): its credential
+    /// id and public key, base64url, the key as SPKI DER. A software device key may carry one too
+    /// (kiff/cloud#96): then that key alone approves for this Mac, and the device key grants nothing.
     var credential: Credential?
     /// Base64url of 32 random bytes. The computer keeps it to claim the pairing.
     let nonce: String
@@ -71,17 +72,18 @@ struct PairingPayload: Codable, Equatable {
         enum CodingKeys: String, CodingKey { case id, publicKey = "public_key" }
     }
 
-    /// The payload for a Mac's keys. A device key outside hardware is said so, and such a
-    /// Mac has no approval key and no credential in the code, whatever was passed (it pairs as
-    /// view). A credential goes only with `passkey`: never beside an approval key, as Windows'
-    /// `PairingOffer.Create` and §5.1.
+    /// The payload for a Mac's keys. A device key outside hardware is said so, and such a Mac has no
+    /// approval key in the code, whatever was passed. With its security key's credential it pairs as
+    /// `passkey` and that key approves for it (kiff/cloud#96, the PM's decision (i)); without one it
+    /// pairs as view, as before. A credential goes only with `passkey`: never beside an approval key,
+    /// as Windows' `PairingOffer.Create` and §5.1.
     init(deviceKey: Data, keyStore: String, approvalKey: Data?, name: String, nonce: String, exp: String,
          credential: Credential? = nil) {
         let software = keyStore == "software"
         let approval = software ? nil : approvalKey
         self.init(pub: Encoding.base64URL(deviceKey), approvalPub: approval.map(Encoding.base64URL), name: name,
                   kind: approval == nil ? .passkey : .enclave, keyStore: software ? "software" : nil,
-                  credential: software || approval != nil ? nil : credential, nonce: nonce, exp: exp)
+                  credential: approval != nil ? nil : credential, nonce: nonce, exp: exp)
     }
 
     init(pub: String, approvalPub: String?, name: String, kind: Kind, keyStore: String? = nil, credential: Credential? = nil,

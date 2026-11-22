@@ -28,11 +28,17 @@ final class DevicesModel: ObservableObject {
     /// approval, so only a Mac that can sign one may: without it no button is drawn, and
     /// nothing is ever sent.
     let canRemoveOthers: Bool
+    /// This Mac's security key, when it approves with one (kiff/cloud#96): signing another device out is then
+    /// approved by the key, one request, named in the PIN sheet. Set by the window once its session is known.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
 
     init(account: AccountClient, canRemoveOthers: Bool = false) {
         self.account = account
         self.canRemoveOthers = canRemoveOthers
     }
+
+    /// Whether this Mac may sign another device out: with an approval key, or with its security key.
+    var mayRemoveOthers: Bool { canRemoveOthers || approveWithKey != nil }
 
     func load() async {
         do { state = .loaded(try await account.devices()) } catch { state = .unread(why: NeedsYouModel.why(error)) }
@@ -55,7 +61,7 @@ final class DevicesModel: ObservableObject {
     /// is an approval (the iPad's `removeDevice` signs it with the approval key).
     func signOutClicked(_ device: Device) -> Bool {
         guard !device.thisDevice else { return false }
-        guard canRemoveOthers else {
+        guard mayRemoveOthers else {
             notRemoved = nil
             needsApprover = true
             return false
@@ -66,12 +72,20 @@ final class DevicesModel: ObservableObject {
     /// Signs another device out, then reads the list again. This Mac is never removed here:
     /// it signs out with Sign out, which also forgets its session.
     func remove(_ device: Device) async {
-        guard canRemoveOthers, !device.thisDevice else { return }
+        guard mayRemoveOthers, !device.thisDevice else { return }
         do {
-            try await account.removeDevice(device.id)
+            if let approveWithKey {
+                // The security key approves this one request (`DELETE /v1/me/devices/{id}`), named in its sheet.
+                let act = KeyAct.signOutDevice(id: device.id)
+                _ = try await approveWithKey(act, act.title(Words.app, device: device.name ?? Words.app("settings.devices.unnamed")))
+            } else {
+                try await account.removeDevice(device.id)
+            }
             notRemoved = nil
             needsApprover = false
             await load()
+        } catch is CancellationError {
+            // The security key's sheet closed: nothing was sent, and nothing is said.
         } catch KIFFError.refused(status: 403, code: let code) where Self.approvalCodes.contains(code) {
             notRemoved = nil
             needsApprover = true
@@ -209,7 +223,7 @@ struct DevicesView: View {
                 Text(words("settings.devices.this_device_title")).font(.system(size: 13)).foregroundColor(Theme.dim)
                 Button(words("settings.sign_out")) { confirmingSignOut = true }
                     .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.no)
-            } else if model.canRemoveOthers {
+            } else if model.mayRemoveOthers {
                 Button(words("settings.devices.sign_out")) { removing = device }
                     .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.no)
             } else {

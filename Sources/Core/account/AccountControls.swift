@@ -124,14 +124,27 @@ enum AccountZone {
     /// Saves `zone`. `confirm` asks for the owner's presence and throws when it isn't given
     /// (`OwnerPrompt.Closed` for a prompt closed). Nothing is sent before it; a session without
     /// a device key sends nothing and says to sign in again.
+    /// `approveWithKey`: on a Mac that approves with its security key (kiff/cloud#96), the key approves the one
+    /// request (`KeyAct.timeZone`), named in its sheet, in place of the confirmation and the device key's signature;
+    /// a closed sheet sends nothing and says nothing.
     static func save(_ zone: String, account: AccountClient, cloud: CloudClient, words: Words,
-                     confirm: (String) async throws -> Void) async -> Saved {
-        guard account.sign != nil else { return Saved(me: nil, why: words("sign_in.again_to_sign")) }
-        do { try await confirm(words("settings.time_zone.prompt", ["zone": zone])) } catch {
-            return Saved(me: nil, why: OwnerPrompt.stopped(error, words: words))
-        }
-        do { _ = try await account.setTimeZone(zone) } catch {
-            return Saved(me: nil, why: words("settings.time_zone.not_changed", ["why": CoachStart.why(error, words: words)]))
+                     confirm: (String) async throws -> Void,
+                     approveWithKey: ((KeyAct, String) async throws -> Data)? = nil) async -> Saved {
+        if let approveWithKey {
+            let act = KeyAct.timeZone(zone)
+            do { _ = try await approveWithKey(act, act.title(words)) } catch is CancellationError {
+                return Saved(me: nil, why: nil)
+            } catch {
+                return Saved(me: nil, why: words("settings.time_zone.not_changed", ["why": CoachStart.why(error, words: words)]))
+            }
+        } else {
+            guard account.sign != nil else { return Saved(me: nil, why: words("sign_in.again_to_sign")) }
+            do { try await confirm(words("settings.time_zone.prompt", ["zone": zone])) } catch {
+                return Saved(me: nil, why: OwnerPrompt.stopped(error, words: words))
+            }
+            do { _ = try await account.setTimeZone(zone) } catch {
+                return Saved(me: nil, why: words("settings.time_zone.not_changed", ["why": CoachStart.why(error, words: words)]))
+            }
         }
         // KIFF took it: what's read from here on is in the new zone.
         let me = try? await account.me()

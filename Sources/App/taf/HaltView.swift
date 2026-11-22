@@ -24,6 +24,42 @@ final class HaltModel: ObservableObject {
         if let read = try? await cloud.halted(taf) { halt = read }
     }
 
+    /// This Mac's security key, when it approves with one (kiff/cloud#96): Resume is then approved by the key.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
+    /// The taf's KIFF agent and name, for Resume (nil for every taf of the account).
+    var agent: String?
+    var name: String?
+
+    /// Resume, as the iPad's `resume` (AppModel.swift:4576-4624): KIFF resumes the agent, or with none the account,
+    /// approved by this Mac's security key and named in its sheet; then tafs cloud lets kiff/agents run it again. A
+    /// closed sheet sends nothing and says nothing. True once both took it.
+    @discardableResult
+    func resume(words: Words) async -> Bool {
+        guard !busy, let approveWithKey else { return false }
+        if taf != nil && agent == nil { return false }
+        busy = true
+        notHalted = nil
+        defer { busy = false }
+        let act = KeyAct.resume(agent: taf == nil ? nil : agent)
+        do {
+            _ = try await approveWithKey(act, act.title(words, device: name ?? ""))
+        } catch is CancellationError {
+            return false
+        } catch {
+            let why = NeedsYouModel.why(error)
+            notHalted = name.map { words("taf.halt.kiff_not_resumed", ["taf": $0, "why": why]) } ?? words("taf.halt.kiff_not_resumed_all", ["why": why])
+            return false
+        }
+        do {
+            halt = try await cloud.releaseHalt(taf)
+            return true
+        } catch {
+            let why = NeedsYouModel.why(error)
+            notHalted = name.map { words("taf.halt.cloud_not_resumed", ["taf": $0, "why": why]) } ?? words("taf.halt.cloud_not_resumed_all", ["why": why])
+            return false
+        }
+    }
+
     /// One click, no key: it only takes authority away. True when tafs cloud answered: then the
     /// list is read again at once (`halted`), still busy, as the iPad's `halt` with its `refresh()`,
     /// and the halt followed while it is halting.
@@ -157,6 +193,13 @@ struct HaltView: View {
                 Button(words("halt.again")) { Task { if await model.halt(words: words, halted: halted) { await model.follow() } } }
                     .buttonStyle(OutlineButtonStyle(color: Theme.no))
                     .disabled(model.busy)
+            case .halted where model.approveWithKey != nil && !(h.account && model.taf != nil):
+                // Resuming gives authority back: this Mac's security key approves it (kiff/cloud#96).
+                Button(words(model.taf == nil ? "taf.halt.resume_all_prompt" : "taf.halt.resume_prompt", ["taf": model.name ?? ""])) {
+                    Task { await model.resume(words: words) }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(model.busy)
             case .halted:
                 // Resuming gives authority back, so it's signed: until this Mac can sign it, the
                 // iPad's line for an approval that can't be made here (`Biometry.short`).

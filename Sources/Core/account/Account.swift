@@ -125,6 +125,12 @@ struct AccountClient {
     }
 
     /// Signs a device out of the account: it no longer approves, and its session is over.
+    /// Revokes a Card in KIFF, as the iPad's `revoke(cardID:)` (KIFFClient.swift:1175-1177): a plain session call,
+    /// no signature, since it only takes authority away. KIFF refuses it for a view-only session.
+    func revoke(cardID: String) async throws {
+        _ = try await send("POST", "/v1/me/mandates/\(CloudClient.escaped(cardID))/revoke", body: Data("{}".utf8))
+    }
+
     func removeDevice(_ id: String) async throws {
         var allowed = CharacterSet.urlPathAllowed
         allowed.remove("/")

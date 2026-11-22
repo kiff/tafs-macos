@@ -77,8 +77,9 @@ let howItWorksTests: [Test] = [
         try expectEqual(ApprovalRoute.phoneOrPasskey.howItWorksKey, "sign_in.every_action_taf_takes_goes_view")
         try expectEqual(ApprovalRoute.touchID.howItWorksKey, "sign_in.every_action_taf_takes_goes_view")
         try expectEqual(ApprovalRoute.passkey.howItWorksKey, "sign_in.every_action_taf_takes_goes")
-        // Every Mac approves on the phone today: the route the app gives at sign-in, with the switch off.
-        try expectEqual(ApprovalRoute.of(.passkey, securityKey: true).howItWorksKey, "sign_in.every_action_taf_takes_goes_view")
+        // A Mac with its security key signs here since kiff/cloud#96; one without approves on the phone.
+        try expectEqual(ApprovalRoute.of(.passkey, securityKey: true).howItWorksKey, "sign_in.every_action_taf_takes_goes")
+        try expectEqual(ApprovalRoute.of(.passkey, securityKey: false).howItWorksKey, "sign_in.every_action_taf_takes_goes_view")
         let folder = URL(fileURLWithPath: ".shared/app/strings")
         for language in try Words.shipped(folder: folder) {
             let words = try Words(language: language, folder: folder)

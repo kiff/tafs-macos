@@ -45,6 +45,41 @@ let accountControlsTests: [Test] = [
         try expectEqual(AccountZone.offersDevice(saved.me, device: "Europe/Paris"), false)
         try expectEqual(AccountZone.offersDevice(saved.me, device: "America/New_York"), true)
     }),
+    Test("on a security-key Mac the time zone is approved by the key alone: named in its sheet, the same bytes, no device signature, no prompt", awaiting: {
+        let words = try english()
+        let (account, kiff, cloud, cloudSent) = clients([(200, meParis)], [(200, #"{"time_zone":"Europe/Paris","updated":2}"#)], signed: false)
+        var asked: [String] = [], acts: [KeyAct] = [], titles: [String] = []
+        let saved = await AccountZone.save("Europe/Paris", account: account, cloud: cloud, words: words, confirm: { asked.append($0) },
+                                           approveWithKey: { act, title in acts.append(act); titles.append(title); return Data() })
+        try expectEqual(asked, [])
+        try expectEqual(acts, [.timeZone("Europe/Paris")])
+        try expectEqual(titles, ["Set your account's time zone to Europe/Paris"])
+        try expectEqual(KeyAct.timeZone("Europe/Paris").method + " " + KeyAct.timeZone("Europe/Paris").path, "PUT /v1/me/time-zone")
+        // The same bytes as the device key's call.
+        try expectEqual(String(decoding: KeyAct.timeZone("Europe/Paris").body, as: UTF8.self), #"{"time_zone":"Europe\/Paris"}"#)
+        try expectEqual(kiff.sent.map { $0.method + " " + $0.path }, ["GET /v1/me"])
+        try expectEqual(cloudSent.sent.map { $0.method + " " + $0.path }, ["POST /v1/account/time-zone"])
+        try expectEqual(saved.why, nil)
+        // The key's sheet closed: nothing more is sent, and nothing is said.
+        let (account2, kiff2, cloud2, _) = clients([], [], signed: false)
+        let closed = await AccountZone.save("Europe/Paris", account: account2, cloud: cloud2, words: words, confirm: { _ in },
+                                            approveWithKey: { _, _ in throw CancellationError() })
+        try expectEqual(closed, AccountZone.Saved(me: nil, why: nil))
+        try expectEqual(kiff2.sent.count, 0)
+        // "Approve on your phone instead": nothing sent, and the line says where to approve, never the error's type.
+        let onPhone = await AccountZone.save("Europe/Paris", account: account2, cloud: cloud2, words: words, confirm: { _ in },
+                                             approveWithKey: { _, _ in throw ApproveOnPhone() })
+        try expectEqual(onPhone.why, words("settings.time_zone.not_changed", ["why": words("approval.device_can_not_approve_approve")]))
+        try expectEqual(kiff2.sent.count, 0)
+    }),
+    Test("Revoke is the iPad's plain session call: POST /v1/me/mandates/{id}/revoke with {}, no signature and no key", awaiting: {
+        let (account, kiff, _, _) = clients([(200, "{}")], [])
+        try await account.revoke(cardID: "card/1")
+        try expectEqual(kiff.sent.map { $0.method + " " + $0.path }, ["POST /v1/me/mandates/card%2F1/revoke"])
+        try expectEqual(String(decoding: kiff.sent[0].body, as: UTF8.self), "{}")
+        try expectEqual(kiff.sent[0].headers["KIFF-Device-Signature"], nil)
+        try expectEqual(kiff.sent[0].headers["KIFF-Passkey-Assertion"], nil)
+    }),
     Test("a time zone not confirmed, or without a device key, sends nothing and says why", awaiting: {
         let words = try english()
         let (account, kiff, cloud, cloudSent) = clients([], [])

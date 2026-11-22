@@ -64,6 +64,15 @@ struct CloudClient {
         return body
     }
 
+    /// Sends one `DELETE` and answers its body; a refusal throws `CloudRefusal`, as `post` does.
+    func delete(_ path: String) async throws -> Data {
+        let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
+                       "Accept-Language": language, "User-Agent": "tafs-macos"]
+        let (status, body) = try await transport.send(HTTPRequest(method: "DELETE", path: path, headers: headers))
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: body) }
+        return body
+    }
+
     /// A value as one part of a query: only letters and digits stay as they are.
     static func query(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? value

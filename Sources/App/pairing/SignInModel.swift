@@ -194,11 +194,11 @@ final class SignInModel: ObservableObject {
                 step = .welcome
                 justConnected = true
                 // Last, once the screen holds what the store holds: it can't throw past this step.
-                keepSecurityKey(offer)
+                keepSecurityKey(offer, granted: got)
                 await endSession(replaced, oldKey)
             } else {
                 try finish(got, mine)
-                keepSecurityKey(offer)
+                keepSecurityKey(offer, granted: got)
             }
         } catch {
             if replaced != nil { DeviceKey.discardNext(in: store) }
@@ -389,9 +389,11 @@ final class SignInModel: ObservableObject {
     /// key that goes with this Mac; with none, any earlier one is forgotten, as it went with another
     /// device key. A store that refuses it (checked writable before the code, so not expected) keeps
     /// none: this Mac then approves on the phone, and the pairing stands as the screen shows it.
-    private func keepSecurityKey(_ offer: PasskeyPairingOffer?) {
+    /// Keeps the pairing's security key for this Mac, only when KIFF's claim granted `passkey`: any other answer
+    /// keeps none, and this Mac stays view-only. The app never claims more than KIFF granted (kiff/cloud#96).
+    private func keepSecurityKey(_ offer: PasskeyPairingOffer?, granted: Session) {
         let keys = SecurityKeyStore(store: sessions.store)
-        guard let id = offer?.keptCredentialID else { return keys.forget() }
+        guard let id = offer?.keptCredentialID, granted.approvalMode == "passkey" else { return keys.forget() }
         do { try keys.save(id) } catch { keys.forget() }
     }
 

@@ -146,6 +146,12 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
+        .onAppear {
+            devices.approveWithKey = approveWithKey
+            accountModel.approveWithKey = approveWithKey
+            accountHalt.approveWithKey = approveWithKey
+        }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
         // every account change (AppModel.swift:887, :1472).
@@ -321,12 +327,28 @@ struct SignedInView: View {
                                words: words)
     }
 
+    /// One act approved by this Mac's security key (`KeyAct`, `PasskeySession.approved`), named in the PIN sheet; nil
+    /// when this Mac has no key on the security key's route, so the act says to approve elsewhere, as before.
+    private var approveWithKey: ((KeyAct, String) async throws -> Data)? {
+        guard let passkey = passkeySession else { return nil }
+        return { act, title in
+            try await askSecurityKey(act: title) { pin in try await passkey.approved(method: act.method, path: act.path, body: act.body, pin: pin) }
+        }
+    }
+
+    /// The security key's assertion over one act's request, named in the PIN sheet, without sending it (a taf's removal
+    /// signs before its Cards are revoked); nil without a key on the security key's route.
+    private var signWithKey: ((KeyAct, String) async throws -> String)? {
+        guard let passkey = passkeySession else { return nil }
+        return { act, title in try await askSecurityKey(act: title) { pin in try await passkey.assertion(for: act, pin: pin) } }
+    }
+
     /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries
     /// as the person makes; it answers once the key approved, or throws once the sheet is closed.
-    @MainActor private func askSecurityKey<Answer>(_ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
+    @MainActor private func askSecurityKey<Answer>(act: String? = nil, _ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
         try await withCheckedThrowingContinuation { continuation in
             var answer: Answer?
-            pinSheet = PINSheetModel(words: words, attempt: { pin in answer = try await ask(pin) },
+            pinSheet = PINSheetModel(words: words, act: act, attempt: { pin in answer = try await ask(pin) },
                                      readTries: { try await FidoKey().triesLeft() },
                                      done: { error in
                                          pinSheet = nil
@@ -353,7 +375,30 @@ struct SignedInView: View {
         guard let id = taf.tafID else { return }
         tafTab = tab
         tafChat = CoachModel(cloud: cloud, taf: Coach(id: id, name: taf.name), streamer: streamer)
-        tafPages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
+        let pages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
+        // Resume on this Mac's security key, when it has one (kiff/cloud#96), for this taf's KIFF agent.
+        pages.halt.approveWithKey = approveWithKey
+        pages.halt.agent = taf.kiffAgent
+        pages.halt.name = taf.name
+        // Revoke, as the iPad's: each Card revoked in KIFF, then the list read again.
+        pages.viewOnly = accountModel.me?.viewOnly == true
+        pages.revokeCards = { [account] ids in
+            for id in ids { try await account.revoke(cardID: id) }
+            await readTafs()
+        }
+        // Remove for good on this Mac's security key, as the iPad's `removeTaf`.
+        if let sign = signWithKey {
+            let cardIDs = taf.cards.map(\.id), name = taf.name, words = self.words
+            pages.removalPreview = { [cloud] in try? await cloud.removalPreview(id) }
+            pages.removeForGood = { [account, cloud] in
+                let said = await TafRemoval.remove(taf: name, cloudID: id, cardIDs: cardIDs, words: words, sign: sign,
+                                                   revoke: { try await account.revoke(cardID: $0) },
+                                                   remove: { try await cloud.remove(id, assertion: $0) })
+                await readTafs()
+                return said
+            }
+        }
+        tafPages = pages
         openTaf = taf.id
     }
 

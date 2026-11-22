@@ -45,7 +45,8 @@ let approvalsSecurityKeyWordsTests: [Test] = [
         try expectEqual(ApprovalRoute.of(.passkey, securityKey: true, enabled: true), .passkey)
         try expectEqual(ApprovalRoute.of(.passkey, securityKey: false, enabled: true), .phoneOrPasskey)
         try expectEqual(ApprovalRoute.of(.passkey, securityKey: true, enabled: false), .phoneOrPasskey)
-        try expectEqual(ApprovalRoute.of(.passkey, securityKey: true), .phoneOrPasskey)
+        // On by default since kiff/cloud#96.
+        try expectEqual(ApprovalRoute.of(.passkey, securityKey: true), .passkey)
         try expectEqual(ApprovalRoute.of(.key(Data([1])), securityKey: true, enabled: true), .touchID)
     },
     Test("the PIN sheet's purpose picks its words: approving a request, or adding the key while this computer pairs") {

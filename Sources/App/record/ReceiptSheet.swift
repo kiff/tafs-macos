@@ -147,7 +147,8 @@ struct ReceiptSheet: View {
         let trace = entry.receipt?.traceID ?? ""
         var lines = [["receipt \(trace)", signer.map { "signer \($0.prefix(6))…\($0.suffix(4))" }].compactMap { $0 }.joined(separator: " · ")]
         for (i, step) in steps.steps.enumerated() {
-            lines.append("\(i + 1)  \(step.words) · \(step.at.map(time) ?? "")\n   hash \(step.hash)")
+            // KIFF's signed message, as it signed it: the full receipt is the receipt, not its words (tafs#1709).
+            lines.append("\(i + 1)  \(step.message) · \(step.at.map(time) ?? "")\n   hash \(step.hash)")
         }
         if let sig = steps.signature {
             lines.append("✎  trace \(trace) · secp256k1 + keccak256\n   sig 0x\(sig.prefix(4))…\(sig.suffix(4))")

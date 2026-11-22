@@ -12,9 +12,10 @@ import Foundation
 ///
 /// Core builds on Linux, so hashing is passed in (`sha256`): the app gives CryptoKit's.
 enum Features {
-    /// Passkey approvals on macOS 12. Off: `PasskeyApprover` refuses before the security key is
-    /// asked, as Windows' `Features.WindowsPasskeyApprovals` was until KIFF took its passkey.
-    static let macPasskeyApprovals = false
+    /// Passkey approvals on macOS 12: on since KIFF takes a software-key computer's security key
+    /// (kiff/cloud#96, the PM's decision (i), 22 Nov). Off, `PasskeyApprover` refuses before the
+    /// security key is asked.
+    static let macPasskeyApprovals = true
 }
 
 enum Passkeys {
