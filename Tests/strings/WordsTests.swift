@@ -188,6 +188,16 @@ let wordsTests: [Test] = [
             try expect(!(try words(language)).isRightToLeft, "\(language) left to right")
         }
     },
+    Test("in Arabic and Hebrew each value is set apart, with no direction character of its own; left to right, values are as they are") {
+        let he = try words("he"), en = try words("en")
+        let filled = he("home.not_fully_removed", ["name": "Refunds #5098"])
+        try expect(filled.contains("\u{2068}Refunds #5098\u{2069}"), "isolated: \(filled)")
+        let sneaky = he("home.not_fully_removed", ["name": "A\u{2069}\u{202E}B\u{200F}"])
+        try expect(sneaky.contains("\u{2068}AB\u{2069}"), "no direction character inside: \(sneaky.unicodeScalars.map { String($0.value, radix: 16) })")
+        try expectEqual(en("home.not_fully_removed", ["name": "Refunds"]), "Refunds isn't fully removed yet.")
+        try expect(!(try words("ar")).count("needs_you.count", 3).contains("{"), "a count fills")
+        try expectEqual(Words.withoutDirection("a\u{200E}b\u{061C}c\u{2066}d"), "abcd")
+    },
     Test("a small heading keeps no letter-spacing in Hangul, kana, Han and Arabic, as the iPad's Eyebrow") {
         for text in ["بانتظارك", "あなたのTAFS", "기억하는 것", "要确认", "Needs you · بانتظارك"] { try expect(Script.ideographic(text), text) }
         // Hebrew's letters don't join, and the iPad spaces it as Latin.

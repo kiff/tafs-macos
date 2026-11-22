@@ -53,6 +53,19 @@ struct Words {
     /// The languages written right to left, by their language code. The window mirrors for them.
     static let rightToLeft: Set<String> = ["ar", "he", "fa", "ur", "dv"]
 
+    /// A value set apart in a right-to-left line, as the iPad's `Words.isolated` (kiff/tafs `ios/Tafs/Design/Words.swift`):
+    /// U+2068 FIRST STRONG ISOLATE … U+2069 POP DIRECTIONAL ISOLATE, so a taf's or person's name in Latin letters, or
+    /// "#5098", takes its own direction without turning the sentence around it. Inside, the value carries no direction
+    /// character of its own (`withoutDirection`), so none can close the isolate early.
+    static func isolated(_ value: String) -> String { "\u{2068}\(withoutDirection(value))\u{2069}" }
+
+    /// The text with U+202A–U+202E, U+2066–U+2069, U+200E, U+200F and U+061C taken out, and nothing else changed.
+    static func withoutDirection(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.filter { s in
+            !((0x202A...0x202E).contains(s.value) || (0x2066...0x2069).contains(s.value) || [0x200E, 0x200F, 0x061C].contains(s.value))
+        }))
+    }
+
     /// Whether this language is written right to left.
     var isRightToLeft: Bool { Self.rightToLeft.contains(String(language.split(separator: "-").first ?? "")) }
 
@@ -163,7 +176,7 @@ struct Words {
             let parts = rest[rest.index(after: open)..<close].split(separator: "|", maxSplits: 1).map(String.init)
             if let name = parts.first, let value = values[name],
                let filled = Self.form(parts.count == 2 ? parts[1] : nil, of: value, language: language) {
-                out += filled
+                out += isRightToLeft ? Self.isolated(filled) : filled
             } else {
                 out += rest[open...close]
             }
