@@ -177,6 +177,9 @@ struct ApprovalElsewhereButton: View {
             Button(title) { said = true }
                 .buttonStyle(OutlineButtonStyle(color: Theme.no))
             if said {
+                // This Mac has no security key: what one is, then where to approve (tafs#1718).
+                Text(words("approval.security_key.none_paired")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }

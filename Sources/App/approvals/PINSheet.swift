@@ -85,6 +85,13 @@ final class PINSheetModel: ObservableObject, Identifiable {
         finish(CancellationError())
     }
 
+    /// "Approve on your phone instead": nothing is approved here or sent; the act says to approve on another device
+    /// (`ApproveOnPhone`), as the PM decided for the desktops (kiff/work#20, 20:12). Nothing is handed to the phone.
+    func onPhone() {
+        reader.clear()
+        finish(ApproveOnPhone())
+    }
+
     private func show(_ error: Error) {
         message = SecurityKeyWords.line(error, words: words)
         if !SecurityKeyWords.mayTryAgain(error) { locked = true }
@@ -163,8 +170,8 @@ struct PINSheet: View {
             Text(words(model.purpose.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 .frame(maxWidth: .infinity).accessibilityAddTraits(.isHeader)
             if let act = model.act {
-                // What is being approved, before the PIN: the person sees the act the key signs.
-                Text(verbatim: act).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                // What is being approved, before the PIN, in the shared line (tafs#1718; the owner's ask, kiff/work#20).
+                Text(words("approval.security_key.before", ["act": act])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(words(model.purpose.leadKey)).font(.system(size: 14)).foregroundColor(Theme.soft)
@@ -193,6 +200,10 @@ struct PINSheet: View {
 
     private var buttons: some View {
         HStack {
+            // Wherever this Mac can't approve now (a key locked, or none plugged in), and for any act on the key.
+            if model.act != nil {
+                Button(words("approval.security_key.on_phone")) { model.onPhone() }
+            }
             Spacer()
             Button(words(model.purpose.closeKey)) { model.cancel() }.keyboardShortcut(.cancelAction)
             Button(words(model.purpose.actionKey)) { Task { await model.approve() } }
@@ -201,3 +212,7 @@ struct PINSheet: View {
         }
     }
 }
+
+/// The person chose to approve on their phone instead of with this Mac's security key: nothing was approved or sent here.
+/// The act's line says to approve on another device (`approval.device_can_not_approve_approve`).
+struct ApproveOnPhone: Error {}

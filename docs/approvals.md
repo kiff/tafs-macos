@@ -157,7 +157,12 @@ key's signature. The PIN sheet names the act first, in the iPad's own words for 
 | Resume after a halt | `POST /v1/agents/{agent}/resume` or `/v1/resume`, `{}`; then tafs cloud's `DELETE …/halt` | "Resume {taf}", "Resume all your tafs" |
 | Remove for good | the key first, then each Card revoked, then tafs cloud's `DELETE /v1/tafs/{id}` with that assertion (`TafRemoval`) | "Remove {taf} for good" |
 
-A closed sheet sends nothing and says nothing. **Revoke** needs no key: it's the iPad's plain
+The sheet's lead is the shared line "This needs your security key: {act}. Plug it in, then touch
+it and enter its PIN." (`approval.security_key.before`, tafs#1718). **Approve on your phone
+instead** (`on_phone`) is in the sheet for every act on the key: it sends nothing and hands nothing
+to the phone, and the act's line then says to approve on another device (`ApproveOnPhone`). Where
+this Mac has no key, the approve-elsewhere line first says what a security key is
+(`none_paired`). A closed sheet sends nothing and says nothing. **Revoke** needs no key: it's the iPad's plain
 session call (`POST /v1/me/mandates/{id}/revoke`), and a view-only Mac gets the shared line instead.
 Sharing and groups come with their own screens ("People and sharing"). A held call's answer and
 planque's acts stay the phone's.

@@ -312,6 +312,7 @@ final class NeedsYouModel: ObservableObject {
 
     static func why(_ error: Error) -> String {
         switch error {
+        case is ApproveOnPhone: return Words.app("approval.device_can_not_approve_approve")
         case let refusal as CloudRefusal: return refusal.why(Words.app)
         // KIFF no longer accepts the sign-in: its words, never KIFF's code ("unauthorized"). The window
         // ends and sign-in opens (`SessionWatch`).
