@@ -23,11 +23,10 @@ and never approves an action.
 
 ## Signing in inside the app (`AppSignIn`, `KIFFClient.appToken`; the new onboarding)
 
-The iPad's onboarding (kiff/tafs `docs/onboarding.md`), behind the same switch: `Onboarding.on`, on
-only in a build made with `K5=1 scripts/build.sh` (Swift's `TAFS_K5`, as the iPad's), until the pin
-moves to the kiff/tafs commit that turns it on everywhere. `dmg.sh` refuses a K5 build. Off, the
-welcome and the sign-in are as before, with only a raised age line under Continue where the
-country asks more than 16. The contract is kiff/cloud's `api/internal/appsignin/README.md`.
+The iPad's onboarding (kiff/tafs `docs/onboarding.md`), on in every build as the iPad's since
+tafs#1708 (`Onboarding.on`; PM, kiff/work#20). The download isn't published yet, and a live Mac
+sign-in pass on the test account comes before any release. The contract is kiff/cloud's
+`api/internal/appsignin/README.md`.
 
 1. **The welcome, with one tick** (`OnboardingConsent`, `ConsentTick`): "I agree to KIFF's Terms of
    Service and the tafs Terms", each name a link to its page; privacy as two links below, never

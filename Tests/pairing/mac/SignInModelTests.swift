@@ -9,7 +9,7 @@ private func model(_ answers: [(Int, String)], store: MemoryStore = MemoryStore(
     let transport = CannedTransport(answers)
     let key = try DeviceKey.load(from: store, enclave: false)
     let model = SignInModel(client: KIFFClient(transport: transport), key: key, approval: .passkey, sessions: SessionStore(store: store),
-                            deviceName: "A Mac", sleep: { _ in }, open: opened, now: { Date(timeIntervalSince1970: 1_794_679_200) })
+                            deviceName: "A Mac", sleep: { _ in }, open: opened, now: { Date(timeIntervalSince1970: 1_794_679_200) }, onboarding: false)
     return (model, transport)
 }
 
@@ -141,7 +141,7 @@ private func signedIn(_ answers: [(Int, String)]) throws -> (SignInModel, Canned
     var ended: [(String, Data)] = []
     let model = SignInModel(client: KIFFClient(transport: transport), key: oldKey, approval: .passkey, sessions: SessionStore(store: store),
                             deviceName: "A Mac", sleep: { _ in }, open: { _ in }, now: { Date(timeIntervalSince1970: 1_794_679_200) },
-                            enclave: false, endSession: { session, key in ended.append((session.accessToken, key.publicKeyDER)) })
+                            enclave: false, onboarding: false, endSession: { session, key in ended.append((session.accessToken, key.publicKeyDER)) })
     return (model, transport, store, oldKey, { ended })
 }
 

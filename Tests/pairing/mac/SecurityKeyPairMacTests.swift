@@ -42,7 +42,7 @@ let pairingSecurityKeyMacTests: [Test] = [
     Test("signing this Mac out forgets the security key that goes with it", awaiting: { @MainActor in
         let store = MemoryStore()
         let model = SignInModel(client: KIFFClient(transport: CannedTransport([])), key: try DeviceKey.load(from: store, enclave: false),
-                                approval: .passkey, sessions: SessionStore(store: store), deviceName: "A Mac", sleep: { _ in }, open: { _ in })
+                                approval: .passkey, sessions: SessionStore(store: store), deviceName: "A Mac", sleep: { _ in }, open: { _ in }, onboarding: false)
         try SecurityKeyStore(store: store).save(Data("the-key".utf8))
         try expectEqual(SecurityKeyStore(store: store).load(), Data("the-key".utf8))
         model.signedOut()
