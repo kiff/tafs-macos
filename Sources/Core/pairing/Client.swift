@@ -90,9 +90,13 @@ struct Session: Codable, Equatable {
     let subject: String
     /// This Mac's id in the Devices list, when KIFF says it (a pairing's claim does).
     let deviceID: String?
+    /// How KIFF lets this session approve, when it says (`key`, `passkey`, `view`): a security key is kept for
+    /// this Mac only when a pairing's claim answers `passkey` (kiff/cloud#96), never on the app's word.
+    var approvalMode: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token", expiresIn = "expires_in", tenant, subject, deviceID = "device_id"
+        case approvalMode = "approval_mode"
     }
 }
 

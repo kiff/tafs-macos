@@ -196,7 +196,7 @@ let pairingSecurityKeyTests: [Test] = [
             throw Failure(description: "not thrown")
         } catch let failure as SecurityKeyFailure { try expectEqual(failure, .wrongPIN(triesLeft: 2)) }
     }),
-    Test("the QR names the credential as {id, public_key}, only with passkey, never with a software key or an approval key") {
+    Test("the QR names the credential as {id, public_key}, only with passkey, never with an approval key; a software key carries it (kiff/cloud#96)") {
         let credential = PairingPayload.Credential(id: "SUQ", publicKey: Encoding.base64URL(keyOnKey))
         let payload = PairingPayload(deviceKey: deviceKey, keyStore: "enclave", approvalKey: nil, name: "A Mac", nonce: "N", exp: "E",
                                      credential: credential)
@@ -207,8 +207,10 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(qr["approval_pub"] == nil, true)
         let software = PairingPayload(deviceKey: deviceKey, keyStore: "software", approvalKey: nil, name: "A Mac", nonce: "N", exp: "E",
                                       credential: credential)
-        try expectEqual(software.credential, nil)
+        try expectEqual(software.credential, credential)
         try expectEqual(software.keyStore, "software")
+        try expectEqual(software.kind, .passkey)
+        try expectEqual(software.checkedKeyDER, keyOnKey)
         let enclave = PairingPayload(deviceKey: deviceKey, keyStore: "enclave", approvalKey: keyOnKey, name: "A Mac", nonce: "N", exp: "E",
                                      credential: credential)
         try expectEqual(enclave.credential, nil)
@@ -244,9 +246,9 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(String(decoding: transport.sent[1].body, as: UTF8.self), #"{"nonce":"n","proof":"PROOF","pub":"PUB"}"#)
     }),
 
-    Test("the creation proof is on: a passkey computer's claim proves its credential, as KIFF requires from 1 Dec 2026") {
+    Test("the creation proof is on, and so are passkey approvals since kiff/cloud#96 (the PM's decision (i))") {
         try expectEqual(Features.macPairingPasskeyProof, true)
-        try expectEqual(Features.macPasskeyApprovals, false)
+        try expectEqual(Features.macPasskeyApprovals, true)
     },
     Test("an offer with the key: the QR names its credential, the claim proves it with the pairing's challenge, and its id is the one kept", awaiting: {
         let key = NewKey()
@@ -271,20 +273,24 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(offer.claimProof, nil)
         try expectEqual(offer.keptCredentialID, credentialID)
     }),
-    Test("no key asked, or a software device key: no credential in the QR, no proof, nothing to keep", awaiting: {
+    Test("no key asked: no credential in the QR, no proof, nothing to keep", awaiting: {
         let none = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil,
                                                       proving: true, make: nil, sha256: testSHA256, random: { Data([1]) })
         try expectEqual(none.payload.credential, nil)
         try expectEqual(none.claimProof, nil)
         try expectEqual(none.keptCredentialID, nil)
+    }),
+    Test("a software device key asks the key, names its credential with key_store software, and always proves it (kiff/cloud#96)", awaiting: {
         let key = NewKey()
+        // The proof switched off still proves for a software key: KIFF requires it there whatever the date.
         let software = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "software", name: "M", nonce: "N", exp: "E", kept: nil,
-                                                          proving: true, make: { try await make(key, challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
-        try expectEqual(key.asked.count, 0)
+                                                          proving: false, make: { try await make(key, challenge: $0) }, sha256: testSHA256, random: { Data([1]) })
+        try expectEqual(key.asked.count, 1)
         try expectEqual(software.payload.keyStore, "software")
-        try expectEqual(software.payload.credential, nil)
-        try expectEqual(software.claimProof, nil)
-        try expectEqual(software.keptCredentialID, nil)
+        try expectEqual(software.payload.kind, .passkey)
+        try expect(software.payload.credential != nil, "the QR names it")
+        try expect(software.claimProof != nil, "credential_proof, always")
+        try expect(software.keptCredentialID != nil, "kept once claimed")
     }),
     Test("the PIN sheet closed pairs without the key; a pairing that was itself stopped still stops", awaiting: {
         let closed = try await SecurityKeyPairing.offer(deviceKeyDER: deviceKey, keyStore: "enclave", name: "M", nonce: "N", exp: "E", kept: nil,
