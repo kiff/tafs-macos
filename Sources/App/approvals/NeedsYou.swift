@@ -51,6 +51,9 @@ final class NeedsYouModel: ObservableObject {
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
     let route: ApprovalRoute
+    /// Approve once on this Mac's security key, through its PIN sheet (`PasskeySession.approveOnce`), set by the
+    /// window; nil where this Mac has no key, and the card says to approve on another device.
+    var approveOnceWithKey: ((HeldCall) async throws -> Void)?
     /// The person confirms before the device key signs a step, as the iPad's `sign(_:reason:)`
     /// does: Touch ID, or the Mac's login password, which every Mac has. Throws when not
     /// confirmed; the prompt's words are tafs cloud's for the answer and the step.
@@ -309,6 +312,29 @@ final class NeedsYouModel: ObservableObject {
             notTaken[call.id] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
         }
     }
+
+    /// Approve once, on the security key, as the iPad's `answer(_:with: .approveOnce)`: one approval for this one call,
+    /// then the list read again. A closed sheet sends nothing and says nothing; "Approve on your phone instead" says to
+    /// approve on another device; anything else says KIFF didn't take it, with why.
+    func approveOnce(_ call: HeldCall) async {
+        guard let approveOnceWithKey, answering == nil else { return }
+        answering = call.id
+        defer { answering = nil }
+        do {
+            try await approveOnceWithKey(call)
+            notTaken[call.id] = nil
+            await load()
+        } catch is CancellationError {
+            notTaken[call.id] = nil
+        } catch is ApproveOnPhone {
+            notTaken[call.id] = Self.why(ApproveOnPhone())
+        } catch {
+            notTaken[call.id] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
+        }
+    }
+
+    /// Whether this card offers Approve once: KIFF allows it for the call, and this Mac approves with its key.
+    func offersApproveOnce(_ call: HeldCall) -> Bool { call.canApproveOnce && call.accountingVersion != nil && approveOnceWithKey != nil }
 
     static func why(_ error: Error) -> String {
         switch error {
@@ -580,6 +606,7 @@ struct NeedsYouView: View {
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if model.offersApproveOnce(call) { approveOnceButton(call) }
             // Refuse, as the iPad's outlined button: the card's width, in red.
             Button { Task { await model.refuse(call) } } label: {
                 HStack(spacing: 8) {
@@ -602,6 +629,20 @@ struct NeedsYouView: View {
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
         .accessibilityElement(children: .contain)
+    }
+
+    /// Approve once, as the iPad's filled button above Refuse, on the security key: its PIN sheet names the call.
+    private func approveOnceButton(_ call: HeldCall) -> some View {
+        Button { Task { await model.approveOnce(call) } } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "key.fill").accessibilityHidden(true)
+                Text(words("needs_you.approve_once"))
+                if model.answering == call.id { ProgressView().controlSize(.small) }
+            }
+        }
+        .buttonStyle(PrimaryButtonStyle())
+        .disabled(model.answering != nil)
+        .accessibilityIdentifier("needs_you.approve_once")
     }
 
     private func countdown(_ expires: Date, at date: Date) -> some View {

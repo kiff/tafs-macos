@@ -79,3 +79,29 @@ enum KeyAct: Equatable {
 /// nothing is handed to the phone. Every act's line then says to approve on another device
 /// (`approval.device_can_not_approve_approve`), through `CoachStart.why`, `NeedsYouModel.why` and `TafRemoval`.
 struct ApproveOnPhone: Error {}
+
+extension PasskeySession {
+    /// Approve once, on the security key (kiff/cloud's `checkPasskeyAnswer`, from a session that approves with this
+    /// Mac's own passkey): one fresh assertion over the answer's `kiff.answer.v1` (the hold, `approve-once`, no next
+    /// step or note, the hold's accounting version as the person saw it, `signed_at` now), sent as
+    /// `POST /v1/me/card-exceptions/{id}/approve-once` with `{"signature":{"passkey":{…},"signed_at":"…"}}`. Never a
+    /// device key's signature, never a window: one approval for this one call. A hold KIFF says can't be approved once,
+    /// or one without its accounting version, is refused here before the key is asked. A refusal is KIFF's
+    /// (`KIFFError`), so the card's line says it.
+    func approveOnce(_ call: HeldCall, pin: SecurityKeyPIN?, now: Date = Date()) async throws {
+        guard call.canApproveOnce else { throw KIFFError.refused(status: 0, code: "cannot_approve_once") }
+        guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
+        let signedAt = KIFFMessage.time(now)
+        let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: .approveOnce,
+                                                accountingVersion: version, signedAt: signedAt, pin: pin)
+        // The assertion's object as the key's answer gave it, and the same signed_at, in sorted keys.
+        var body = Data(#"{"signature":{"passkey":"#.utf8)
+        body.append(passkey)
+        body.append(Data(#","signed_at":"\#(signedAt)"}}"#.utf8))
+        let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
+                       "Accept-Language": language, "User-Agent": "tafs-macos"]
+        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/approve-once"
+        let (status, answer) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
+        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: answer) }
+    }
+}

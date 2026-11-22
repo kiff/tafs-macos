@@ -249,4 +249,42 @@ let approvalsScreenTests: [Test] = [
         let hold = KIFFMessage.answer(tenant: "t_vector", callID: "ho_0123456789abcdef01234567", answer: .approveOnce, nextStep: nil, accountingVersion: 1, signedAt: "2026-11-11T17:00:00Z")
         try expect(hold != message, "a hold's answer is never a hand-off's")
     }),
+    Test("Approve once is offered only with this Mac's key and a call KIFF can approve once; it goes through the key, then the list is read again", awaiting: { @MainActor in
+        let (model, transport) = model([(200, one), (200, none)], route: .passkey)
+        await model.load()
+        guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
+        try expect(!model.offersApproveOnce(calls[0]), "no key, no Approve once")
+        var approved: [String] = []
+        model.approveOnceWithKey = { approved.append($0.id) }
+        try expect(model.offersApproveOnce(calls[0]), "with the key")
+        await model.approveOnce(calls[0])
+        try expectEqual(approved, ["exc_1"])
+        // The key's request is its own (PasskeySession.approveOnce); here the list is read again, never the device key's answer.
+        try expectEqual(transport.sent.map(\.path), ["/v1/me/card-exceptions?status=held", "/v1/me/card-exceptions?status=held"])
+        try expectEqual(model.state, .loaded([]))
+        try expectEqual(model.answering, nil)
+    }),
+    Test("Approve once: a closed sheet says nothing, Approve on your phone instead says so, and KIFF's refusal is the card's line", awaiting: { @MainActor in
+        let (model, _) = model([(200, one)], route: .passkey)
+        await model.load()
+        guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
+        model.approveOnceWithKey = { _ in throw CancellationError() }
+        await model.approveOnce(calls[0])
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), nil)
+        model.approveOnceWithKey = { _ in throw ApproveOnPhone() }
+        await model.approveOnce(calls[0])
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("approval.device_can_not_approve_approve"))
+        model.approveOnceWithKey = { _ in throw KIFFError.refused(status: 403, code: "passkey_not_this_device") }
+        await model.approveOnce(calls[0])
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": "passkey_not_this_device"]))
+        try expectEqual(model.count, 1)
+    }),
+    Test("a call KIFF says can't be approved once, or without its accounting version, offers no Approve once", awaiting: { @MainActor in
+        let cannot = #"{"exceptions":[{"id":"e1","subject":"a","action":"b","title":"T","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"can_approve_once":false},{"id":"e2","subject":"a","action":"b","title":"T","created_at":"2026-11-14T18:00:00Z"}]}"#
+        let (model, _) = model([(200, cannot)], route: .passkey)
+        model.approveOnceWithKey = { _ in }
+        await model.load()
+        guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
+        try expectEqual(calls.map { model.offersApproveOnce($0) }, [false, false])
+    }),
 ]

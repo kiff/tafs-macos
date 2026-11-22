@@ -66,7 +66,7 @@ struct TafCardTab: View {
     }
 
     /// For whoever manages the taf: halting it, its versions, its usage, then Revoke.
-    @ViewBuilder private var managed: some View {
+    @MainActor @ViewBuilder private var managed: some View {
         let live = TafView.halts(manages: manages, state: taf.state)
         if let pages, live {
             // Halting is a job of its own: its row opens its screen.

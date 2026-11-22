@@ -33,8 +33,8 @@ makes an answer count only for the hold as the person saw it.
 | Answer | Grants authority? | Who signs on a Mac |
 |---|---|---|
 | **Refuse** (`reject`) | No: it takes authority away | The device key, once the person confirms with Touch ID or the Mac's password. Any signed-in Mac may refuse. |
-| **Approve once** (`approve-once`) | Yes | Touch ID's approval key on a Mac that has one. Otherwise the phone, or a passkey. |
-| **Extra room** (`change-card`) | Yes | The same as Approve once. |
+| **Approve once** (`approve-once`) | Yes | **This Mac's security key** (`PasskeySession.approveOnce`, below), on the security key's route. Without a key, the phone. |
+| **Extra room** (`change-card`) | Yes | The phone, for now. KIFF takes it from the security key as it takes Approve once; it comes with Allow from now on. |
 
 - **A Mac without a Secure Enclave never signs an approval.** `ApprovalRoute.of` says where
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
@@ -53,7 +53,28 @@ makes an answer count only for the hold as the person saw it.
     it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
     for a call without arguments) isn't ported yet.
 
-Approving with Touch ID, on the phone and with a passkey each arrive in their own pull request.
+**Approve once on the security key** (kiff/cloud's `checkPasskeyAnswer`, `mandate_exceptions.go`): a session that
+approves with this Mac's own passkey answers `approve-once` with that passkey's assertion in place of a device key's
+signature. The card's **Approve once** (`needs_you.approve_once`, the shared primary button, above Refuse) shows only
+where this Mac has its key on the security key's route, for a call KIFF says can be approved once
+(`can_approve_once`) and that carries its accounting version. A click opens the PIN sheet, named as the iPad's prompt
+("Answer {summary}", `needs_you.prompt.answer`), and then:
+- **The message:** one fresh assertion over the answer's `kiff.answer.v1` (the account, the hold, `approve-once`, no
+  next step, no note, the hold's accounting version, and `signed_at` now, RFC 3339 to the second, within KIFF's
+  5 minutes). The challenge is `base64url(sha256(message))`, as for any of the key's approvals
+  (`PasskeyApprover.answer`, in the same file as the request's: the signing stays private).
+- **The request:** `POST /v1/me/card-exceptions/{id}/approve-once` with
+  `{"signature":{"passkey":{"credential_id","client_data_json","authenticator_data","signature"},"signed_at":"…"}}`,
+  the session's bearer and no `KIFF-Passkey-Assertion` header. Never the device key's signature, never a window: one
+  approval for this one call. KIFF checks that the passkey is the one this Mac's pairing registered
+  (`passkey_not_this_device` otherwise), and that it isn't synced.
+- **Refused here first, with nothing asked of the key:** a call KIFF says can't be approved once, one without its
+  accounting version, or an answer that grants nothing (a refusal is the device key's: `PasskeyRefusal.notAnApproval`).
+- **Then:** the list is read again (KIFF's list is the truth). A closed sheet sends nothing and says nothing; **Approve
+  on your phone instead** says to approve on another device; KIFF's refusal is the card's line, "KIFF didn't take the
+  answer: {why}".
+
+Extra room, next steps and Allow from now on come in their own pull request.
 
 ## Nothing is approved at planque from this Mac
 
@@ -164,8 +185,8 @@ to the phone, and the act's line then says to approve on another device (`Approv
 this Mac has no key, the approve-elsewhere line first says what a security key is
 (`none_paired`). A closed sheet sends nothing and says nothing. **Revoke** needs no key: it's the iPad's plain
 session call (`POST /v1/me/mandates/{id}/revoke`), and a view-only Mac gets the shared line instead.
-Sharing and groups come with their own screens ("People and sharing"). A held call's answer and
-planque's acts stay the phone's.
+Sharing and groups come with their own screens ("People and sharing"). A held call's **Approve once** is the
+key's too (above, "Answers"); its other answers that grant authority, and planque's acts, stay the phone's.
 
 **In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
 `PasskeyRegistration`:

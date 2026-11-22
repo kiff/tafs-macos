@@ -151,6 +151,7 @@ struct SignedInView: View {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
+            needsYou.approveOnceWithKey = approveOnceWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
@@ -333,6 +334,16 @@ struct SignedInView: View {
         guard let passkey = passkeySession else { return nil }
         return { act, title in
             try await askSecurityKey(act: title) { pin in try await passkey.approved(method: act.method, path: act.path, body: act.body, pin: pin) }
+        }
+    }
+
+    /// Approve once on this Mac's security key (`PasskeySession.approveOnce`), named in the PIN sheet as the iPad's
+    /// prompt ("Answer {summary}"); nil without a key on the security key's route, so the card says to approve elsewhere.
+    private var approveOnceWithKey: ((HeldCall) async throws -> Void)? {
+        guard let passkey = passkeySession else { return nil }
+        return { call in
+            let title = words("needs_you.prompt.answer", ["summary": call.title ?? call.action])
+            try await askSecurityKey(act: title) { pin in try await passkey.approveOnce(call, pin: pin) }
         }
     }
 
