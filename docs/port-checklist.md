@@ -22,6 +22,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | OnboardingCards.swift | 234 | The three cards on how tafs works, after signing in and from How tafs works | OnboardingPage, OnboardingSteps | `OnboardingCards`, `OnboardingPicture` (the sample's tafs, its Card on `CardFace`, a Needs you card), `HowTafsWorksView` with the four legal pages, from the first Home and Account › Legal (`pairing/OnboardingCards.swift`, `SignInModel.celebrated`, `overview/OverviewView.swift`, `account/AccountView.swift`, `Core/pairing/Onboarding.swift`). The last card is a desktop's line (`control_lead_desktop`): this Mac approves on the phone |
 | PairSignInView.swift | 104 | Signing in from another phone: this device shows the pairing QR and its check code, the phone approves | KIFF/Pairing | "Add this Mac with a phone": `pairing/SignInView.swift`, `SignInModel.swift`, `QRCode.swift`, `Core/pairing/Client.swift`, `Messages.swift` |
 | ReportAnswerSheet.swift | 124 | Report an answer Coach or a taf wrote | AnswerReport | `coach/ReportAnswerSheet.swift`, `Core/coach/Report.swift` |
+| WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | WatchDaysModel | From your watch after the chats, each day opening in place with Back, each turn sent from the watch, when, and what came of it (`coach/CoachChatsSheet.swift`, `coach/WatchDaysModel.swift`, `Core/coach/WatchDays.swift`) |
 | YourStepCard.swift | 46 | A step a taf handed its owner, with Done and Skip | YourStep | `approvals/NeedsYou.swift`, `Core/approvals/YourStep.swift` (signed with the device key after Touch ID or the Mac's password) |
 
 ## Partial
@@ -76,7 +77,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TrialViews.swift | 214 | Trials of a new version | |
-| WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | |
 
 ## Not for macOS 12
 

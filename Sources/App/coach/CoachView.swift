@@ -155,6 +155,9 @@ final class CoachModel: ObservableObject {
 
     /// Reads Coach's past chats, as the iPad's `loadSetupChats` (AppModel.swift:7138-7143): a read
     /// that fails keeps the list as it was, and one that comes back after sign-out is dropped.
+    /// The watch's conversations for Previous conversations (`WatchDaysModel`), read from this Coach's tafs cloud.
+    func watchDays() -> WatchDaysModel { WatchDaysModel(cloud: cloud) }
+
     func loadChats() async {
         guard isCoach, case .loaded(let coach, _) = state else { return }
         let gen = accountGeneration
@@ -1026,7 +1029,7 @@ struct CoachView: View {
         // Coach's chat is read again while a connection waits, so its sign-in's end is seen here.
         .task(id: model.watchesConnection) { if model.watchesConnection { await model.watchConnection() } }
         .sheet(isPresented: $showingChats) {
-            CoachChatsSheet(model: model) { session in
+            CoachChatsSheet(model: model, watch: model.watchDays()) { session in
                 showingChats = false
                 Task { await model.open(chat: session) }
             }
