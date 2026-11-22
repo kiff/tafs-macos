@@ -258,9 +258,8 @@ struct TafSetup: Decodable, Equatable {
             return Part(title: title, summary: Lines.line((try? p.decodeIfPresent(String.self, forKey: line)) ?? nil))
         }
         workflow = part(.workflow)
-        struct Lenient: Decodable { let step: WorkflowStep?; init(from decoder: Decoder) throws { step = try? WorkflowStep(from: decoder) } }
         let steps = try? c.nestedContainer(keyedBy: PartKeys.self, forKey: .workflow)
-        workflowSteps = ((steps.flatMap { try? $0.decodeIfPresent([Lenient].self, forKey: .steps) } ?? nil) ?? []).compactMap(\.step)
+        workflowSteps = ((steps.flatMap { try? $0.decodeIfPresent([Lenient<WorkflowStep>].self, forKey: .steps) } ?? nil) ?? []).compactMap(\.value)
         memory = part(.memory, line: .latest)
         versions = part(.versions)
         let counted = try? c.nestedContainer(keyedBy: PartKeys.self, forKey: .versions)
