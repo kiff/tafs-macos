@@ -68,13 +68,10 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | DeleteAccountView.swift | 60 | Deleting the account | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DoorsView.swift | 923 | A taf's Doors tab | |
-| DriveViews.swift | 73 | Coach asks to drive the app | |
 | FilesViews.swift | 453 | Files: the account's or one taf's, newest first, the list and the open file side by side | |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
 | ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
-| TafDialPanel.swift | 228 | The dial's requests and confirmation | |
-| TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TrialViews.swift | 214 | Trials of a new version | |
 | WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | |
 
@@ -82,9 +79,12 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 
 | iPad file | Lines | Why |
 | :- | -: | :- |
+| DriveViews.swift | 73 | The phone's: Coach drives the phone's own screen (tafs docs/drive.md is the iOS and Android contract). As Windows (tafs-windows#242). |
 | HomeView.swift | 403 | The phone's compact home (`TafsTab` draws it only below regular width, HomeSplitView.swift:10-14). This Mac always has the sidebar: its Overview is `ShareViews`' `OverviewView`, and no taf's recipes are `HomeRecipes`. Its board 2, no tafs yet, is the Overview's with no taf and no job listed. The first Home (Ask Coach, How tafs works, with `Onboarding.on`) is the Overview's with no taf. |
 | PairComputerView.swift | 222 | The phone's side of pairing: its camera reads a computer's code. This Mac is the computer being added. |
+| TafDialPanel.swift | 228 | Not reachable on the iPad at the pin: it opens `DoorsView` only as `.only(door.id)`, so the remote never shows. To reopen if the iPad turns it on. As Windows (tafs-windows#242). |
 | TafKnobRemote.swift | 64 | Keeps the remote above the phone's tab bar. The Mac has no tab bar. |
+| TafKnobView.swift | 377 | The same as `TafDialPanel` (only `TafKnobView.color` is reused, by Coach's chat). As Windows (tafs-windows#242). |
 | TafsBar.swift | 121 | The phone's bar along the foot. The Mac has the sidebar (`HomeSplitView`). |
 
 ## In review
