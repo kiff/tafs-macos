@@ -147,7 +147,10 @@ struct SignedInView: View {
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
-        .onAppear { devices.approveWithKey = approveWithKey }
+        .onAppear {
+            devices.approveWithKey = approveWithKey
+            accountModel.approveWithKey = approveWithKey
+        }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
         // every account change (AppModel.swift:887, :1472).

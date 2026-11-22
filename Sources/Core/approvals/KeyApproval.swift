@@ -23,22 +23,31 @@ extension PasskeySession {
 enum KeyAct: Equatable {
     /// Signing another device out (the iPad's `prepareRemoveDevice`): `DELETE /v1/me/devices/{id}`, empty body.
     case signOutDevice(id: String)
+    /// The account's time zone (the iPad's `setTimeZone`): `PUT /v1/me/time-zone` with `{"time_zone": zone}`.
+    case timeZone(String)
 
     var method: String {
         switch self {
         case .signOutDevice: return "DELETE"
+        case .timeZone: return "PUT"
         }
     }
 
     var path: String {
         switch self {
         case .signOutDevice(let id): return "/v1/me/devices/\(CloudClient.escaped(id))"
+        case .timeZone: return "/v1/me/time-zone"
         }
     }
 
     var body: Data {
         switch self {
         case .signOutDevice: return Data()
+        case .timeZone(let zone):
+            // The same bytes as the device key's signed call (`AccountClient.setTimeZone`): sorted keys.
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? encoder.encode(["time_zone": zone])) ?? Data()
         }
     }
 
@@ -46,6 +55,7 @@ enum KeyAct: Equatable {
     func title(_ words: Words, device: String = "") -> String {
         switch self {
         case .signOutDevice: return words("settings.devices.sign_out_prompt", ["device": device])
+        case .timeZone(let zone): return words("settings.time_zone.prompt", ["zone": zone])
         }
     }
 }
