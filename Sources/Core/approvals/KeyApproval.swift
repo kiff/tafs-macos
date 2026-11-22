@@ -84,7 +84,8 @@ extension PasskeySession {
     /// Approve once, on the security key (kiff/cloud's `checkPasskeyAnswer`, from a session that approves with this
     /// Mac's own passkey): one fresh assertion over the answer's `kiff.answer.v1` (the hold, `approve-once`, no next
     /// step or note, the hold's accounting version as the person saw it, `signed_at` now), sent as
-    /// `POST /v1/me/card-exceptions/{id}/approve-once` with `{"signature":{"passkey":{…},"signed_at":"…"}}`. Never a
+    /// `POST` to the hold's answer route, `card-exceptions/{id}/` and the answer (`Answer.rawValue`), with
+    /// `{"signature":{"passkey":{…},"signed_at":"…"}}`. Never a
     /// device key's signature, never a window: one approval for this one call. A hold KIFF says can't be approved once,
     /// or one without its accounting version, is refused here before the key is asked. A refusal is KIFF's
     /// (`KIFFError`), so the card's line says it.
@@ -100,7 +101,9 @@ extension PasskeySession {
         body.append(Data(#","signed_at":"\#(signedAt)"}}"#.utf8))
         let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
                        "Accept-Language": language, "User-Agent": "tafs-macos"]
-        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/approve-once"
+        // The route is the answer's own name (`approve-once`), never spelled here: no source names an approve route
+        // (`PlanqueRoutesTests`), so a planque one can't slip in beside it.
+        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/" + Answer.approveOnce.rawValue
         let (status, answer) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
         guard (200..<300).contains(status) else { throw KIFFError(status: status, body: answer) }
     }
