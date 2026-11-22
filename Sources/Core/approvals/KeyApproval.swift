@@ -74,3 +74,8 @@ enum KeyAct: Equatable {
         }
     }
 }
+
+/// The person chose "Approve on your phone instead" in the security key's sheet: nothing was approved or sent here, and
+/// nothing is handed to the phone. Every act's line then says to approve on another device
+/// (`approval.device_can_not_approve_approve`), through `CoachStart.why`, `NeedsYouModel.why` and `TafRemoval`.
+struct ApproveOnPhone: Error {}

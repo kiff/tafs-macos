@@ -66,6 +66,11 @@ let accountControlsTests: [Test] = [
                                             approveWithKey: { _, _ in throw CancellationError() })
         try expectEqual(closed, AccountZone.Saved(me: nil, why: nil))
         try expectEqual(kiff2.sent.count, 0)
+        // "Approve on your phone instead": nothing sent, and the line says where to approve, never the error's type.
+        let onPhone = await AccountZone.save("Europe/Paris", account: account2, cloud: cloud2, words: words, confirm: { _ in },
+                                             approveWithKey: { _, _ in throw ApproveOnPhone() })
+        try expectEqual(onPhone.why, words("settings.time_zone.not_changed", ["why": words("approval.device_can_not_approve_approve")]))
+        try expectEqual(kiff2.sent.count, 0)
     }),
     Test("Revoke is the iPad's plain session call: POST /v1/me/mandates/{id}/revoke with {}, no signature and no key", awaiting: {
         let (account, kiff, _, _) = clients([(200, "{}")], [])

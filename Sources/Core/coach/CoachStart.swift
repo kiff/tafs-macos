@@ -127,6 +127,7 @@ enum CoachStart {
         case KIFFError.refused(let status, _): return words(StepRefusal.plainKey(status: status))
         case KIFFError.unreadable: return words("error.ours")
         case is SecurityKeyFailure, is PasskeyRefusal: return SecurityKeyWords.line(error, words: words)
+        case is ApproveOnPhone: return words("approval.device_can_not_approve_approve")
         default: return error.localizedDescription
         }
     }

@@ -39,6 +39,9 @@ enum TafRemoval {
         let assertion: String
         do { assertion = try await sign(act, act.title(words, device: taf)) } catch is CancellationError {
             return nil
+        } catch is ApproveOnPhone {
+            // Nothing changed here: the person approves on another device.
+            return words("approval.device_can_not_approve_approve")
         } catch {
             return words("taf.remove.not_confirmed")
         }

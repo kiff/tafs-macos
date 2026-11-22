@@ -212,7 +212,3 @@ struct PINSheet: View {
         }
     }
 }
-
-/// The person chose to approve on their phone instead of with this Mac's security key: nothing was approved or sent here.
-/// The act's line says to approve on another device (`approval.device_can_not_approve_approve`).
-struct ApproveOnPhone: Error {}

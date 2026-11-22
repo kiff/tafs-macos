@@ -25,6 +25,10 @@ let tafRemovalTests: [Test] = [
         let refused = await TafRemoval.remove(taf: "R", cloudID: "t", cardIDs: ["c"], words: words, sign: { _, _ in throw Refused() },
                                               revoke: { _ in touched = true }, remove: { _ in touched = true; return .init(done: true, removed: [], failed: []) })
         try expectEqual(refused, words("taf.remove.not_confirmed"))
+        // "Approve on your phone instead": nothing changed here, and it says where to approve.
+        let onPhone = await TafRemoval.remove(taf: "R", cloudID: "t", cardIDs: ["c"], words: words, sign: { _, _ in throw ApproveOnPhone() },
+                                              revoke: { _ in touched = true }, remove: { _ in touched = true; return .init(done: true, removed: [], failed: []) })
+        try expectEqual(onPhone, words("approval.device_can_not_approve_approve"))
         try expectEqual(touched, false)
     }),
     Test("a Card KIFF didn't revoke and steps tafs cloud didn't finish are each said, as the iPad's", awaiting: {
