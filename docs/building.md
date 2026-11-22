@@ -1,7 +1,7 @@
 # Building and testing
 
-tafs for macOS runs on macOS 12 (Monterey) and later, on Intel and Apple silicon. It is
-written in Swift with SwiftUI and AppKit.
+tafs for macOS is for macOS 12 (Monterey), on Intel and Apple silicon; macOS 13 and later get
+the Mac App Store app ([macos-13.md](macos-13.md)). It is written in Swift with SwiftUI and AppKit.
 
 ## What you need
 

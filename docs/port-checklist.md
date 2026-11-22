@@ -28,6 +28,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | :- | -: | :- | :- | :- |
 | ApprovalSetupView.swift | 102 | This device's approval readiness: `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalNotReady`'s line where an approval can't be made here (`approvals/NeedsYou.swift`, `taf/HaltView.swift`) | `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`: no Mac approves yet |
 | AttachViews.swift | 267 | Attaching photos and files in a chat | `AttachButton` (Choose photos, Choose file, as many as the message has room for), `FileTray`, `FileChip`, `FileIcon`, `MessageFiles`; each file declared to tafs cloud and its bytes put to storage, sent with the message by id (`coach/ChatFilesViews.swift`, `FilePrepMac.swift`, `CoachView.swift`, `Core/coach/ChatFiles.swift`) | Take photo (this Mac's camera); Quick Look in place (a file opens in the app this Mac opens its kind with) |
+| BriefView.swift | 448 | Your brief: decisions first with Coach's recommendation, the next move, what got done; a mission's log | The brief in Needs you's place once tafs cloud serves it, `DecisionCard`, `CaseRow`, Later, the mission's log (`brief/BriefView.swift`, `DecisionCard.swift`, `MissionLogView.swift`, `BriefModel.swift`, `Core/brief/Brief.swift`; docs/brief.md) | A held call's own page (Approve isn't on macOS 12 yet); the mission log's Ask Coach; alert routing by `brief_kind`; the sample brief |
 | CalendarView.swift | 434 | Calendar: the month card, Day, Week, Month | All three views, the month card, the agenda full width under the card and the grid as the wide layout, a narrow week's chips keeping a few characters of the name (`WeekChip`), today in the account's zone (`calendar/CalendarView.swift`, `Core/calendar/Agenda.swift`) | Opening a taf from an event |
 | CoachMode.swift | 131 | Coach mode over the app: `CoachView`, `CoachPanel`, `PhoneCoachPanel` | `CoachView`'s Back and ⤢; `CoachPanel`: Coach slides in from the right over any screen, a taf's page too, which stays in view; its edge drags it wider or narrower, ⤢ fills the window and back, the width and ⤢ kept on this Mac, a fade with Reduce Motion; every way into Coach opens it (`coach/CoachPanel.swift`, `CoachView.swift`, `shell/SignedInView.swift`, `ShellView.swift`, `Core/coach/CoachMode.swift`) | The dimmed ground and its tap outside, and closing by a drag past the narrowest or a swipe: on the Mac the screen beside Coach stays usable, and Back or Esc close it. `PhoneCoachPanel` is the phone's |
 | ConnectAppsView.swift | 1141 | Connect apps, a connected app's detail, connecting's approval | The search, Yours and Discover, the table (`ConnectColumns`), each row's end in `connectFor`'s words (Ask Coach), the chevron, logos read through the app's transport (`AppLogos`), More apps, Not listed? Ask Coach (`connections/ConnectAppsView.swift`, `connections/AppLogoView.swift`, `Core/connections/Apps.swift`, `Core/connections/AppLogos.swift`); `AppConnectionsView`, read only, its actions drawn and a click saying to approve elsewhere (`connections/AppConnectionsView.swift`, `Core/connections/AppConnections.swift`); `ConnectApprovalSheet`'s receipt with board 5, shown over Coach once a connection it showed waiting is made (`connections/ConnectReceiptSheet.swift`, `Core/connections/ConnectReceipt.swift`, `coach/CoachView.swift`) | Connecting and Sign in again from here; Connect off with "Make one first" for no taf; the rest of `ConnectApprovalSheet` (the approval, the key's sheet, the receipt's logo, host, last 4 characters and Disconnect); `ConnectionDetailView`; a connection's last failed call and "Also on …'s Card"; Disconnect and Clear (each with its approval) |
@@ -59,17 +60,23 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | iPad file | Lines | What | Models |
 | :- | -: | :- | :- |
 | AllowSheetView.swift | 96 | "Allow this from now on" | HoldAllow |
+| APIDoorViews.swift | 410 | A door "From another application": its count and cap, last request, keys, New key, Revoke (each signed but pausing) | DoorsModel |
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
+| ChromeViews.swift | 178 | Account › Chrome: the paired Chromes, Pair a Chrome, Unpair (shown once planque offers Chromes; pairing is signed) | AppModel.chromes |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | DriveViews.swift | 73 | Coach asks to drive the app | |
+| FilesViews.swift | 453 | Files: the account's or one taf's, newest first, the list and the open file side by side | |
+| OnboardingCards.swift | 234 | The three cards on how tafs works, after signing in and from How tafs works; the last names this computer's way to approve | Onboarding |
 | RecipeGallery.swift | 135 | The jobs' gallery | |
+| ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TafDialPanel.swift | 228 | The dial's requests and confirmation | |
 | TafKnobView.swift | 377 | The taf's remote | KnobNavigation |
 | TrialViews.swift | 214 | Trials of a new version | |
+| WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | |
 
 ## Not for macOS 12
 
@@ -83,21 +90,15 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 ## In review
 
 Pull requests open against `main`, not counted above. Each updates its lines here as it
-merges.
+merges. None is open.
 
-| PR | iPad files | Mac files it changes |
-| :- | :- | :- |
-| #80 A taf's runs | TafDetailView (`RunsPanel`, Run now), TafPresentationViews (`RetainedRuns`) | `taf/TafRunsView.swift`, `RunNowModel.swift`, `TafTabsView.swift`, `Core/taf/TafRuns.swift` |
-| #81 The jobs' gallery | RecipeGallery, HomeSplitView (+ New, Explore) | `overview/RecipeGalleryView.swift`, `HomeRecipesView.swift`, `OverviewView.swift`, `shell/ShellView.swift`, `Core/overview/Gallery.swift` |
-| #82 Setup: Starts when and Results go to | TafSetupViews (Starts when, Results go to) | `taf/KnobSetupView.swift`, `base/AccountTime.swift`, `TafView.swift`, `Core/taf/TafKnob.swift` |
-| #83 Doors | DoorsView, TafPresentationViews (`TafKnocksPanel`), NeedsYouView (knocks) | `taf/TafDoorsViews.swift`, `TafDoorsModel.swift`, `approvals/NeedsYou.swift`, `Core/taf/TafDoors.swift` |
-| #89 Coach's title row and Previous conversations | CoachMode (Back), SetupChatView (`SetupChatsList`, `startNewTaf`) | `coach/CoachChatsSheet.swift`, `CoachView.swift`, `shell/ShellView.swift` |
-| #90 Start-up | HomeView (the list remembered for the first frame) | `overview/OverviewView.swift`, `Core/overview/RememberedHome.swift`, `entry/TafsApp.swift` |
-| #91 Setup's proof | TafDetailView's Setup read with this device's planque proof | `taf/TafTabsView.swift`, `Core/taf/PlanqueClient.swift`, `Core/base/CloudClient.swift` |
-| #94 Devices test | None: a test only | `Tests/account/mac/DevicesTests.swift` |
-| #95 Refuse's confirmation | NeedsYouView (Refuse's Touch ID or password) | `approvals/NeedsYou.swift`, `Core/approvals/HeldCalls.swift` |
+Closed without merging, so their screens are owed again (each branch is read before its screen
+is ported again, and what's sound is reused): #80 a taf's runs (`RunsPanel`, `RetainedRuns`),
+#81 the jobs' gallery, #82 Starts when and Results go to, #83 Doors, #89 Coach's title row and
+Previous conversations, #90 start-up (the list remembered for the first frame), #94 the Devices
+test.
 
 ## Counts
 
-Ported 7, partial 27, not started 12, not for macOS 12 4: the 50 view files at the pin
-(`da55768`).
+Ported 7, partial 28, not started 18, not for macOS 12 4: the 57 view files at the pin
+(`85c8a17`).

@@ -43,7 +43,8 @@ struct TafsApp: App {
             .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
             // The iPad's frame at first launch, remembered after (`WindowSize`).
             .background(WindowFrame())
-            .environment(\.words, words)
+            // The words, mirrored for a language written right to left (`inLanguage`).
+            .inLanguage(words)
             // The theme the person chose, from the last launch.
             .onAppear { ThemeChoice.saved().apply() }
         }

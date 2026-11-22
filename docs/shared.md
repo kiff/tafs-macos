@@ -9,7 +9,7 @@ repository.
 
 | From kiff/tafs | What | Used by |
 |---|---|---|
-| `app/strings/<lang>/*.json` | The apps' own words, in 8 languages | `Words` (`Sources/Core/strings`) |
+| `app/strings/<lang>/*.json` | The apps' own words, in every shipped language (26 at `85c8a17`) | `Words` (`Sources/Core/strings`) |
 | `app/strings/languages.json` | The languages the apps ship | `Words.shipped` |
 | `contracts/*.json` | What tafs cloud answers the apps | the `contracts` tests |
 | `ios/Tafs/KIFF/Keccak.swift` | The iPad's Keccak-256, for KIFF's receipts | Core, compiled as it is (`scripts/shared.sh sources`; docs/record.md) |
@@ -35,6 +35,22 @@ words.count("needs_you.count", 3)                     // the plural form of 3 in
 - **The app's language** is the first one the person prefers that is shipped, else English.
 - **A key the code names must exist.** A test reads every `words("…")` and `words.count("…")`
   in `Sources/` and fails for a key English lacks, or a count used as a plain line.
+
+## Ahead of the pin
+
+A language kiff/tafs has written but doesn't ship yet can be offered here first: it's in
+`languages.json`'s `all`, it has its folder at the pin, and it's named in `Words.ahead` and in
+`scripts/build.sh`'s `AHEAD` (a test checks they match). It reads English's line for any it lacks,
+until kiff/tafs has it. Today that is **Arabic** (`ar`), which lacks the six `record.report.*`
+lines. It leaves the list in the pull request that moves the pin to a commit that ships it.
+
+- **Right to left:** in Arabic (and any language in `Words.rightToLeft`) the window mirrors, as
+  the iPad's does: the app sets SwiftUI's `layoutDirection` and `locale` from the app's language,
+  not only the Mac's.
+- **Plural forms:** `Plural.form` gives each language's whole-number forms by CLDR's rules. A test
+  reads `generate.py`'s `PLURALS` at the pin and checks every offered language: each number's
+  form is one it lists, and each form it lists is reached.
+- Hebrew and the other languages kiff/tafs is adding come with the pin move that brings them.
 
 ## A refusal's why
 

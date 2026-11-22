@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(CoreGraphics)
+// On a Mac, CGSize is Equatable only through CoreGraphics' overlay, which Foundation alone
+// doesn't bring in with Swift 5.7 on macOS 12. Linux's Foundation declares it Equatable itself.
+import CoreGraphics
+#endif
 
 let shellWindowSizeTests: [Test] = [
     Test("the first window opens at the iPad's frame on a screen that has room", {

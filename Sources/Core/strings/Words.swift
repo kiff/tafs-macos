@@ -27,6 +27,10 @@ struct Words {
     /// kiff/tafs's apps read it: it holds only the lines that read differently there.
     init(language: String, folder: URL) throws {
         var lines: [String: Line] = [:]
+        if Self.ahead.contains(language) {
+            // A language this Mac offers before kiff/tafs ships it: a line it doesn't have yet reads as English's.
+            lines = try Self.read("en", folder: folder)
+        }
         if let base = try Self.variants(folder: folder)[language] {
             lines = try Self.read(base, folder: folder)
         }
@@ -49,6 +53,24 @@ struct Words {
         struct Languages: Decodable { let shipped: [String] }
         return try JSONDecoder().decode(Languages.self, from: Data(contentsOf: folder.appendingPathComponent("languages.json"))).shipped
     }
+
+    /// Languages this Mac offers before kiff/tafs ships them (docs/shared.md, "Ahead of the pin"): each is in
+    /// `languages.json`'s "all" with its own folder at the pin, and reads English's line for any it lacks yet.
+    /// One leaves this list in the pull request that moves the pin to the commit shipping it.
+    static let ahead = ["ar"]
+
+    /// The languages this Mac offers: the shipped ones, then each of `ahead` the pin has a folder for.
+    static func offered(folder: URL) throws -> [String] {
+        let shipped = try shipped(folder: folder)
+        let more = ahead.filter { !shipped.contains($0) && FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+        return shipped + more
+    }
+
+    /// The languages written right to left, by their language code. The window mirrors for them.
+    static let rightToLeft: Set<String> = ["ar", "he", "fa", "ur", "dv"]
+
+    /// Whether this language is written right to left.
+    var isRightToLeft: Bool { Self.rightToLeft.contains(String(language.split(separator: "-").first ?? "")) }
 
     /// Each regional variant's base, as `languages.json` lists them ("pt-BR": "pt"); none when it lists none.
     static func variants(folder: URL) throws -> [String: String] {
@@ -167,22 +189,56 @@ struct Words {
     }
 }
 
-/// The plural form a whole number takes in each shipped language (CLDR's cardinal rules).
+/// The plural form a whole number takes in each language the apps ship, by CLDR's cardinal rules for
+/// whole numbers, the forms kiff/tafs's `generate.py` lists for each (`PLURALS`). A form a language's
+/// line doesn't have reads `other` (`Words.count`).
 enum Plural {
     static func form(_ n: Int, language: String) -> String {
         let n = abs(n)
         let million = n != 0 && n % 1_000_000 == 0
-        switch language {
-        case "fr", "pt", "pt-BR":
+        let ten = n % 10, hundred = n % 100
+        switch language.split(separator: "-").first.map(String.init) ?? language {
+        case "fr", "pt":
             return n <= 1 ? "one" : million ? "many" : "other"
-        // Korean and Japanese have one form for every number.
-        case "ko", "ja":
+        // One form for every number.
+        case "ko", "ja", "zh", "id", "vi", "th", "km", "lo", "ms":
             return "other"
+        // "one" is 0 and 1.
+        case "hy", "bn":
+            return n <= 1 ? "one" : "other"
+        // Hebrew's "many" left CLDR in 42.
+        case "he":
+            return n == 1 ? "one" : n == 2 ? "two" : "other"
+        case "mk":
+            return ten == 1 && hundred != 11 ? "one" : "other"
+        case "ru", "uk":
+            if ten == 1 && hundred != 11 { return "one" }
+            return (2...4).contains(ten) && !(12...14).contains(hundred) ? "few" : "many"
         case "es", "it":
             return n == 1 ? "one" : million ? "many" : "other"
         case "pl":
             if n == 1 { return "one" }
-            return (2...4).contains(n % 10) && !(12...14).contains(n % 100) ? "few" : "many"
+            return (2...4).contains(ten) && !(12...14).contains(hundred) ? "few" : "many"
+        case "cs", "sk":
+            return n == 1 ? "one" : (2...4).contains(n) ? "few" : "other"
+        case "hr", "sr", "bs":
+            if ten == 1 && hundred != 11 { return "one" }
+            return (2...4).contains(ten) && !(12...14).contains(hundred) ? "few" : "other"
+        case "lt":
+            if (11...19).contains(hundred) { return "other" }
+            return ten == 1 ? "one" : ten >= 2 ? "few" : "other"
+        case "lv":
+            if ten == 0 || (11...19).contains(hundred) { return "zero" }
+            return ten == 1 ? "one" : "other"
+        case "sl":
+            return hundred == 1 ? "one" : hundred == 2 ? "two" : (3...4).contains(hundred) ? "few" : "other"
+        case "ro":
+            return n == 1 ? "one" : n == 0 || (1...19).contains(hundred) ? "few" : "other"
+        case "ar":
+            if n == 0 { return "zero" }
+            if n == 1 { return "one" }
+            if n == 2 { return "two" }
+            return (3...10).contains(hundred) ? "few" : (11...99).contains(hundred) ? "many" : "other"
         default:
             return n == 1 ? "one" : "other"
         }

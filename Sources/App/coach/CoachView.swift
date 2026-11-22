@@ -1546,8 +1546,7 @@ struct CoachView: View {
                 HStack(spacing: 10) {
                     if !planOpen, let current { mark(current.status, size: 16) }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: (card.planLine ?? words("coach.plan.progress", ["done": words.number(card.planDone), "total": words.number(card.plan.count)])).uppercased())
-                            .font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.dim)
+                        Eyebrow(text: card.planLine ?? words("coach.plan.progress", ["done": words.number(card.planDone), "total": words.number(card.plan.count)]))
                         if !planOpen, let current {
                             Text(verbatim: current.label).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink).lineLimit(1)
                         }
@@ -1619,7 +1618,7 @@ struct CoachView: View {
     private func handOver(_ card: Thread.Card) -> some View {
         let name = card.tafName ?? ""
         return VStack(alignment: .leading, spacing: 10) {
-            Text(words("coach.result.set_up", ["taf": name]).uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.ok)
+            Eyebrow(text: words("coach.result.set_up", ["taf": name]), color: Theme.ok)
             if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
             if !card.tools.isEmpty {
                 // In words, as the iPad's (`KIFFMapping.toolWords`), never a tool's own name.
@@ -1669,7 +1668,7 @@ struct CoachView: View {
             if let answered = card.answered { outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.service].compactMap { $0 }.joined(separator: " · ")) }
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text(words("coach.sign_in.eyebrow").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
+                Eyebrow(text: words("coach.sign_in.eyebrow"), color: Theme.amberText)
                 Text(card.service.map { words("coach.sign_in.at", ["vendor": $0]) } ?? words("coach.sign_in.at_vendor"))
                     .font(.system(size: 20, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
                 if let note = card.note ?? card.text { Text(verbatim: note).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
@@ -1710,7 +1709,7 @@ struct CoachView: View {
             }
         } else if card.waitsForPerson {
             VStack(alignment: .leading, spacing: 12) {
-                Text(words("coach.needs_you_approve").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
+                Eyebrow(text: words("coach.needs_you_approve"), color: Theme.amberText)
                 if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
                 if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
                 if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 13)).foregroundColor(Theme.soft) }

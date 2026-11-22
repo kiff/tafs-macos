@@ -21,7 +21,7 @@ final class AppLanguage: ObservableObject {
         self.preferred = preferred
         let chosen = LanguageChoice.saved(defaults)
         self.chosen = chosen
-        shipped = folder.flatMap { try? Words.shipped(folder: $0) } ?? ["en"]
+        shipped = folder.flatMap { try? Words.offered(folder: $0) } ?? ["en"]
         words = Words.load(folder: folder, preferred: preferred, chosen: chosen)
         Words.app = words
     }

@@ -10,7 +10,7 @@ extension Words {
     /// test), `folder` says where they are.
     static func load(folder: URL? = bundleFolder, preferred: [String] = Locale.preferredLanguages,
                      chosen: String? = LanguageChoice.saved(.standard)) -> Words {
-        guard let folder, let shipped = try? Words.shipped(folder: folder) else { return Words(language: "en", lines: [:]) }
+        guard let folder, let shipped = try? Words.offered(folder: folder) else { return Words(language: "en", lines: [:]) }
         let language = LanguageChoice.language(chosen: chosen, preferred: preferred, shipped: shipped)
         return (try? Words(language: language, folder: folder)) ?? Words(language: "en", lines: [:])
     }
@@ -30,6 +30,17 @@ extension EnvironmentValues {
     var words: Words {
         get { self[WordsKey.self] }
         set { self[WordsKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// The app's words, and the direction and locale that go with their language: Arabic (and any
+    /// language in `Words.rightToLeft`) mirrors the view, as the iPad's does, and dates and numbers
+    /// follow the app's language, not only the Mac's. The window and the screenshot tests both use it.
+    func inLanguage(_ words: Words) -> some View {
+        environment(\.words, words)
+            .environment(\.layoutDirection, words.isRightToLeft ? .rightToLeft : .leftToRight)
+            .environment(\.locale, Locale(identifier: words.language))
     }
 }
 

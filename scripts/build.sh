@@ -44,7 +44,9 @@ cp App/Info.plist "$APP/Contents/Info.plist"
 STRINGS="$APP/Contents/Resources/strings"
 mkdir -p "$STRINGS"
 cp .shared/app/strings/languages.json "$STRINGS/"
-for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped/ { for (i = 2; i <= NF; i++) print $i }'); do
+# The shipped languages, and those this Mac offers before kiff/tafs ships them (`Words.ahead`, docs/shared.md).
+AHEAD="ar"
+for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped/ { for (i = 2; i <= NF; i++) print $i }') $AHEAD; do
     cp -R ".shared/app/strings/$lang" "$STRINGS/$lang"
     ls "$STRINGS/$lang"/*.json > /dev/null
 done

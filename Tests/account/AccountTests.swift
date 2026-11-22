@@ -119,8 +119,8 @@ let accountClientTests: [Test] = [
         let plist = try Data(contentsOf: URL(fileURLWithPath: "App/Info.plist"))
         let info = try PropertyListSerialization.propertyList(from: plist, format: nil) as? [String: Any] ?? [:]
         let declared = info["CFBundleLocalizations"] as? [String] ?? []
-        let shipped = try Words.shipped(folder: URL(fileURLWithPath: ".shared/app/strings"))
-        try expectEqual(Set(declared), Set(shipped))
+        let offered = try Words.offered(folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(Set(declared), Set(offered))
         try expectEqual(AppInfo.version(info), "0.1 (4)")
         // The Dock and Finder show the app's own icon: Info.plist names it, and its 1024-point source is there.
         try expectEqual(info["CFBundleIconFile"] as? String ?? "", "tafs")

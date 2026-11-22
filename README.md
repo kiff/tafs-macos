@@ -1,7 +1,12 @@
 # tafs for macOS
 
-The tafs desktop app for macOS 12 (Monterey) and later, on Intel and Apple silicon. Work
-happens in pull requests to `main`.
+The tafs desktop app for **macOS 12 (Monterey)**, on Intel and Apple silicon. Work happens in
+pull requests to `main`.
+
+**On macOS 13 and later, tafs is the Mac App Store app**: the iPhone and iPad app built with Mac
+Catalyst, from kiff/tafs ([macOS 13 and later](docs/macos-13.md)). This app is for the Macs that
+can't run it. It still opens on a newer macOS (its minimum stays 12.0), but it's built, tested and
+offered for macOS 12 only.
 
 ## Docs
 
