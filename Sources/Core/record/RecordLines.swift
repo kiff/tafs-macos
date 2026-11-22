@@ -156,9 +156,12 @@ extension Record {
 
     /// The tafs (by their id at tafs cloud) whose calls name a line: each with a line KIFF hashed
     /// what it acted on and that isn't named yet, as the iPad's `nameRecordLines`. Each once, in order.
-    static func tafsToName(_ groups: [Group]) -> [String] {
+    /// Only the person's own listed tafs (`listed`), as the iPad reads calls only for a taf it has as
+    /// its own (`cloudTaf(for:)`): a taf they only oversee is never read, and its lines stay unnamed.
+    static func tafsToName(_ groups: [Group], listed: Set<String>) -> [String] {
         var out: [String] = []
-        for entry in groups.flatMap(\.entries) where entry.onHash != nil && entry.onValue == nil && !out.contains(entry.taf.id) {
+        for entry in groups.flatMap(\.entries) where entry.onHash != nil && entry.onValue == nil
+            && listed.contains(entry.taf.id) && !out.contains(entry.taf.id) {
             out.append(entry.taf.id)
         }
         return out
@@ -176,6 +179,23 @@ extension Record {
             })
         }
     }
+
+    /// A line's colour by its kind, as the iPad's `RecordEntry.Kind.color`: started is good, a call
+    /// done in tafs is dim, anything unknown amber. Not a taf's Activity's (`TafActivity.Entry.tone`).
+    enum Tone: Equatable { case ok, amber, no, dim }
+
+    static func tone(of kind: String) -> Tone {
+        switch kind {
+        case "done", "approved", "started": return .ok
+        case "refused", "revoked", "not_done": return .no
+        case "in_tafs": return .dim
+        default: return .amber
+        }
+    }
+
+    /// Whether a line of the list opens its sheet, as the iPad's `RecordRow`: every line but one done
+    /// in tafs, which isn't a call (kiff/tafs#236), receipt or not.
+    static func opensSheet(_ entry: Entry) -> Bool { entry.kind != "in_tafs" }
 
     /// Whether a held line still waits, as the iPad's `AppModel.isWaiting`: until KIFF's held list is
     /// read (`held` nil: unread or failed) it does; after, only while some held call is its call (by

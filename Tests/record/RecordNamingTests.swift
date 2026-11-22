@@ -69,9 +69,29 @@ let recordNamingTests: [Test] = [
             try line("a", taf: "t1", call: hashed()), try line("b", taf: "t1", call: hashed()),
             try line("c", taf: "t2", call: #"{"proposal_id":"p"}"#), try line("d", taf: "t3", call: hashed()),
         ])]
-        try expectEqual(Record.tafsToName(groups), ["t1", "t3"])
+        try expectEqual(Record.tafsToName(groups, listed: ["t1", "t2", "t3"]), ["t1", "t3"])
         let done = Record.naming(groups, refs: ["tc-a": paymentA], sha256: testSHA256)
-        try expectEqual(Record.tafsToName(done), [])
+        try expectEqual(Record.tafsToName(done, listed: ["t1", "t2", "t3"]), [])
+    },
+    Test("a taf the person doesn't list (one they only oversee) is never read to name a line, as the iPad's cloudTaf(for:)") {
+        let groups = [Record.Group(id: "g", title: "", entries: [
+            try line("a", taf: "mine", call: hashed()), try line("b", taf: "overseen", call: hashed()),
+        ])]
+        try expectEqual(Record.tafsToName(groups, listed: ["mine"]), ["mine"])
+        try expectEqual(Record.tafsToName(groups, listed: []), [])
+    },
+    Test("a line's colour is the iPad's RecordEntry.Kind.color: started good, in tafs dim, the unknown amber") {
+        for kind in ["done", "approved", "started"] { try expectEqual(Record.tone(of: kind), .ok) }
+        for kind in ["held", "unknown", "sending", "new_kind"] { try expectEqual(Record.tone(of: kind), .amber) }
+        for kind in ["refused", "revoked", "not_done"] { try expectEqual(Record.tone(of: kind), .no) }
+        try expectEqual(Record.tone(of: "in_tafs"), .dim)
+    },
+    Test("every line but one done in tafs opens its sheet, receipt or not; a step opens it when KIFF's call names its taf") {
+        try expect(Record.opensSheet(try line("a", kind: "held", call: "{}")), "no receipt: its facts")
+        try expect(Record.opensSheet(try line("b", call: hashed(extra: signed))), "a receipt")
+        try expect(!Record.opensSheet(try line("c", kind: "in_tafs", call: "{}")), "done in tafs, not a call")
+        try expect(try line("d", call: #"{"actor_id":"agent-1"}"#).hasActor, "the iPad's evidence")
+        try expect(!(try line("e", call: hashed(extra: signed)).hasActor), "no actor: no evidence, as the iPad's")
     },
     Test("a taf's calls are read as the iPad's, whole or not at all", awaiting: {
         let transport = CannedTransport([(200, #"{"calls":[{"invocation":"tc-a","value":"pi_1","at":"2026-11-14T17:30:00Z"}]}"#),

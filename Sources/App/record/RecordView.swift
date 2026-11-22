@@ -34,6 +34,9 @@ final class RecordModel: ObservableObject {
     /// KIFF no longer holds says "no longer waiting". Nil until read, or when it couldn't be: every
     /// held line still waits, as the iPad's before its list is read.
     @Published private(set) var heldProposals: Set<String>?
+    /// The person's own listed tafs, by their id at tafs cloud: only their calls name a line, as the
+    /// iPad's `cloudTaf(for:)`. The screen sets it (`list(_:)`).
+    private(set) var listed: Set<String> = []
 
     /// A search across the Record, kept apart from the list as the iPad's `RecordSearch`: its
     /// words, its pages as tafs cloud sent them, and where it stands.
@@ -68,6 +71,8 @@ final class RecordModel: ObservableObject {
     private let account: AccountClient?
     private var cursor: String?
     private var asked = 0
+    /// Each read of KIFF's held list, so an older answer never replaces a newer one.
+    private var heldAsked = 0
     /// The search waiting for the person to stop typing.
     private var typing: Task<Void, Never>?
     /// How long the Record waits after the last key before it searches what's typed, as the
@@ -88,14 +93,28 @@ final class RecordModel: ObservableObject {
     }
 
     /// Reads the calls KIFF holds (`GET /v1/me/card-exceptions?status=held`, the iPad's `heldCalls`),
-    /// for the held lines' "no longer waiting". Unread, every held line still waits.
+    /// for the held lines' "no longer waiting". Unread, every held line still waits. The list reads it
+    /// after each page of lines, so it is never older than the lines it is held against: a call held
+    /// after an older read of it would otherwise read as no longer waiting.
     func loadHeld() async {
         guard let account else { return }
+        heldAsked += 1
+        let mine = heldAsked
         do {
-            heldProposals = HeldCall.heldProposals(try await account.heldCalls())
+            let read = HeldCall.heldProposals(try await account.heldCalls())
+            if mine == heldAsked { heldProposals = read }
         } catch {
-            heldProposals = nil
+            if mine == heldAsked { heldProposals = nil }
         }
+    }
+
+    /// The person's listed tafs, as the screen has them: a taf listed since the last read has its
+    /// lines named now.
+    func list(_ ids: Set<String>) async {
+        guard ids != listed else { return }
+        listed = ids
+        guard state == .loaded else { return }
+        await name(asked)
     }
 
     /// Whether a held line still waits for the person (`Record.isWaiting`).
@@ -104,9 +123,10 @@ final class RecordModel: ObservableObject {
     /// Names what the lines read acted on, as the iPad's `nameRecordLines` (AppModel.swift:6726-6740):
     /// each taf with a line KIFF hashed and not yet named has its calls read from tafs cloud
     /// (`GET /v1/tafs/{id}/calls`), and a line is named only by the value whose hash is KIFF's. Best
-    /// effort: a taf whose calls can't be read keeps its lines unnamed. A newer read of the list drops it.
+    /// effort: a taf whose calls can't be read keeps its lines unnamed. Only the person's listed tafs are
+    /// read, as the iPad's (a taf they only oversee isn't). A newer read of the list drops it.
     private func name(_ mine: Int) async {
-        let ids = Record.tafsToName(groups)
+        let ids = Record.tafsToName(groups, listed: listed)
         guard !ids.isEmpty else { return }
         var refs: [String: String] = [:]
         for id in ids {
@@ -129,8 +149,12 @@ final class RecordModel: ObservableObject {
         do {
             let page = try await cloud.record()
             guard mine == asked else { return }
+            // Lines read again are held against KIFF's list read after them, never an older one: until
+            // it is read, every held line waits.
+            heldProposals = nil
             groups = page.shown
             show(page)
+            await loadHeld()
             await name(mine)
         } catch {
             guard mine == asked else { return }
@@ -153,6 +177,7 @@ final class RecordModel: ObservableObject {
                 }
             }
             show(page)
+            await loadHeld()
             await name(mine)
         } catch KIFFError.refused(status: 409, code: _) {
             // A call was made since: the cursor is over, so the search starts again.
@@ -234,11 +259,13 @@ final class RecordModel: ObservableObject {
         }
     }
 
-    /// Opens a line's receipt sheet and reads KIFF's receipt, as the iPad's `ReceiptView`. A line
-    /// with no receipt opens nothing.
+    /// Opens a line's sheet, as the iPad's `ReceiptView`: its facts and Open in the taf's chat for any
+    /// line, and KIFF's receipt, read and checked, for one that has a receipt.
     func openReceipt(_ entry: Record.Entry) async {
-        guard entry.receipt != nil else { return }
         receiptEntry = entry
+        receiptRaw = nil
+        receiptCheck = nil
+        receiptError = nil
         await loadReceipt()
     }
 
@@ -327,9 +354,10 @@ struct RecordView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
-        .task { await model.load() }
+        // The listed tafs first, so only theirs name a line; KIFF's held list is read with each page.
+        .task { await model.list(listedIDs); await model.load() }
         .task { await model.loadAccess() }
-        .task { await model.loadHeld() }
+        .onChange(of: listedIDs) { ids in Task { await model.list(ids) } }
         .sheet(isPresented: Binding(get: { model.caseAbout != nil }, set: { if !$0 { model.closeCase() } })) { caseSheet }
         // A line's receipt from the list or a search; a case's step opens its own over the case's sheet.
         .background(EmptyView().sheet(isPresented: receiptShown(inCase: false)) { receiptSheet })
@@ -353,7 +381,7 @@ struct RecordView: View {
         case .unread(let why):
             Text(words("home.couldnt_load_from_kiff")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
             Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft)
-            Button(words("common.try_again")) { Task { await model.load(); await model.loadHeld() } }
+            Button(words("common.try_again")) { Task { await model.load() } }
         case .loaded:
             if model.shown.isEmpty {
                 Text(model.noneWords ?? words("common.nothing_yet")).font(.system(size: 14)).foregroundColor(Theme.soft)
@@ -441,6 +469,9 @@ struct RecordView: View {
         }
     }
 
+    /// The person's listed tafs, by their id at tafs cloud.
+    private var listedIDs: Set<String> { Set(tafs.compactMap(\.tafID)) }
+
     /// The call's taf is one of the person's listed tafs, as the iPad's `tafID(cloudID:)`.
     private func listed(_ entry: Record.Entry) -> Bool { tafs.contains { $0.tafID == entry.taf.id } }
 
@@ -464,7 +495,18 @@ struct RecordView: View {
     /// One call, as the iPad's `RecordRow`: its status dot; then its taf's dot and "Taf · what it
     /// did · amount", with its time at the right; then who decided and what became of it at the
     /// tool, "within its Card · done", as the iPad's `detail`.
-    private func row(_ entry: Record.Entry) -> some View {
+    @ViewBuilder private func row(_ entry: Record.Entry) -> some View {
+        // Every line but one done in tafs opens its sheet, receipt or not, as the iPad's `RecordRow`.
+        if Record.opensSheet(entry) {
+            Button { Task { await model.openReceipt(entry) } } label: { rowFace(entry).contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+                .help(words("record.shows_receipt"))
+        } else {
+            rowFace(entry)
+        }
+    }
+
+    private func rowFace(_ entry: Record.Entry) -> some View {
         let taf = tafs.first { $0.tafID == entry.taf.id }
         let head = [entry.taf.name, entry.title, entry.amountText].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return HStack(alignment: .top, spacing: 12) {
@@ -478,28 +520,17 @@ struct RecordView: View {
                 }
                 // What it acted on, then who decided and what became of it, or "no longer waiting".
                 Text(verbatim: entry.line(words, waiting: model.isWaiting(entry))).font(.system(size: 13)).foregroundColor(Theme.soft)
-                // KIFF's receipt, opened in its sheet and checked there, as the iPad's row opens it.
-                if entry.receipt != nil {
-                    Button { Task { await model.openReceipt(entry) } } label: {
-                        Label(words("receipt.kiff_receipt"), systemImage: "doc.text").font(.system(size: 12)).foregroundColor(Theme.ok)
-                    }
-                    .buttonStyle(.plain)
-                    .help(words("record.shows_receipt"))
+                // KIFF says it's signed; the seal is for the sheet's own check, as the iPad's row.
+                if entry.receipt?.status == "signed" {
+                    Label(words("receipt.kiff_receipt"), systemImage: "doc.text").font(.system(size: 12)).foregroundColor(Theme.ok)
                 }
             }
         }
         .padding(14)
-        .accessibilityElement(children: .contain)
+        .accessibilityElement(children: .combine)
     }
 
-    /// The iPad's kind colours (`RecordEntry.Kind.color`), as a taf's Activity has them.
-    private func color(_ kind: String) -> Color {
-        switch TafActivity.Entry.tone(of: kind) {
-        case .ok: return Theme.ok
-        case .amber: return Theme.amber
-        case .no: return Theme.no
-        }
-    }
+    private func color(_ kind: String) -> Color { Theme.recordColor(kind) }
 
     /// One case, open from a search: every call about the same thing, oldest first, each as its
     /// taf's Activity draws it with its own next step (`RecordStepRow`), the step that didn't go

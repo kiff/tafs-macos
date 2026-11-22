@@ -33,12 +33,13 @@ struct RecordStepRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The iPad's `SourceActivityRow`: a plain row, not boxed, that opens the call's receipt, then its
-    /// next step. The next step is tafs cloud's words, as the iPad shows anyone it gives no button:
-    /// its buttons (connect again, Ask Coach) are `NextStepRow`'s, not on this Mac yet.
+    /// The iPad's `SourceActivityRow`: a plain row, not boxed, that opens the call's sheet whenever KIFF's
+    /// call names its taf (the iPad's `evidence`), receipt or not, then its next step. The next step is
+    /// tafs cloud's words, as the iPad shows anyone it gives no button: its buttons (connect again, Ask
+    /// Coach) are `NextStepRow`'s, not on this Mac yet.
     private var activity: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if entry.receipt != nil {
+            if entry.hasActor {
                 Button { Task { await model.openReceipt(entry) } } label: { face }
                     .buttonStyle(.plain)
                     .help(words("record.shows_receipt"))
@@ -82,5 +83,17 @@ struct RecordStepRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.line))
+    }
+}
+
+extension Theme {
+    /// A Record line's colour by its kind, as the iPad's `RecordEntry.Kind.color` (`Record.tone`).
+    static func recordColor(_ kind: String) -> Color {
+        switch Record.tone(of: kind) {
+        case .ok: return Theme.ok
+        case .amber: return Theme.amber
+        case .no: return Theme.no
+        case .dim: return Theme.dim
+        }
     }
 }

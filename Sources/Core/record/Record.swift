@@ -66,6 +66,9 @@ enum Record {
         var onValue: String? = nil
         /// The owner's next step for a call that wasn't done, as tafs cloud says it (`next`).
         let next: NextStep?
+        /// KIFF's call names the taf that made it (`call.actor_id`): what the iPad's `SourceActivityRow`
+        /// needs to open the call's sheet (its `evidence`), receipt or not.
+        let hasActor: Bool
 
         enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call, next }
 
@@ -99,9 +102,11 @@ enum Record {
             var onHash: String?
             var onArg: String?
             var reason: String?
+            var actorID: String?
             enum CodingKeys: String, CodingKey {
                 case receipt, amount, answer, readOnly = "read_only", outcome, held
                 case proposalID = "proposal_id", entityID = "entity_id", onHash = "on_hash", onArg = "on_arg", reason
+                case actorID = "actor_id"
             }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -116,6 +121,7 @@ enum Record {
                 onHash = (try? c.decodeIfPresent(String.self, forKey: .onHash)) ?? nil
                 onArg = (try? c.decodeIfPresent(String.self, forKey: .onArg)) ?? nil
                 reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
+                actorID = (try? c.decodeIfPresent(String.self, forKey: .actorID)) ?? nil
             }
         }
 
@@ -150,6 +156,7 @@ enum Record {
             answerSigned = call?.answer?.signed == true
             answerDevice = call?.answer?.device
             next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
+            hasActor = call?.actorID != nil
         }
     }
 

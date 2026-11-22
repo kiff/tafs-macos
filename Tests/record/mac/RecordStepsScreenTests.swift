@@ -40,6 +40,7 @@ let recordStepsScreenTests: [Test] = [
     Test("the list's lines are named from their taf's calls, only by the value KIFF hashed, best effort", awaiting: { @MainActor in
         let (model, cloud, _) = reading(cloud: [(200, page([hashedLine("e1"), hashedLine("e2", taf: "taf_2")])),
                                                (200, #"{"calls":[{"invocation":"tc-a","value":"foo"}]}"#), (503, "")])
+        await model.list(["taf_1", "taf_2"])
         await model.load()
         try expectEqual(cloud.sent.map(\.path), ["/v1/record?q=", "/v1/tafs/taf_1/calls", "/v1/tafs/taf_2/calls"])
         try expectEqual(cloud.sent[1].method, "GET")
@@ -47,20 +48,49 @@ let recordStepsScreenTests: [Test] = [
         // KIFF hashed names it too (refs are by KIFF's key, as the iPad's).
         try expectEqual(model.groups.flatMap(\.entries).map(\.onValue), ["foo", "foo"])
         let (other, _, _) = reading(cloud: [(200, page([hashedLine("e1")])), (200, #"{"calls":[{"invocation":"tc-a","value":"bar"}]}"#)])
+        await other.list(["taf_1"])
         await other.load()
         try expectEqual(other.groups[0].entries[0].onValue, nil)
     }),
-    Test("a held line is no longer waiting only once KIFF's held list is read without it", awaiting: { @MainActor in
+    Test("a taf the person only oversees is never read to name its lines; one listed later is", awaiting: { @MainActor in
+        let (model, cloud, _) = reading(cloud: [(200, page([hashedLine("e1"), hashedLine("e2", taf: "taf_9", name: "Payouts")])),
+                                               (200, #"{"calls":[{"invocation":"tc-a","value":"foo"}]}"#)])
+        await model.list(["taf_1"])
+        await model.load()
+        try expectEqual(cloud.sent.map(\.path), ["/v1/record?q=", "/v1/tafs/taf_1/calls"])
+        try expectEqual(model.groups.flatMap(\.entries).map(\.onValue), ["foo", "foo"])
+        let (late, lateCloud, _) = reading(cloud: [(200, page([hashedLine("e1")])), (200, #"{"calls":[{"invocation":"tc-a","value":"foo"}]}"#)])
+        await late.load()
+        try expectEqual(lateCloud.sent.map(\.path), ["/v1/record?q="])
+        await late.list(["taf_1"])
+        try expectEqual(lateCloud.sent.map(\.path), ["/v1/record?q=", "/v1/tafs/taf_1/calls"])
+        try expectEqual(late.groups[0].entries[0].onValue, "foo")
+    }),
+    Test("a held line is no longer waiting only once KIFF's held list, read after the lines, is without it", awaiting: { @MainActor in
         let held = #"{"exceptions":[{"id":"ex1","subject":"a1","action":"refund","created_at":"2026-10-21T00:41:03Z","proposal_id":"p2"}]}"#
         let (model, _, kiff) = reading(cloud: [(200, page([hashedLine("e1", kind: "held")]))], kiff: [(200, held), (500, "")])
+        let unread = try AccountClient.decoder.decode(Record.Entry.self, from: Data(hashedLine("e1", kind: "held").utf8))
+        try expect(model.isWaiting(unread), "unread: waiting")
         await model.load()
         let entry = model.groups[0].entries[0]
-        try expect(model.isWaiting(entry), "unread: waiting")
-        await model.loadHeld()
-        try expectEqual(kiff.sent[0].path, "/v1/me/card-exceptions?status=held")
+        try expectEqual(kiff.sent.map(\.path), ["/v1/me/card-exceptions?status=held"])
         try expect(!model.isWaiting(entry), "KIFF holds p2 only")
         await model.loadHeld()
         try expect(model.isWaiting(entry), "a failed read: waiting again")
+    }),
+    Test("after a 409 the lines are read again and KIFF's held list after them: a call held since still waits", awaiting: { @MainActor in
+        let none = #"{"exceptions":[]}"#
+        let heldP5 = #"{"exceptions":[{"id":"ex5","subject":"a1","action":"refund","created_at":"2026-10-21T00:41:03Z","proposal_id":"p5"}]}"#
+        let first = #"{"hint":"","entries":[\#(hashedLine("e1"))],"groups":[],"next_cursor":"c1"}"#
+        let (model, _, kiff) = reading(cloud: [(200, first), (409, #"{"error":"cursor_stale"}"#),
+                                               (200, page([hashedLine("e5", kind: "held", proposal: "p5"), hashedLine("e1")]))],
+                                       kiff: [(200, none), (200, heldP5)])
+        await model.load()
+        try expect(model.canContinue, "a next page")
+        await model.more()
+        try expectEqual(kiff.sent.count, 2)
+        guard let line = model.groups.flatMap(\.entries).first(where: { $0.id == "e5" }) else { throw Failure(description: "no e5") }
+        try expect(model.isWaiting(line), "held since the first read: still waiting")
     }),
     Test("the screenshots: a named line no longer waiting; the receipt's facts; a payment KIFF didn't sign; a case's steps", awaiting: { @MainActor in
         let words = Words.load(folder: strings, preferred: ["en"])
@@ -68,8 +98,8 @@ let recordStepsScreenTests: [Test] = [
         let (list, _, _) = reading(cloud: [(200, page([hashedLine("e1", kind: "held", detail: "Waiting for you"), hashedLine("e2")])),
                                            (200, #"{"calls":[{"invocation":"tc-a","value":"foo"}]}"#)],
                                    kiff: [(200, #"{"exceptions":[]}"#)])
+        await list.list(["taf_1"])
         await list.load()
-        await list.loadHeld()
         try expect(list.groups[0].entries.allSatisfy { $0.onValue == "foo" }, "named")
         try write(RecordView(model: list, tafs: tafs, timeZone: "Europe/Paris").environment(\.words, words), "record-row-on-en", size: CGSize(width: 980, height: 760))
         for (name, value) in [("receipt-facts-en", "foo"), ("receipt-payment-mismatch-en", "bar")] {

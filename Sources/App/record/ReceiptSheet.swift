@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// One Record line's KIFF receipt, checked on this Mac, as the iPad's `ReceiptView`: the line, what
-/// happened (only once the receipt checks out as KIFF's and matches the line), and the check itself.
-/// Nothing opens outside the app.
+/// One Record line's sheet, as the iPad's `ReceiptView`: the line's facts and Open in the taf's chat;
+/// then, for a line with a KIFF receipt, what happened (only once the receipt checks out as KIFF's and
+/// matches the line) and the check itself. A line without one shows its facts only. Nothing opens
+/// outside the app.
 struct ReceiptSheet: View {
     @Environment(\.words) private var words
     @Environment(\.openTaf) private var openTaf
@@ -20,8 +21,11 @@ struct ReceiptSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     facts
-                    whatHappened
-                    checkPanel
+                    // As the iPad's: no receipt, no check and nothing KIFF signed to show.
+                    if entry.receipt != nil {
+                        whatHappened
+                        checkPanel
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -45,13 +49,8 @@ struct ReceiptSheet: View {
         }
     }
 
-    private var kindColor: Color {
-        switch TafActivity.Entry.tone(of: entry.kind) {
-        case .ok: return Theme.ok
-        case .amber: return Theme.amber
-        case .no: return Theme.no
-        }
-    }
+    /// The iPad's `RecordEntry.Kind.color`, not a taf's Activity's: started is good, in tafs dim.
+    private var kindColor: Color { Theme.recordColor(entry.kind) }
 
     private var steps: ReceiptSteps { ReceiptSteps(model.receiptRaw ?? Data()) }
 
@@ -68,7 +67,8 @@ struct ReceiptSheet: View {
     /// the outcome, KIFF's why and who decided; then Open in the taf's chat.
     @ViewBuilder private var facts: some View {
         VStack(alignment: .leading, spacing: 12) {
-            fact(words("receipt.fact.taf"), entry.taf.name.isEmpty ? "–" : entry.taf.name)
+            // The listed taf's name, as the iPad's `model.taf(entry.tafID)?.name`; "–" for one not listed.
+            fact(words("receipt.fact.taf"), taf?.name ?? "–")
             fact(words("receipt.fact.at"), AccountTime(timeZone).zonedShown(entry.at, date: .abbreviated, time: .standard, words: words))
             if let on = entry.receiptOn { fact(words("receipt.fact.on"), on) }
             fact(words("receipt.fact.outcome"), entry.receiptOutcome(words), bold: true)
