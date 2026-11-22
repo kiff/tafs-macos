@@ -23,6 +23,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | PairSignInView.swift | 104 | Signing in from another phone: this device shows the pairing QR and its check code, the phone approves | KIFF/Pairing | "Add this Mac with a phone": `pairing/SignInView.swift`, `SignInModel.swift`, `QRCode.swift`, `Core/pairing/Client.swift`, `Messages.swift` |
 | RecipeGallery.swift | 135 | The jobs' gallery | Gallery | `RecipeGallerySheet` with Say it in your own words, All jobs and every job by category; Explore jobs and the strip in the sidebar (`overview/RecipeGalleryView.swift`, `shell/ShellView.swift`, `Core/overview/Gallery.swift`; it came with #97, the row was stale) |
 | ReportAnswerSheet.swift | 124 | Report an answer Coach or a taf wrote | AnswerReport | `coach/ReportAnswerSheet.swift`, `Core/coach/Report.swift` |
+| WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | WatchDaysModel | From your watch after the chats, each day opening in place with Back, each turn sent from the watch, when, and what came of it (`coach/CoachChatsSheet.swift`, `coach/WatchDaysModel.swift`, `Core/coach/WatchDays.swift`) |
 | YourStepCard.swift | 46 | A step a taf handed its owner, with Done and Skip | YourStep | `approvals/NeedsYou.swift`, `Core/approvals/YourStep.swift` (signed with the device key after Touch ID or the Mac's password) |
 
 ## Partial
@@ -73,7 +74,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TrialViews.swift | 214 | Trials of a new version | |
-| WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | |
 
 ## Not for macOS 12
 

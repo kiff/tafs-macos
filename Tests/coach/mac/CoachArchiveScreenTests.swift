@@ -88,7 +88,7 @@ let coachArchiveMacTests: [Test] = [
             await model.loadArchivedChats()
             let words = Words.load(folder: strings, preferred: [language])
             for (archived, name) in [(false, "coach-chats"), (true, "coach-chats-archived")] {
-                let view = CoachChatsSheet(model: model, open: { _ in }, archived: archived).environment(\.words, words)
+                let view = CoachChatsSheet(model: model, watch: WatchDaysModel(readDays: { WatchDays.List() }, readDay: { _ in [] }), open: { _ in }, archived: archived).environment(\.words, words)
                 guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 420, height: 460)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
                 try png.write(to: folder.appendingPathComponent("\(name)-\(language).png"))
             }
