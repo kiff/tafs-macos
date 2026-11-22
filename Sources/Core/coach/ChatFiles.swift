@@ -167,6 +167,8 @@ extension CloudClient {
     /// another's is a 404.
     func attachmentURL(_ id: String, file: String) async throws -> URL {
         struct Answer: Decodable { let url: URL }
+        // An id of "." or ".." would fold into the path above it once the address is resolved: never sent.
+        guard ![".", ".."].contains(id), ![".", ".."].contains(file) else { throw KIFFError.unreadable }
         let answer: Answer = try await get("/v1/tafs/\(Self.escaped(id))/attachments/\(Self.escaped(file))", saying: true)
         return answer.url
     }
