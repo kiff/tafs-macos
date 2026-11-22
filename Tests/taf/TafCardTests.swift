@@ -128,3 +128,18 @@ let tafCardLinesTests: [Test] = [
         try expectEqual(test.eachItem, [])
     },
 ]
+
+let tafScrollFoldTests: [Test] = [
+    Test("a taf's header line folds once its chat has scrolled down a step, and comes back a step up") {
+        var fold = ScrollFold()
+        try expectEqual(fold.moved(to: 0), nil)
+        try expectEqual(fold.moved(to: -10), nil)
+        try expectEqual(fold.moved(to: -30), true)
+        // A wobble under a step from the new mark says nothing.
+        try expectEqual(fold.moved(to: -20), nil)
+        try expectEqual(fold.moved(to: -60), true)
+        try expectEqual(fold.moved(to: -30), false)
+        try expectEqual(fold.mark, -30)
+    },
+]
+

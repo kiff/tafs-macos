@@ -1,2 +1,2 @@
 /// The taf part's tests that need no Mac.
-let tafTests: [Test] = tafCardTests + tafTabsTests + tafPlanqueTests + planqueRoutesTests + howItWorksTests + tafKnobTests + tafRunsTests + tafDoorsTests + tafPageTests + tafRemovalTests + tafCardLinesTests
+let tafTests: [Test] = tafCardTests + tafTabsTests + tafPlanqueTests + planqueRoutesTests + howItWorksTests + tafKnobTests + tafRunsTests + tafDoorsTests + tafPageTests + tafRemovalTests + tafCardLinesTests + tafScrollFoldTests
