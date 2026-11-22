@@ -8,8 +8,8 @@ private func words(_ language: String) throws -> Words { try Words(language: lan
 let wordsTests: [Test] = [
     Test("every shipped language is read, with English's keys") {
         let shipped = try Words.shipped(folder: folder)
-        // The 34 kiff/tafs ships at the pin, as `languages.json` says, the first ones among them.
-        try expect(shipped.count >= 34, "34 or more shipped languages, got \(shipped.count)")
+        // The 40 kiff/tafs ships at the pin, as `languages.json` says, the first ones among them.
+        try expect(shipped.count >= 40, "40 or more shipped languages, got \(shipped.count)")
         try expect(Set(["en", "de", "fr", "es", "it", "pt", "nl", "pl", "ja", "ko", "pt-BR", "zh-Hant"]).isSubset(of: Set(shipped)), "the first ones shipped")
         let english = Set(try words("en").lines.keys)
         try expect(english.count > 1000, "more than 1000 keys, got \(english.count)")
