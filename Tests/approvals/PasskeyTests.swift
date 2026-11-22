@@ -172,10 +172,10 @@ let approvalsPasskeyTests: [Test] = [
             "644f3b501cf306af2c63c032848fd13d2056bdd8ef04cafe891f9c718041efad", "3cc16020d315b4eb9a8afac14484dd7047044a4c5385e74c065e6dde0d23deff"), sha256: testSHA256),
             "7UWb8NtnHMqAVlenob3dXQXSWSVUwZC3NoYVsDtim2A")
     }),
-    Test("switched off, as by default, nothing is asked of the security key: one request or the pair", awaiting: {
-        try expectEqual(Features.macPasskeyApprovals, false)
+    Test("switched off, nothing is asked of the security key: one request or the pair; on by default since kiff/cloud#96", awaiting: {
+        try expectEqual(Features.macPasskeyApprovals, true)
         let key = FakeKey()
-        let off = PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256)
+        let off = PasskeyApprover(authenticator: key, credentialID: credential, sha256: testSHA256, enabled: false)
         try await refused(.off) { try await off.approve(tenant: "t1", method: "POST", path: "/v1/cards", body: Data(), signedAt: "t") }
         let pair = RequestsTogether.Request(method: "POST", path: "/v1/x", body: Data())
         try await refused(.off) { try await RequestsTogether.approve(off, tenant: "t1", pair, pair, signedAt: "t") }
