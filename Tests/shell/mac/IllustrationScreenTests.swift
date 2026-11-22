@@ -55,13 +55,13 @@ let shellIllustrationMacTests: [Test] = [
         // 1. The sign-in window, KIFF's half.
         let signIn = SignInModel(client: KIFFClient(transport: CannedTransport([])), key: SoftwareKey(key: P256.Signing.PrivateKey()), approval: .passkey,
                                  sessions: SessionStore(store: MemoryStore()), deviceName: "tafs on this Mac", sleep: { _ in throw CancellationError() },
-                                 open: { _ in }, enclave: false)
+                                 open: { _ in }, enclave: false, onboarding: false)
         signIn.show(.welcome)
         try shoot(.firstRun, "sign-in", SignInView(model: signIn), CGSize(width: 1280, height: 800))
         // 2. The Overview with no taf and no job listed; 10. with a taf.
         let none = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, #"{"tafs":[]}"#)]), session: artSession))
         await none.load()
-        try shoot(.noTafs, "overview", OverviewView(model: none, mayUseCoach: true), CGSize(width: 980, height: 800))
+        try shoot(.noTafs, "overview", OverviewView(model: none, mayUseCoach: true, onboarding: false), CGSize(width: 980, height: 800))
         let one = OverviewModel(cloud: CloudClient(transport: CannedTransport([(200, artOneTaf)]), session: artSession))
         await one.load()
         try shoot(.overview, "overview", OverviewView(model: one), CGSize(width: 980, height: 800))

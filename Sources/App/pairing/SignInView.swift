@@ -22,7 +22,7 @@ struct SignInView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         // The phone's code as the window opens, and a new one each time it runs out.
-        .onAppear { Task { await model.showPhoneCode() } }
+        .onAppear { Task { await model.readTerms(); await model.showPhoneCode() } }
         .onChange(of: model.step) { _ in Task { await model.showPhoneCode() } }
         // A pairing asks this Mac's security key for its credential through its PIN sheet.
         .sheet(item: $model.pinSheet) { sheet in PINSheet(model: sheet).environment(\.words, words) }
@@ -58,8 +58,28 @@ struct SignInView: View {
         default:
             firstRun
             title(words("sign_in.with_kiff"))
-            primary(words("common.continue")) { await model.signIn() }
+            if model.onboarding {
+                OnboardingConsent(model: model, region: region, ages: ages)
+                if let problem = model.problem { note(problem, color: Theme.no) }
+                if model.signingInApp {
+                    waiting(words("sign_in.waiting"))
+                } else {
+                    primary(words("common.continue"), enabled: model.tick.canContinue) { await model.signInInApp(language: words.language) }
+                }
+            } else {
+                primary(words("common.continue")) { await model.signIn() }
+                if let raised = Onboarding.raisedAgeLine(region: region, ages: ages, words: words) { note(raised, size: 12) }
+            }
         }
+    }
+
+    /// This Mac's region, for the age line: the country whose law sets the age.
+    private var region: String? { Locale.current.regionCode }
+
+    /// legal-i18n's ages (`strings/ages.json` in the app); the standard alone when it can't be read.
+    private var ages: MinimumAge {
+        (Words.bundleFolder.flatMap { try? MinimumAge(folder: $0) })
+            ?? (try? MinimumAge(json: Data(#"{"default":16}"#.utf8)))!
     }
 
     /// Board 1, first run (docs/window.md › Illustrations): a card opening, where the iPad's welcome
@@ -83,6 +103,9 @@ struct SignInView: View {
 
     // MARK: Sign in with your phone
 
+    /// Whether the phone's way waits for the welcome's tick: the new onboarding, on a Mac with no session yet.
+    private var waitsOnTick: Bool { model.onboarding && model.session == nil && !model.tick.canContinue }
+
     /// The phone's title: a view-only Mac adding itself says so.
     private var phoneTitle: String {
         model.session == nil ? words("sign_in.with_phone") : words("pair.title", ["device": device])
@@ -99,7 +122,12 @@ struct SignInView: View {
         case (.offer, _):
             SignInArt.phone()
             title(phoneTitle)
-            primary(words("common.continue"), isDefault: halves.kiff == nil) { await model.pair() }
+            primary(words("common.continue"), isDefault: halves.kiff == nil, enabled: waitsOnTick == false) { await model.pair() }
+        case (.starting, _) where waitsOnTick:
+            // The new welcome: the phone's code waits on the tick, as the iPad's "Sign in with your phone".
+            SignInArt.phone()
+            title(phoneTitle)
+            primary(words("common.continue"), isDefault: false, enabled: false) {}
         default:
             SignInArt.phone()
             title(phoneTitle)
@@ -166,13 +194,16 @@ struct SignInView: View {
     }
 
     /// The half's one button, filled with the brand. The KIFF half's is the window's default (Return).
-    @ViewBuilder private func primary(_ title: String, isDefault: Bool = true, _ action: @escaping () async -> Void) -> some View {
+    @ViewBuilder private func primary(_ title: String, isDefault: Bool = true, enabled: Bool = true,
+                                      _ action: @escaping () async -> Void) -> some View {
         let button = Button { Task { await action() } } label: {
             Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(.white)
                 .padding(.horizontal, 26).padding(.vertical, 12)
                 .background(Capsule().fill(Theme.brand))
+                .opacity(enabled ? 1 : 0.4)
         }
         .buttonStyle(.plain)
+        .disabled(!enabled)
         if isDefault { button.keyboardShortcut(.defaultAction) } else { button }
     }
 

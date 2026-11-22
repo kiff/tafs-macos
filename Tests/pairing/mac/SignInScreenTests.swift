@@ -26,7 +26,7 @@ private func model(_ answers: [(Int, String)], key: SigningKey, store: MemorySto
     let transport = CannedTransport(answers)
     let model = SignInModel(client: KIFFClient(transport: transport), key: key, approval: .passkey, sessions: SessionStore(store: store),
                             deviceName: "tafs on this Mac", sleep: { _ in }, open: { _ in }, now: { Date(timeIntervalSince1970: 1_794_679_200) },
-                            enclave: false)
+                            enclave: false, onboarding: false)
     return (model, transport)
 }
 

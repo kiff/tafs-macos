@@ -23,7 +23,7 @@ private final class RefusingStore: SecretStore {
 private func pairing(_ store: SecretStore, key: SigningKey, answers: [(Int, String)]) -> (SignInModel, CannedTransport) {
     let transport = CannedTransport(answers)
     let model = SignInModel(client: KIFFClient(transport: transport), key: key, approval: .passkey, sessions: SessionStore(store: store),
-                            deviceName: "A Mac", sleep: { _ in }, open: { _ in }, enclave: false)
+                            deviceName: "A Mac", sleep: { _ in }, open: { _ in }, enclave: false, onboarding: false)
     return (model, transport)
 }
 

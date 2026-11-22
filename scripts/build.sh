@@ -43,7 +43,7 @@ cp App/Info.plist "$APP/Contents/Info.plist"
 # The shared words of each shipped language and the mascot, as kiff/tafs has them at the pin.
 STRINGS="$APP/Contents/Resources/strings"
 mkdir -p "$STRINGS"
-cp .shared/app/strings/languages.json "$STRINGS/"
+cp .shared/app/strings/languages.json .shared/app/strings/ages.json "$STRINGS/"
 for lang in $(tr -d '[]",:' < .shared/app/strings/languages.json | awk '/shipped/ { for (i = 2; i <= NF; i++) print $i }'); do
     cp -R ".shared/app/strings/$lang" "$STRINGS/$lang"
     ls "$STRINGS/$lang"/*.json > /dev/null

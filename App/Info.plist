@@ -49,6 +49,12 @@
 		<string>az</string>
 		<string>bn</string>
 		<string>he</string>
+		<string>ca</string>
+		<string>mk</string>
+		<string>mn</string>
+		<string>ne</string>
+		<string>km</string>
+		<string>lo</string>
 		<string>pt-BR</string>
 	</array>
 	<key>CFBundleDisplayName</key>

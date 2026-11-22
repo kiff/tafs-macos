@@ -194,6 +194,10 @@ struct OverviewView: View {
     var ownWords: () -> Void = {}
     /// Hands a recipe to Coach, as the iPad's `handRecipeToCoach`.
     var hand: (Recipes.Recipe) -> Void = { _ in }
+    /// Whether the new onboarding is on (`Onboarding.on`): then Home with no taf is the first Home.
+    var onboarding = Onboarding.on
+    /// How tafs works, opened from the first Home.
+    @State private var showingHowItWorks = false
 
     var body: some View {
         ScrollView {
@@ -265,24 +269,55 @@ struct OverviewView: View {
         } else {
             // Board 2, no tafs yet (docs/window.md › Illustrations), above the empty line.
             if board == .noTafs { Illustration.noTafs.frame(maxWidth: .infinity) }
-            VStack(alignment: .leading, spacing: 6) {
-                if let line = model.recipes?.homeWords {
-                    // tafs cloud's empty line, whoever reads it: no words of the app's.
-                    Text(verbatim: line).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                } else {
-                    // Not read yet, or a tafs cloud from before the line: the app's own.
-                    Text(words("home.no_tafs")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-                    // Setting one up is Coach's: someone who may not use it reads where shared tafs show.
-                    Text(mayUseCoach ? words("home.empty.coach") : words("home.empty.shared")).font(.system(size: 14)).foregroundColor(Theme.soft)
-                }
+            if Onboarding.showsFirstHome(on: onboarding, mayUseCoach: mayUseCoach) {
+                firstHome
+            } else {
+                emptyLine
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
-            // No job listed: "Say it in your own words" still leads to Coach.
-            if mayUseCoach, let own = model.recipes?.homeOwnWords {
-                OwnWordsRow(title: own.title, line: own.line, action: ownWords)
+        }
+    }
+
+    /// The first Home, as the iPad's (HomeView.swift:137-152, docs/pairing.md): tafs cloud's line, else the app's
+    /// "No tafs yet" and what Coach does; Ask Coach; and How tafs works, the cards again.
+    @ViewBuilder private var firstHome: some View {
+        let lines = Onboarding.firstHomeLines(cloud: model.recipes?.homeWords, words: words)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(verbatim: lines.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            if let lead = lines.lead {
+                Text(verbatim: lead).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+        HStack(spacing: 12) {
+            Button(words("coach.ask"), action: ownWords).buttonStyle(PrimaryButtonStyle()).frame(maxWidth: 260)
+            Button(words("onboarding.how_it_works")) { showingHowItWorks = true }.buttonStyle(OutlineButtonStyle()).frame(maxWidth: 260)
+        }
+        .sheet(isPresented: $showingHowItWorks) {
+            HowTafsWorksView { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
+        }
+    }
+
+    /// Home with no taf and no job listed, before the new onboarding: tafs cloud's empty line, or the app's own.
+    @ViewBuilder private var emptyLine: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let line = model.recipes?.homeWords {
+                // tafs cloud's empty line, whoever reads it: no words of the app's.
+                Text(verbatim: line).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            } else {
+                // Not read yet, or a tafs cloud from before the line: the app's own.
+                Text(words("home.no_tafs")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                // Setting one up is Coach's: someone who may not use it reads where shared tafs show.
+                Text(mayUseCoach ? words("home.empty.coach") : words("home.empty.shared")).font(.system(size: 14)).foregroundColor(Theme.soft)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+        // No job listed: "Say it in your own words" still leads to Coach.
+        if mayUseCoach, let own = model.recipes?.homeOwnWords {
+            OwnWordsRow(title: own.title, line: own.line, action: ownWords)
         }
     }
 

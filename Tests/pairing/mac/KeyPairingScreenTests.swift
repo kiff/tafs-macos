@@ -76,7 +76,7 @@ private func model(_ answers: [(Int, String)], store: MemoryStore, key: PairingK
     let device = HardwareKey()
     let model = SignInModel(client: KIFFClient(transport: transport), key: device, approval: .passkey, sessions: SessionStore(store: store),
                             deviceName: "A Mac", sleep: { _ in }, open: { _ in }, now: { Date(timeIntervalSince1970: 1_794_679_200) },
-                            securityKey: PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: enabled, proving: true))
+                            securityKey: PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: enabled, proving: true), onboarding: false)
     return (model, transport, device)
 }
 
@@ -147,7 +147,7 @@ let pairingKeyScreenTests: [Test] = [
         let transport = CannedTransport([(200, paired)])
         let model = SignInModel(client: KIFFClient(transport: transport), key: HardwareKey(), approval: .passkey, sessions: SessionStore(store: store),
                                 deviceName: "A Mac", sleep: { _ in }, open: { _ in },
-                                securityKey: PairingSecurityKey(words: words, authenticator: missing, readTries: { 8 }, enabled: true, proving: true))
+                                securityKey: PairingSecurityKey(words: words, authenticator: missing, readTries: { 8 }, enabled: true, proving: true), onboarding: false)
         let pairing = Task { await model.pair() }
         let pin = try await sheet(model)
         let field = NSSecureTextField()
@@ -224,7 +224,7 @@ let pairingKeyScreenTests: [Test] = [
         let transport = CannedTransport([(200, paired)])
         let model = SignInModel(client: KIFFClient(transport: transport), key: HardwareKey(), approval: .passkey, sessions: SessionStore(store: store),
                                 deviceName: "A Mac", sleep: { _ in }, open: { _ in },
-                                securityKey: PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: true, proving: true))
+                                securityKey: PairingSecurityKey(words: words, authenticator: key, readTries: { 8 }, enabled: true, proving: true), onboarding: false)
         let pairing = Task { await model.pair() }
         let pin = try await sheet(model)
         store.refuseKey = true
@@ -257,7 +257,7 @@ let pairingKeyScreenTests: [Test] = [
                                      credential: .init(id: Encoding.base64URL(Data("the-key".utf8)), publicKey: Encoding.base64URL(key.publicKey.derRepresentation)))
         let store = MemoryStore()
         let model = SignInModel(client: KIFFClient(transport: CannedTransport([])), key: device, approval: .passkey,
-                                sessions: SessionStore(store: store), deviceName: "A Mac", open: { _ in })
+                                sessions: SessionStore(store: store), deviceName: "A Mac", open: { _ in }, onboarding: false)
         model.show(.pairing(.init(text: try payload.text(), check: Signing.checkCode(deviceKey: device.publicKeyDER, approvalKey: payload.checkedKeyDER))))
         let view = SignInView(model: model).environment(\.words, words)
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 1280, height: 800)), let png = Snapshot.png(bitmap) else {

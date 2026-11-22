@@ -301,6 +301,10 @@ struct AccountView: View {
         .padding(2).background(Capsule().fill(Theme.raised)).padding(.vertical, 10)
     }
 
+    /// Whether the new onboarding is on (`Onboarding.on`): then Legal opens How tafs works.
+    var onboarding = Onboarding.on
+    @State private var showingHowItWorks = false
+
     /// How tafs works, Legal, About and Sign out, as the iPad's list ends.
     @ViewBuilder private var aboutGroups: some View {
         group(words("sign_in.how_works")) {
@@ -308,9 +312,17 @@ struct AccountView: View {
                 .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
         }
         group(words("settings.legal")) {
+            // The new onboarding's How tafs works: the three cards again, and KIFF's and tafs's pages (`HowTafsWorksView`).
+            if onboarding {
+                action(words("onboarding.how_it_works"), color: Theme.amberText) { showingHowItWorks = true }
+                divider
+            }
             action(legal(words("settings.terms")), color: Theme.amberText) { Self.openPage(LegalPages.terms(words.language)) }
             divider
             action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage(LegalPages.privacy(words.language)) }
+        }
+        Color.clear.frame(height: 0).sheet(isPresented: $showingHowItWorks) {
+            HowTafsWorksView { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
         }
         group(words("settings.about")) {
             row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))
