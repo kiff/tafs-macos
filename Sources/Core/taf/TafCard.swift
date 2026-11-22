@@ -18,8 +18,14 @@ struct TafCard: Decodable, Identifiable, Equatable {
         /// The window in the person's words, as tafs cloud sends them: "a day", "today".
         let each: String?
         let now: String?
+        /// What of its use is from calls the tool refused, which count until KIFF can confirm nothing moved, in KIFF's
+        /// words (`pending_text`), as the iPad's `CardTotal.pending`; nil without any.
+        var pendingText: String?
+        /// Why its amount has no currency, in KIFF's words (`unit_words`): a tool the Card grants isn't connected any
+        /// more. Nil otherwise.
+        var unitWords: String?
 
-        enum CodingKeys: String, CodingKey { case limit, used, words = "window_words" }
+        enum CodingKeys: String, CodingKey { case limit, used, words = "window_words", pendingText = "pending_text", unitWords = "unit_words" }
         enum WordsKeys: String, CodingKey { case each, now }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -28,6 +34,12 @@ struct TafCard: Decodable, Identifiable, Equatable {
             let words = try? c.nestedContainer(keyedBy: WordsKeys.self, forKey: .words)
             each = words.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .each)) ?? nil }
             now = words.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .now)) ?? nil }
+            func text(_ key: CodingKeys) -> String? {
+                let said = ((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return said?.isEmpty == false ? said : nil
+            }
+            pendingText = text(.pendingText)
+            unitWords = text(.unitWords)
         }
     }
 
@@ -119,6 +131,17 @@ struct TafCard: Decodable, Identifiable, Equatable {
     let id: String
     let title: String
     let active: Bool
+    /// Production, or every environment: what the taf does for real (tafs cloud's `live`).
+    let live: Bool
+    /// Its totals for each item apart, in tafs cloud's words (`each_item`), as the iPad's `eachItem`; blank lines left out.
+    let eachItem: [String]
+
+    /// What of its totals' use is from calls the tool refused, in KIFF's words, as the iPad's `pending`.
+    var pending: [String] { [total?.pendingText, calls?.pendingText].compactMap { $0 } }
+    /// Why its money total has no currency, in KIFF's words; nil when it has one, as the iPad's `unitWords`.
+    var unitWords: String? { total?.unitWords }
+    /// Whether its totals are what the taf may do for real: live, and active.
+    var countsForReal: Bool { live && active }
     let expires: Date?
     let rules: [Rule]
     let total: Total<Amount>?
@@ -153,12 +176,14 @@ struct TafCard: Decodable, Identifiable, Equatable {
         manages ? words("common.you") : (account ?? words("card.issued_by_account"))
     }
 
-    enum CodingKeys: String, CodingKey { case id, title, active, expires, rules, total, calls, counted }
+    enum CodingKeys: String, CodingKey { case id, title, active, live, expires, rules, total, calls, counted, eachItem = "each_item" }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
         active = ((try? c.decodeIfPresent(Bool.self, forKey: .active)) ?? nil) ?? true
+        live = ((try? c.decodeIfPresent(Bool.self, forKey: .live)) ?? nil) ?? false
+        eachItem = (((try? c.decodeIfPresent([String].self, forKey: .eachItem)) ?? nil) ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         expires = (try? c.decodeIfPresent(Date.self, forKey: .expires)) ?? nil
         rules = ((try? c.decodeIfPresent([Rule].self, forKey: .rules)) ?? nil) ?? []
         total = (try? c.decodeIfPresent(Total<Amount>.self, forKey: .total)) ?? nil

@@ -983,6 +983,10 @@ struct CoachView: View {
     /// in its box, nothing sent, as the iPad's `askCoachAbout`. Nil for someone who may not, who
     /// reads the card alone.
     var askCoach: ((String) -> Void)? = nil
+    /// In a taf's page, its chat scrolled a step down (true) or up (false): the page folds its header line,
+    /// as the iPad's `TafChatView(onScroll:)`. Nil reads nothing.
+    var onScroll: ((Bool) -> Void)? = nil
+    @State private var scrollFold = ScrollFold()
     @State private var planOpen = false
 
     var body: some View {
@@ -1144,6 +1148,14 @@ struct CoachView: View {
             }
             .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GeometryReader { drawn in
+                Color.clear.preference(key: ThreadTop.self, value: drawn.frame(in: .named(ThreadTop.space)).minY)
+            })
+        }
+        .coordinateSpace(name: ThreadTop.space)
+        .onPreferenceChange(ThreadTop.self) { top in
+            guard let onScroll, let down = scrollFold.moved(to: top) else { return }
+            onScroll(down)
         }
         // A new version's See version: that taf's Versions, as the iPad's `VersionsScreen`.
         .sheet(item: $versionsShown) { shown in
@@ -1905,6 +1917,13 @@ struct WrapRow<Cell: View>: View {
         .background(GeometryReader { drawn in Color.clear.preference(key: WrapHeight.self, value: drawn.size.height) })
         .onPreferenceChange(WrapHeight.self) { height = $0 }
     }
+}
+
+/// Where the chat's thread starts in its scroll view: lower as it scrolls down.
+private struct ThreadTop: PreferenceKey {
+    static let space = "coach-thread"
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 private struct WrapHeight: PreferenceKey {

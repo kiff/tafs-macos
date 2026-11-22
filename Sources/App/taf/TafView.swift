@@ -131,24 +131,35 @@ struct TafView: View {
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
+    /// The version and share lines folded away while the chat scrolls down, as the iPad's `folded`.
+    @State private var folded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
             // Under the header, as the iPad's `headerLine`: its live version, which opens
             // Versions, then who it's shared with, for whoever manages the taf.
-            if manages {
+            if manages && !folded {
                 VStack(alignment: .leading, spacing: 6) {
                     if let pages { versionLine(pages) }
                     if let shareLine { shareLine }
                 }
+                .transition(.opacity)
             }
             tabs
             tabContent
         }
+        .onChange(of: tab) { _ in folded = false }
         .padding(.horizontal, Look.inset - 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.background)
+    }
+
+    /// Folds the header's line going down, and brings it back going up, as the iPad's `fold`.
+    private func fold(_ down: Bool) {
+        guard down != folded else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { folded = down }
     }
 
     /// As the iPad's head: its avatar, its name, and tafs cloud's state at the right.
@@ -196,7 +207,7 @@ struct TafView: View {
     /// The chat, with the Card beside it as on the iPad.
     private var chatTab: some View {
         HStack(alignment: .top, spacing: 20) {
-            CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach)
+            CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             cardColumn
         }
@@ -208,7 +219,7 @@ struct TafView: View {
         if let pages {
             HStack(alignment: .top, spacing: 20) {
                 TafActivityTab(model: pages, taf: taf, openUsage: openUsage,
-                               doors: manages ? doors : nil, doorsOffered: doorsOffered)
+                               doors: manages ? doors : nil, doorsOffered: doorsOffered, manages: manages)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 cardColumn
             }
@@ -267,7 +278,7 @@ struct TafView: View {
 
     /// The Card tab, as the iPad's `card(_:)` (TafDetailView.swift:380-462).
     private var cardTab: some View {
-        TafCardTab(taf: taf, pages: pages, manages: manages, issuedBy: issuedBy, front: $frontCard, halted: halted)
+        TafCardTab(taf: taf, pages: pages, manages: manages, issuedBy: issuedBy, improveInCoach: improveInCoach, front: $frontCard, halted: halted)
     }
 }
 

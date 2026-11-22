@@ -52,7 +52,7 @@ struct ConnectedToolsRing: View {
         case .loaded(let setup):
             if let error = setup.connectionsError { failed(error) }
             ring(TafSetup.nodes(setup.connections))
-            if let workflow = setup.workflow { self.workflow(workflow) }
+            if let workflow = setup.workflow { self.workflow(workflow, steps: setup.workflowSteps) }
         }
     }
 
@@ -138,10 +138,11 @@ struct ConnectedToolsRing: View {
         .position(point)
     }
 
-    /// Its workflow, as tafs cloud words it, opening to Change the workflow with Coach. Its steps
-    /// aren't read on this Mac yet.
-    private func workflow(_ workflow: TafSetup.Part) -> some View {
+    /// Its workflow, as tafs cloud words it, opening to its steps and Change the workflow with Coach, as the iPad's
+    /// (TafPresentationViews.swift:45-59): each step's number (green while it runs), label, words and app.
+    private func workflow(_ workflow: TafSetup.Part, steps: [TafSetup.WorkflowStep]) -> some View {
         DisclosureGroup(isExpanded: $workflowOpen) {
+            ForEach(steps, id: \.number) { step in WorkflowStepRow(step: step) }
             if manages, let improveInCoach {
                 Button(words("taf.workflow.change_with_coach"), action: improveInCoach)
                     .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
@@ -154,5 +155,25 @@ struct ConnectedToolsRing: View {
                 if let summary = workflow.summary { Text(verbatim: summary).font(.system(size: 13)).foregroundColor(Theme.soft) }
             }
         }
+    }
+}
+
+/// One step of a taf's workflow, as the iPad's row: its number, green while it runs; its label; tafs cloud's words; the app.
+struct WorkflowStepRow: View {
+    let step: TafSetup.WorkflowStep
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(verbatim: "\(step.number)").font(.system(size: 14, weight: .semibold)).foregroundColor(step.running ? Theme.ok : Theme.soft)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(verbatim: step.label).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                if !step.words.isEmpty {
+                    Text(verbatim: step.words).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                }
+                if let app = step.app { Text(verbatim: app).font(.system(size: 12)).foregroundColor(Theme.amberText) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 }
