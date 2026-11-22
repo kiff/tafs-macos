@@ -373,6 +373,12 @@ struct SignedInView: View {
         pages.halt.approveWithKey = approveWithKey
         pages.halt.agent = taf.kiffAgent
         pages.halt.name = taf.name
+        // Revoke, as the iPad's: each Card revoked in KIFF, then the list read again.
+        pages.viewOnly = accountModel.me?.viewOnly == true
+        pages.revokeCards = { [account] ids in
+            for id in ids { try await account.revoke(cardID: id) }
+            await readTafs()
+        }
         tafPages = pages
         openTaf = taf.id
     }

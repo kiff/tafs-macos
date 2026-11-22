@@ -4,6 +4,10 @@ import SwiftUI
 /// A taf's Activity and Setup, read from tafs cloud when their tab opens. Both only read.
 @MainActor
 final class TafPagesModel: ObservableObject {
+    /// Revokes the taf's Cards in KIFF, as the iPad's `revoke`: set by the window; nil draws no Revoke.
+    var revokeCards: (([String]) async throws -> Void)?
+    /// Whether this Mac's session is view-only (KIFF's `view`): Revoke isn't offered, as on the iPad.
+    var viewOnly = false
     enum State<Page: Equatable>: Equatable {
         case loading
         case loaded(Page)

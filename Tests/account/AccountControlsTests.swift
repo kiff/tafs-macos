@@ -67,6 +67,14 @@ let accountControlsTests: [Test] = [
         try expectEqual(closed, AccountZone.Saved(me: nil, why: nil))
         try expectEqual(kiff2.sent.count, 0)
     }),
+    Test("Revoke is the iPad's plain session call: POST /v1/me/mandates/{id}/revoke with {}, no signature and no key", awaiting: {
+        let (account, kiff, _, _) = clients([(200, "{}")], [])
+        try await account.revoke(cardID: "card/1")
+        try expectEqual(kiff.sent.map { $0.method + " " + $0.path }, ["POST /v1/me/mandates/card%2F1/revoke"])
+        try expectEqual(String(decoding: kiff.sent[0].body, as: UTF8.self), "{}")
+        try expectEqual(kiff.sent[0].headers["KIFF-Device-Signature"], nil)
+        try expectEqual(kiff.sent[0].headers["KIFF-Passkey-Assertion"], nil)
+    }),
     Test("a time zone not confirmed, or without a device key, sends nothing and says why", awaiting: {
         let words = try english()
         let (account, kiff, cloud, cloudSent) = clients([], [])
