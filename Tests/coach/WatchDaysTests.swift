@@ -36,7 +36,8 @@ let coachWatchDaysTests: [Test] = [
         let now = ISO8601DateFormatter().date(from: "2026-11-20T12:00:00Z")!
         try expectEqual(WatchDays.title("2026-11-20", today: nil, now: now, zone: utc, locale: en, words: words), "Today")
         try expectEqual(WatchDays.title("not a date", today: nil, zone: utc, locale: en, words: words), "not a date")
-        try expectEqual(WatchDays.time("2026-11-22T08:06:00.500Z", zone: utc, locale: en), "8:06 AM")
+        // Newer macOS puts a narrow no-break space before AM (U+202F), macOS 12 a plain one: either is this Mac's own short time.
+        try expectEqual(WatchDays.time("2026-11-22T08:06:00.500Z", zone: utc, locale: en)?.replacingOccurrences(of: "\u{202F}", with: " "), "8:06 AM")
         try expectEqual(WatchDays.time("", zone: utc, locale: en), nil)
     },
     Test("the days and a day are read from tafs cloud; its switch off (404) is no days, never an error", awaiting: {
