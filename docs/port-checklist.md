@@ -21,6 +21,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | MicButton.swift | 122 | The mic in a chat's message bar, its language switch and the listening bar | Dictation (`Services/Dictation.swift`) | `coach/MicButton.swift`, `coach/Dictation.swift`, `Core/coach/Dictating.swift`, in Coach's and a taf's message bar |
 | OnboardingCards.swift | 234 | The three cards on how tafs works, after signing in and from How tafs works | OnboardingPage, OnboardingSteps | `OnboardingCards`, `OnboardingPicture` (the sample's tafs, its Card on `CardFace`, a Needs you card), `HowTafsWorksView` with the four legal pages, from the first Home and Account › Legal (`pairing/OnboardingCards.swift`, `SignInModel.celebrated`, `overview/OverviewView.swift`, `account/AccountView.swift`, `Core/pairing/Onboarding.swift`). The last card is a desktop's line (`control_lead_desktop`): this Mac approves on the phone |
 | PairSignInView.swift | 104 | Signing in from another phone: this device shows the pairing QR and its check code, the phone approves | KIFF/Pairing | "Add this Mac with a phone": `pairing/SignInView.swift`, `SignInModel.swift`, `QRCode.swift`, `Core/pairing/Client.swift`, `Messages.swift` |
+| RecipeGallery.swift | 135 | The jobs' gallery | Gallery | `RecipeGallerySheet` with Say it in your own words, All jobs and every job by category; Explore jobs and the strip in the sidebar (`overview/RecipeGalleryView.swift`, `shell/ShellView.swift`, `Core/overview/Gallery.swift`; it came with #97, the row was stale) |
 | ReportAnswerSheet.swift | 124 | Report an answer Coach or a taf wrote | AnswerReport | `coach/ReportAnswerSheet.swift`, `Core/coach/Report.swift` |
 | YourStepCard.swift | 46 | A step a taf handed its owner, with Done and Skip | YourStep | `approvals/NeedsYou.swift`, `Core/approvals/YourStep.swift` (signed with the device key after Touch ID or the Mac's password) |
 
@@ -69,7 +70,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | FilesViews.swift | 453 | Files: the account's or one taf's, newest first, the list and the open file side by side | |
-| RecipeGallery.swift | 135 | The jobs' gallery | |
 | ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TrialViews.swift | 214 | Trials of a new version | |
