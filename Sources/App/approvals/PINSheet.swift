@@ -29,6 +29,9 @@ final class PINSheetModel: ObservableObject, Identifiable {
     let reader = PINReader()
     /// Approving a request, or adding the key while this Mac pairs: only the sheet's words differ.
     let purpose: SecurityKeySheetPurpose
+    /// The act the key approves, named in the sheet (the owner's ask, kiff/work#20, 17:31): "Sign MacBook out of
+    /// your account". Nil for adding the key while pairing.
+    let act: String?
     private let words: Words
     private let attempt: (SecurityKeyPIN) async throws -> Void
     private let readTries: () async throws -> Int
@@ -37,10 +40,11 @@ final class PINSheetModel: ObservableObject, Identifiable {
     /// - `attempt` asks the key with the PIN; it returns once the key approved.
     /// - `readTries` reads the PIN tries left, before the PIN is asked.
     /// - `done` hears once: nil once approved, or the error that closed the sheet.
-    init(words: Words, purpose: SecurityKeySheetPurpose = .approve, attempt: @escaping (SecurityKeyPIN) async throws -> Void,
+    init(words: Words, purpose: SecurityKeySheetPurpose = .approve, act: String? = nil, attempt: @escaping (SecurityKeyPIN) async throws -> Void,
          readTries: @escaping () async throws -> Int, done: @escaping (Error?) -> Void) {
         self.words = words
         self.purpose = purpose
+        self.act = act
         self.attempt = attempt
         self.readTries = readTries
         self.done = done
@@ -158,6 +162,11 @@ struct PINSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(words(model.purpose.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 .frame(maxWidth: .infinity).accessibilityAddTraits(.isHeader)
+            if let act = model.act {
+                // What is being approved, before the PIN: the person sees the act the key signs.
+                Text(verbatim: act).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(words(model.purpose.leadKey)).font(.system(size: 14)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
             if let tries = model.triesLine {

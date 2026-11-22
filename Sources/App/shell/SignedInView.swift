@@ -146,6 +146,8 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
+        .onAppear { devices.approveWithKey = approveWithKey }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
         // every account change (AppModel.swift:887, :1472).
@@ -321,12 +323,21 @@ struct SignedInView: View {
                                words: words)
     }
 
+    /// One act approved by this Mac's security key (`KeyAct`, `PasskeySession.approved`), named in the PIN sheet; nil
+    /// when this Mac has no key on the security key's route, so the act says to approve elsewhere, as before.
+    private var approveWithKey: ((KeyAct, String) async throws -> Data)? {
+        guard let passkey = passkeySession else { return nil }
+        return { act, title in
+            try await askSecurityKey(act: title) { pin in try await passkey.approved(method: act.method, path: act.path, body: act.body, pin: pin) }
+        }
+    }
+
     /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries
     /// as the person makes; it answers once the key approved, or throws once the sheet is closed.
-    @MainActor private func askSecurityKey<Answer>(_ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
+    @MainActor private func askSecurityKey<Answer>(act: String? = nil, _ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
         try await withCheckedThrowingContinuation { continuation in
             var answer: Answer?
-            pinSheet = PINSheetModel(words: words, attempt: { pin in answer = try await ask(pin) },
+            pinSheet = PINSheetModel(words: words, act: act, attempt: { pin in answer = try await ask(pin) },
                                      readTries: { try await FidoKey().triesLeft() },
                                      done: { error in
                                          pinSheet = nil
