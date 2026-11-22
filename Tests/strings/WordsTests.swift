@@ -8,8 +8,8 @@ private func words(_ language: String) throws -> Words { try Words(language: lan
 let wordsTests: [Test] = [
     Test("every shipped language is read, with English's keys") {
         let shipped = try Words.shipped(folder: folder)
-        // The 26 kiff/tafs ships at the pin, as `languages.json` says, the 8 first ones among them.
-        try expect(shipped.count >= 26, "26 or more shipped languages, got \(shipped.count)")
+        // The 34 kiff/tafs ships at the pin, as `languages.json` says, the first ones among them.
+        try expect(shipped.count >= 34, "34 or more shipped languages, got \(shipped.count)")
         try expect(Set(["en", "de", "fr", "es", "it", "pt", "nl", "pl", "ja", "ko", "pt-BR", "zh-Hant"]).isSubset(of: Set(shipped)), "the first ones shipped")
         let english = Set(try words("en").lines.keys)
         try expect(english.count > 1000, "more than 1000 keys, got \(english.count)")
@@ -92,7 +92,7 @@ let wordsTests: [Test] = [
                 Range($0.range(at: 1), in: text).map { String(text[$0]) }
             }
         }
-        for language in try Words.offered(folder: folder) {
+        for language in try Words.shipped(folder: folder) {
             let book = try words(language)
             for (key, line) in book.lines {
                 switch line {
@@ -161,7 +161,7 @@ let wordsTests: [Test] = [
                 .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\" ")) }.filter { !$0.isEmpty }
             plurals[language] = Set(forms + ["other"])
         }
-        for language in try Words.offered(folder: folder) {
+        for language in try Words.shipped(folder: folder) {
             let base = String(language.split(separator: "-")[0])
             guard let forms = plurals[base] else { throw Failure(description: "\(language) has no PLURALS entry") }
             for n in 0...1_200 {
@@ -174,18 +174,19 @@ let wordsTests: [Test] = [
             try expect(forms.subtracting(["other"]).isSubset(of: reached), "\(language) never reaches \(forms.subtracting(reached).sorted())")
         }
     },
-    Test("Arabic is offered before kiff/tafs ships it: right to left, and a line it lacks reads as English's") {
-        try expect(!(try Words.shipped(folder: folder)).contains("ar"), "ar is shipped now: take it out of Words.ahead")
-        try expect(try Words.offered(folder: folder).contains("ar"), "ar offered")
-        let ar = try words("ar"), en = try words("en")
-        try expect(ar.isRightToLeft && !en.isRightToLeft && !(try words("ja")).isRightToLeft, "only Arabic is right to left")
-        try expectEqual(Set(ar.lines.keys), Set(en.lines.keys))
-        try expect(ar("home.overview.title") != en("home.overview.title"), "Arabic's own line")
-        // Its six missing lines (record.report.*), until kiff/tafs has them, read in English.
-        for (key, line) in ar.lines where key.hasPrefix("record.report.") { try expectEqual(line, en.lines[key]!) }
-        // The build bundles the same languages ahead as the app offers.
-        let build = try String(contentsOf: URL(fileURLWithPath: "scripts/build.sh"))
-        try expect(build.contains("AHEAD=\"\(Words.ahead.joined(separator: " "))\""), "build.sh's AHEAD is Words.ahead")
+    Test("Arabic and Hebrew are shipped, with every line, and written right to left") {
+        let shipped = try Words.shipped(folder: folder)
+        try expect(shipped.contains("ar") && shipped.contains("he"), "ar and he shipped")
+        let english = Set(try words("en").lines.keys)
+        for language in ["ar", "he"] {
+            let book = try words(language)
+            try expect(book.isRightToLeft, "\(language) right to left")
+            try expectEqual(Set(book.lines.keys), english)
+            try expect(book("home.overview.title") != (try words("en"))("home.overview.title"), "\(language)'s own line")
+        }
+        for language in shipped where !["ar", "he"].contains(language) {
+            try expect(!(try words(language)).isRightToLeft, "\(language) left to right")
+        }
     },
     Test("a small heading keeps no letter-spacing in Hangul, kana, Han and Arabic, as the iPad's Eyebrow") {
         for text in ["بانتظارك", "あなたのTAFS", "기억하는 것", "要确认", "Needs you · بانتظارك"] { try expect(Script.ideographic(text), text) }

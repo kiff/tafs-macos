@@ -41,8 +41,15 @@
 		<string>vi</string>
 		<string>th</string>
 		<string>zh-Hant</string>
-		<string>pt-BR</string>
 		<string>ar</string>
+		<string>sr-Latn</string>
+		<string>sq</string>
+		<string>ka</string>
+		<string>hy</string>
+		<string>az</string>
+		<string>bn</string>
+		<string>he</string>
+		<string>pt-BR</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>tafs</string>

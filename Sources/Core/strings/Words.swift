@@ -27,10 +27,6 @@ struct Words {
     /// kiff/tafs's apps read it: it holds only the lines that read differently there.
     init(language: String, folder: URL) throws {
         var lines: [String: Line] = [:]
-        if Self.ahead.contains(language) {
-            // A language this Mac offers before kiff/tafs ships it: a line it doesn't have yet reads as English's.
-            lines = try Self.read("en", folder: folder)
-        }
         if let base = try Self.variants(folder: folder)[language] {
             lines = try Self.read(base, folder: folder)
         }
@@ -52,18 +48,6 @@ struct Words {
     static func shipped(folder: URL) throws -> [String] {
         struct Languages: Decodable { let shipped: [String] }
         return try JSONDecoder().decode(Languages.self, from: Data(contentsOf: folder.appendingPathComponent("languages.json"))).shipped
-    }
-
-    /// Languages this Mac offers before kiff/tafs ships them (docs/shared.md, "Ahead of the pin"): each is in
-    /// `languages.json`'s "all" with its own folder at the pin, and reads English's line for any it lacks yet.
-    /// One leaves this list in the pull request that moves the pin to the commit shipping it.
-    static let ahead = ["ar"]
-
-    /// The languages this Mac offers: the shipped ones, then each of `ahead` the pin has a folder for.
-    static func offered(folder: URL) throws -> [String] {
-        let shipped = try shipped(folder: folder)
-        let more = ahead.filter { !shipped.contains($0) && FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
-        return shipped + more
     }
 
     /// The languages written right to left, by their language code. The window mirrors for them.

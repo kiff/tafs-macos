@@ -198,21 +198,24 @@ let storeScreenshotMacTests: [Test] = [
             try expect(shot.pixelsWide == 2880 && shot.pixelsHigh == 1800, "\(name) at 2880×1800, not \(shot.pixelsWide)×\(shot.pixelsHigh)")
         }
     }),
-    Test("the pin's languages: the whole window in English, French, Arabic (right to left) and Japanese, light and dark", awaiting: { @MainActor in
+    Test("the pin's languages: the whole window in English, French, Arabic and Hebrew (right to left) and Japanese, light and dark", awaiting: { @MainActor in
         for dark in [false, true] {
             var overviews: [String: NSBitmapImageRep] = [:]
-            for language in ["en", "fr", "ar", "ja"] {
+            for language in ["en", "fr", "ar", "he", "ja"] {
                 let words = storeWords(language)
                 try expectEqual(words.language, language)
                 overviews[language] = try await storeFrames(words: words, prefix: "languages", dark: dark)[0]
             }
             // Arabic mirrors the window: the sidebar's side and the screen's side swap, so the colour at
             // the left edge in Arabic is English's at the right edge, and the other way round.
-            guard let en = overviews["en"], let ar = overviews["ar"] else { throw Failure(description: "no overview") }
+            guard let en = overviews["en"] else { throw Failure(description: "no overview") }
             let width = Int(storeSize.width), y = Int(storeSize.height) / 2
             try expect(Snapshot.hexes(en, x: 3, y: y) != Snapshot.hexes(en, x: width - 3, y: y), "the two edges differ in English")
-            try expectEqual(Snapshot.hexes(ar, x: 3, y: y), Snapshot.hexes(en, x: width - 3, y: y))
-            try expectEqual(Snapshot.hexes(ar, x: width - 3, y: y), Snapshot.hexes(en, x: 3, y: y))
+            for language in ["ar", "he"] {
+                guard let mirrored = overviews[language] else { throw Failure(description: "no \(language) overview") }
+                try expectEqual(Snapshot.hexes(mirrored, x: 3, y: y), Snapshot.hexes(en, x: width - 3, y: y))
+                try expectEqual(Snapshot.hexes(mirrored, x: width - 3, y: y), Snapshot.hexes(en, x: 3, y: y))
+            }
         }
     }),
 ]

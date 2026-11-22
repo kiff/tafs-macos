@@ -10,7 +10,7 @@ extension Words {
     /// test), `folder` says where they are.
     static func load(folder: URL? = bundleFolder, preferred: [String] = Locale.preferredLanguages,
                      chosen: String? = LanguageChoice.saved(.standard)) -> Words {
-        guard let folder, let shipped = try? Words.offered(folder: folder) else { return Words(language: "en", lines: [:]) }
+        guard let folder, let shipped = try? Words.shipped(folder: folder) else { return Words(language: "en", lines: [:]) }
         let language = LanguageChoice.language(chosen: chosen, preferred: preferred, shipped: shipped)
         return (try? Words(language: language, folder: folder)) ?? Words(language: "en", lines: [:])
     }

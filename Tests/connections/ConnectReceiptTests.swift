@@ -94,8 +94,8 @@ let connectReceiptTests: [Test] = [
     },
     Test("the receipt's words are shared keys, in every shipped language: nothing is worded here") {
         let folder = URL(fileURLWithPath: ".shared/app/strings")
-        let languages = try Words.offered(folder: folder)
-        try expect(languages.count > 26, "every offered language, got \(languages.count)")
+        let languages = try Words.shipped(folder: folder)
+        try expect(languages.count >= 34, "every shipped language, got \(languages.count)")
         for language in languages {
             let words = try Words(language: language, folder: folder)
             for key in ["connect.status.connected", "common.done", "connect.disconnect_button", "approval.device_can_not_approve_approve"] {

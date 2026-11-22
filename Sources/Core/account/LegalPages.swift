@@ -4,10 +4,10 @@ import Foundation
 /// `ios/Tafs/Design/Components.swift`) opens them.
 enum LegalPages {
     /// The languages kiff.dev serves the pages in, besides English, at `kiff.dev/<lang>/tafs/…`: the iPad's
-    /// `Legal.translated`, one for one. Traditional Chinese is served under `/zh/` and Brazilian Portuguese under
-    /// `/pt/` (`site`).
+    /// `Legal.translated`, one for one. Traditional Chinese is served under `/zh/`, Serbian in Latin script under `/sr/`
+    /// and Brazilian Portuguese under `/pt/` (`site`).
     static let languages: Set<String> = ["de", "es", "fr", "it", "nl", "pl", "pt", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl",
-                                         "hu", "ro", "bg", "hr", "tr", "id", "vi", "th", "zh"]
+                                         "hu", "ro", "bg", "hr", "tr", "id", "vi", "th", "zh", "ar", "sr", "sq", "ka", "hy", "az", "bn", "he"]
 
     /// The Terms, in `language` where kiff.dev has them, else in English (no `/en/`).
     static func terms(_ language: String) -> String { page("terms", language) }
@@ -21,11 +21,12 @@ enum LegalPages {
         language != "en" && !languages.contains(site(language))
     }
 
-    /// The app's language as kiff.dev names it: "zh" for Traditional Chinese, "pt" for Brazilian Portuguese, as the
-    /// iPad's `Legal.language`.
+    /// The app's language as kiff.dev names it: "zh" for Traditional Chinese, "sr" for Serbian in Latin script, "pt" for
+    /// Brazilian Portuguese, as the iPad's `Legal.language`.
     static func site(_ language: String) -> String {
         switch language {
         case "zh-Hant": return "zh"
+        case "sr-Latn": return "sr"
         case "pt-BR": return "pt"
         default: return language
         }
