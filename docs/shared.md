@@ -9,7 +9,7 @@ repository.
 
 | From kiff/tafs | What | Used by |
 |---|---|---|
-| `app/strings/<lang>/*.json` | The apps' own words, in every shipped language (40 at `43da43e`) | `Words` (`Sources/Core/strings`) |
+| `app/strings/<lang>/*.json` | The apps' own words, in every shipped language (40 at `1b523c3`) | `Words` (`Sources/Core/strings`) |
 | `app/strings/languages.json` | The languages the apps ship | `Words.shipped` |
 | `contracts/*.json` | What tafs cloud answers the apps | the `contracts` tests |
 | `ios/Tafs/KIFF/Keccak.swift` | The iPad's Keccak-256, for KIFF's receipts | Core, compiled as it is (`scripts/shared.sh sources`; docs/record.md) |
