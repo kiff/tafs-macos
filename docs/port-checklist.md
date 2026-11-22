@@ -16,6 +16,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | :- | -: | :- | :- | :- |
 | AIConsentView.swift | 74 | The AI-data consent, and Account's AI use row | AIConsent | Coach's consent sheet (`coach/CoachView.swift`); Account › AI use, `AIConsentRow` with Withdraw, and its screen, `AIConsentSheet` (`account/AccountRows.swift`, `AccountActions.swift`, `Core/account/AccountControls.swift`, `Core/contracts/AIConsent.swift`) |
 | AccountPreferencesView.swift | 37 | Account's theme, language and time zone pickers | ThemePreference, AppLanguage, setAccountTimeZone | `ThemePicker` (`account/AccountView.swift`), `LanguagePicker` (`account/LanguagePicker.swift`), `TimeZonePicker`: Use this Mac's, tafs cloud's zones for the search, saved to KIFF signed (`account/KiffAccountView.swift`, `Core/account/AccountControls.swift`) |
+| DiscardSettingUp.swift | 35 | Discard a taf being set up | SettingUp | Discard beside the state chip of a taf being set up that this person started, in tafs cloud's words, behind its confirm; approved on the security key, its Cards revoked, then tafs cloud (`taf/TafView.swift`, `shell/SignedInView.swift`, `Core/overview/SettingUp.swift`, `Core/approvals/KeyApproval.swift`) |
 | ExportChatsView.swift | 82 | Account › Export my chats | AppModel.exportChats | `account/ExportChatsView.swift`, `Core/account/ChatsExport.swift` |
 | HaltScreen.swift | 176 | A halt of one taf or every taf | Halt | Halt now and Halt all now, the parts that hold it, following while halting, board 4 once every taf is halted (`taf/HaltView.swift`, `Core/taf/Halt.swift`, `Core/shell/ArtBoard.swift`); Resume on this Mac's security key (`KeyAct.resume`, named "Resume {taf}"), then tafs cloud releases it (`CloudClient.releaseHalt`), as the iPad's `resume`; a Mac with no key says to approve elsewhere |
 | MicButton.swift | 122 | The mic in a chat's message bar, its language switch and the listening bar | Dictation (`Services/Dictation.swift`) | `coach/MicButton.swift`, `coach/Dictation.swift`, `Core/coach/Dictating.swift`, in Coach's and a taf's message bar |
@@ -23,6 +24,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | PairSignInView.swift | 104 | Signing in from another phone: this device shows the pairing QR and its check code, the phone approves | KIFF/Pairing | "Add this Mac with a phone": `pairing/SignInView.swift`, `SignInModel.swift`, `QRCode.swift`, `Core/pairing/Client.swift`, `Messages.swift` |
 | RecipeGallery.swift | 135 | The jobs' gallery | Gallery | `RecipeGallerySheet` with Say it in your own words, All jobs and every job by category; Explore jobs and the strip in the sidebar (`overview/RecipeGalleryView.swift`, `shell/ShellView.swift`, `Core/overview/Gallery.swift`; it came with #97, the row was stale) |
 | ReportAnswerSheet.swift | 124 | Report an answer Coach or a taf wrote | AnswerReport | `coach/ReportAnswerSheet.swift`, `Core/coach/Report.swift` |
+| ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | | At the receipt's foot where tafs cloud offers it: the intro with the line's taf, amount and date, Report and halt, done or failed; the tafs read again (`record/ReceiptSheet.swift`, `record/RecordView.swift`, `Core/record/Record.swift`) |
 | YourStepCard.swift | 46 | A step a taf handed its owner, with Done and Skip | YourStep | `approvals/NeedsYou.swift`, `Core/approvals/YourStep.swift` (signed with the device key after Touch ID or the Mac's password) |
 
 ## Partial
@@ -67,10 +69,8 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | ChromeViews.swift | 178 | Account › Chrome: the paired Chromes, Pair a Chrome, Unpair (shown once planque offers Chromes; pairing is signed) | AppModel.chromes |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
 | DeleteAccountView.swift | 60 | Deleting the account | |
-| DiscardSettingUp.swift | 35 | Discard a taf being set up | |
 | DoorsView.swift | 923 | A taf's Doors tab | |
 | FilesViews.swift | 453 | Files: the account's or one taf's, newest first, the list and the open file side by side | |
-| ReportPaymentSheet.swift | 64 | Report this payment from a receipt: KIFF marks it and halts its taf | |
 | SetupShapePanel.swift | 130 | What Coach has made so far | SetupShape |
 | TrialViews.swift | 214 | Trials of a new version | |
 | WatchDaysViews.swift | 93 | Coach's Previous conversations: the watch's days, each read only | |
@@ -100,5 +100,5 @@ test.
 
 ## Counts
 
-Ported 9, partial 27, not started 17, not for macOS 12 4: the 57 view files at the pin
-(`9843655`).
+Ported 12, partial 27, not started 11, not for macOS 12 7: the 57 view files at the pin
+(`aa8f202`).
