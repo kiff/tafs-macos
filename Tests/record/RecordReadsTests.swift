@@ -132,8 +132,9 @@ let recordReadsTests: [Test] = [
         try expectEqual(try line("refused", #","answer":{"decision":"refused","by":"admin"}"#), "refused by an admin · nothing sent")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once","by":"finance_lead"}"#), "approved by someone with the role finance lead · done")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once"}"#), "approved by someone else · done")
-        // Held, KIFF may no longer hold it: tafs cloud's own line stands.
-        try expectEqual(try line("held", detail: "Waiting for you"), "Waiting for you")
+        // Held, while waiting (KIFF's held list unread, or holding it): who decided and what became of it,
+        // as the iPad's; "no longer waiting" is in RecordNamingTests.
+        try expectEqual(try line("held", detail: "Waiting for you"), "waiting for you · nothing sent yet")
         // No receipt and no answer: tafs cloud's line, as the iPad's own.
         try expectEqual(try entry(call("b", detail: "Done, within its Card")).line(en), "Done, within its Card")
         // A receipt without its trace isn't one.

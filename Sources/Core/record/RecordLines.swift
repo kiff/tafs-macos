@@ -4,13 +4,31 @@ import Foundation
 /// (RecordView.swift:216-259, 314-329): who decided, then what became of it at the tool, in the
 /// shared words ("within its Card · done").
 extension Record.Entry {
-    /// "<who decided> · <result at the tool>" for a call with a KIFF receipt or an answer, as the
-    /// iPad's; any other line reads as tafs cloud words it. A held call keeps tafs cloud's line too:
-    /// the iPad says "no longer waiting" once KIFF holds it no more, which the Record doesn't tell
-    /// this Mac, so tafs cloud's words, which do, stand.
-    func line(_ words: Words) -> String {
-        guard kind != "held", receipt != nil || answer != nil else { return detail }
-        return [decidedLine(words), resultLine(words)].filter { !$0.isEmpty }.joined(separator: " · ")
+    /// The iPad's `RecordRow.detail` (RecordView.swift:317-330), joined with " · ": first what the
+    /// call acted on (`onText`), when the line is named; then, for a held call KIFF no longer holds
+    /// (`waiting` false), "no longer waiting · nothing sent"; else, for a call with a KIFF receipt or
+    /// an answer, "<who decided> · <result at the tool>"; else tafs cloud's words for it. `waiting`
+    /// is true until KIFF's held list is read (`Record.isWaiting`), as the iPad's.
+    func line(_ words: Words, waiting: Bool = true) -> String {
+        var parts: [String] = []
+        if let on = onText(words) { parts.append(on) }
+        if kind == "held", !waiting {
+            parts += [words("record.no_longer_waiting"), words("record.nothing_sent")]
+        } else if receipt != nil || answer != nil {
+            parts += [decidedLine(words), resultLine(words)].filter { !$0.isEmpty }
+        } else {
+            parts.append(detail)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// "payment …QbstR": what the call acted on, by its argument's name ("it" without one), once
+    /// `Record.naming` named it, as the iPad's `RecordEntry.onText` (RecordView.swift:206-212). A
+    /// value longer than 6 shows its last 5.
+    func onText(_ words: Words) -> String? {
+        guard let value = onValue else { return nil }
+        let noun = (onArg ?? words("record.on.it")).replacingOccurrences(of: "_", with: " ")
+        return value.count > 6 ? "\(noun) …\(value.suffix(5))" : "\(noun) \(value)"
     }
 
     /// Who decided: its Card, the owner or another person (approving or refusing), or KIFF's refusal.
@@ -42,6 +60,68 @@ extension Record.Entry {
         }
     }
 
+    /// The receipt sheet's state line, as the iPad's `ReceiptView.stateLabel` (RecordView.swift:689-694):
+    /// the owner's answer and who gave it, else how the call went (`RecordEntry.Kind.label`).
+    func receiptLabel(_ words: Words) -> String {
+        if let answer {
+            let who = answerer(words)
+            return answer == "refused" ? words("receipt.refused_by", ["who": who]) : words("receipt.approved_once_by", ["who": who])
+        }
+        switch kind {
+        case "done": return words("receipt.label.done")
+        case "approved": return words("receipt.label.approved")
+        case "refused": return words("record.filter.refused")
+        case "held": return words("receipt.label.held")
+        case "not_done": return words("receipt.label.not_done")
+        case "sending": return words("receipt.label.sending")
+        case "revoked": return words("card.card_revoked")
+        case "started": return words("receipt.label.started")
+        case "in_tafs": return words("receipt.label.in_tafs")
+        default: return words("receipt.label.unknown")
+        }
+    }
+
+    /// The receipt's Outcome fact, as the iPad's `ReceiptView.outcome` (RecordView.swift:696-703).
+    func receiptOutcome(_ words: Words) -> String {
+        switch kind {
+        case "done", "approved":
+            guard amount != nil, let money = amountText else { return words("receipt.outcome.done") }
+            return words("receipt.outcome.moved", ["amount": money])
+        case "refused":
+            return answer == "refused" ? words("receipt.outcome.refused_by", ["who": answerer(words)]) : words("receipt.outcome.card_refused")
+        case "held": return words("receipt.outcome.waiting")
+        default: return detail
+        }
+    }
+
+    /// The receipt's Decided by fact, as the iPad's `ReceiptView.decidedBy` (RecordView.swift:717-731),
+    /// in KIFF's mode, this Mac's only one. The iPad's refusal signed on the device itself is never a
+    /// Record line here: this Mac signs none.
+    func receiptDecidedBy(_ words: Words) -> String {
+        if answer != nil {
+            let who = answerer(words)
+            var how = answeredByYou ? words("receipt.decided_by.you") : who.prefix(1).uppercased() + who.dropFirst()
+            if answerSigned {
+                how = words("receipt.decided_by.signed_on", ["who": how, "device": answerDevice ?? words("receipt.decided_by.your_device")])
+            }
+            return how
+        }
+        switch kind {
+        case "approved": return words("receipt.decided_by.you_approving_once")
+        case _ where ownerApproved: return words("receipt.decided_by.you_approving_once")
+        case "revoked": return words("receipt.decided_by.you_revoking")
+        case "started": return words("receipt.decided_by.you_issuing")
+        default: return words("receipt.decided_by.kiff")
+        }
+    }
+
+    /// The receipt's On fact, as the iPad's (RecordView.swift:395-397): the argument's name and the
+    /// whole value, once the line is named; nil otherwise.
+    var receiptOn: String? {
+        guard let value = onValue else { return nil }
+        return "\((onArg ?? "").replacingOccurrences(of: "_", with: " ")) \(value)"
+    }
+
     /// Who answered, in words: "you", or by KIFF's role for them ("an admin").
     func answerer(_ words: Words) -> String {
         if answeredByYou { return words("record.answerer.you") }
@@ -60,6 +140,63 @@ extension Record.Entry {
 }
 
 extension Record {
+    /// One of a taf's calls, as tafs cloud keeps it (`GET /v1/tafs/{id}/calls`): KIFF's key for it
+    /// (`invocation`) and the value it acted on.
+    struct CallRef: Decodable, Equatable {
+        let invocation: String
+        let value: String
+    }
+
+    /// Whether `value` is what KIFF's hash names, as the iPad's `KIFFMapping.isOn`: "sha256:" and the
+    /// lowercase hex SHA-256 of its UTF-8 bytes, untrimmed, in its own case, compared exactly. `sha256`
+    /// is passed in (CryptoKit's in the app), as Core builds on Linux without it.
+    static func isOn(_ value: String, hash: String, sha256: (Data) -> Data) -> Bool {
+        hash == "sha256:" + sha256(Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// The tafs (by their id at tafs cloud) whose calls name a line: each with a line KIFF hashed
+    /// what it acted on and that isn't named yet, as the iPad's `nameRecordLines`. Each once, in order.
+    static func tafsToName(_ groups: [Group]) -> [String] {
+        var out: [String] = []
+        for entry in groups.flatMap(\.entries) where entry.onHash != nil && entry.onValue == nil && !out.contains(entry.taf.id) {
+            out.append(entry.taf.id)
+        }
+        return out
+    }
+
+    /// The lines with what each acted on, from the tafs' calls by KIFF's key (`refs`), as the iPad's
+    /// `KIFFMapping.naming`: only a value whose hash is KIFF's, so a line never names a payment KIFF
+    /// didn't.
+    static func naming(_ groups: [Group], refs: [String: String], sha256: (Data) -> Data) -> [Group] {
+        groups.map { group in
+            Group(id: group.id, title: group.title, entries: group.entries.map { e in
+                var e = e
+                if let key = e.entityID, let hash = e.onHash, let value = refs[key], isOn(value, hash: hash, sha256: sha256) { e.onValue = value }
+                return e
+            })
+        }
+    }
+
+    /// Whether a held line still waits, as the iPad's `AppModel.isWaiting`: until KIFF's held list is
+    /// read (`held` nil: unread or failed) it does; after, only while some held call is its call (by
+    /// KIFF's proposal id, `HeldCall.heldProposals`). A line without a proposal id still waits: it is
+    /// never said to be no longer waiting without KIFF's word.
+    static func isWaiting(_ entry: Entry, held: Set<String>?) -> Bool {
+        guard let held, let proposal = entry.proposalID else { return true }
+        return held.contains(proposal)
+    }
+
+    /// A line from KIFF as the Record draws it, as the iPad's `KIFFMapping.visible`: no direction
+    /// character (U+202A–U+202E, U+2066–U+2069, U+200E, U+200F, U+061C), and any other control
+    /// character a space.
+    static func visible(_ text: String) -> String {
+        var kept = String.UnicodeScalarView()
+        for scalar in Words.withoutDirection(text).unicodeScalars {
+            kept.append(scalar.properties.generalCategory == .control ? " " : scalar)
+        }
+        return String(kept)
+    }
+
     /// "€640 spent": a day's money moved, a sum for each currency joined with " + ", in the app's
     /// language (`record.day_spent`, where the amount's place differs by language), as the iPad's
     /// `RecordView.spent` (RecordView.swift:107-125). Nil when the day moved none.

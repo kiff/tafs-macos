@@ -47,8 +47,27 @@ enum Record {
         /// The owner approved it, a held call that KIFF then allowed, whatever the tool did: the
         /// iPad's `ownerApproved` (`outcome` allowed and `held`), or a call tafs cloud names approved.
         let ownerApproved: Bool
+        /// KIFF's id for the call (`call.proposal_id`): what a held call is matched by in KIFF's held list.
+        let proposalID: String?
+        /// KIFF's key for what the call acted on (`call.entity_id`, the gateway's "tc-…"), what the taf's
+        /// calls name it by; drawn only through `Record.visible`.
+        let entityID: String?
+        /// What it acted on, as KIFF signs it: "sha256:<hex>" of the value (`call.on_hash`), and the name
+        /// of the argument it came from (`call.on_arg`, "payment").
+        let onHash: String?
+        let onArg: String?
+        /// Why it wasn't sent, in KIFF's words (`call.reason`), through `Record.visible`.
+        let reason: String?
+        /// The owner's answer was signed on a device, and which (`call.answer.signed`, `.device`).
+        let answerSigned: Bool
+        let answerDevice: String?
+        /// What the call acted on ("pi_3US…08Vgp"): never sent, set only by `Record.naming` from the
+        /// taf's own calls when its value is the one KIFF hashed.
+        var onValue: String? = nil
+        /// The owner's next step for a call that wasn't done, as tafs cloud says it (`next`).
+        let next: NextStep?
 
-        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call }
+        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call, next }
 
         /// The part of KIFF's call the receipt sheet reads. Each part that doesn't read is left out, and
         /// the line still reads.
@@ -57,12 +76,16 @@ enum Record {
                 let decision: String
                 var by: String?
                 var you: Bool?
-                enum CodingKeys: String, CodingKey { case decision, by, you }
+                var signed: Bool?
+                var device: String?
+                enum CodingKeys: String, CodingKey { case decision, by, you, signed, device }
                 init(from decoder: Decoder) throws {
                     let c = try decoder.container(keyedBy: CodingKeys.self)
                     decision = try c.decode(String.self, forKey: .decision)
                     by = (try? c.decodeIfPresent(String.self, forKey: .by)) ?? nil
                     you = (try? c.decodeIfPresent(Bool.self, forKey: .you)) ?? nil
+                    signed = (try? c.decodeIfPresent(Bool.self, forKey: .signed)) ?? nil
+                    device = (try? c.decodeIfPresent(String.self, forKey: .device)) ?? nil
                 }
             }
             var receipt: Receipt?
@@ -71,7 +94,15 @@ enum Record {
             var readOnly: Bool?
             var outcome: String?
             var held: Bool?
-            enum CodingKeys: String, CodingKey { case receipt, amount, answer, readOnly = "read_only", outcome, held }
+            var proposalID: String?
+            var entityID: String?
+            var onHash: String?
+            var onArg: String?
+            var reason: String?
+            enum CodingKeys: String, CodingKey {
+                case receipt, amount, answer, readOnly = "read_only", outcome, held
+                case proposalID = "proposal_id", entityID = "entity_id", onHash = "on_hash", onArg = "on_arg", reason
+            }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
                 receipt = (try? c.decodeIfPresent(Receipt.self, forKey: .receipt)) ?? nil
@@ -80,6 +111,11 @@ enum Record {
                 readOnly = (try? c.decodeIfPresent(Bool.self, forKey: .readOnly)) ?? nil
                 outcome = (try? c.decodeIfPresent(String.self, forKey: .outcome)) ?? nil
                 held = (try? c.decodeIfPresent(Bool.self, forKey: .held)) ?? nil
+                proposalID = (try? c.decodeIfPresent(String.self, forKey: .proposalID)) ?? nil
+                entityID = (try? c.decodeIfPresent(String.self, forKey: .entityID)) ?? nil
+                onHash = (try? c.decodeIfPresent(String.self, forKey: .onHash)) ?? nil
+                onArg = (try? c.decodeIfPresent(String.self, forKey: .onArg)) ?? nil
+                reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
             }
         }
 
@@ -106,6 +142,42 @@ enum Record {
             answeredByYou = call?.answer?.you == true
             readOnly = call?.readOnly == true
             ownerApproved = kind == "approved" || (call?.outcome == "allowed" && call?.held == true)
+            proposalID = call?.proposalID
+            entityID = call?.entityID.map(Record.visible)
+            onHash = call?.onHash
+            onArg = call?.onArg
+            reason = call?.reason.map(Record.visible)
+            answerSigned = call?.answer?.signed == true
+            answerDevice = call?.answer?.device
+            next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
+        }
+    }
+
+    /// The owner's next step for a call that wasn't done, as tafs cloud says it (the iPad's
+    /// `TafsCloud.NextStep`): `kind` is `reconnect`, `ask_coach` or `try_later`, `words` its button's,
+    /// or its line's. One without a kind or words isn't one.
+    struct NextStep: Decodable, Equatable {
+        let kind: String
+        let words: String
+        var tool: String?
+        var taf: String?
+        var message: String?
+
+        enum CodingKeys: String, CodingKey { case kind, words, tool, taf, message }
+        init(kind: String, words: String, tool: String? = nil, taf: String? = nil, message: String? = nil) {
+            self.kind = kind; self.words = words; self.tool = tool; self.taf = taf; self.message = message
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            kind = try c.decode(String.self, forKey: .kind)
+            words = try c.decode(String.self, forKey: .words)
+            guard !kind.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw DecodingError.dataCorruptedError(forKey: .words, in: c, debugDescription: "a next step needs its kind and words")
+            }
+            tool = (try? c.decodeIfPresent(String.self, forKey: .tool)) ?? nil
+            taf = (try? c.decodeIfPresent(String.self, forKey: .taf)) ?? nil
+            message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil
         }
     }
 
@@ -183,7 +255,20 @@ enum Record {
 
     /// One case: every call about the same thing, oldest first.
     struct Case: Decodable, Equatable {
-        struct Failed: Decodable, Equatable { let id: String; let words: String? }
+        /// Its own next step is decoded, as the iPad's; each step's `next` is the retry drawn.
+        struct Failed: Decodable, Equatable {
+            let id: String
+            let words: String?
+            let next: NextStep?
+            enum CodingKeys: String, CodingKey { case id, words, next }
+            init(id: String, words: String?, next: NextStep? = nil) { self.id = id; self.words = words; self.next = next }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                id = try c.decode(String.self, forKey: .id)
+                words = (try? c.decodeIfPresent(String.self, forKey: .words)) ?? nil
+                next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
+            }
+        }
         let about: String
         let steps: [Entry]
         /// The latest step that didn't go through, in tafs cloud's words.
@@ -286,5 +371,14 @@ extension CloudClient {
     /// One case: every call about `about`. A 404 says no call of the person's is about it.
     func recordCase(_ about: String) async throws -> Record.Case {
         try await get("/v1/record/cases/\(Self.escaped(about))", saying: true)
+    }
+
+    /// One taf's calls, by KIFF's key and the value it acted on, as the iPad's `TafsCloud.calls`
+    /// (`GET /v1/tafs/{id}/calls`): what names a Record line's payment. Read whole or not at all: a
+    /// ref that doesn't read makes the answer unreadable.
+    func calls(_ tafID: String) async throws -> [Record.CallRef] {
+        struct Answer: Decodable { let calls: [Record.CallRef] }
+        let answer: Answer = try await get("/v1/tafs/\(Self.escaped(tafID))/calls")
+        return answer.calls
     }
 }
