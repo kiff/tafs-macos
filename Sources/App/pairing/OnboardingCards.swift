@@ -196,3 +196,64 @@ struct OnboardingPicture: View {
         return (try? JSONDecoder().decode(Cards.self, from: data))?.cards.first
     }
 }
+
+/// How tafs works, any time (the first Home; Account), as the iPad's `HowTafsWorksView`: the three cards again, each
+/// opening where it's clicked, and the privacy and terms pages, KIFF's and tafs's.
+struct HowTafsWorksView: View {
+    @Environment(\.words) private var words
+    @State private var opened: OnboardingPage?
+    let close: () -> Void
+
+    /// The four legal pages as rows, each titled as its page is: standalone titles (`onboarding.row_*`), never the
+    /// tick line's link words, which are written to sit inside its sentence ("the tafs Terms", German's dative).
+    static func legalRows(_ words: Words) -> [(title: String, url: String)] {
+        [(words("onboarding.row_kiff_privacy"), LegalPages.kiffPrivacy(words.language)),
+         (words("onboarding.row_tafs_privacy"), LegalPages.privacy(words.language)),
+         (words("onboarding.row_kiff_terms"), LegalPages.kiffTerms(words.language)),
+         (words("onboarding.row_tafs_terms"), LegalPages.terms(words.language))]
+    }
+
+    var body: some View {
+        if let opened {
+            OnboardingCards(start: opened) { self.opened = nil }
+        } else {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text(words("onboarding.how_it_works")).font(Theme.display(24)).foregroundColor(Theme.ink).accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
+                }
+                VStack(spacing: 0) {
+                    ForEach(OnboardingPage.allCases) { page in
+                        Button { opened = page } label: {
+                            HStack {
+                                Text(words(page.titleKey)).foregroundColor(Theme.ink)
+                                Spacer()
+                                Image(systemName: "chevron.forward").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                                    .flipsForRightToLeftLayoutDirection(true)
+                            }
+                            .padding(.vertical, 11).padding(.horizontal, 14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if page.next != nil { Divider().padding(.leading, 14) }
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Self.legalRows(words), id: \.url) { row in
+                        if let url = URL(string: row.url) {
+                            Link(LegalPages.saysEnglish(words.language) ? words("settings.legal_in_english", ["label": row.title]) : row.title,
+                                 destination: url)
+                                .foregroundColor(Theme.amberText)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Theme.background)
+        }
+    }
+}
