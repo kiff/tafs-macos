@@ -25,15 +25,23 @@ struct SettingUp: Decodable, Equatable, Identifiable {
 
     let name: String
     let kiffAgent: String
+    /// Its colour, by its index in the palette, as Home gives it.
+    let color: Int
+    /// "Finish setting up", in tafs cloud's words, for the person who started it while Coach's chat for it waits.
+    let finishWords: String?
     /// Only for the person who started it, with tafs cloud's words: nil draws no Discard.
     let discard: Discard?
     var id: String { kiffAgent }
 
-    enum CodingKeys: String, CodingKey { case name, kiffAgent = "kiff_agent", discard }
+    enum CodingKeys: String, CodingKey { case name, kiffAgent = "kiff_agent", color, finish, discard }
+    private struct Finish: Decodable { let words: String? }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         name = try c.decode(String.self, forKey: .name)
         kiffAgent = try c.decode(String.self, forKey: .kiffAgent)
+        color = ((try? c.decodeIfPresent(Int.self, forKey: .color)) ?? nil) ?? 0
+        let finish = ((try? c.decodeIfPresent(Finish.self, forKey: .finish)) ?? nil)?.words?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        finishWords = finish.isEmpty ? nil : finish
         // A Discard without its button's words can't be drawn: none.
         discard = ((try? c.decodeIfPresent(Discard.self, forKey: .discard)) ?? nil).flatMap { $0.words.button.isEmpty ? nil : $0 }
     }

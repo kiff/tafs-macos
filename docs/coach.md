@@ -169,6 +169,19 @@ and `loadSetupThread` (`:7328-7375`):
   what was read; "Not put back. {why}" when tafs cloud refuses. ‹ Back returns to the list.
 - **After sign-out**, an archive, a put-back or an archived list that comes back late does and
   says nothing.
+- **From your watch** (W11), as the iPad's `WatchDaysSection` (`WatchDaysViews.swift`,
+  `TafsCloud+WatchDays.swift`, `WatchDays.swift`): after the chats, the days the person asked
+  from their watch, newest first (`GET /v1/watch/days`), each with how many requests, under
+  "From your watch". Only the person's own, read only. A day that doesn't read is left out; a
+  read that fails, or tafs cloud's switch off (404), draws no section. A day's title is
+  "Today" for tafs cloud's `today` (else this Mac's day), else its weekday, day and month in
+  the person's language. **A day opens in place** with ‹ Back, as Archived does (the iPad
+  pushes it), oldest first (`GET /v1/watch/days/{date}`): each turn's "⌚ Sent from your watch"
+  and when, the person's words, then the taf that took it and tafs cloud's line, else its
+  words for the state; a reply sits under what it answers. A message to a taf (`kind: "taf"`)
+  is that taf's chat, not Coach's, and isn't listed. An answer for a day asked before the last
+  is never drawn, and nothing of a day is kept once it's left. **Mac difference:** a turn's
+  time is in this Mac's zone; the iPad writes it in the account's.
 - **After sign-out**, a chats list or a reopened chat that comes back late is dropped, as the
   iPad's `accountGeneration` guard.
 - **Start a new taf**, from Home's Own words, the gallery's own words, and the sidebar's +

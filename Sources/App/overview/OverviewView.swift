@@ -202,6 +202,8 @@ struct OverviewView: View {
     var hand: (Recipes.Recipe) -> Void = { _ in }
     /// Whether the new onboarding is on (`Onboarding.on`): then Home with no taf is the first Home.
     var onboarding = Onboarding.on
+    /// Discard a taf being set up (Home's `setting_up[].discard`), on the security key; what to tell the person, or nil.
+    var discard: ((SettingUp) async -> String?)? = nil
     /// How tafs works, opened from the first Home.
     @State private var showingHowItWorks = false
 
@@ -231,6 +233,12 @@ struct OverviewView: View {
                     }
                     // In the iPad's order (`listedTafs`). Halt all is the sidebar's, as on the iPad.
                     if page.tafs.isEmpty { noTaf } else { table(model.filtered(model.listedTafs)) }
+                    // The tafs being set up, as Home lists them apart (`setting_up`), each with Discard for its starter.
+                    if !page.settingUp.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(page.settingUp) { SettingUpRow(taf: $0, discard: discard) }
+                        }
+                    }
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
@@ -443,3 +451,58 @@ private struct UsedByLine: View {
     }
 }
 
+/// A taf being set up, as the iPad's Home row for it: its avatar and name, tafs cloud's "Finish setting up" line, and
+/// Discard (`DiscardSettingUpButton`) for the person who started it. Every word on it is tafs cloud's. The confirmation
+/// asks first; its yes approves on the security key, revokes the half-made taf's Cards and drops it.
+struct SettingUpRow: View {
+    @Environment(\.words) private var words
+    let taf: SettingUp
+    let discard: ((SettingUp) async -> String?)?
+    @State private var confirming = false
+    @State private var discarding = false
+    @State private var note: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                TafAvatar(name: taf.name, color: taf.color, size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                    if let finish = taf.finishWords {
+                        Text(verbatim: finish).font(.system(size: 13)).foregroundColor(Theme.amberText)
+                    }
+                }
+                Spacer()
+                if let shown = taf.discard?.words, discard != nil { button(shown) }
+            }
+            if let note {
+                Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+
+    private func button(_ shown: SettingUp.Discard.Words) -> some View {
+        Button { confirming = true } label: {
+            Text(verbatim: discarding ? words("common.loading") : shown.button).padding(.horizontal, 16)
+        }
+        .buttonStyle(OutlineButtonStyle(color: Theme.soft))
+        .fixedSize()
+        .disabled(discarding)
+        .accessibilityIdentifier("home.discard-setup")
+        .confirmationDialog(shown.title.isEmpty ? shown.button : shown.title, isPresented: $confirming, titleVisibility: .visible) {
+            Button(shown.yes.isEmpty ? shown.button : shown.yes, role: .destructive) {
+                discarding = true
+                note = nil
+                Task {
+                    note = await discard?(taf)
+                    discarding = false
+                }
+            }
+            Button(shown.no.isEmpty ? words("common.cancel") : shown.no, role: .cancel) {}
+        } message: {
+            if !shown.text.isEmpty { Text(verbatim: shown.text) }
+        }
+    }
+}

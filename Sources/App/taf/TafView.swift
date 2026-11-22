@@ -128,12 +128,6 @@ struct TafView: View {
     var askCoach: ((String) -> Void)? = nil
     /// Connect apps, from the ring's +, for whoever manages the taf; nil draws no +.
     var openConnect: (() -> Void)? = nil
-    /// A taf being set up that this person started: tafs cloud's Discard words, and the discard itself (the security
-    /// key's approval, its Cards revoked, then tafs cloud), which answers what to tell the person; nil draws no Discard.
-    var discard: (words: SettingUp.Discard.Words, run: () async -> String?)? = nil
-    @State private var confirmingDiscard = false
-    @State private var discarding = false
-    @State private var discardNote: String?
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
@@ -176,40 +170,8 @@ struct TafView: View {
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             if let chip = TafState.chip(state: taf.state, attention: taf.attention) { stateChip(chip.key, chip.tone) }
-            if let discard { discardButton(discard.words) }
         }
         .padding(.top, 40)
-        .overlay(alignment: .bottomLeading) {
-            if let discardNote {
-                Text(verbatim: discardNote).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
-                    .offset(y: 22)
-            }
-        }
-    }
-
-    /// Discard, beside the taf being set up's state, as the iPad's `DiscardSettingUpButton`: every word is tafs cloud's.
-    /// The confirmation asks first; its yes approves on the security key, revokes the half-made taf's Cards and drops it.
-    private func discardButton(_ shown: SettingUp.Discard.Words) -> some View {
-        Button { confirmingDiscard = true } label: {
-            Text(verbatim: discarding ? words("common.loading") : shown.button).padding(.horizontal, 16)
-        }
-        .buttonStyle(OutlineButtonStyle(color: Theme.soft))
-        .fixedSize()
-        .disabled(discarding)
-        .accessibilityIdentifier("taf.discard-setup")
-        .confirmationDialog(shown.title.isEmpty ? shown.button : shown.title, isPresented: $confirmingDiscard, titleVisibility: .visible) {
-            Button(shown.yes.isEmpty ? shown.button : shown.yes, role: .destructive) {
-                discarding = true
-                discardNote = nil
-                Task {
-                    discardNote = await discard?.run()
-                    discarding = false
-                }
-            }
-            Button(shown.no.isEmpty ? words("common.cancel") : shown.no, role: .cancel) {}
-        } message: {
-            if !shown.text.isEmpty { Text(verbatim: shown.text) }
-        }
     }
 
     /// The four tabs, as the iPad's switch.
