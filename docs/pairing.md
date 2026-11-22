@@ -21,6 +21,48 @@ and never approves an action.
 2. KIFF answers a code and a page. The person opens the page, checks the code and approves.
 3. The Mac asks for its session every few seconds (`Waiting.until`) until it is handed over.
 
+## Signing in inside the app (`AppSignIn`, `KIFFClient.appToken`; the new onboarding)
+
+The iPad's onboarding (kiff/tafs `docs/onboarding.md`), behind the same switch: `Onboarding.on`, on
+only in a build made with `K5=1 scripts/build.sh` (Swift's `TAFS_K5`, as the iPad's), until the pin
+moves to the kiff/tafs commit that turns it on everywhere. `dmg.sh` refuses a K5 build. Off, the
+welcome and the sign-in are as before, with only a raised age line under Continue where the
+country asks more than 16. The contract is kiff/cloud's `api/internal/appsignin/README.md`.
+
+1. **The welcome, with one tick** (`OnboardingConsent`, `ConsentTick`): "I agree to KIFF's Terms of
+   Service and the tafs Terms", each name a link to its page; privacy as two links below, never
+   ticked; and the age line for this Mac's region (`Onboarding.ageLine`, from `strings/ages.json`,
+   legal-i18n's table at the pin). The box is its own control: a link opens its page and never
+   ticks it. The Terms version in force is read as the welcome shows (`GET /v1/auth/app/terms`), so
+   the one sent is the one the person saw.
+2. **Continue waits on the tick**, then opens KIFF's `/oauth/authorize` in the system's own sign-in
+   sheet (`SystemKIFFSheet`: `ASWebAuthenticationSession`, which macOS 12 has), **private**
+   (`prefersEphemeralWebBrowserSession`), so no earlier sign-in or cookie comes in. PKCE S256 with
+   a 43-character verifier and a fresh `state` (`AppSignIn`). The way back is
+   `dev.kiff.tafs:/oauth` exactly, with this attempt's `state` once; the sheet catches it itself,
+   so **nothing is registered with macOS** and no other app can be handed the code. The code goes to
+   `POST /v1/auth/app/token` with its verifier, the ticked version, and this Mac's device fields
+   exactly as `/v1/auth/device/start` sends them (`KIFFClient.device`): the same session as the
+   device flow's, then the same celebration.
+3. **How it ends otherwise:** the sheet closed or KIFF's page declined (`access_denied`) says
+   nothing; signing in inside the app being off says so, in KIFF's `words` when it sends them;
+   **Terms that changed** since the tick (409 `terms_outdated`) untick the box and say so, and the
+   code, which KIFF refused before spending it, is kept for 50 of its 60 seconds so the new tick
+   sends it again with the new version without opening KIFF's page twice; anything else says
+   signing in didn't work, with the tick kept. Another state's code is never traded.
+4. **The phone's half** waits on the same tick: no code is shown before it, and the claim carries
+   the ticked version (`terms_version` on `/v1/pair/claim`), so KIFF records the consent for this
+   Mac however the person signs in. `terms_outdated` there unticks the box too.
+5. **The three cards** (`OnboardingCards`, the iPad's whole): Your tafs, A Card is your permission,
+   You stay in control, with Skip (Esc), Next and Get started (Return). They follow the celebration
+   once on this Mac (`Onboarding.cardsSeenKey`). The last names a desktop's approval
+   (`onboarding.control_lead_desktop`): on the phone, since a Mac on macOS 12 has no Touch ID.
+6. **The first Home** (the Overview with no taf and no job listed, for someone who may use Coach):
+   board 2, tafs cloud's empty line or the app's "No tafs yet" with what Coach does, **Ask Coach** and
+   **How tafs works** (`HowTafsWorksView`: the cards, each opening where it's clicked, and the four
+   legal pages titled as their pages). Account's Legal opens it too.
+7. **A sign-out** leaves an unticked box, with the Terms read again.
+
 ## Adding this Mac with a phone (`PairingPayload`, `KIFFClient.claimPairing`)
 
 1. The Mac shows a QR code with its public keys and name, and a 6-character check code.

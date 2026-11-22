@@ -167,6 +167,7 @@ let pairingAppSignInTests: [Test] = [
     Test("KIFF's own Terms and Privacy open in kiff.dev's language, beside tafs's") {
         try expectEqual(LegalPages.kiffTerms("fr"), "https://kiff.dev/fr/terms")
         try expectEqual(LegalPages.kiffPrivacy("zh-Hant"), "https://kiff.dev/zh/privacy")
-        try expectEqual(LegalPages.kiffTerms("ar"), "https://kiff.dev/terms")
+        try expectEqual(LegalPages.kiffTerms("he"), "https://kiff.dev/he/terms")
+        try expectEqual(LegalPages.kiffTerms("el"), "https://kiff.dev/terms")
     },
 ]
