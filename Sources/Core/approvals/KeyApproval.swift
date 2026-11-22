@@ -28,12 +28,16 @@ enum KeyAct: Equatable {
     /// Resuming a halted KIFF agent, or with none the whole account (the iPad's `KIFFClient.resume`):
     /// `POST /v1/agents/{agent}/resume` or `POST /v1/resume`, with `{}`.
     case resume(agent: String?)
+    /// Removing a taf for good (the iPad's `removeTaf`): tafs cloud's `DELETE /v1/tafs/{id}`, empty body, signed before
+    /// its Cards are revoked and sent after (`PasskeySession.assertion`).
+    case removeTaf(String)
 
     var method: String {
         switch self {
         case .signOutDevice: return "DELETE"
         case .timeZone: return "PUT"
         case .resume: return "POST"
+        case .removeTaf: return "DELETE"
         }
     }
 
@@ -42,6 +46,7 @@ enum KeyAct: Equatable {
         case .signOutDevice(let id): return "/v1/me/devices/\(CloudClient.escaped(id))"
         case .timeZone: return "/v1/me/time-zone"
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
+        case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
         }
     }
 
@@ -54,6 +59,7 @@ enum KeyAct: Equatable {
             encoder.outputFormatting = [.sortedKeys]
             return (try? encoder.encode(["time_zone": zone])) ?? Data()
         case .resume: return Data("{}".utf8)
+        case .removeTaf: return Data()
         }
     }
 
@@ -64,6 +70,7 @@ enum KeyAct: Equatable {
         case .timeZone(let zone): return words("settings.time_zone.prompt", ["zone": zone])
         // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
         case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
+        case .removeTaf: return words("taf.remove.prompt", ["taf": device])
         }
     }
 }

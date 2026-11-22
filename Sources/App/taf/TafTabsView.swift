@@ -8,6 +8,10 @@ final class TafPagesModel: ObservableObject {
     var revokeCards: (([String]) async throws -> Void)?
     /// Whether this Mac's session is view-only (KIFF's `view`): Revoke isn't offered, as on the iPad.
     var viewOnly = false
+    /// Remove for good on this Mac's security key (`TafRemoval`), set by the window; nil says to approve elsewhere.
+    var removeForGood: (() async -> String?)?
+    /// What the removal takes with it, in tafs cloud's words, read before the key is asked.
+    var removalPreview: (() async -> String?)?
     enum State<Page: Equatable>: Equatable {
         case loading
         case loaded(Page)
@@ -348,8 +352,12 @@ struct TafSetupTab: View {
                     // Remove for good, as the iPad draws it for whoever manages the taf (not behind its
                     // ApprovalGate). It's signed with the approval key there (`removeTaf`), which this
                     // Mac can't do: a click says to approve on another device and sends nothing.
-                    ApprovalElsewhereButton(title: words("setup.remove_for_good"))
-                        .accessibilityIdentifier("setup.remove")
+                    if model.removeForGood != nil, let taf {
+                        RemoveForGoodButton(model: model, name: taf.name).accessibilityIdentifier("setup.remove")
+                    } else {
+                        ApprovalElsewhereButton(title: words("setup.remove_for_good"))
+                            .accessibilityIdentifier("setup.remove")
+                    }
                 }
             }
             .padding(.bottom, Look.inset)
@@ -532,5 +540,44 @@ struct ConnectedAppSheet: View {
         .padding(20)
         .frame(width: 480, height: 440)
         .background(Theme.background)
+    }
+}
+
+/// Remove for good on this Mac's security key, as the iPad's (TafDetailView.swift:153-158, `removeTaf`): confirmed first
+/// with what goes with it in tafs cloud's words, then the key's sheet names it ("Remove {taf} for good"), then what
+/// happened, in the iPad's words.
+struct RemoveForGoodButton: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    let name: String
+    @State private var confirming = false
+    @State private var goes: String?
+    @State private var busy = false
+    @State private var said: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(words("setup.remove_for_good")) {
+                Task {
+                    goes = await model.removalPreview?()
+                    confirming = true
+                }
+            }
+            .buttonStyle(OutlineButtonStyle(color: Theme.no))
+            .disabled(busy)
+            .alert(words("taf.remove_title", ["taf": name]), isPresented: $confirming) {
+                Button(words("taf.remove.button"), role: .destructive) {
+                    Task {
+                        busy = true
+                        said = await model.removeForGood?()
+                        busy = false
+                    }
+                }
+                Button(words("common.cancel"), role: .cancel) {}
+            } message: { Text(TafRemoval.body(words, goes: goes)) }
+            if let said {
+                Text(verbatim: said).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }

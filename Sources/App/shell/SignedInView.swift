@@ -336,6 +336,13 @@ struct SignedInView: View {
         }
     }
 
+    /// The security key's assertion over one act's request, named in the PIN sheet, without sending it (a taf's removal
+    /// signs before its Cards are revoked); nil without a key on the security key's route.
+    private var signWithKey: ((KeyAct, String) async throws -> String)? {
+        guard let passkey = passkeySession else { return nil }
+        return { act, title in try await askSecurityKey(act: title) { pin in try await passkey.assertion(for: act, pin: pin) } }
+    }
+
     /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries
     /// as the person makes; it answers once the key approved, or throws once the sheet is closed.
     @MainActor private func askSecurityKey<Answer>(act: String? = nil, _ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
@@ -378,6 +385,18 @@ struct SignedInView: View {
         pages.revokeCards = { [account] ids in
             for id in ids { try await account.revoke(cardID: id) }
             await readTafs()
+        }
+        // Remove for good on this Mac's security key, as the iPad's `removeTaf`.
+        if let sign = signWithKey {
+            let cardIDs = taf.cards.map(\.id), name = taf.name, words = self.words
+            pages.removalPreview = { [cloud] in try? await cloud.removalPreview(id) }
+            pages.removeForGood = { [account, cloud] in
+                let said = await TafRemoval.remove(taf: name, cloudID: id, cardIDs: cardIDs, words: words, sign: sign,
+                                                   revoke: { try await account.revoke(cardID: $0) },
+                                                   remove: { try await cloud.remove(id, assertion: $0) })
+                await readTafs()
+                return said
+            }
         }
         tafPages = pages
         openTaf = taf.id
