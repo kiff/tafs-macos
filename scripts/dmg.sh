@@ -11,6 +11,8 @@ cd "$(dirname "$0")/.."
 APP=build/tafs.app
 IDENTITY="${IDENTITY:--}"
 [ -d "$APP" ] || { echo "No $APP: run scripts/build.sh first" >&2; exit 2; }
+# The end-to-end pass's build (K5=1) has the new onboarding on before it's live: never a download.
+[ ! -e "$APP/Contents/Resources/k5" ] || { echo "$APP is a K5 build: build it again without K5 first" >&2; exit 2; }
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")

@@ -38,6 +38,12 @@ enum KIFFError: Error, Equatable {
     case refused(status: Int, code: String)
     /// An answer that isn't what the contract says.
     case unreadable
+    /// The Terms changed since the welcome's tick (409 `terms_outdated`): the box is unticked, and the person ticks the
+    /// new version. KIFF refuses it before it spends the code or claims the pairing.
+    case termsOutdated
+    /// KIFF has signing in inside the app off (`unsupported_client` on `/v1/auth/app/…`), with its own words when it
+    /// sends them, as the iPad's `KIFFError.signInNotOn`.
+    case signInNotOn(words: String?)
 
     /// Whether KIFF no longer knows this session: signed out, or the device was removed.
     var endsSession: Bool {
@@ -46,9 +52,12 @@ enum KIFFError: Error, Equatable {
     }
 
     init(status: Int, body: Data) {
-        struct Refusal: Decodable { let error: String? }
-        let code = (try? JSONDecoder().decode(Refusal.self, from: body))?.error ?? ""
+        struct Refusal: Decodable { let error: String?; let words: String? }
+        let refusal = try? JSONDecoder().decode(Refusal.self, from: body)
+        let code = refusal?.error ?? ""
         switch (status, code) {
+        case (409, "terms_outdated"): self = .termsOutdated
+        case (400, KIFFClient.unsupportedClient): self = .signInNotOn(words: refusal?.words)
         case (400, "authorization_pending"): self = .authorizationPending
         case (400, "slow_down"): self = .slowDown
         case (400, "expired_token"): self = .expired
@@ -102,6 +111,12 @@ struct KIFFClient {
     /// Starts a sign-in as a new device. `publicKey` is the device key (SPKI DER), and
     /// `keyStore` says where its private half is.
     func startSignIn(publicKey: Data, keyStore: String, name: String, approval: ApprovalMeans) async throws -> DeviceStart {
+        try await post("/v1/auth/device/start", Self.device(publicKey: publicKey, keyStore: keyStore, name: name, approval: approval))
+    }
+
+    /// This Mac as a sign-in names it: its device key, name, platform and how it approves. The device flow and the
+    /// in-app sign-in send the same fields, with the same meaning and checks.
+    static func device(publicKey: Data, keyStore: String, name: String, approval: ApprovalMeans) -> [String: String] {
         var body = ["public_key": publicKey.base64EncodedString(), "device_name": name, "platform": "macos", "kind": "other"]
         // A device key outside hardware never approves: it says so, and sends no approval key.
         if keyStore == "software" {
@@ -112,7 +127,7 @@ struct KIFFClient {
         } else {
             body["approval"] = "passkey"
         }
-        return try await post("/v1/auth/device/start", body)
+        return body
     }
 
     /// One ask for the sign-in's session. Throws `.authorizationPending` until the person approves.
@@ -123,14 +138,44 @@ struct KIFFClient {
     /// One ask for a pairing's session, with the proof that this Mac holds the device key.
     /// `publicKey` is as the QR code wrote it (base64url). With `credentialProof`, the claim proves
     /// the QR's credential was made for this pairing (`credential_proof`, as Windows'
-    /// `PairingClaim.BodyAsync`).
-    func claimPairing(nonce: String, publicKey: String, proof: String, credentialProof: CredentialProof? = nil) async throws -> Session {
+    /// `PairingClaim.BodyAsync`). `termsVersion`: the version the welcome's tick agreed to (`Onboarding`), which
+    /// KIFF records for this Mac with the session, as the iPad's `claimPairing(termsVersion:)`; KIFF answers
+    /// `terms_outdated` before claiming anything when it's an old one.
+    func claimPairing(nonce: String, publicKey: String, proof: String, credentialProof: CredentialProof? = nil,
+                      termsVersion: String? = nil) async throws -> Session {
         struct Claim: Encodable {
             let nonce: String, pub: String, proof: String
             let credentialProof: [String: String]?
-            enum CodingKeys: String, CodingKey { case nonce, pub, proof, credentialProof = "credential_proof" }
+            let termsVersion: String?
+            enum CodingKeys: String, CodingKey { case nonce, pub, proof, credentialProof = "credential_proof", termsVersion = "terms_version" }
         }
-        return try await post("/v1/pair/claim", Claim(nonce: nonce, pub: publicKey, proof: proof, credentialProof: credentialProof?.fields))
+        return try await post("/v1/pair/claim", Claim(nonce: nonce, pub: publicKey, proof: proof, credentialProof: credentialProof?.fields,
+                                                      termsVersion: termsVersion))
+    }
+
+    /// KIFF's code for "signing in inside the app is off".
+    static let unsupportedClient = "unsupported_client"
+
+    /// The Terms version in force, read as the welcome's tick shows (`GET /v1/auth/app/terms`): the one sent with the
+    /// sign-in is the one the person saw.
+    func appTerms() async throws -> String {
+        struct Terms: Decodable { let termsVersion: String; enum CodingKeys: String, CodingKey { case termsVersion = "terms_version" } }
+        let request = HTTPRequest(method: "GET", path: "/v1/auth/app/terms")
+        let (status, body) = try await transport.send(request)
+        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: body) }
+        guard let terms = try? JSONDecoder().decode(Terms.self, from: body), !terms.termsVersion.isEmpty else { throw KIFFError.unreadable }
+        return terms.termsVersion
+    }
+
+    /// Trades the in-app sign-in's code (`AppSignIn`) for the device flow's own session (`POST /v1/auth/app/token`,
+    /// kiff/cloud `api/internal/appsignin/README.md`), with its verifier and the ticked terms version. This Mac's
+    /// device goes with it exactly as `startSignIn` sends it, so the session is the same as the device flow's.
+    func appToken(code: String, verifier: String, termsVersion: String, publicKey: Data, keyStore: String, name: String,
+                  approval: ApprovalMeans) async throws -> Session {
+        var body = ["client_id": AppSignIn.clientID, "code": code, "code_verifier": verifier,
+                    "redirect_uri": AppSignIn.redirectURI, "terms_version": termsVersion]
+        body.merge(Self.device(publicKey: publicKey, keyStore: keyStore, name: name, approval: approval)) { _, device in device }
+        return try await post("/v1/auth/app/token", body)
     }
 
     private func post<Answer: Decodable, Fields: Encodable>(_ path: String, _ fields: Fields) async throws -> Answer {
