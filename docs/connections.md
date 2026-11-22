@@ -53,8 +53,11 @@ panels.
   words (`connectFor`, `ConnectAppsView.swift:195-220`, `:345-367`; `Apps.buttonKey`): **Ask
   Coach** where tafs cloud says which tafs need the app (`needed_by`) and none of them is a taf
   this person manages on tafs cloud; else **Sign in again**, or **Connect**. Each opens Coach,
-  where an app is connected on this Mac. The iPad's Connect for no taf at all is disabled, with
-  "Make one first" over Discover; here it opens Coach, which makes the taf too.
+  where an app is connected on this Mac. Where no taf can have the app (no `needed_by`, and
+  no taf this person manages on tafs cloud), Connect is off, as the iPad's (`route == .noTaf`,
+  `Apps.route`), and Discover's panel opens with "Apps connect for a taf. Make one first, then
+  connect its apps here." (`connect.apps_connect_taf_make_one`, `Apps.saysMakeATaf`, the iPad's
+  `ConnectRow.saysMakeATaf`, `ConnectAppsView.swift:410-412`). Never over Yours.
 - **The chevron** past Status, on a row whose connections open (`AppConnections.opens`, the
   iPad's `opensConnections`: connected, or holding a connection on this account), opens "Your
   {app} connections" in the screen's place; so does a click anywhere on a connected row.
@@ -114,18 +117,33 @@ and its model (`AppModel.swift:7025-7083`). It only reads.
   health in its words, amber when it isn't ok); else its name (planque's `title`, else the
   account it names, else the app's), planque's words for its status or "Waiting for the sign-in
   at …", and "Made for {taf}, which doesn't use {app}." for one tafs cloud names `misplaced`.
+  planque's own row (its health and its `actions`) opens **the connection's page**, below.
 - **What would change a connection** is drawn as on the iPad, for whoever manages the Cards:
   **Sign in again** or **Replace the key** (a provider's connection says to remove it and connect
   it again), **Remove access**, **Cancel the request** or **Cancel**, and **Clear these
   connections** under the removed tafs' (only when tafs cloud lists one with no live taf's Card
-  using it; a kept one says whose Card uses it). This Mac can't sign them: a click shows "This
+  using it; a kept one says whose Card uses it). **The iPad's question comes first** where the
+  iPad asks one (`GateQuestion`): Remove access asks "Remove access to {vendor} for {taf}?" with
+  what stops (the iPad's `DisconnectWords`: `AppConnections.disconnectTitle`, `disconnectMessage`,
+  the key's own line for a key); Cancel asks "Cancel the request for …?" or "Cancel the sign-in to
+  …?" with Keep waiting (`ConnectionFixWords`: `cancelTitle`, `cancelWordKey`); Clear asks "Clear
+  {count} connections from removed tafs?" with its body. This Mac can't sign them: on its yes (or
+  the click, for Sign in again and Replace the key, which the iPad doesn't ask) it shows "This
   device can't approve. Approve on another device signed in to your account."
-  (`approval.device_can_not_approve_approve`) under it, and sends nothing.
+  (`approval.device_can_not_approve_approve`) under it, and sends nothing. The questions name no
+  other taf whose Card also stops: this Mac doesn't read which Cards use a connection's tools.
 - The footer, "Removing access takes its tools from that taf only, …", shows for whoever
   manages Cards when a connection here is a taf's.
 - **Back** ("Connect apps") returns to the list.
-- **Left out:** a connection's own page (`ConnectionDetailView`), its last failed call (KIFF's
-  calls aren't read here), and "Also on …'s Card" (the Cards aren't read here).
+- **The connection's page** (`ConnectionDetailView`, the iPad's `ConnectAppsView.swift:1181-1262`),
+  in the page's place, with Back to "Your {app} connections": its name (else the app's), its
+  health in planque's words (ink when ok, else amber), "Used by …", and, for whoever manages the
+  Cards, the actions planque says work for it now (`actions`, read as the iPad's `Grant.Action`:
+  only a known one with its words, `Action.known`: Sign in again by `approve` or `key`, Remove by
+  `delete`), in planque's words and order, Remove's in red. Remove asks first in planque's words,
+  with what stops (`stops`); then each says to approve on another device and sends nothing.
+- **Left out:** a connection's last failed call (KIFF's calls by tool aren't read here), and
+  "Also on …'s Card" (the Cards' actions by tool aren't read here), as on Linux.
 
 ## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
 
@@ -217,11 +235,16 @@ KIFF. It gets this device's key, and a KIFF key that connects tools and does not
   - a key minted just before the session ended is handed over, then it ends (the iPad returns
     at `:6293` and drops the key, which stays live in KIFF).
 
-## Not yet
+## Not on this Mac
 
-Connecting and signing in again from this screen, removing access, clearing the removed tafs'
-connections, and a connection's own page. Each but the last changes what a taf may do, so each
-comes with its approval.
+Connecting and signing in again from this screen, giving or replacing a key, removing access, and
+clearing the removed tafs' connections. Each is approved at planque, signed by a device key that
+grants (the iPad's Face ID key, Windows' TPM key behind Windows Hello); this Mac's device key
+grants nothing, and planque takes no security key, so "Nothing is approved at planque from this
+Mac" (docs/approvals.md). Each is drawn up to its approval, which is made on the phone. So are
+the approval sheet's own parts (the approval, the key's sheet, the receipt's logo, host and last
+4 characters): the receipt over Coach has no grant to read them from, and this Mac never holds a
+key.
 
 ## Tests
 
@@ -253,7 +276,9 @@ while a refused one leaves it empty. The connections read from planque with this
 read (the tenant escaped, no session, no read without a proof, a refusal and an answer with no
 list never "no connections"), signed over planque's message with the device id; an app's
 connections; the groups in the iPad's order; the removed tafs' and Clear; each connection's end;
-the catalog read with the proof, `needed_by` and `misplaced`; and the button's words in the 8
-languages. It writes `connect-apps-logos-en.png` and `connect-app-connections-en.png` (each with
+the catalog read with the proof, `needed_by` and `misplaced`; planque's actions read as the
+iPad's (only a known one with its words, Remove the one that ends it, `stops` trimmed, a list that
+doesn't read is none); the questions before Remove access and Cancel, in the iPad's words; "Make
+one first" and Connect off for no taf; and the page's words in every shipped language. It writes `connect-apps-logos-en.png` and `connect-app-connections-en.png` (each with
 its `-dark` twin), `connect-app-connections-gated-en.png` (Remove access clicked) and
-`connect-app-connections-opened-en.png`.
+`connect-app-connections-opened-en.png`, `connect-connection-page-en.png` (with its `-dark` twin and `-gated`) and `connect-apps-make-one-first-en.png`.
