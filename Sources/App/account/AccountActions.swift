@@ -96,10 +96,6 @@ extension AccountModel {
 
     /// Saves the account's time zone, as the iPad's `setAccountTimeZone(_:)` (`AccountZone.save`):
     /// confirmed, signed by the device key, then read again.
-    /// This Mac's security key, when it approves with one (kiff/cloud#96): the time zone is then approved by the key,
-    /// named in its sheet. Set by the window once its session is known.
-    var approveWithKey: ((KeyAct, String) async throws -> Data)?
-
     func saveZone(_ zone: String, words: Words) async {
         guard !savingZone else { return }
         savingZone = true
