@@ -1,8 +1,16 @@
 # tafs on macOS 13 and later
 
-On macOS 13 and later, tafs is the iPhone and iPad app built for the Mac with **Mac Catalyst**. Its code is in [kiff/tafs](https://github.com/kiff/tafs), under `ios/`. This repository holds the notes.
+On macOS 13 and later, tafs is the iPhone and iPad app built for the Mac with **Mac Catalyst**, sold through the Mac App Store. Its code is in [kiff/tafs](https://github.com/kiff/tafs), under `ios/`. This repository holds the notes.
 
-The full page is [docs/mac-app.md in kiff/tafs](https://github.com/kiff/tafs/blob/main/docs/mac-app.md), once its pull request is merged. This page keeps the decision and the build steps.
+The full page is [docs/mac-app.md in kiff/tafs](https://github.com/kiff/tafs/blob/main/docs/mac-app.md). This page keeps the decision and the build steps.
+
+## Which Mac gets which app
+
+Decided on kiff/work#17 (22 Nov 2026):
+
+- **macOS 13 and later: the Mac App Store app** (Mac Catalyst). Its iOS target, 16.0, is macOS 13, and it is the iPad's own code, so it stays level with the iPad. It approves with Touch ID and buys through the App Store (kiff/work#9).
+- **macOS 12: this repository's app**, the signed, notarized disk image. It approves with the phone or a USB security key, and buys with the phone, then a web checkout (kiff/work#9).
+- Nothing in this app is removed for macOS 13 and later, and its minimum stays macOS 12.0: it still opens there. But its download page, its docs and its tests are for macOS 12, and on macOS 13 and later it points to the App Store app. That pointer needs a shared line in kiff/tafs first (docs/shared.md, "A new line").
 
 ## The decision: Mac Catalyst
 

@@ -202,7 +202,7 @@ let appConnectionsTests: [Test] = [
                     "connect.cancel_request.button", "common.cancel", "connect.disconnect_button", "connect.used_by.one", "connect.used_by.many",
                     "approval.device_can_not_approve_approve", "connect.apps.title"]
         let shipped = try Words.shipped(folder: folder)
-        try expectEqual(shipped.count, 10)
+        try expect(shipped.count >= 34, "every shipped language, got \(shipped.count)")
         for language in shipped {
             let words = try Words(language: language, folder: folder)
             for key in keys { try expect(words(key) != key, "\(key) in \(language)") }

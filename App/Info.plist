@@ -24,8 +24,32 @@
 		<string>pt</string>
 		<string>nl</string>
 		<string>pl</string>
-		<string>pt-BR</string>
 		<string>ko</string>
+		<string>ja</string>
+		<string>et</string>
+		<string>lt</string>
+		<string>lv</string>
+		<string>cs</string>
+		<string>sk</string>
+		<string>sl</string>
+		<string>hu</string>
+		<string>ro</string>
+		<string>bg</string>
+		<string>hr</string>
+		<string>tr</string>
+		<string>id</string>
+		<string>vi</string>
+		<string>th</string>
+		<string>zh-Hant</string>
+		<string>ar</string>
+		<string>sr-Latn</string>
+		<string>sq</string>
+		<string>ka</string>
+		<string>hy</string>
+		<string>az</string>
+		<string>bn</string>
+		<string>he</string>
+		<string>pt-BR</string>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>tafs</string>

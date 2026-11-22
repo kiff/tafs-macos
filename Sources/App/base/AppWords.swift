@@ -33,6 +33,17 @@ extension EnvironmentValues {
     }
 }
 
+extension View {
+    /// The app's words, and the direction and locale that go with their language: Arabic (and any
+    /// language in `Words.rightToLeft`) mirrors the view, as the iPad's does, and dates and numbers
+    /// follow the app's language, not only the Mac's. The window and the screenshot tests both use it.
+    func inLanguage(_ words: Words) -> some View {
+        environment(\.words, words)
+            .environment(\.layoutDirection, words.isRightToLeft ? .rightToLeft : .leftToRight)
+            .environment(\.locale, Locale(identifier: words.language))
+    }
+}
+
 /// The tafs mascot, from the app's bundle, or from `Mascot.folder` in a test.
 struct Mascot: View {
     static var file = Bundle.main.resourceURL?.appendingPathComponent("mascot.png")

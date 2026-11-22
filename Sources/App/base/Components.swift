@@ -54,13 +54,17 @@ struct Chip: View {
 }
 
 /// A small heading in capitals over a column or a group, as the iPad's `Eyebrow`: 12
-/// monospaced, tracking 0.7, in `dim`.
+/// monospaced, tracking 0.7, in `dim`. Korean, Japanese, Chinese and Arabic keep the plain face
+/// with no tracking (`Script.ideographic`): the monospaced face's wide spaces split Hangul, and
+/// tracking cuts Arabic's joined letters apart.
 struct Eyebrow: View {
     let text: String
     var color: Color = Theme.dim
 
     var body: some View {
-        Text(text.uppercased()).tracking(0.7).font(.system(size: 12, design: .monospaced)).foregroundColor(color)
+        let plain = Script.ideographic(text)
+        Text(verbatim: text.uppercased()).tracking(plain ? 0 : 0.7)
+            .font(.system(size: 12, design: plain ? .default : .monospaced)).foregroundColor(color)
     }
 }
 

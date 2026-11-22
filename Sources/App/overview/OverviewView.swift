@@ -290,7 +290,7 @@ struct OverviewView: View {
     /// counts (Coach's chats, steps), in its words. Each opens Needs you.
     private func needsYou(count: Int, words line: String?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(words("needs_you.title").uppercased()).font(Theme.mono(12)).tracking(0.7).foregroundColor(Theme.amberText)
+            Eyebrow(text: words("needs_you.title"), color: Theme.amberText)
             ForEach(held) { row in
                 needsRow(row.taf.map { "\($0) · \(row.asks)" } ?? row.asks) {
                     if let by = row.answerBy {

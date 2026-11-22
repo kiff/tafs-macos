@@ -82,7 +82,7 @@ let shellViewMacTests: [Test] = [
     },
     Test("the words are the preferred language's, and English when it isn't shipped") {
         try expectEqual(Words.load(folder: strings, preferred: ["fr-FR"]).language, "fr")
-        try expectEqual(Words.load(folder: strings, preferred: ["ja-JP"]).language, "en")
+        try expectEqual(Words.load(folder: strings, preferred: ["fi-FI"]).language, "en")
         try expectEqual(Words.load(folder: URL(fileURLWithPath: "nowhere"), preferred: ["fr"])("app.name"), "app.name")
     },
     Test("the screenshots: the sidebar in English, French and Portuguese, light and dark") {

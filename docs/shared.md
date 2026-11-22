@@ -9,7 +9,7 @@ repository.
 
 | From kiff/tafs | What | Used by |
 |---|---|---|
-| `app/strings/<lang>/*.json` | The apps' own words, in 8 languages | `Words` (`Sources/Core/strings`) |
+| `app/strings/<lang>/*.json` | The apps' own words, in every shipped language (34 at `7d0c091`) | `Words` (`Sources/Core/strings`) |
 | `app/strings/languages.json` | The languages the apps ship | `Words.shipped` |
 | `contracts/*.json` | What tafs cloud answers the apps | the `contracts` tests |
 | `ios/Tafs/KIFF/Keccak.swift` | The iPad's Keccak-256, for KIFF's receipts | Core, compiled as it is (`scripts/shared.sh sources`; docs/record.md) |
@@ -35,6 +35,17 @@ words.count("needs_you.count", 3)                     // the plural form of 3 in
 - **The app's language** is the first one the person prefers that is shipped, else English.
 - **A key the code names must exist.** A test reads every `words("…")` and `words.count("…")`
   in `Sources/` and fails for a key English lacks, or a count used as a plain line.
+
+## Right to left, and plural forms
+
+- **Right to left:** in Arabic and Hebrew (and any language in `Words.rightToLeft`) the window
+  mirrors, as the iPad's does: `inLanguage(_:)` sets SwiftUI's `layoutDirection` and `locale` from
+  the app's language, not only the Mac's. The window and the screenshot tests both use it.
+- **Plural forms:** `Plural.form` gives each language's whole-number forms by CLDR's rules. A test
+  reads `generate.py`'s `PLURALS` at the pin and checks every shipped language: each number's
+  form is one it lists, and each form it lists is reached.
+- **Small headings** (`Eyebrow`) keep no letter-spacing in Hangul, kana, Han and Arabic
+  (`Script.ideographic`, the iPad's ranges): spacing cuts Arabic's joined letters apart.
 
 ## A refusal's why
 

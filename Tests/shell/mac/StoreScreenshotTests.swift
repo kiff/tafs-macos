@@ -18,8 +18,8 @@ private func storeAt(minutesAgo: Double) -> String {
     ISO8601DateFormatter().string(from: storeNow.addingTimeInterval(-minutesAgo * 60))
 }
 
-private func storeWords() -> Words {
-    Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
+private func storeWords(_ language: String = "en") -> Words {
+    Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: [language], chosen: nil)
 }
 
 /// A Card counted in calls, as tafs cloud sends a taf's Card: `used` of `limit` today.
@@ -148,10 +148,10 @@ private let storeGallery = #"""
 /// Draws a frame at 2×, in a window off screen with the run loop turned a few times, so a
 /// screen whose scrolled content is laid out a turn later is drawn whole.
 @MainActor
-private func storeShot<V: View>(_ view: V, _ name: String) throws -> NSBitmapImageRep {
+private func storeShot<V: View>(_ view: V, _ name: String, language: String = "en", dark: Bool = false) throws -> NSBitmapImageRep {
     let host = NSHostingView(rootView: view.frame(width: storeSize.width, height: storeSize.height))
     host.frame = CGRect(origin: .zero, size: storeSize)
-    host.appearance = NSAppearance(named: .aqua)
+    host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     _ = NSApplication.shared
     let window = NSWindow(contentRect: CGRect(x: -10_000, y: -10_000, width: storeSize.width, height: storeSize.height),
                           styleMask: .borderless, backing: .buffered, defer: false)
@@ -172,32 +172,20 @@ private func storeShot<V: View>(_ view: V, _ name: String) throws -> NSBitmapIma
     guard let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG for \(name)") }
     let folder = URL(fileURLWithPath: "build/screenshots")
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    try png.write(to: folder.appendingPathComponent("\(name)-en.png"))
+    try png.write(to: folder.appendingPathComponent("\(name)-\(language)\(dark ? "-dark" : "").png"))
     return bitmap
 }
 
 let storeScreenshotMacTests: [Test] = [
     Test("the Store's screenshots: the whole window at 2880×1800, with the iPad's samples and no amount", awaiting: { @MainActor in
         let words = storeWords()
-        let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(storeHome.utf8))
+        let (page, held) = try storeSamples()
         try expectEqual(page.tafs.map(\.name), ["Deploys", "Late parcels", "Support replies", "Lead follow-up", "Access"])
-        struct Held: Decodable { let exceptions: [HeldCall] }
-        let calls = try AccountClient.decoder.decode(Held.self, from: Data(storeHeld().utf8)).exceptions
-        let held = calls.map { HeldRow($0, tafs: page.tafs) }
         try expectEqual(held.count, 3)
         // No sample moves money: nothing any frame reads holds a currency.
         for fixture in [storeHome, storeHeld(), storeRecord(), storeActivity, storeGallery] {
             try expect(!["€", "$", "£"].contains { fixture.contains($0) }, "an amount in a fixture")
         }
-
-        Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
-        func shell(_ selection: Screen, tafPage: AnyView? = nil, openTaf: String? = nil, screen: @escaping (Screen) -> AnyView?) -> AnyView {
-            AnyView(ShellView(selection: .constant(selection), needsYou: held.count, tafs: page.tafs, held: held, tafPage: tafPage,
-                              openTaf: openTaf, accountLine: "you@example.com", screen: screen)
-                .environment(\.words, words))
-        }
-
-        // 1. The Overview: the three waiting calls, and each taf's line and Card.
         let overview = OverviewModel(cloud: CloudClient(transport: StoreCloud(), session: storeSession))
         await overview.load()
         await overview.loadLastResults(words: words)
@@ -205,36 +193,86 @@ let storeScreenshotMacTests: [Test] = [
             guard let listed = page.tafs.first(where: { $0.tafID == taf }) else { throw Failure(description: "no \(taf)") }
             try expectEqual(overview.lastResult(listed, words: words, time: { _ in "" }), line)
         }
-        let one = try storeShot(shell(.overview) { _ in AnyView(OverviewView(model: overview, held: held, needsCount: held.count)) }, "store-1-overview")
-
-        // 2. Needs you: the three calls, each with its reason and the time left.
-        let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([(200, storeHeld())]), session: storeSession), route: .touchID)
-        await needsYou.load()
-        let two = try storeShot(shell(.needsYou) { _ in AnyView(NeedsYouView(model: needsYou, tafs: page.tafs, now: storeNow)) }, "store-2-needs-you")
-
-        // 3. Support replies' page, on its Activity.
-        guard let support = page.tafs.first(where: { $0.name == "Support replies" }) else { throw Failure(description: "no Support replies") }
-        let pageCloud = CloudClient(transport: CannedTransport([(200, #"{"working":false,"items":[]}"#), (200, storeActivity)]), session: storeSession)
-        let chat = CoachModel(cloud: pageCloud, taf: Coach(id: "taf-support", name: "Support replies"), sleep: { _ in })
-        await chat.load()
-        let pages = TafPagesModel(cloud: pageCloud, taf: "taf-support")
-        await pages.loadActivity()
-        let tafPage = AnyView(TafView(taf: support, chat: chat, pages: pages, manages: true, tab: .activity).environment(\.words, words))
-        let three = try storeShot(shell(.overview, tafPage: tafPage, openTaf: support.kiffAgent) { _ in nil }, "store-3-support-replies")
-
-        // 4. The Record: today's fifteen lines, with each taf's chip.
-        let record = RecordModel(cloud: CloudClient(transport: CannedTransport([(200, storeRecord())]), session: storeSession))
-        await record.load()
-        let four = try storeShot(shell(.record) { _ in AnyView(RecordView(model: record, tafs: page.tafs, now: storeNow)) }, "store-4-record")
-
-        // 5. Start a new taf: the jobs, and Coach for your own words.
-        let gallery = try JSONDecoder().decode(Gallery.self, from: Data(storeGallery.utf8))
-        let five = try storeShot(shell(.coach) { _ in
-            AnyView(RecipeGallerySheet(gallery: gallery, mode: .create, labels: nil, canHand: true, choose: { _ in }, close: {}))
-        }, "store-5-start")
-
-        for (shot, name) in [(one, "overview"), (two, "needs you"), (three, "Support replies"), (four, "record"), (five, "start")] {
+        let shots = try await storeFrames(words: words, prefix: "store")
+        for (shot, name) in zip(shots, ["overview", "needs you", "Support replies", "record", "start"]) {
             try expect(shot.pixelsWide == 2880 && shot.pixelsHigh == 1800, "\(name) at 2880×1800, not \(shot.pixelsWide)×\(shot.pixelsHigh)")
         }
     }),
+    Test("the pin's languages: the whole window in English, French, Arabic and Hebrew (right to left) and Japanese, light and dark", awaiting: { @MainActor in
+        for dark in [false, true] {
+            var overviews: [String: NSBitmapImageRep] = [:]
+            for language in ["en", "fr", "ar", "he", "ja"] {
+                let words = storeWords(language)
+                try expectEqual(words.language, language)
+                overviews[language] = try await storeFrames(words: words, prefix: "languages", dark: dark)[0]
+            }
+            // Arabic mirrors the window: the sidebar's side and the screen's side swap, so the colour at
+            // the left edge in Arabic is English's at the right edge, and the other way round.
+            guard let en = overviews["en"] else { throw Failure(description: "no overview") }
+            let width = Int(storeSize.width), y = Int(storeSize.height) / 2
+            try expect(Snapshot.hexes(en, x: 3, y: y) != Snapshot.hexes(en, x: width - 3, y: y), "the two edges differ in English")
+            for language in ["ar", "he"] {
+                guard let mirrored = overviews[language] else { throw Failure(description: "no \(language) overview") }
+                try expectEqual(Snapshot.hexes(mirrored, x: 3, y: y), Snapshot.hexes(en, x: width - 3, y: y))
+                try expectEqual(Snapshot.hexes(mirrored, x: width - 3, y: y), Snapshot.hexes(en, x: 3, y: y))
+            }
+        }
+    }),
 ]
+
+/// The samples every frame reads: the tafs, and the three held calls.
+private func storeSamples() throws -> (Home.Page, [HeldRow]) {
+    let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(storeHome.utf8))
+    struct Held: Decodable { let exceptions: [HeldCall] }
+    let calls = try AccountClient.decoder.decode(Held.self, from: Data(storeHeld().utf8)).exceptions
+    return (page, calls.map { HeldRow($0, tafs: page.tafs) })
+}
+
+/// The five frames of the whole window with the samples, in one language and appearance, each written
+/// as `<prefix>-<n>-<frame>-<language>[-dark].png`.
+@MainActor
+private func storeFrames(words: Words, prefix: String, dark: Bool = false) async throws -> [NSBitmapImageRep] {
+    let (page, held) = try storeSamples()
+    Mascot.file = URL(fileURLWithPath: ".shared/ios/Shared/Mascot.xcassets/Mascot.imageset/mascot.png")
+    func shell(_ selection: Screen, tafPage: AnyView? = nil, openTaf: String? = nil, screen: @escaping (Screen) -> AnyView?) -> AnyView {
+        AnyView(ShellView(selection: .constant(selection), needsYou: held.count, tafs: page.tafs, held: held, tafPage: tafPage,
+                          openTaf: openTaf, accountLine: "you@example.com", screen: screen)
+            .inLanguage(words))
+    }
+    func shot(_ view: AnyView, _ name: String) throws -> NSBitmapImageRep {
+        try storeShot(view, "\(prefix)-\(name)", language: words.language, dark: dark)
+    }
+
+    // 1. The Overview: the three waiting calls, and each taf's line and Card.
+    let overview = OverviewModel(cloud: CloudClient(transport: StoreCloud(), session: storeSession))
+    await overview.load()
+    await overview.loadLastResults(words: words)
+    let one = try shot(shell(.overview) { _ in AnyView(OverviewView(model: overview, held: held, needsCount: held.count)) }, "1-overview")
+
+    // 2. Needs you: the three calls, each with its reason and the time left.
+    let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([(200, storeHeld())]), session: storeSession), route: .touchID)
+    await needsYou.load()
+    let two = try shot(shell(.needsYou) { _ in AnyView(NeedsYouView(model: needsYou, tafs: page.tafs, now: storeNow)) }, "2-needs-you")
+
+    // 3. Support replies' page, on its Activity.
+    guard let support = page.tafs.first(where: { $0.name == "Support replies" }) else { throw Failure(description: "no Support replies") }
+    let pageCloud = CloudClient(transport: CannedTransport([(200, #"{"working":false,"items":[]}"#), (200, storeActivity)]), session: storeSession)
+    let chat = CoachModel(cloud: pageCloud, taf: Coach(id: "taf-support", name: "Support replies"), sleep: { _ in })
+    await chat.load()
+    let pages = TafPagesModel(cloud: pageCloud, taf: "taf-support")
+    await pages.loadActivity()
+    let tafPage = AnyView(TafView(taf: support, chat: chat, pages: pages, manages: true, tab: .activity).inLanguage(words))
+    let three = try shot(shell(.overview, tafPage: tafPage, openTaf: support.kiffAgent) { _ in nil }, "3-support-replies")
+
+    // 4. The Record: today's fifteen lines, with each taf's chip.
+    let record = RecordModel(cloud: CloudClient(transport: CannedTransport([(200, storeRecord())]), session: storeSession))
+    await record.load()
+    let four = try shot(shell(.record) { _ in AnyView(RecordView(model: record, tafs: page.tafs, now: storeNow)) }, "4-record")
+
+    // 5. Start a new taf: the jobs, and Coach for your own words.
+    let gallery = try JSONDecoder().decode(Gallery.self, from: Data(storeGallery.utf8))
+    let five = try shot(shell(.coach) { _ in
+        AnyView(RecipeGallerySheet(gallery: gallery, mode: .create, labels: nil, canHand: true, choose: { _ in }, close: {}))
+    }, "5-start")
+    return [one, two, three, four, five]
+}

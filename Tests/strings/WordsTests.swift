@@ -8,7 +8,9 @@ private func words(_ language: String) throws -> Words { try Words(language: lan
 let wordsTests: [Test] = [
     Test("every shipped language is read, with English's keys") {
         let shipped = try Words.shipped(folder: folder)
-        try expectEqual(shipped.sorted(), ["de", "en", "es", "fr", "it", "ko", "nl", "pl", "pt", "pt-BR"])
+        // The 34 kiff/tafs ships at the pin, as `languages.json` says, the first ones among them.
+        try expect(shipped.count >= 34, "34 or more shipped languages, got \(shipped.count)")
+        try expect(Set(["en", "de", "fr", "es", "it", "pt", "nl", "pl", "ja", "ko", "pt-BR", "zh-Hant"]).isSubset(of: Set(shipped)), "the first ones shipped")
         let english = Set(try words("en").lines.keys)
         try expect(english.count > 1000, "more than 1000 keys, got \(english.count)")
         for language in shipped {
@@ -119,12 +121,77 @@ let wordsTests: [Test] = [
             ("es", [0: "other", 1: "one", 1_000_000: "many"]),
             ("it", [1: "one", 3: "other", 1_000_000: "many"]),
             ("pl", [1: "one", 2: "few", 4: "few", 5: "many", 12: "many", 14: "many", 22: "few", 25: "many", 0: "many"]),
+            ("cs", [1: "one", 2: "few", 4: "few", 5: "other", 22: "other"]),
+            ("sk", [1: "one", 3: "few", 0: "other"]),
+            ("hr", [1: "one", 21: "one", 11: "other", 2: "few", 24: "few", 12: "other", 5: "other"]),
+            ("lt", [1: "one", 21: "one", 11: "other", 2: "few", 9: "few", 19: "other", 10: "other"]),
+            ("lv", [0: "zero", 10: "zero", 11: "zero", 1: "one", 21: "one", 2: "other"]),
+            ("sl", [1: "one", 101: "one", 2: "two", 3: "few", 4: "few", 5: "other", 11: "other"]),
+            ("ro", [1: "one", 0: "few", 2: "few", 19: "few", 20: "other", 101: "few", 120: "other"]),
+            ("ar", [0: "zero", 1: "one", 2: "two", 3: "few", 10: "few", 11: "many", 99: "many", 100: "other", 103: "few"]),
+            ("ja", [1: "other"]), ("zh-Hant", [1: "other"]), ("th", [1: "other"]), ("vi", [1: "other"]), ("id", [1: "other"]),
+            ("tr", [1: "one", 2: "other"]), ("hu", [1: "one", 2: "other"]), ("bg", [1: "one"]), ("et", [1: "one"]),
+            ("pt-BR", [0: "one", 1: "one", 2: "other"]),
+            ("he", [1: "one", 2: "two", 3: "other", 10: "other", 20: "other"]),
+            ("hy", [0: "one", 1: "one", 2: "other"]), ("bn", [0: "one", 1: "one", 2: "other"]),
+            ("sr-Latn", [1: "one", 21: "one", 11: "other", 3: "few", 13: "other"]),
+            ("mk", [1: "one", 21: "one", 11: "other", 2: "other"]),
+            ("ca", [1: "one", 2: "other", 1_000_000: "other"]),
+            ("km", [1: "other"]), ("lo", [1: "other"]),
+            ("ru", [1: "one", 21: "one", 11: "many", 2: "few", 12: "many", 5: "many"]),
         ]
         for (language, forms) in cases {
             for (n, form) in forms {
                 try expectEqual("\(language) \(n): \(Plural.form(n, language: language))", "\(language) \(n): \(form)")
             }
         }
+    },
+    Test("every form a number takes is one kiff/tafs's generator lists for its language, in every offered language") {
+        // `generate.py`'s PLURALS: the forms each language's whole numbers take, beside "other".
+        let generator = try String(contentsOf: folder.appendingPathComponent("generate.py"))
+        guard let start = generator.range(of: "PLURALS = {"), let end = generator[start.upperBound...].range(of: "}") else {
+            throw Failure(description: "no PLURALS in generate.py")
+        }
+        let table = try NSRegularExpression(pattern: #""([a-z]+)": \[([^\]]*)\]"#)
+        let text = String(generator[start.upperBound..<end.lowerBound])
+        var plurals: [String: Set<String>] = [:]
+        for match in table.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            let language = String(text[Range(match.range(at: 1), in: text)!])
+            let forms = text[Range(match.range(at: 2), in: text)!].split(separator: ",")
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "\" ")) }.filter { !$0.isEmpty }
+            plurals[language] = Set(forms + ["other"])
+        }
+        for language in try Words.shipped(folder: folder) {
+            let base = String(language.split(separator: "-")[0])
+            guard let forms = plurals[base] else { throw Failure(description: "\(language) has no PLURALS entry") }
+            for n in 0...1_200 {
+                let form = Plural.form(n, language: language)
+                try expect(forms.contains(form) || form == "many" && Set(["fr", "es", "it", "pt"]).contains(base),
+                           "\(language) \(n) is \(form), not one of \(forms.sorted())")
+            }
+            // And each form the generator lists is reached by some whole number.
+            let reached = Set((0...1_200).map { Plural.form($0, language: language) })
+            try expect(forms.subtracting(["other"]).isSubset(of: reached), "\(language) never reaches \(forms.subtracting(reached).sorted())")
+        }
+    },
+    Test("Arabic and Hebrew are shipped, with every line, and written right to left") {
+        let shipped = try Words.shipped(folder: folder)
+        try expect(shipped.contains("ar") && shipped.contains("he"), "ar and he shipped")
+        let english = Set(try words("en").lines.keys)
+        for language in ["ar", "he"] {
+            let book = try words(language)
+            try expect(book.isRightToLeft, "\(language) right to left")
+            try expectEqual(Set(book.lines.keys), english)
+            try expect(book("home.overview.title") != (try words("en"))("home.overview.title"), "\(language)'s own line")
+        }
+        for language in shipped where !["ar", "he"].contains(language) {
+            try expect(!(try words(language)).isRightToLeft, "\(language) left to right")
+        }
+    },
+    Test("a small heading keeps no letter-spacing in Hangul, kana, Han and Arabic, as the iPad's Eyebrow") {
+        for text in ["بانتظارك", "あなたのTAFS", "기억하는 것", "要确认", "Needs you · بانتظارك"] { try expect(Script.ideographic(text), text) }
+        // Hebrew's letters don't join, and the iPad spaces it as Latin.
+        for text in ["Needs you", "À VOUS", "ЖДЁТ ВАС", "ממתין לך", "Ελληνικά"] { try expect(!Script.ideographic(text), text) }
     },
     Test("a count's line is the form its number takes, with the number in it") {
         let pl = try words("pl")
