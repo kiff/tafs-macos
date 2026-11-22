@@ -28,6 +28,8 @@ final class FilesModel: ObservableObject {
     /// What the last Download or Delete now said, by the file it was for.
     @Published private(set) var notes: [String: String] = [:]
     @Published private(set) var deleting: Set<String> = []
+    /// The files open now: a start that answers after its file closed isn't kept.
+    private var open: Set<String> = []
 
     private let readAll: () async throws -> [DeliveredFile]
     private let readPreview: (String) async throws -> FilePreviewText?
@@ -69,17 +71,23 @@ final class FilesModel: ObservableObject {
     /// A file's start, once per opening: tafs cloud's when it gives one. A text type it couldn't reach says so; any other
     /// type with no start draws none.
     func preview(_ file: DeliveredFile) async {
+        open.insert(file.id)
         guard previews[file.id] == nil else { return }
         let text = FileText.textTypes.contains(file.type.uppercased())
+        let read: PreviewRead
         do {
-            previews[file.id] = try await readPreview(file.id).map(PreviewRead.text) ?? .noPreview
+            read = try await readPreview(file.id).map(PreviewRead.text) ?? .noPreview
         } catch {
-            previews[file.id] = text ? .unreachable : .noPreview
+            read = text ? .unreachable : .noPreview
         }
+        // Closed while it was read: its start isn't kept.
+        guard open.contains(file.id) else { return }
+        previews[file.id] = read
     }
 
     /// The file left the screen: its start isn't kept.
     func close(_ file: DeliveredFile) {
+        open.remove(file.id)
         previews[file.id] = nil
         notes[file.id] = nil
     }
@@ -93,7 +101,9 @@ final class FilesModel: ObservableObject {
             try data.write(to: destination, options: .atomic)
             notes[file.id] = Words.app("files.saved")
         } catch {
-            notes[file.id] = NeedsYouModel.why(error)
+            // As the iPad says it: a refused or expired download (403), a redirect refused, a URL that isn't https, or
+            // no network all read as not reaching the server. Never a bare status.
+            notes[file.id] = Words.app("error.offline")
         }
     }
 
@@ -103,8 +113,10 @@ final class FilesModel: ObservableObject {
         defer { deleting.remove(file.id) }
         do {
             try await deleteOne(file.id)
+        } catch let refused as CloudRefusal where refused.status == 404 {
+            // Already gone (deleted elsewhere, or past its 30 days): it leaves the list as a delete would.
         } catch {
-            notes[file.id] = NeedsYouModel.why(error)
+            notes[file.id] = Words.app("error.offline")
             return false
         }
         if case .loaded(let all) = state { state = .loaded(all.filter { $0.id != file.id }) }

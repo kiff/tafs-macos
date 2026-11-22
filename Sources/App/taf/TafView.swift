@@ -206,7 +206,8 @@ struct TafView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(count > 0 ? "\(words("files.title")), \(words.count("files.taf_row", count))" : words("files.title"))
         .accessibilityIdentifier("taf.files")
-        .task(id: id) { if case .loading = files.state { await files.load() } })
+        // Read each time the page opens, as the iPad's `.task(id: taf)`: a new file counts, and a failed read is tried again.
+        .task(id: id) { await files.load() })
     }
 
     /// Folds the header's line going down, and brings it back going up, as the iPad's `fold`.
