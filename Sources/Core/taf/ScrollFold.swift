@@ -1,4 +1,4 @@
-import CoreGraphics
+import Foundation
 
 /// Folds a taf's header line while its chat scrolls down and brings it back on the way up, as the iPad's
 /// `TafDetailView.fold` (its version, Files and who it's shared with give the chat the screen). The thread's
