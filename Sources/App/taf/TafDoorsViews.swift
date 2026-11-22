@@ -31,7 +31,7 @@ struct DoorBadge: View {
 }
 
 /// A panel as the iPad's `Panel`: 16 in, on the panel's fill, with an edge when asked.
-private struct DoorPanel<Content: View>: View {
+struct DoorPanel<Content: View>: View {
     var stroke: Color? = nil
     @ViewBuilder let content: () -> Content
 
