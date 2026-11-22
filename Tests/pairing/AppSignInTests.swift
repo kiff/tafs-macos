@@ -146,9 +146,9 @@ let pairingAppSignInTests: [Test] = [
             try expectEqual(Onboarding.ageLine(region: country, ages: ages, words: words), words("onboarding.age"))
             try expectEqual(Onboarding.raisedAgeLine(region: country, ages: ages, words: words), nil)
         }
-        // The number as the language writes it.
+        // The number as the language writes it on this system (macOS 12 writes Arabic-Indic digits, a newer one Latin).
         let arabic = try Words(language: "ar", folder: strings)
-        try expect(Onboarding.ageLine(region: "IN", ages: ages, words: arabic).contains("١٨"), "Arabic digits")
+        try expect(Onboarding.ageLine(region: "IN", ages: ages, words: arabic).contains(arabic.number(18)), "the language's number")
     },
     Test("the cards show once, only with the onboarding on; the first Home takes tafs cloud's line first") {
         try expect(Onboarding.showsCards(on: true, seen: false), "first time")
