@@ -10,6 +10,8 @@ struct TafCardTab: View {
     let pages: TafPagesModel?
     let manages: Bool
     let issuedBy: String
+    /// A new Coach conversation on this taf, for a Card whose tool isn't connected any more; nil offers none.
+    var improveInCoach: (() -> Void)? = nil
     @Binding var front: String?
     var halted: () async -> Void = {}
     @State private var counting: TafCard?
@@ -53,6 +55,11 @@ struct TafCardTab: View {
             if let shown = CardStack.front(of: taf.cards, front) {
                 // A Card with no rules has no panel under it, never an empty one.
                 if !shown.rules.isEmpty { CardRulesPanel(card: shown) }
+                // Its totals for each item apart ("1 call in any 7 days for each invoice id"), as tafs cloud says them.
+                ForEach(shown.eachItem, id: \.self) { line in
+                    Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+                }
                 // How KIFF counts each of its tools, as the owner approved it: its own sheet.
                 if !shown.counted.isEmpty {
                     PanelLink(action: { counting = shown }) {
@@ -61,6 +68,7 @@ struct TafCardTab: View {
                     }
                     .accessibilityIdentifier("card-counted")
                 }
+                CardStateLines(card: shown, reconnect: manages ? improveInCoach : nil)
             }
         }
     }
@@ -267,6 +275,32 @@ struct CountedView: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.panel))
+        }
+    }
+}
+
+/// Under a Card, as the iPad's (TafDetailView.swift:420-446): what's pending, in KIFF's words, for a live and active Card
+/// only, since a test Card's totals aren't what the taf may do for real; and why its total has no currency, with Coach to
+/// connect it again for whoever manages the taf.
+struct CardStateLines: View {
+    @Environment(\.words) private var words
+    let card: TafCard
+    let reconnect: (() -> Void)?
+
+    var body: some View {
+        if card.countsForReal {
+            ForEach(card.pending, id: \.self) { line in
+                Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if let unit = card.unitWords {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(verbatim: unit).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                if let reconnect {
+                    Button(words("connect.reconnect_in_coach"), action: reconnect)
+                        .buttonStyle(.plain).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
+                }
+            }
         }
     }
 }

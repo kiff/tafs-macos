@@ -118,7 +118,31 @@ struct TafSetup: Decodable, Equatable {
         let summary: String?
     }
 
+    struct WorkflowStep: Decodable, Equatable {
+        let number: Int
+        let label: String
+        let words: String
+        let app: String?
+        let running: Bool
+
+        enum CodingKeys: String, CodingKey { case number, label, words, app, running }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            number = try c.decode(Int.self, forKey: .number)
+            label = try c.decode(String.self, forKey: .label)
+            guard !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw DecodingError.dataCorruptedError(forKey: .label, in: c, debugDescription: "a step with no label")
+            }
+            words = ((try? c.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ""
+            app = ((try? c.decodeIfPresent(String.self, forKey: .app)) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+            running = ((try? c.decodeIfPresent(Bool.self, forKey: .running)) ?? nil) ?? false
+        }
+    }
+
     let workflow: Part?
+    /// Its workflow's steps, in tafs cloud's order and words, as the iPad's `WorkflowStep`: each one's number, label,
+    /// words, the app it uses, and whether it runs now. Empty when it has none yet; a step that doesn't read is left out.
+    let workflowSteps: [WorkflowStep]
     let memory: Part?
     let versions: Part?
     /// Its versions counted, as tafs cloud counts them (`versions.live`, `versions.earlier`): the
@@ -222,7 +246,7 @@ struct TafSetup: Decodable, Equatable {
         case workflow, memory, versions, connections, connectionsError = "connections_error", exceptions = "card_unit_exceptions"
         case connectAgain = "connect_again"
     }
-    enum PartKeys: String, CodingKey { case title, summary, latest, live, earlier }
+    enum PartKeys: String, CodingKey { case title, summary, latest, live, earlier, steps }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
@@ -234,6 +258,8 @@ struct TafSetup: Decodable, Equatable {
             return Part(title: title, summary: Lines.line((try? p.decodeIfPresent(String.self, forKey: line)) ?? nil))
         }
         workflow = part(.workflow)
+        let steps = try? c.nestedContainer(keyedBy: PartKeys.self, forKey: .workflow)
+        workflowSteps = ((steps.flatMap { try? $0.decodeIfPresent([Lenient<WorkflowStep>].self, forKey: .steps) } ?? nil) ?? []).compactMap(\.value)
         memory = part(.memory, line: .latest)
         versions = part(.versions)
         let counted = try? c.nestedContainer(keyedBy: PartKeys.self, forKey: .versions)

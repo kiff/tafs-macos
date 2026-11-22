@@ -33,6 +33,12 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var query: String?
     /// The runs it kept: the panel's first few (`false`), and all of them (`true`).
     @Published private(set) var runPages: [Bool: TafRuns.Pages] = [:]
+    /// Where its work stands, once read, as the iPad's `works[tafID]`: a read that fails keeps it.
+    @Published private(set) var work: TafWork?
+    /// What went wrong under the work, as the iPad's `workErrors[tafID]`.
+    @Published private(set) var workFailure: TafWork.Failure?
+    /// The runs whose Send again is on its way: a second click sends nothing.
+    @Published private(set) var sendingAgain: Set<String> = []
     /// Run now, kept by taf for the whole app (`RunNowModel`), so it outlives this page.
     let runs: RunNowModel
     /// Run now is on its way: a second click sends nothing.
@@ -88,6 +94,39 @@ final class TafPagesModel: ObservableObject {
             guard mine == asked else { return }
             activity = .unread(why: NeedsYouModel.why(error))
         }
+    }
+
+    /// Reads where its work stands, as the iPad's `loadWork`.
+    func loadWork() async {
+        do {
+            work = try await cloud.work(of: taf)
+            workFailure = nil
+        } catch is CancellationError {
+        } catch {
+            workFailure = .notRead(why: NeedsYouModel.why(error))
+        }
+    }
+
+    /// Answer within: the owner's promise, whole hours or nil to clear it, as the iPad's `setPromise`. tafs cloud
+    /// checks and keeps it, so the work is read again after, whatever came of it.
+    func setPromise(hours: Int?) async {
+        workFailure = nil
+        var failed: TafWork.Failure?
+        do { try await cloud.setPromise(of: taf, hours: hours) } catch { failed = .promiseNotSet(why: NeedsYouModel.why(error)) }
+        await loadWork()
+        // Said after the work is read again, so the read doesn't clear it.
+        if let failed { workFailure = failed }
+    }
+
+    /// Send again, as the iPad's `sendAgain`: one run's delivery once more. The work is read again after.
+    func sendAgain(run: String, place: String) async {
+        guard sendingAgain.insert(run).inserted else { return }
+        workFailure = nil
+        var failed: TafWork.Failure?
+        do { try await cloud.sendAgain(of: taf, run: run, place: place) } catch { failed = .notSentAgain(why: NeedsYouModel.why(error)) }
+        sendingAgain.remove(run)
+        await loadWork()
+        if let failed { workFailure = failed }
     }
 
     /// The next page of the same filter, once the list's end is shown, as the iPad does. A
@@ -189,6 +228,8 @@ struct TafActivityTab: View {
     var doors: DoorsModel? = nil
     /// tafs cloud offers doors here: only then are they read.
     var doorsOffered = false
+    /// Whoever manages the taf sets Answer within and sends a reply again.
+    var manages = false
 
     var body: some View {
         ScrollView {
@@ -199,7 +240,7 @@ struct TafActivityTab: View {
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
-                if let health = taf.health, health.needsAttention { workPanel(health) }
+                TafWorkPanel(model: model, homeHealth: taf.health, manages: manages, openUsage: openUsage)
                 // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
                 RunsPanel(model: model, taf: taf)
                 RetainedRuns(model: model)
@@ -237,39 +278,6 @@ struct TafActivityTab: View {
             .padding(.bottom, Look.inset)
         }
         .task { await model.loadActivity() }
-    }
-
-    /// Its work, as the iPad's `WorkPanel` (TafDetailView.swift:564-612): "Its work", then its
-    /// health as Home read it (`HealthLines`). The rest of the panel comes with `GET …/work`.
-    private func workPanel(_ health: Home.Taf.Health) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Eyebrow(text: words("taf.its_work"))
-            healthLines(health)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-    }
-
-    /// A taf that isn't healthy, as the iPad's `HealthLines`: each line, amber when at risk and
-    /// red when failing, with the fixes tafs cloud decided for it. The credits fix opens Plan &
-    /// usage. A fix of a kind the app doesn't know is no button.
-    private func healthLines(_ health: Home.Taf.Health) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(health.lines.enumerated()), id: \.offset) { index, line in
-                Text(verbatim: line).font(.system(size: 14)).foregroundColor(health.failing ? Theme.no : Theme.amberText)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForEach(Array(health.fixes(for: index).enumerated()), id: \.offset) { _, fix in
-                    if let act = Self.action(fix, openUsage: openUsage) {
-                        Button(action: act) { Text(verbatim: fix.words).padding(.horizontal, 16) }
-                            .buttonStyle(OutlineButtonStyle())
-                            .fixedSize()
-                            .accessibilityIdentifier("taf.health.fix.\(fix.kind)")
-                    }
-                }
-            }
-        }
-        .accessibilityIdentifier("taf.health")
     }
 
     /// What a fix does here, as `HealthLines.action`; nil draws no button.

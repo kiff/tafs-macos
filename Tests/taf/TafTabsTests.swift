@@ -3,6 +3,24 @@ import Foundation
 private let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
 
 let tafTabsTests: [Test] = [
+    Test("a workflow's steps read as the iPad's: number, label, words, app and whether it runs; a step with no label is left out") {
+        let json = #"""
+        {"workflow":{"title":"Workflow","summary":"3 steps","steps":[
+          {"number":1,"label":"Read the ticket","words":"From Zendesk","app":"Zendesk","running":true},
+          {"number":2,"label":"Draft a reply","words":"","app":""},
+          {"number":3,"label":"  ","words":"x"},
+          {"label":"no number"}]}}
+        """#
+        let setup = try JSONDecoder().decode(TafSetup.self, from: Data(json.utf8))
+        try expectEqual(setup.workflowSteps.map(\.number), [1, 2])
+        try expectEqual(setup.workflowSteps[0].running, true)
+        try expectEqual(setup.workflowSteps[0].app, "Zendesk")
+        try expectEqual(setup.workflowSteps[1].app, nil)
+        try expectEqual(setup.workflowSteps[1].running, false)
+        // The contract's taf has none yet.
+        let none = try JSONDecoder().decode(TafSetup.self, from: Data(#"{"workflow":{"title":"Workflow","summary":"Ask Coach","steps":[]}}"#.utf8))
+        try expectEqual(none.workflowSteps, [])
+    },
     Test("a taf's id reaches tafs cloud as written in the path, as the iPad's escaped; only / and what a path can't carry are escaped", awaiting: {
         let id = "taf_9f2c-41e8.a@acme~1"
         try expectEqual(CloudClient.escaped(id), id)
