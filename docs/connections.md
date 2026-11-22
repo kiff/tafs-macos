@@ -139,11 +139,12 @@ and its model (`AppModel.swift:7025-7083`). It only reads.
   in the page's place, with Back to "Your {app} connections": its name (else the app's), its
   health in planque's words (ink when ok, else amber), "Used by …", and, for whoever manages the
   Cards, the actions planque says work for it now (`actions`, read as the iPad's `Grant.Action`:
-  only a known one with its words, `Action.known`: Sign in again by `approve` or `key`, Remove by
-  `delete`), in planque's words and order, Remove's in red. Remove asks first in planque's words,
+  only a known one with its words, `Action.known`: Sign in again by `approve` or `key`; `remove` or
+  `remove_unfinished` by `delete`), in planque's words and order, each removing one in red. A removing one asks first in planque's words,
   with what stops (`stops`); then each says to approve on another device and sends nothing.
 - **Left out:** a connection's last failed call (KIFF's calls by tool aren't read here), and
-  "Also on …'s Card" (the Cards' actions by tool aren't read here), as on Linux.
+  "Also on …'s Card" (the Cards' actions by tool aren't read here); kiff/tafs-linux's checklist
+  leaves both out for the same reason (its ConnectAppsView row, `lastFailure` and `alsoStops`).
 
 ## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
 

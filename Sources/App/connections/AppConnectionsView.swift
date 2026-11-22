@@ -38,7 +38,7 @@ struct AppConnectionsView: View {
         }
     }
 
-    private var page: some View {
+    @ViewBuilder private var page: some View {
         let tafs = self.tafs
         let parts = AppConnections.groups(AppConnections.connections(of: app, in: model.grants),
                                           taf: { AppConnections.taf(of: $0, in: tafs) }, removed: Set(model.removedTafs.map(\.agent)))
