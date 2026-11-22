@@ -45,6 +45,30 @@ final class SignInModel: ObservableObject {
     /// (`ConnectedView`), until the person moves on. Never set by a session kept from the last launch.
     @Published var justConnected = false
 
+    // MARK: The new onboarding's welcome (`Onboarding.on`, docs/pairing.md, "Signing in inside the app")
+
+    /// The welcome's one tick for the Terms: Continue, and the phone's code, wait on it.
+    @Published var tick = ConsentTick()
+    /// The Terms version in force, read as the tick shows: the one sent with the sign-in is the one the person saw.
+    @Published private(set) var termsVersion: String?
+    /// KIFF said the Terms changed since the tick: the box is unticked, and the welcome says why.
+    @Published private(set) var termsChanged = false
+    /// Why the last in-app sign-in didn't work; nil when the sheet was closed, or nothing went wrong.
+    @Published private(set) var problem: String?
+    /// The three cards on how tafs works, over the window after the celebration: once on this Mac, with the onboarding on.
+    @Published private(set) var showsCards = false
+    /// Where this Mac keeps that the cards were seen (`Onboarding.cardsSeenKey`).
+    var cardsSeen: UserDefaults = .standard
+    /// KIFF's sign-in is open in the system's sheet, or its session is being made.
+    @Published private(set) var signingInApp = false
+    /// Whether the welcome is the new onboarding's: `Onboarding.on`, or a test's say.
+    let onboarding: Bool
+    /// Where KIFF's sign-in page opens: the system's private sheet, or a test's stand-in.
+    private let sheet: KIFFSheet?
+    /// A code KIFF refused only for changed Terms, kept so the new tick sends it again with the new version without
+    /// opening KIFF's page twice, as the iPad's: only within `AppSignIn.codeLifetime`, and only for that refusal.
+    private var keptCode: (code: String, verifier: String, at: Date)?
+
     private let client: KIFFClient
     /// This Mac's device key: the one its session is bound to.
     private(set) var key: SigningKey
@@ -80,9 +104,11 @@ final class SignInModel: ObservableObject {
     init(client: KIFFClient, key: SigningKey, approval: ApprovalMeans, sessions: SessionStore, deviceName: String,
          sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          open: @escaping (URL) -> Void, now: @escaping () -> Date = Date.init, enclave: Bool? = nil,
-         securityKey: PairingSecurityKey? = nil,
+         securityKey: PairingSecurityKey? = nil, sheet: KIFFSheet? = nil, onboarding: Bool = Onboarding.on,
          endSession: @escaping (Session, SigningKey) async -> Void = { _, _ in }) {
         self.endSession = endSession
+        self.sheet = sheet
+        self.onboarding = onboarding
         self.enclave = enclave
         self.securityKey = securityKey
         self.client = client; self.key = key; self.approval = approval; self.sessions = sessions
@@ -149,7 +175,8 @@ final class SignInModel: ObservableObject {
             let got = try await Waiting.until(interval: 3, expiresIn: PairingPayload.lifetime, sleep: sleep) {
                 guard self.attempt == mine else { throw CancellationError() }
                 return try await self.client.claimPairing(nonce: nonce, publicKey: payload.pub, proof: proof,
-                                                          credentialProof: offer?.claimProof)
+                                                          credentialProof: offer?.claimProof,
+                                                          termsVersion: self.onboarding ? self.termsVersion : nil)
             }
             guard mine == attempt else {
                 if replaced != nil { DeviceKey.discardNext(in: store) }
@@ -177,11 +204,93 @@ final class SignInModel: ObservableObject {
             if replaced != nil { DeviceKey.discardNext(in: store) }
             if case KIFFError.expired = error {
                 if mine == attempt { step = .codeExpired }
+            } else if case KIFFError.termsOutdated = error, mine == attempt {
+                // As Continue does: the box unticked, why, and the new version for the new tick.
+                await termsChangedSinceTick()
+                step = .welcome
             } else {
                 fail(error, mine, pairing: true)
             }
         }
     }
+
+    /// The celebration's Let's go: then the three cards, the first time on this Mac with the onboarding on.
+    func celebrated() {
+        justConnected = false
+        showsCards = Onboarding.showsCards(on: onboarding, seen: cardsSeen.bool(forKey: Onboarding.cardsSeenKey))
+    }
+
+    /// Get started or Skip on the cards: seen on this Mac, and How tafs works opens them again.
+    func cardsDone() {
+        cardsSeen.set(true, forKey: Onboarding.cardsSeenKey)
+        showsCards = false
+    }
+
+    /// Reads the Terms version in force as the welcome shows its tick. Unreadable, it's read again at Continue or at
+    /// the phone's code, and nothing is sent without one: consent is never skipped.
+    func readTerms() async {
+        guard onboarding, termsVersion == nil else { return }
+        termsVersion = try? await client.appTerms()
+    }
+
+    /// Ticks or unticks the box. Unticked, the phone's code waits again; ticked, it's shown.
+    func toggleTick() async {
+        tick.toggle()
+        if tick.canContinue { termsChanged = false }
+        if !tick.canContinue, isPairing { cancel() }
+        await showPhoneCode()
+    }
+
+    /// Continue: KIFF's sign-in in the system's sheet (`AppSignIn`), the code traded at KIFF's app token route with its
+    /// verifier and the ticked Terms version, then the session as any sign-in's (the celebration, then the cards). The
+    /// sheet closed or KIFF's page declined leave the welcome as it was; Terms that changed since the tick untick the box.
+    func signInInApp(language: String) async {
+        guard onboarding, tick.canContinue, !signingInApp, let sheet else { return }
+        problem = nil
+        termsChanged = false
+        signingInApp = true
+        attempt += 1
+        let mine = attempt
+        var pending: (code: String, verifier: String, at: Date)?
+        do {
+            if termsVersion == nil { termsVersion = try await client.appTerms() }
+            guard let version = termsVersion else { throw KIFFError.unreadable }
+            if let kept = keptCode, now().timeIntervalSince(kept.at) < AppSignIn.codeLifetime {
+                pending = kept
+            } else {
+                let pkce = AppSignIn.PKCE.make(), state = AppSignIn.makeState()
+                let url = AppSignIn.authorizeURL(base: URL(string: "https://api.kiff.dev")!, challenge: pkce.challenge(sha256: Self.sha256),
+                                                 state: state, language: language)
+                let back = try await sheet.open(url, callbackScheme: AppSignIn.callbackScheme)
+                pending = (try AppSignIn.code(from: back, state: state), pkce.verifier, now())
+            }
+            keptCode = nil
+            guard mine == attempt, let pending else { return }
+            let got = try await client.appToken(code: pending.code, verifier: pending.verifier, termsVersion: version,
+                                                publicKey: key.publicKeyDER, keyStore: key.keyStore, name: deviceName, approval: approval)
+            try finish(got, mine)
+        } catch {
+            guard mine == attempt else { return }
+            if case KIFFError.termsOutdated = error {
+                // KIFF refuses the Terms before it spends the code: kept, for the new tick.
+                keptCode = pending
+                await termsChangedSinceTick()
+            } else {
+                keptCode = nil
+                problem = AppSignIn.why(error, words: Words.app)
+            }
+        }
+        if mine == attempt { signingInApp = false }
+    }
+
+    /// The Terms changed since the tick: unticked, said, and the new version read for the new tick.
+    private func termsChangedSinceTick() async {
+        tick = ConsentTick()
+        termsChanged = true
+        termsVersion = try? await client.appTerms()
+    }
+
+    static func sha256(_ data: Data) -> Data { Data(SHA256.hash(data: data)) }
 
     /// Puts the screen on a step, for a screenshot: a still picture, so the phone's code isn't
     /// started by itself.
@@ -210,6 +319,13 @@ final class SignInModel: ObservableObject {
     /// key, which asks for nothing (`Signing.claimProof`).
     func showPhoneCode() async {
         guard !still, pinSheet == nil, SignInPlan.showsCode(phase, signedIn: session != nil, asksKey: asksKey) else { return }
+        // The new welcome: the phone's code waits on the tick, and carries the version it agreed to, read now if it
+        // couldn't be when the welcome showed. Without one, nothing is shown and the welcome says signing in didn't work.
+        if onboarding, session == nil {
+            guard tick.canContinue else { return }
+            if termsVersion == nil { termsVersion = try? await client.appTerms() }
+            guard termsVersion != nil else { problem = Words.app("sign_in.didnt_work"); return }
+        }
         await pair()
     }
 
@@ -313,6 +429,13 @@ final class SignInModel: ObservableObject {
         sessions.forget()
         session = nil
         justConnected = false
+        showsCards = false
+        // The next sign-in starts at an unticked box, with the Terms read again.
+        tick = ConsentTick()
+        termsVersion = nil
+        termsChanged = false
+        problem = nil
+        keptCode = nil
         step = .welcome
     }
 
