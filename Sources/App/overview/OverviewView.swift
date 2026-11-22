@@ -52,6 +52,12 @@ final class OverviewModel: ObservableObject {
         return []
     }
 
+    /// The taf being set up by this KIFF agent, as Home lists it (`setting_up`); nil for any other.
+    func settingUp(_ agent: String) -> SettingUp? {
+        if case .loaded(let page) = state { return page.settingUp.first { $0.kiffAgent == agent } }
+        return nil
+    }
+
     /// The list was read and has no taf. Not so while it loads, or when it couldn't be read:
     /// then nobody is told to pick a job for a first taf they may already have.
     var hasNoTafs: Bool {

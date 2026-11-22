@@ -22,6 +22,7 @@ struct ReceiptSheet: View {
                     facts
                     whatHappened
                     checkPanel
+                    reportPanel
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -58,6 +59,45 @@ struct ReceiptSheet: View {
                 }
             }
         }
+    }
+
+    /// "Report this payment", as the iPad's `ReportPaymentSheet`, at the receipt's foot where tafs cloud offers it: a
+    /// payment the person didn't expect. One click reports it and halts its taf; resuming stays behind an approval. The words
+    /// are the app's (`record.report.*`), with the line's own taf, amount and date.
+    @ViewBuilder private var reportPanel: some View {
+        let phase = model.reportPhase[entry.id] ?? .asking
+        if phase == .done {
+            Text(words("record.report.done", ["taf": entry.taf.name])).font(.system(size: 15)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("record.report.done")
+        } else if entry.offersReport() {
+            VStack(alignment: .leading, spacing: 10) {
+                Eyebrow(text: words("record.report.title"))
+                Text(words("record.report.intro", ["taf": entry.taf.name, "amount": entry.amountText ?? "", "date": reportDate]))
+                    .font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                if phase == .failed {
+                    Text(words("record.report.failed")).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.no)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button { Task { await model.report(entry) } } label: {
+                    HStack(spacing: 8) {
+                        Text(words("record.report.submit", ["taf": entry.taf.name]))
+                        if phase == .sending { ProgressView().controlSize(.small) }
+                    }
+                }
+                .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                .disabled(phase == .sending)
+                .accessibilityIdentifier("record.report")
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        }
+    }
+
+    /// When the payment was made, long, in the person's language: tafs cloud's time for it, else the line's.
+    private var reportDate: String {
+        AppDates.formatter(words, date: .long).string(from: entry.report?.at ?? entry.at)
     }
 
     @ViewBuilder private var checkPanel: some View {
