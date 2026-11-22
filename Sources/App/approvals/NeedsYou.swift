@@ -51,9 +51,9 @@ final class NeedsYouModel: ObservableObject {
     private let account: AccountClient
     /// Where an approval is signed on this Mac.
     let route: ApprovalRoute
-    /// Approve once on this Mac's security key, through its PIN sheet (`PasskeySession.approveOnce`), set by the
-    /// window; nil where this Mac has no key, and the card says to approve on another device.
-    var approveOnceWithKey: ((HeldCall) async throws -> Void)?
+    /// An answer that grants authority on this Mac's security key, through its PIN sheet (`PasskeySession.approveOnce`,
+    /// `extraRoom`), set by the window; nil where this Mac has no key, and the card says to approve on another device.
+    var answerWithKey: ((HeldCall, Answer) async throws -> Void)?
     /// The person confirms before the device key signs a step, as the iPad's `sign(_:reason:)`
     /// does: Touch ID, or the Mac's login password, which every Mac has. Throws when not
     /// confirmed; the prompt's words are tafs cloud's for the answer and the step.
@@ -316,12 +316,18 @@ final class NeedsYouModel: ObservableObject {
     /// Approve once, on the security key, as the iPad's `answer(_:with: .approveOnce)`: one approval for this one call,
     /// then the list read again. A closed sheet sends nothing and says nothing; "Approve on your phone instead" says to
     /// approve on another device; anything else says KIFF didn't take it, with why.
-    func approveOnce(_ call: HeldCall) async {
-        guard let approveOnceWithKey, answering == nil else { return }
+    func approveOnce(_ call: HeldCall) async { await answerOnKey(call, .approveOnce) }
+
+    /// Extra room, on the security key, as the iPad's `answer(_:with: .extraRoom)`: KIFF's `change-card` for this one call,
+    /// over a total approving once can't pass. Then as Approve once.
+    func extraRoom(_ call: HeldCall) async { await answerOnKey(call, .changeCard) }
+
+    private func answerOnKey(_ call: HeldCall, _ answer: Answer) async {
+        guard let answerWithKey, answer.grants, answering == nil else { return }
         answering = call.id
         defer { answering = nil }
         do {
-            try await approveOnceWithKey(call)
+            try await answerWithKey(call, answer)
             notTaken[call.id] = nil
             await load()
         } catch is CancellationError {
@@ -334,7 +340,13 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// Whether this card offers Approve once: KIFF allows it for the call, and this Mac approves with its key.
-    func offersApproveOnce(_ call: HeldCall) -> Bool { call.canApproveOnce && call.accountingVersion != nil && approveOnceWithKey != nil }
+    func offersApproveOnce(_ call: HeldCall) -> Bool { call.canApproveOnce && call.accountingVersion != nil && answerWithKey != nil }
+
+    /// Whether this card offers Extra room, as the iPad's: over a total approving once can't pass, for someone who
+    /// manages the Cards (KIFF's `cards.manage`), on a Mac that approves with its key.
+    func offersExtraRoom(_ call: HeldCall, managesCards: Bool) -> Bool {
+        !call.canApproveOnce && managesCards && call.accountingVersion != nil && answerWithKey != nil
+    }
 
     static func why(_ error: Error) -> String {
         switch error {
@@ -362,6 +374,9 @@ struct NeedsYouView: View {
     var now: Date?
     /// Whether this person answers the account's held calls (KIFF's `holds.answer`).
     var answersHolds = true
+    /// Whether this person manages the account's Cards (KIFF's `cards.manage`): the over-total line says they can give
+    /// extra room.
+    var managesCards = true
     /// Opens a taf where its door knocks are answered: its Activity.
     var openKnocks: (Home.Taf) -> Void = { _ in }
     /// Reads the lists again once a step is answered: the taf's run goes on.
@@ -601,34 +616,64 @@ struct NeedsYouView: View {
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
                 .accessibilityElement(children: .combine)
             }
-            Text(words("needs_you.nothing_sent")).font(.system(size: 14)).foregroundColor(Theme.soft)
-            if model.route == .phoneOrPasskey {
-                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if model.offersApproveOnce(call) { approveOnceButton(call) }
-            // Refuse, as the iPad's outlined button: the card's width, in red.
-            Button { Task { await model.refuse(call) } } label: {
-                HStack(spacing: 8) {
-                    Text(words("needs_you.refuse")).font(.system(size: 15, weight: .medium))
-                    if model.answering == call.id { ProgressView().controlSize(.small) }
-                }
-                .foregroundColor(Theme.no)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.no.opacity(0.4), lineWidth: 1))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(model.answering != nil)
-            if let line = Self.notTakenLine(model, call) {
-                Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.no)
-            }
+            answers(call)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
         .accessibilityElement(children: .contain)
+    }
+
+    /// The card's answers, as the iPad's `answers(refuseOnly:)`: what's sent, Approve once on the key, the over-total
+    /// line, the next steps, then Refuse, and why the last answer wasn't taken.
+    @ViewBuilder private func answers(_ call: HeldCall) -> some View {
+        Text(words("needs_you.nothing_sent")).font(.system(size: 14)).foregroundColor(Theme.soft)
+        if model.route == .phoneOrPasskey {
+            Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if model.offersApproveOnce(call) { approveOnceButton(call) }
+        if !call.canApproveOnce { overTotal }
+        nextSteps(call)
+        // Refuse, as the iPad's outlined button: the card's width, in red.
+        Button { Task { await model.refuse(call) } } label: {
+            HStack(spacing: 8) {
+                Text(words("needs_you.refuse")).font(.system(size: 15, weight: .medium))
+                if model.answering == call.id { ProgressView().controlSize(.small) }
+            }
+            .foregroundColor(Theme.no)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.no.opacity(0.4), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.answering != nil)
+        if let line = Self.notTakenLine(model, call) {
+            Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.no)
+        }
+    }
+
+    /// Over a total the Card keeps across calls, as the iPad's: approving once can't pass it (kiff/tafs#138, item 49).
+    /// Someone who manages the Cards can give it extra room; anyone else is told who can.
+    private var overTotal: some View {
+        Text(words(managesCards ? "needs_you.over_total_manager" : "needs_you.over_total")).font(.system(size: 13)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The call's next steps, as the iPad's: each refuses the call with that step for the taf, in its own words, signed
+    /// by the device key once the person confirms, as Refuse is.
+    @ViewBuilder private func nextSteps(_ call: HeldCall) -> some View {
+        if !call.nextSteps.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(call.nextSteps, id: \.self) { step in
+                    Button { Task { await model.refuse(call, nextStep: step) } } label: { Text(verbatim: step).lineLimit(2) }
+                        .buttonStyle(OutlineButtonStyle())
+                        .disabled(model.answering != nil)
+                }
+            }
+            .accessibilityIdentifier("needs_you.next_steps")
+        }
     }
 
     /// Approve once, as the iPad's filled button above Refuse, on the security key: its PIN sheet names the call.

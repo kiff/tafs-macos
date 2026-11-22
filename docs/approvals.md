@@ -34,7 +34,7 @@ makes an answer count only for the hold as the person saw it.
 |---|---|---|
 | **Refuse** (`reject`) | No: it takes authority away | The device key, once the person confirms with Touch ID or the Mac's password. Any signed-in Mac may refuse. |
 | **Approve once** (`approve-once`) | Yes | **This Mac's security key** (`PasskeySession.approveOnce`, below), on the security key's route. Without a key, the phone. |
-| **Extra room** (`change-card`) | Yes | The phone, for now. KIFF takes it from the security key as it takes Approve once; it comes with Allow from now on. |
+| **Extra room** (`change-card`) | Yes | **This Mac's security key** (`PasskeySession.extraRoom`), over a total approving once can't pass, for whoever manages the Cards. Its button waits for its shared word (below). Without a key, the phone. |
 
 - **A Mac without a Secure Enclave never signs an approval.** `ApprovalRoute.of` says where
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
@@ -74,7 +74,22 @@ where this Mac has its key on the security key's route, for a call KIFF says can
   on your phone instead** says to approve on another device; KIFF's refusal is the card's line, "KIFF didn't take the
   answer: {why}".
 
-Extra room, next steps and Allow from now on come in their own pull request.
+**Extra room** (`change-card`, the iPad's `answer(_:with: .extraRoom)`, kiff/tafs#211 6.13) is the same request with
+`change-card` in the message and the path, `POST /v1/me/card-exceptions/{id}/change-card`. It's offered over a total
+approving once can't pass (KIFF's `can_approve_once` false, so that isn't asked; the accounting version is), to someone
+who manages the Cards (KIFF's `cards.manage`), on a Mac with its key. **Its button isn't drawn yet:** the only shared
+word for it names a fingerprint or face (`needs_you.extra_room_with`, "Extra room with {biometry}"), and a plain one is
+asked of the PM (kiff/work#20). Its request, the model and their tests are in.
+
+**Over a total**, as the iPad's: the card says approving once can't pass it, in the words for whoever manages the Cards
+("Extra room lets only this call through", `needs_you.over_total_manager`) or for anyone else ("Someone who manages
+the Cards can give it extra room, or you can refuse it", `needs_you.over_total`).
+
+**Next steps**, as the iPad's: each of the call's `next_steps` is an outlined button in its own words, above Refuse. It
+refuses the call with that step for the taf, signed by the device key once the person confirms, as Refuse is (a
+refusal takes authority away: never the security key's). Only the call's own steps are sent (`not_a_next_step`).
+
+Allow from now on comes in its own pull request.
 
 ## Nothing is approved at planque from this Mac
 
