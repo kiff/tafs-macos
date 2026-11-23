@@ -1,7 +1,7 @@
 import Foundation
 
-/// A server's id or file name, kept as one component under the app's own folder (kiff/work#20: agentgabo's Windows
-/// catch, dev-android's Android one).
+/// A server's id or file name, kept as one component under the app's own folder, as the
+/// Windows and Android apps keep it.
 let shellLocalNameTests: [Test] = [
     Test("a name from the server stays one component inside its folder, whatever it holds") {
         let folder = URL(fileURLWithPath: "/tmp/tafs-test/attachments", isDirectory: true)

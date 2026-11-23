@@ -1,7 +1,7 @@
 import Foundation
 
 /// One act approved by this Mac's security key alone (docs/approvals.md, "Approving with the security key";
-/// kiff/cloud#96, the PM's decision (i)): the request the app writes in full, its `kiff.request.v1` message signed by
+/// kiff/cloud#96): the request the app writes in full, its `kiff.request.v1` message signed by
 /// a fresh assertion of the key (UP, and UV from its PIN), and sent with `KIFF-Passkey-Assertion` only. One request
 /// per assertion: never a window, never two requests under one (`RequestsTogether` is never used here), never the
 /// device key's signature, which grants nothing on a software-key Mac.
@@ -43,7 +43,7 @@ enum KeyAct: Equatable {
     /// An API door's acts (the iPad's `DoorsModel.reopen`, `revoke`, `removeAPI`), each tafs cloud's own request, signed
     /// as a removal is: opening a paused door again (`PATCH …/doors/{door}` with `{"open":true}`), revoking one of its keys
     /// (`DELETE …/keys/{key}`), and removing the door (`DELETE …/doors/{door}`). Pausing is never signed. A new key stays
-    /// the phone's (the PM's 00:19): this Mac can't keep a key shown once from screen recording or the clipboard.
+    /// the phone's: this Mac can't keep a key shown once from screen recording or the clipboard.
     case reopenAPIDoor(taf: String, door: String)
     case revokeAPIDoorKey(taf: String, door: String, key: String)
     case removeAPIDoor(taf: String, door: String)

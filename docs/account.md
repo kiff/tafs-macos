@@ -269,7 +269,7 @@ tafs-linux#89.
   routes, as Linux's `planque::Safe`: `GET …/chromes` and `DELETE …/chromes/{id}`. Each is an empty-bodied request,
   signed by the device key for that one request (`planque.request.v1`), with no session token, on planque's own host.
   None goes through the enrolment's armed signer, which stays armed only around the enrolment. Nothing approves,
-  confirms or pairs. agentgabo confirmed on kiff/work#20 (22 Nov) that planque's safe routes take a software device key.
+  confirms or pairs. planque's safe routes take a software device key.
   `PlanqueRoutesTests` pins both lists.
 - **Not here yet:** each Chrome's own connections, and naming them in Unpair's question ("Your Chrome" 3 and 4).
   planque's grant read names each connection's Chrome; they wait on tafs' words for those lines, as on Linux.
