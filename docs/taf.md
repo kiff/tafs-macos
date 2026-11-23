@@ -251,9 +251,13 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
 - **Pausing is never signed:** `PATCH` with `{"open":false}` on the session, as every door's switch.
 - **A closed sheet** sends nothing and says nothing; without a key on this Mac, each says to approve on another
   device.
+- **API instructions**, a row under the boundary line, as the iPad's (`APIInstructionsView`): a sheet with where to
+  send work (`APIInstructions.endpoint`), an example request that reads the key from the caller's own secret
+  (`$TAFS_API_KEY`), that the key isn't here, and the boundary. **The endpoint is only ever on tafs cloud's own host,
+  over HTTPS** (as the iPad's since `9fa9d97`, Windows' and Linux's): an address on another host, another scheme, a
+  port or a user becomes its path on tafs cloud, since the example sends the developer's key.
 - **Not here:** **New key**, which stays the phone's: a key is shown once, and this Mac can't keep it
-  out of screen recording or the clipboard's history. Also not here: the API instructions and Coach's drafted door
-  (`DoorDraftCard`).
+  out of screen recording or the clipboard's history. Also not here: Coach's drafted door (`DoorDraftCard`).
 
 ## Tests
 

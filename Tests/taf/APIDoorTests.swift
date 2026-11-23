@@ -45,3 +45,39 @@ let tafAPIDoorTests: [Test] = [
         do { _ = try await cloud.signedDoorChange(.removeAPIDoor(taf: "t", door: "d9"), assertion: "t=3,a=z"); throw Failure(description: "taken") } catch is CloudRefusal {}
     }),
 ]
+
+/// The API instructions (`APIInstructions`), as the iPad's `testAnAPIDoorsLinesNeverCarryTheKey`: the endpoint is whole
+/// and only ever on tafs cloud's own host, over HTTPS; the example never holds a key.
+let tafAPIInstructionsTests: [Test] = [
+    Test("the endpoint is the door's address on tafs cloud, and the example reads the key from the caller's own secret") {
+        try expectEqual(APIInstructions.endpoint("/v1/doors/api/door_ord7/requests"), "https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests")
+        let example = APIInstructions.example(endpoint: APIInstructions.endpoint("/v1/doors/api/door_ord7/requests"))
+        try expect(example.contains("$TAFS_API_KEY"), "the caller's own secret")
+        try expect(example.contains("https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests"), "the endpoint")
+        try expect(!example.contains("tafs_api_"), "never a key")
+    },
+    Test("the endpoint is only ever on tafs cloud's own host, over HTTPS, whatever the address says") {
+        let base = URL(string: "https://cloud.test")!
+        for (address, shown) in [
+            ("https://cloud.test/v1/x", "https://cloud.test/v1/x"),
+            ("https://CLOUD.test/v1/x", "https://CLOUD.test/v1/x"),
+            ("v1/x", "https://cloud.test/v1/x"),
+            ("https://evil.example/v1/x", "https://cloud.test/v1/x"),
+            ("http://cloud.test/v1/x", "https://cloud.test/v1/x"),
+            ("https://cloud.test:8443/v1/x", "https://cloud.test/v1/x"),
+            ("https://me@cloud.test/v1/x", "https://cloud.test/v1/x"),
+            ("https://cloud.test.evil.example/v1/x", "https://cloud.test/v1/x"),
+            ("//evil.example/v1/x", "https://cloud.test/v1/x"),
+        ] {
+            try expectEqual(APIInstructions.endpoint(address, base: base), shown)
+        }
+        for address in ["foo:x@evil.example/v1/x", "mailto:a@evil.example", "@evil.example/x", "\\\\evil.example\\x",
+                        "https://evil.example@cloud.test.evil.example/"] {
+            let shown = APIInstructions.endpoint(address, base: base)
+            let url = URL(string: shown)
+            try expectEqual(url?.scheme, "https")
+            try expect(url?.host == "cloud.test", "\(address) → \(shown)")
+            try expect(url?.user == nil && url?.port == nil, "\(address) → \(shown)")
+        }
+    },
+]

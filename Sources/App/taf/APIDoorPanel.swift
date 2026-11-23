@@ -13,6 +13,7 @@ struct APIDoorPanel: View {
     /// Remove door, asked first by the door's screen.
     let remove: () -> Void
     @State private var revoking: TafDoors.Door.Key?
+    @State private var showingInstructions = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -64,12 +65,29 @@ struct APIDoorPanel: View {
                 Text(words("door.api.two_keys")).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
                 Text(words("door.api.boundary", ["taf": taf.name])).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
+                // Everything a developer needs but the key, as the iPad's row (`APIInstructionsView`).
+                Button { showingInstructions = true } label: {
+                    HStack {
+                        Text(words("door.api.instructions")).font(.system(size: 15, weight: .medium)).foregroundColor(Theme.ink)
+                        Spacer()
+                        Image(systemName: "chevron.forward").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                            .flipsForRightToLeftLayoutDirection(true).accessibilityHidden(true)
+                    }
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("door.api.instructions")
                 Button(role: .destructive, action: remove) {
                     Text(words("door.remove_door")).font(.system(size: 14, weight: .medium)).foregroundColor(Theme.no)
                 }
                 .buttonStyle(.plain)
                 .disabled(doors.busy)
             }
+        }
+        .sheet(isPresented: $showingInstructions) {
+            APIInstructionsView(endpoint: APIInstructions.endpoint(door.address), taf: taf) { showingInstructions = false }
+                .environment(\.words, words).frame(minWidth: 560, minHeight: 420)
         }
         .confirmationDialog(words("door.api.revoke_title", ["key": revoking?.shownName ?? ""]),
                             isPresented: Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }),
@@ -95,5 +113,47 @@ struct APIDoorPanel: View {
         let made = when(key.madeAt, words: words) ?? "", last4 = key.last4 ?? ""
         if let used = when(key.lastUsedAt, words: words) { return words("door.api.key_line", ["made": made, "used": used, "last4": last4]) }
         return words("door.api.key_never_used", ["made": made, "last4": last4])
+    }
+}
+
+/// An API door's instructions, as the iPad's `APIInstructionsView`: where to send work, an example that reads the key
+/// from the caller's own secret, that the key isn't here, and the taf's boundary. The key is never on this Mac: a new
+/// key stays the phone's, shown there once.
+struct APIInstructionsView: View {
+    @Environment(\.words) private var words
+    let endpoint: String
+    let taf: Home.Taf
+    let close: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(words("door.api.instructions")).font(Theme.display(22)).foregroundColor(Theme.ink).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button(words("common.done"), action: close).keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Eyebrow(text: words("door.api.where"))
+                    Text(verbatim: endpoint).font(.system(size: 14, design: .monospaced)).foregroundColor(Theme.ink).textSelection(.enabled)
+                        .accessibilityIdentifier("door.api.endpoint")
+                    Eyebrow(text: words("door.api.example"))
+                    // Code, as written: monospaced, selectable, scrolled sideways rather than wrapped.
+                    ScrollView(.horizontal) {
+                        Text(verbatim: APIInstructions.example(endpoint: endpoint)).font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(Theme.ink).textSelection(.enabled).padding(12)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.raised))
+                    .environment(\.layoutDirection, .leftToRight)
+                    Text(words("door.api.key_not_here")).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    Text(words("door.api.boundary", ["taf": taf.name])).font(.system(size: 14)).foregroundColor(Theme.soft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(Theme.background)
     }
 }
