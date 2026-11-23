@@ -186,6 +186,14 @@ final class NeedsYouModel: ObservableObject {
     /// holds (KIFF's `holds.answer`).
     func canAnswerSteps(answersHolds: Bool) -> Bool { answersHolds && account.signMessage != nil }
 
+    /// Whether a step's card still shows, as the iPad's `canAnswer(step:)`: not answered or ended
+    /// here, while a list read before that may still carry it.
+    func canAnswer(step handoff: String) -> Bool { !answeredSteps.contains(handoff) }
+
+    /// The step `handoff` waits on as Home lists it, as the iPad's `yourStep(_:)`: Home's carries
+    /// the vendor's link when tafs cloud vouched for it, a request's own never does.
+    func listedStep(_ handoff: String) -> YourStep? { steps.first { $0.handoff == handoff } }
+
     /// Starts an answer that sign-out can stop (`cancelAnswers`).
     func startAnswer(_ step: YourStep, done: Bool, answersHolds: Bool, answered: @escaping () async -> Void = {}) {
         guard stepAnswers[step.handoff] == nil else { return }
@@ -457,7 +465,7 @@ struct NeedsYouView: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
                 }
                 // A step a taf handed its owner comes first, oldest first, as the iPad's.
-                ForEach(model.steps) { step($0) }
+                ForEach(model.steps) { YourStepCard(model: model, step: $0, answersHolds: answersHolds, answered: answered) }
                 // Coach waits on the person in a chat, after the steps, as on the iPad
                 // (NeedsYouView.swift:16-19): Set all aside above them, with two or more.
                 coachWaiting
@@ -518,53 +526,6 @@ struct NeedsYouView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         }
-    }
-
-    /// A step a taf handed its owner, as the iPad's `YourStepCard`: tafs cloud's title, the taf,
-    /// what to do and why, the vendor's page only as tafs cloud vouched for it, and Done or Skip
-    /// when this Mac can answer.
-    private func step(_ step: YourStep) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !step.words.title.isEmpty { Eyebrow(text: step.words.title) }
-            if let name = step.taf?.name, !name.isEmpty {
-                Text(verbatim: name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
-            }
-            Text(verbatim: step.what).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            if !step.why.isEmpty {
-                Text(verbatim: step.why).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
-            }
-            if let link = step.openLink {
-                VStack(alignment: .leading, spacing: 4) {
-                    Button { openURL(link.url) } label: {
-                        Label(link.words, systemImage: "arrow.up.right.square").padding(.horizontal, 16)
-                    }
-                    .buttonStyle(OutlineButtonStyle())
-                    .fixedSize()
-                    // Where it really goes, as tafs cloud read the link.
-                    Text(verbatim: link.host).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
-                }
-            }
-            if model.canAnswerSteps(answersHolds: answersHolds) {
-                HStack(spacing: 8) {
-                    Button { model.startAnswer(step, done: true, answersHolds: answersHolds, answered: answered) } label: {
-                        Text(verbatim: step.words.done).padding(.horizontal, 16)
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    Button { model.startAnswer(step, done: false, answersHolds: answersHolds, answered: answered) } label: {
-                        Text(verbatim: step.words.skip).padding(.horizontal, 16)
-                    }
-                    .buttonStyle(OutlineButtonStyle())
-                }
-                .fixedSize()
-                .disabled(model.answeringSteps.contains(step.handoff))
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
-        .accessibilityElement(children: .contain)
     }
 
     /// "Did this happen?", as the iPad's `DidThisHappenCard`: KIFF's words for the call (else its
