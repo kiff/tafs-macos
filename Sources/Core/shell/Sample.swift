@@ -218,6 +218,41 @@ enum Sample {
         return json(["entries": entries])
     }
 
+    /// The sample taf a tafs cloud path names (`/v1/tafs/sample-{key}/…`), and what follows its id.
+    static func taf(in path: String) -> (Taf, String)? {
+        guard path.hasPrefix("/v1/tafs/") else { return nil }
+        let rest = path.dropFirst("/v1/tafs/".count)
+        let id = rest.split(separator: "/", maxSplits: 1).first.map(String.init) ?? ""
+        guard let taf = tafs.first(where: { tafID($0) == id }) else { return nil }
+        return (taf, String(rest.dropFirst(id.count)))
+    }
+
+    /// A taf's own reads: its chat (its hello, and for Support replies the iPad's sample question), its Setup (its job
+    /// as its workflow), its Activity (what it did), and everything else it has: none yet.
+    static func tafAnswer(_ taf: Taf, _ rest: String, words: Words, now: Date) -> (Int, Data)? {
+        let name = words("sample.\(taf.key).name")
+        switch rest {
+        case "/conversation":
+            var items: [[String: Any]] = [["type": "message", "message": ["id": "sample-hello-\(taf.key)", "from": "taf", "at": time(now.addingTimeInterval(-3600)),
+                                                                            "text": words("sample.hello", ["name": name, "now": words("sample.\(taf.key).job")])]]]
+            if taf.key == "support" {
+                items.append(["type": "message", "message": ["id": "sample-question", "from": "owner", "at": time(now.addingTimeInterval(-1800)),
+                                                             "text": words("sample.chat.question")]])
+            }
+            return (200, json(["working": false, "items": items]))
+        case "/setup":
+            return (200, json(["connections": [], "workflow": ["title": words("sample.\(taf.key).name"), "summary": words("sample.\(taf.key).job"), "steps": []]]))
+        case "/activity":
+            let page = try? JSONSerialization.jsonObject(with: record(words: words, now: now)) as? [String: Any]
+            let mine = ((page?["entries"] as? [[String: Any]]) ?? []).filter { (($0["taf"] as? [String: Any])?["id"] as? String) == tafID(taf) }
+            return (200, json(["entries": mine]))
+        case "/runs": return (200, json(["runs": []]))
+        case "/memory": return (200, json(["notes": []]))
+        case "/work": return (200, json(["summary": ["status": "idle"], "requests": [], "skipped": []]))
+        default: return nil
+        }
+    }
+
     /// The answer the sample gives a request: its reads from the sample, every other read empty, and a write or an
     /// approval refused, with nothing done.
     static func answer(method: String, path: String, words: Words, now: Date) -> (Int, Data) {
@@ -225,6 +260,7 @@ enum Sample {
         guard method == "GET" else {
             return (403, json(["error": "sample", "words": notInSample(words)]))
         }
+        if let (taf, rest) = taf(in: bare), let answer = tafAnswer(taf, rest, words: words, now: now) { return answer }
         switch bare {
         case "/v1/home": return (200, home(words: words, now: now))
         case "/v1/me": return (200, me(words: words))

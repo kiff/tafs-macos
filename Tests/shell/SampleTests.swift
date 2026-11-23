@@ -44,7 +44,7 @@ let shellSampleTests: [Test] = [
             try expectEqual(refusal.words, english()("sign_in.with_kiff"))
         }
         // An unknown read is "not found", in the same words: a screen says it as it says any read that failed.
-        let (status, _) = try await transport.send(HTTPRequest(method: "GET", path: "/v1/tafs/sample-support/memory", headers: [:], body: Data()))
+        let (status, _) = try await transport.send(HTTPRequest(method: "GET", path: "/v1/tafs/sample-support/knob", headers: [:], body: Data()))
         try expectEqual(status, 404)
         try expectEqual(Sample.session.deviceID, nil)
     }),
@@ -61,5 +61,20 @@ let shellSampleTests: [Test] = [
         try expectEqual(record.entries.count, 10)
         try expectEqual(record.entries.filter { $0.kind == "held" }.count, 3)
         try expectEqual(record.entries.first?.taf.name, "Support replies")
+    }),
+    Test("a sample taf's page reads its chat, its Setup, its Activity, its runs, notes and work through the page's own decoders", awaiting: {
+        let (_, cloud, _) = clients()
+        let thread: Thread.Page = try await cloud.get("/v1/tafs/sample-support/conversation")
+        try expectEqual(thread.items.count, 2)
+        let setup = try await cloud.setup(of: "sample-support")
+        try expectEqual(setup.workflow?.summary, english()("sample.support.job"))
+        let activity = try await cloud.activity(of: "sample-parcels")
+        try expectEqual(activity.groups.flatMap(\.entries).count, 2)
+        let runs = try await cloud.runs(of: "sample-parcels")
+        try expectEqual(runs, [])
+        let notes = try await cloud.memory(of: "sample-parcels")
+        try expectEqual(notes, [])
+        let work = try await cloud.work(of: "sample-parcels")
+        try expectEqual(work.requests, [])
     }),
 ]
