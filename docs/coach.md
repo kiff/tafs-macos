@@ -386,6 +386,7 @@ data (`POST /v1/tafs/{id}/components/{component}/answer`), never as text in the 
 | Card | On the Mac |
 |---|---|
 | A choice (`confirm`, with options) | Its title and text as Coach wrote them, and a button for each option. One tap answers it. |
+| The loop card (`confirm`, id `tafs-loop-N`, with `loop`) | In a taf's own chat, when a run read page after page of one list: tafs cloud's words, "Still reading", the read, and **Read on** / **Stop here** (values `tafs_loop_continue`, `tafs_loop_summarise`), as the iPad's `LoopCardView` (tafs#1861) and Android's `answerTafCard`. It's a choice that waits on the owner, so it's drawn and answered as one: the value, with the card's own chat, to the taf's route, then the run that goes on is followed. |
 | Questions (`questions`, with questions) | In Coach's own chat, for someone who may use Coach, while it has no answer: each question's options, or the person's own words, then **Send answers**, once every question has an answer. |
 | An approval or a sign-in (`approval`, `sign_in`) | "Needs you · approve". **Never answered here**: its answer is a signature, which arrives with approvals on the Mac. |
 | A card already answered | What was answered, in tafs cloud's words. |
