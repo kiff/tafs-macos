@@ -46,8 +46,11 @@ struct Me: Decodable, Equatable {
     let capabilities: [String]?
     /// The account's time zone, as KIFF says it ("Europe/Paris"), as the iPad's `Account.timeZone`.
     let timeZone: String?
+    /// The person's role on the account, as KIFF says it (`member_role`: "owner", "admin", …), as the iPad's `role`;
+    /// nil from a KIFF that doesn't say.
+    var role: String? = nil
 
-    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode", capabilities, timeZone = "time_zone" }
+    enum CodingKeys: String, CodingKey { case email, name = "tenant_display_name", slug = "tenant_slug", approvalMode = "approval_mode", capabilities, timeZone = "time_zone", role = "member_role" }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         func text(_ key: CodingKeys) -> String? {
@@ -60,7 +63,12 @@ struct Me: Decodable, Equatable {
         approvalMode = text(.approvalMode)
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
         timeZone = try c.decodeIfPresent(String.self, forKey: .timeZone)
+        role = text(.role)
     }
+
+    /// Whether this person removes the account's passkeys, as the iPad's `canAddPasskey`'s role: an owner or an admin.
+    /// A KIFF that doesn't say the role offers no Remove; KIFF decides either way.
+    var managesPasskeys: Bool { ["owner", "admin"].contains(role ?? "") }
 
     /// Whether this person manages the account's Cards (KIFF's `cards.manage`), as the iPad's
     /// `managesCards`: halting every taf is theirs. A KIFF that doesn't say leaves it to KIFF.

@@ -23,6 +23,10 @@ extension PasskeySession {
 enum KeyAct: Equatable {
     /// Signing another device out (the iPad's `prepareRemoveDevice`): `DELETE /v1/me/devices/{id}`, empty body.
     case signOutDevice(id: String)
+    /// Removing one of the account's own passkeys (the iPad's `preparePasskeyRemoval`): `DELETE /v1/me/passkeys/{id}`,
+    /// empty body. KIFF takes it as an approval (`PhoneApprovalRules`; its handler wants a critical signature, which a
+    /// security key's assertion is), so it's the key's, once.
+    case removePasskey(id: String)
     /// The account's time zone (the iPad's `setTimeZone`): `PUT /v1/me/time-zone` with `{"time_zone": zone}`.
     case timeZone(String)
     /// Resuming a halted KIFF agent, or with none the whole account (the iPad's `KIFFClient.resume`):
@@ -62,6 +66,7 @@ enum KeyAct: Equatable {
     var method: String {
         switch self {
         case .signOutDevice: return "DELETE"
+        case .removePasskey: return "DELETE"
         case .timeZone: return "PUT"
         case .resume: return "POST"
         case .removeTaf: return "DELETE"
@@ -78,6 +83,7 @@ enum KeyAct: Equatable {
     var path: String {
         switch self {
         case .signOutDevice(let id): return "/v1/me/devices/\(CloudClient.escaped(id))"
+        case .removePasskey(let id): return "/v1/me/passkeys/\(CloudClient.escaped(id))"
         case .timeZone: return "/v1/me/time-zone"
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
@@ -101,6 +107,7 @@ enum KeyAct: Equatable {
     var body: Data {
         switch self {
         case .signOutDevice: return Data()
+        case .removePasskey: return Data()
         case .timeZone(let zone):
             // The same bytes as the device key's signed call (`AccountClient.setTimeZone`): sorted keys.
             let encoder = JSONEncoder()
@@ -130,6 +137,8 @@ enum KeyAct: Equatable {
     func title(_ words: Words, device: String = "") -> String {
         switch self {
         case .signOutDevice: return words("settings.devices.sign_out_prompt", ["device": device])
+        // The iPad's reason, "Remove the passkey {name} from your account", the passkey's name in `device`'s place.
+        case .removePasskey: return words("settings.devices.passkey_remove_prompt", ["name": device])
         case .timeZone(let zone): return words("settings.time_zone.prompt", ["zone": zone])
         // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
         case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
