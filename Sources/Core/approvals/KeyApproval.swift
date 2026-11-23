@@ -53,6 +53,11 @@ enum KeyAct: Equatable {
     /// one change at a time.
     case share(agent: String, Shares.Share)
     case unshare(agent: String, Shares.Share)
+    /// The owner's answer to "Did this happen?" (the iPad's `KIFFClient.answerHappened`): KIFF's
+    /// `POST /v1/me/did-this-happen/{proposal}` with `{"happened":true}` or `false`. It's an approval route (kiff/cloud's
+    /// `PhoneApprovalRules`: No gives a Card its room back), so it's the security key's, once, for this one call. The
+    /// first answer stands.
+    case happened(proposal: String, Bool)
 
     var method: String {
         switch self {
@@ -66,6 +71,7 @@ enum KeyAct: Equatable {
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         case .share: return "POST"
         case .unshare: return "DELETE"
+        case .happened: return "POST"
         }
     }
 
@@ -88,6 +94,7 @@ enum KeyAct: Equatable {
             func q(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s }
             let query = share.group.map { "group=\(q($0))" } ?? share.subject.map { "subject=\(q($0))" } ?? ""
             return "/v1/agents/\(CloudClient.escaped(agent))/grants?\(query)"
+        case .happened(let proposal, _): return "/v1/me/did-this-happen/\(CloudClient.escaped(proposal))"
         }
     }
 
@@ -114,6 +121,8 @@ enum KeyAct: Equatable {
             return (try? encoder.encode(share)) ?? Data()
         // The iPad sends an empty object with the DELETE.
         case .unshare: return Data("{}".utf8)
+        // The iPad's body, `["happened": happened]`, these exact bytes.
+        case .happened(_, let happened): return Data(happened ? #"{"happened":true}"#.utf8 : #"{"happened":false}"#.utf8)
         }
     }
 
@@ -135,6 +144,10 @@ enum KeyAct: Equatable {
         case .removeAPIDoor: return words("door.remove_door")
         // The iPad's reason for the whole change, "Share {taf}", with the taf in `device`'s place.
         case .share, .unshare: return words("people.share.title", ["taf": device])
+        // The iPad's prompts, "Say it happened: {title}" and "Say it didn't happen: {title}", the call's title in
+        // `device`'s place.
+        case .happened(_, let happened):
+            return words(happened ? "needs_you.prompt.happened" : "needs_you.prompt.did_not_happen", ["title": device])
         }
     }
 }
