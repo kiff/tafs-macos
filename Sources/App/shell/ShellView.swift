@@ -15,6 +15,9 @@ struct ShellView: View {
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
+    /// Whether a taf was shared with this person to use, not theirs to manage
+    /// (`Access.sharedWithMe`): it's listed under Shared with you.
+    var sharedWithMe: (Home.Taf) -> Bool = { _ in false }
     /// The calls held for the person, listed under NEEDS YOU above the tafs.
     var held: [HeldRow] = []
     /// The open taf's page, drawn in place of the screen.
@@ -86,21 +89,20 @@ struct ShellView: View {
                         ForEach(held) { heldRow($0) }
                         Spacer().frame(height: 10)
                     }
-                    eyebrow(words("home.your_tafs"), color: Theme.soft)
-                    if tafs.isEmpty, let line = noTafsLine {
-                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    ForEach(tafs) { taf in
-                        // The open taf sits on the chosen row's grey, as on the iPad.
-                        Button { open(taf) } label: {
-                            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.chosen : Color.clear))
-                                .contentShape(Rectangle())
+                    // Theirs, then the ones shared with them, as the iPad's sidebar (HomeSplitView.swift:338-368):
+                    // someone with only shared tafs sees just those.
+                    if !ownTafs.isEmpty || sharedTafs.isEmpty {
+                        eyebrow(words("home.your_tafs"), color: Theme.soft)
+                        if tafs.isEmpty, let line = noTafsLine {
+                            Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, -10)
-                        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
+                        ForEach(ownTafs) { tafButton($0) }
+                    }
+                    if !sharedTafs.isEmpty {
+                        if !ownTafs.isEmpty { Spacer().frame(height: 10) }
+                        eyebrow(words("home.shared_you"), color: Theme.soft)
+                        ForEach(sharedTafs) { tafButton($0) }
                     }
                     jobs
                 }
@@ -212,6 +214,23 @@ struct ShellView: View {
     /// A taf in the sidebar, as the iPad's `tafRow`: its 34 avatar, its name (15 semibold), and
     /// tafs cloud's line for where its work stands (13). The line is soft, not the iPad's dim:
     /// dim is under 4.5:1 on the raised ground.
+    /// The person's own tafs, in the list's order.
+    private var ownTafs: [Home.Taf] { tafs.filter { !sharedWithMe($0) } }
+    /// The tafs shared with this person, in the list's order.
+    private var sharedTafs: [Home.Taf] { tafs.filter(sharedWithMe) }
+
+    /// A taf's row: the open taf sits on the chosen row's grey, as on the iPad.
+    private func tafButton(_ taf: Home.Taf) -> some View {
+        Button { open(taf) } label: {
+            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.chosen : Color.clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, -10)
+        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
+    }
+
     private func tafRow(_ taf: Home.Taf) -> some View {
         HStack(spacing: 12) {
             TafAvatar(name: taf.name, color: taf.color, size: 34)

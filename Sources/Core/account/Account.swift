@@ -199,4 +199,9 @@ struct Access: Decodable, Equatable {
     /// Whether this person manages the taf, as the iPad's `manages`: without KIFF's answer for
     /// it (not read yet, or failed), nothing is shown.
     static func manages(_ access: Access?) -> Bool { access?.manage ?? false }
+
+    /// Whether the taf was shared with this person to use, not theirs to manage, as the iPad's
+    /// `sharedWithMe` (AppModel.swift:660-663): KIFF's answer says use without manage; no answer
+    /// yet is not "shared".
+    static func sharedWithMe(_ access: Access?) -> Bool { access.map { !$0.manage } ?? false }
 }
