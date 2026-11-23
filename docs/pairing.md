@@ -59,7 +59,14 @@ sign-in pass on the test account comes before any release. The contract is kiff/
 6. **The first Home** (the Overview with no taf and no job listed, for someone who may use Coach):
    board 2, tafs cloud's empty line or the app's "No tafs yet" with what Coach does, **Ask Coach** and
    **How tafs works** (`HowTafsWorksView`: the cards, each opening where it's clicked, and the four
-   legal pages titled as their pages). Account's Legal opens it too.
+   legal pages titled as their pages). Account's Legal opens it too. Between the cards and the
+   legal pages are its help sections (`HelpSections`, the shared `help.*` lines), each only where
+   this Mac can use it, as the iPad's (tafs#1758, #1848):
+   - **Chrome** (`help.chrome_*`), once planque offers this person Chromes (Account › Chrome shows).
+   - **The security key** (`help.security_key_*`), while this Mac approves with one
+     (`Features.macPasskeyApprovals`).
+   - **The emailed code** (`help.code_*`) isn't shown: it points to Account › Sign in with a code,
+     which this Mac doesn't have yet. It comes with that setting.
 7. **A sign-out** leaves an unticked box, with the Terms read again.
 
 ## Adding this Mac with a phone (`PairingPayload`, `KIFFClient.claimPairing`)

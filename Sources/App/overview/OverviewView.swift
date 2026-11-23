@@ -200,6 +200,8 @@ struct OverviewView: View {
     var ownWords: () -> Void = {}
     /// Hands a recipe to Coach, as the iPad's `handRecipeToCoach`.
     var hand: (Recipes.Recipe) -> Void = { _ in }
+    /// Whether planque offers this person Chromes: How tafs works then has Chrome's help section.
+    var chromeOffered = false
     /// Whether the new onboarding is on (`Onboarding.on`): then Home with no taf is the first Home.
     var onboarding = Onboarding.on
     /// Discard a taf being set up (Home's `setting_up[].discard`), on the security key; what to tell the person, or nil.
@@ -309,7 +311,7 @@ struct OverviewView: View {
             Button(words("onboarding.how_it_works")) { showingHowItWorks = true }.buttonStyle(OutlineButtonStyle()).frame(maxWidth: 260)
         }
         .sheet(isPresented: $showingHowItWorks) {
-            HowTafsWorksView { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
+            HowTafsWorksView(chromeOffered: chromeOffered) { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
         }
     }
 

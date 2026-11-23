@@ -138,7 +138,7 @@ let wordsTests: [Test] = [
             ("mk", [1: "one", 21: "one", 11: "other", 2: "other"]),
             ("ca", [1: "one", 2: "other", 1_000_000: "other"]),
             ("km", [1: "other"]), ("lo", [1: "other"]),
-            ("tk", [0: "other", 1: "one", 2: "other"]), ("hi", [0: "one", 1: "one", 2: "other"]),
+            ("tk", [0: "other", 1: "one", 2: "other"]), ("hi", [0: "one", 1: "one", 2: "other"]), ("ur", [0: "other", 1: "one", 2: "other"]),
             ("ru", [1: "one", 21: "one", 11: "many", 2: "few", 12: "many", 5: "many"]),
         ]
         for (language, forms) in cases {
@@ -175,17 +175,17 @@ let wordsTests: [Test] = [
             try expect(forms.subtracting(["other"]).isSubset(of: reached), "\(language) never reaches \(forms.subtracting(reached).sorted())")
         }
     },
-    Test("Arabic and Hebrew are shipped, with every line, and written right to left") {
+    Test("Arabic, Hebrew and Urdu are shipped, with every line, and written right to left") {
         let shipped = try Words.shipped(folder: folder)
-        try expect(shipped.contains("ar") && shipped.contains("he"), "ar and he shipped")
+        try expect(shipped.contains("ar") && shipped.contains("he") && shipped.contains("ur"), "ar, he and ur shipped")
         let english = Set(try words("en").lines.keys)
-        for language in ["ar", "he"] {
+        for language in ["ar", "he", "ur"] {
             let book = try words(language)
             try expect(book.isRightToLeft, "\(language) right to left")
             try expectEqual(Set(book.lines.keys), english)
             try expect(book("home.overview.title") != (try words("en"))("home.overview.title"), "\(language)'s own line")
         }
-        for language in shipped where !["ar", "he"].contains(language) {
+        for language in shipped where !["ar", "he", "ur"].contains(language) {
             try expect(!(try words(language)).isRightToLeft, "\(language) left to right")
         }
     },
