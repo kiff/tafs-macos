@@ -320,9 +320,10 @@ struct TafView: View {
         }
     }
 
-    /// "Version 3 · live", which opens the taf's versions, as the iPad's `versionLine`.
+    /// "Version 3 · live", which opens the taf's versions, as the iPad's `versionLine`; with a trial open, its way back in
+    /// (the iPad's `OpenTrialLink`): the trial's bar and chat are on Chat.
     private func versionLine(_ pages: TafPagesModel) -> some View {
-        VersionLine(model: pages)
+        VersionLine(model: pages, resume: { tab = .chat })
     }
 
     /// The iPad's `StateChip`: the word on its tone at 15%, in a capsule.
@@ -405,9 +406,26 @@ struct CardStack: View {
 struct VersionLine: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
+    /// Back into the open trial, as the iPad's `OpenTrialLink`: "Trying v2 · Resume" beside the line, and Resume the trial
+    /// on its version.
+    var resume: (() -> Void)? = nil
     @State private var open = false
 
     var body: some View {
+        HStack(spacing: 12) {
+            versions
+            if let trial = model.trial, let resume {
+                Button(action: resume) {
+                    Text(words("taf.trying_resume", ["n": String(trial.n)])).font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Theme.amberText).lineLimit(1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("taf.trying-resume")
+            }
+        }
+    }
+
+    private var versions: some View {
         Button { open = true } label: {
             HStack(spacing: 6) {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 13, weight: .semibold)).accessibilityHidden(true)
@@ -419,7 +437,9 @@ struct VersionLine: View {
         }
         .buttonStyle(.plain)
         .task { await model.loadVersions() }
-        .sheet(isPresented: $open) { VersionsView(model: model) { open = false } }
+        .sheet(isPresented: $open) {
+            VersionsView(model: model, close: { open = false }, resume: resume.map { resume -> () -> Void in { open = false; resume() } })
+        }
     }
 }
 
@@ -431,6 +451,8 @@ struct VersionsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let close: () -> Void
+    /// Back into the open trial, on its own version (the iPad's `OpenTrialLink` in `VersionsPanel`); none, no way back here.
+    var resume: (() -> Void)? = nil
     /// The version whose trial is being started.
     @State private var trying: TafVersions.Version?
 
@@ -509,6 +531,11 @@ struct VersionsView: View {
             // Trying a version that isn't live, under a Card of its own, on the security key (`Trials`); one trial a taf.
             if !v.live, model.startsTrials, model.trial == nil {
                 Button(words("version.try_it")) { trying = v }.buttonStyle(OutlineButtonStyle()).fixedSize()
+            }
+            // The version being tried: back into its trial, as the iPad's Resume the trial.
+            if !v.live, model.trial?.n == v.n, let resume {
+                Button(words("version.resume_trial"), action: resume).buttonStyle(OutlineButtonStyle()).fixedSize()
+                    .accessibilityIdentifier("version.resume-trial")
             }
         }
         .padding(14)
