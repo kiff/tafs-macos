@@ -13,6 +13,11 @@ struct TafWorkPanel: View {
     var manages = false
     /// Plan & usage, from the credits fix.
     var openUsage: () -> Void = {}
+    /// Needs you's model, which answers a step a request waits on in place of its line; nil draws the line.
+    var needsYou: NeedsYouModel? = nil
+    /// Whether this person answers the account's held calls (KIFF's `holds.answer`), and the lists read again after.
+    var answersHolds = true
+    var answered: () async -> Void = {}
 
     var body: some View {
         Group {
@@ -86,9 +91,13 @@ struct TafWorkPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
         case .request(let request):
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: request.line).font(.system(size: 14))
-                    .foregroundColor(request.state == "needs_you" ? Theme.amberText : request.state == "failed" ? Theme.no : Theme.soft)
-                    .fixedSize(horizontal: false, vertical: true)
+                // A step the taf handed its owner, answered here too, in place of its line, as the iPad's `request(_:)`:
+                // Home's, which carries the vendor's link when tafs cloud vouched for it, else the request's own.
+                if let step = request.yourStep, let needsYou {
+                    RequestStep(needsYou: needsYou, step: step, line: Self.line(request), answersHolds: answersHolds, answered: answered)
+                } else {
+                    Self.line(request)
+                }
                 // What the run used, in tafs cloud's words, once KIFF has counted it.
                 if let used = request.creditsLine {
                     Text(verbatim: used).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
@@ -132,5 +141,31 @@ struct TafWorkPanel: View {
             }
         }
         .accessibilityIdentifier("taf.health")
+    }
+
+    /// A request's own line, by its state: amber while it needs its owner, red once failed.
+    static func line(_ request: TafRuns.Request) -> some View {
+        Text(verbatim: request.line).font(.system(size: 14))
+            .foregroundColor(request.state == "needs_you" ? Theme.amberText : request.state == "failed" ? Theme.no : Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// A request that waits on a step its taf handed the owner: the step's card while it can still be
+/// answered here (the iPad's `canAnswer(step:)`), Home's copy when listed; else the request's line.
+private struct RequestStep<Line: View>: View {
+    @ObservedObject var needsYou: NeedsYouModel
+    let step: YourStep
+    let line: Line
+    let answersHolds: Bool
+    let answered: () async -> Void
+
+    var body: some View {
+        if needsYou.canAnswer(step: step.handoff) {
+            YourStepCard(model: needsYou, step: needsYou.listedStep(step.handoff) ?? step, answersHolds: answersHolds,
+                         answered: answered, saysWhy: true)
+        } else {
+            line
+        }
     }
 }

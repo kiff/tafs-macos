@@ -186,6 +186,14 @@ final class NeedsYouModel: ObservableObject {
     /// holds (KIFF's `holds.answer`).
     func canAnswerSteps(answersHolds: Bool) -> Bool { answersHolds && account.signMessage != nil }
 
+    /// Whether a step's card still shows, as the iPad's `canAnswer(step:)`: not answered or ended
+    /// here, while a list read before that may still carry it.
+    func canAnswer(step handoff: String) -> Bool { !answeredSteps.contains(handoff) }
+
+    /// The step `handoff` waits on as Home lists it, as the iPad's `yourStep(_:)`: Home's carries
+    /// the vendor's link when tafs cloud vouched for it, a request's own never does.
+    func listedStep(_ handoff: String) -> YourStep? { steps.first { $0.handoff == handoff } }
+
     /// Starts an answer that sign-out can stop (`cancelAnswers`).
     func startAnswer(_ step: YourStep, done: Bool, answersHolds: Bool, answered: @escaping () async -> Void = {}) {
         guard stepAnswers[step.handoff] == nil else { return }
@@ -294,6 +302,38 @@ final class NeedsYouModel: ObservableObject {
         guard answersHolds, let calls = try? await account.didThisHappen() else { return }
         unproven = calls
     }
+
+    /// The answer to "Did this happen?", on the security key, as the iPad's `answerHappened`: KIFF's approval route, so
+    /// the key approves this one answer (`KeyAct.happened`), named in its sheet as the iPad's prompt ("Say it happened:
+    /// {title}"). Then the call leaves the list and the list is read again: KIFF's list is the truth. A closed sheet
+    /// sends nothing and says nothing; "Approve on your phone instead" says to approve on another device; anything else
+    /// says KIFF didn't take it, with why. One answer at a time, as the held calls'.
+    func answerHappened(_ call: Unproven, happened: Bool) async {
+        guard let approveWithKey, answering == nil else { return }
+        let key = Self.happenedKey(call)
+        answering = key
+        defer { answering = nil }
+        let act = KeyAct.happened(proposal: call.proposal, happened)
+        do {
+            _ = try await approveWithKey(act, act.title(Words.app, device: call.title))
+            notTaken[key] = nil
+            unproven.removeAll { $0.proposal == call.proposal }
+            await loadUnproven(answersHolds: true)
+        } catch is CancellationError {
+            notTaken[key] = nil
+        } catch is ApproveOnPhone {
+            notTaken[key] = Self.why(ApproveOnPhone())
+        } catch {
+            notTaken[key] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
+        }
+    }
+
+    /// Whether "Did this happen?" offers Yes and No: for someone who answers held calls, on a Mac that approves with
+    /// its security key. Elsewhere the card says to approve on another device, or nothing.
+    func offersHappened(answersHolds: Bool) -> Bool { answersHolds && approveWithKey != nil }
+
+    /// A "Did this happen?" answer's key in `answering` and `notTaken`, apart from the held calls' ids.
+    nonisolated static func happenedKey(_ call: Unproven) -> String { "happened:\(call.proposal)" }
 
     /// Refuses a call, then reads the list again: KIFF's list is the truth, not this screen's.
     /// The person confirms first, Touch ID or the Mac's password, as the iPad's `answer(_:with:)`
@@ -413,7 +453,7 @@ struct NeedsYouView: View {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
                 }
                 // A step a taf handed its owner comes first, oldest first, as the iPad's.
-                ForEach(model.steps) { step($0) }
+                ForEach(model.steps) { YourStepCard(model: model, step: $0, answersHolds: answersHolds, answered: answered) }
                 // Coach waits on the person in a chat, after the steps, as on the iPad
                 // (NeedsYouView.swift:16-19): Set all aside above them, with two or more.
                 coachWaiting
@@ -476,56 +516,9 @@ struct NeedsYouView: View {
         }
     }
 
-    /// A step a taf handed its owner, as the iPad's `YourStepCard`: tafs cloud's title, the taf,
-    /// what to do and why, the vendor's page only as tafs cloud vouched for it, and Done or Skip
-    /// when this Mac can answer.
-    private func step(_ step: YourStep) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if !step.words.title.isEmpty { Eyebrow(text: step.words.title) }
-            if let name = step.taf?.name, !name.isEmpty {
-                Text(verbatim: name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
-            }
-            Text(verbatim: step.what).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            if !step.why.isEmpty {
-                Text(verbatim: step.why).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
-            }
-            if let link = step.openLink {
-                VStack(alignment: .leading, spacing: 4) {
-                    Button { openURL(link.url) } label: {
-                        Label(link.words, systemImage: "arrow.up.right.square").padding(.horizontal, 16)
-                    }
-                    .buttonStyle(OutlineButtonStyle())
-                    .fixedSize()
-                    // Where it really goes, as tafs cloud read the link.
-                    Text(verbatim: link.host).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.dim)
-                }
-            }
-            if model.canAnswerSteps(answersHolds: answersHolds) {
-                HStack(spacing: 8) {
-                    Button { model.startAnswer(step, done: true, answersHolds: answersHolds, answered: answered) } label: {
-                        Text(verbatim: step.words.done).padding(.horizontal, 16)
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    Button { model.startAnswer(step, done: false, answersHolds: answersHolds, answered: answered) } label: {
-                        Text(verbatim: step.words.skip).padding(.horizontal, 16)
-                    }
-                    .buttonStyle(OutlineButtonStyle())
-                }
-                .fixedSize()
-                .disabled(model.answeringSteps.contains(step.handoff))
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
-        .accessibilityElement(children: .contain)
-    }
-
     /// "Did this happen?", as the iPad's `DidThisHappenCard`: KIFF's words for the call (else its
-    /// title and amount) and for why it asks. The answer is signed like an approval, which this
-    /// Mac can't do yet: for someone who answers held calls, it says to approve on another
+    /// title and amount) and for why it asks. The answer is an approval: on a Mac with its security key, No and Yes
+    /// (`NeedsYouModel.answerHappened`); elsewhere, for someone who answers held calls, it says to approve on another
     /// device, the iPad's line where an approval can't be made (`Biometry.short`).
     private func happened(_ call: Unproven) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -538,11 +531,32 @@ struct NeedsYouView: View {
             if let why = call.statusWords {
                 Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
-            if Self.saysCantApprove(answersHolds: answersHolds, route: model.route) {
+            if model.offersHappened(answersHolds: answersHolds) {
+                // The iPad's two answers, No then Yes, on the security key, with what No does under them.
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        Button(words("record.did_this_happen.no")) { Task { await model.answerHappened(call, happened: false) } }
+                            .buttonStyle(OutlineButtonStyle())
+                            .accessibilityIdentifier("happened.no")
+                        Button(words("record.did_this_happen.yes")) { Task { await model.answerHappened(call, happened: true) } }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .accessibilityIdentifier("happened.yes")
+                        if model.answering == NeedsYouModel.happenedKey(call) { ProgressView().controlSize(.small) }
+                    }
+                    .disabled(model.answering != nil)
+                    Text(words("record.did_this_happen.what_no_does")).font(.system(size: 12)).foregroundColor(Theme.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let line = model.notTaken[NeedsYouModel.happenedKey(call)] {
+                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.no)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } else if Self.saysCantApprove(answersHolds: answersHolds, route: model.route) {
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityIdentifier("happened.\(call.proposal)")
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
@@ -558,7 +572,7 @@ struct NeedsYouView: View {
 
     /// Where the iPad's `ApprovalGate` shows `ApprovalNotReady`: someone who answers held calls,
     /// on a Mac that approves elsewhere, as the held calls' card says it. A Mac with its own
-    /// approval key gets neither the line nor the buttons until its Yes or No is ported.
+    /// approval key gets no line: its security key answers there (`offersHappened`).
     static func saysCantApprove(answersHolds: Bool, route: ApprovalRoute) -> Bool {
         answersHolds && route == .phoneOrPasskey
     }
