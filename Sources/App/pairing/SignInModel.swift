@@ -97,6 +97,9 @@ final class SignInModel: ObservableObject {
     private let enclave: Bool?
     /// This Mac's security key, for a pairing to register; nil asks no key.
     private let securityKey: PairingSecurityKey?
+    /// The ending key's hook (`EndingKeyHook`): told when a session is kept, to make this sign-in's
+    /// ending key, and when it's forgotten, to delete it. It asks nothing and never fails a sign-in.
+    private let endingKey: EndingKeyHook
     /// The last attempt's credential, with the device key it was made for: a new code uses it again
     /// when the claim doesn't prove it, so the key isn't asked again (Windows' `PairingAttempt`).
     private var kept: (passkey: PairingPasskey, deviceKey: Data)?
@@ -105,8 +108,10 @@ final class SignInModel: ObservableObject {
          sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          open: @escaping (URL) -> Void, now: @escaping () -> Date = Date.init, enclave: Bool? = nil,
          securityKey: PairingSecurityKey? = nil, sheet: KIFFSheet? = nil, onboarding: Bool = Onboarding.on,
+         endingKey: EndingKeyHook = .none,
          endSession: @escaping (Session, SigningKey) async -> Void = { _, _ in }) {
         self.endSession = endSession
+        self.endingKey = endingKey
         self.sheet = sheet
         self.onboarding = onboarding
         self.enclave = enclave
@@ -187,6 +192,8 @@ final class SignInModel: ObservableObject {
                 let oldKey = key
                 try DeviceKey.promoteNext(in: store)
                 try sessions.save(got)
+                // This sign-in's ending key, made for the new device key; the old one's is deleted.
+                endingKey.kept(got, pairingKey.keyStore)
                 ChatsExport.removeFiles(in: exportFolder)
                 RememberedHome.forget(in: rememberedList)
                 key = pairingKey
@@ -422,12 +429,13 @@ final class SignInModel: ObservableObject {
         signedOut()
     }
 
-    /// Forgets the session on this Mac, and the security key that went with it. Ending it at KIFF
+    /// Forgets the session on this Mac, and the security key and ending key that went with it. Ending it at KIFF
     /// is the caller's, with the session.
     func signedOut() {
         ChatsExport.removeFiles(in: exportFolder)
         RememberedHome.forget(in: rememberedList)
         SecurityKeyStore(store: sessions.store).forget()
+        endingKey.forgotten()
         sessions.forget()
         session = nil
         justConnected = false
@@ -444,6 +452,8 @@ final class SignInModel: ObservableObject {
     private func finish(_ got: Session, _ mine: Int) throws {
         guard mine == attempt else { return }
         try sessions.save(got)
+        // This sign-in's ending key, next to its session: made or not, the sign-in goes on.
+        endingKey.kept(got, key.keyStore)
         ChatsExport.removeFiles(in: exportFolder)
         RememberedHome.forget(in: rememberedList)
         session = got

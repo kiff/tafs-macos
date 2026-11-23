@@ -6,7 +6,9 @@ import Foundation
 ///
 /// The owner's rule (docs/approvals.md › Ending access with Touch ID): on a Mac whose device key
 /// is in the Secure Enclave and that can check Touch ID, the person passes Touch ID (biometrics
-/// only, never the Mac's password), then the device key signs planque's `DELETE` of each grant.
+/// only, never the Mac's password: the ending key, made at sign-in and bound to the fingers
+/// enrolled then, signs the iPad's confirmation), then the device key signs planque's `DELETE`
+/// of each grant.
 /// Any other Mac sends nothing and says to approve on the phone. Only ending is done here:
 /// connecting, Sign in again, a key and every approval stay the phone's or the security key's.
 enum ConnectionEnding {
@@ -22,38 +24,11 @@ enum ConnectionEnding {
     static let phoneLine = "approval.device_can_not_approve_approve"
 
     /// Touch ID only with the session's key in the Secure Enclave and biometrics this Mac can
-    /// check now; a software key, a Mac without Touch ID, or Touch ID not set up or locked out
-    /// goes to the phone. planque would take a software key's `DELETE` too, so this is the rule.
+    /// check now with this sign-in's ending key (`EndingKeyCheck.available`); a software key, a
+    /// Mac without Touch ID, Touch ID not set up or locked out, or no ending key goes to
+    /// the phone. planque would take a software key's `DELETE` too, so this is the rule.
     static func route(enclaveKey: Bool, biometrics: Bool) -> Route {
         enclaveKey && biometrics ? .touchID : .phone
-    }
-
-    /// Whether Touch ID's enrolled fingers are still the ones this session first saw
-    /// (`LAContext.evaluatedPolicyDomainState`). On a Mac, anyone who knows its password can add a
-    /// finger in System Settings, so a finger added since would let the password in: a changed
-    /// set ends nothing here until the next sign-in, as the iPad's approval key is renewed when
-    /// its biometrics change.
-    enum Fingers: Equatable {
-        /// The set recorded for this session: Touch ID may end a connection.
-        case same
-        /// Another set, or none: the phone, until the next sign-in.
-        case changed
-        /// Nothing recorded for this session yet: `now` is recorded (`fingersRecord`).
-        case first
-    }
-
-    /// Reads the record kept for `session` (`fingersRecord`) against the set Touch ID has `now`.
-    static func fingers(recorded: Data?, session: String, now: Data?) -> Fingers {
-        // No set, or an id that can't be told apart from its record: never Touch ID.
-        guard let now, !now.isEmpty, !session.utf8.contains(0x0A) else { return .changed }
-        guard let recorded, let cut = recorded.firstIndex(of: 0x0A),
-              recorded[recorded.startIndex..<cut] == Data(session.utf8) else { return .first }
-        return recorded[recorded.index(after: cut)...] == now ? .same : .changed
-    }
-
-    /// What is kept for `session`: the session's id, a line break, then the set's opaque state.
-    static func fingersRecord(session: String, now: Data) -> Data {
-        Data(session.utf8) + Data([0x0A]) + now
     }
 
     /// How an ending went, as Windows' `EndAsync` answers it.
@@ -64,24 +39,27 @@ enum ConnectionEnding {
         var why: String?
         /// Touch ID wasn't passed: nothing was sent.
         var unconfirmed = false
+        /// The ending key is gone (`KeyGone`): nothing was sent, and this Mac goes to the phone.
+        var phone = false
         /// The account changed on the way: nothing more was sent, and nothing is said.
         var stopped = false
     }
 
-    /// Asks once (`confirm`, Touch ID with `prompt` as its reason), then ends each connection in
-    /// turn (`delete`). Nothing is sent unless the prompt was passed, and nothing more once the
-    /// session changed (`current`). A refusal is counted and the next one is still tried.
-    static func end(_ ids: [String], prompt: String,
-                    confirm: (String) async throws -> Void,
+    /// Asks once (`confirm`: Touch ID with `prompt` as its reason, the ending key signing the
+    /// iPad's `confirmation` for `tenant` and `ids`), then ends each connection in turn (`delete`).
+    /// Nothing is sent unless the prompt was passed, and nothing more once the session changed
+    /// (`current`). A refusal is counted and the next one is still tried.
+    static func end(_ ids: [String], tenant: String, prompt: String,
+                    confirm: (String, Data) async throws -> Void,
                     delete: (String) async throws -> Void,
                     current: () async -> Bool,
                     _ say: Words) async -> Outcome {
         guard !ids.isEmpty else { return Outcome() }
         do {
-            try await confirm(prompt)
+            try await confirm(prompt, confirmation(tenant: tenant, ids: ids))
         } catch {
             guard await current() else { return Outcome(left: ids.count, stopped: true) }
-            return Outcome(left: ids.count, unconfirmed: true)
+            return Outcome(left: ids.count, unconfirmed: true, phone: error is KeyGone)
         }
         guard await current() else { return Outcome(left: ids.count, stopped: true) }
         var out = Outcome()
@@ -102,9 +80,11 @@ enum ConnectionEnding {
     }
 
     /// What Disconnect says afterwards, as the iPad's: nothing for a prompt that was closed or a
-    /// session that changed, else planque's refusal.
-    static func disconnectNote(_ outcome: Outcome) -> String? {
-        outcome.stopped || outcome.unconfirmed ? nil : outcome.why
+    /// session that changed, the phone's line for an ending key gone, else planque's refusal.
+    static func disconnectNote(_ outcome: Outcome, _ say: Words) -> String? {
+        if outcome.stopped { return nil }
+        if outcome.phone { return say(phoneLine) }
+        return outcome.unconfirmed ? nil : outcome.why
     }
 
     /// Which of the removed tafs' connections Clear ends and which it keeps, as the iPad's and
@@ -131,10 +111,11 @@ enum ConnectionEnding {
         return parts.joined(separator: " ")
     }
 
-    /// What Clear says afterwards: not done when Touch ID wasn't passed, nothing when the session
-    /// changed, else how it went.
+    /// What Clear says afterwards: not done when Touch ID wasn't passed, the phone's line for an
+    /// ending key gone, nothing when the session changed, else how it went.
     static func clearNote(_ outcome: Outcome, ending: Int, keptFor: [[String]], _ say: Words) -> String? {
         if outcome.stopped { return nil }
+        if outcome.phone { return say(phoneLine) }
         if outcome.unconfirmed { return say("common.not_done_unconfirmed") }
         return cleared(done: ending - outcome.left, kept: keptFor.count, keptFor: keptFor.flatMap { $0 }, left: outcome.left, say)
     }
