@@ -108,6 +108,10 @@ final class CalendarModel: ObservableObject {
 struct CalendarView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CalendarModel
+    /// Home's tafs, so an event opens its own (`Agenda.taf(of:in:)`).
+    var tafs: [Home.Taf] = []
+    /// Opens a taf's page, as the iPad's `opening(_:)` beside the sidebar; none, events open nothing.
+    var open: ((Home.Taf) -> Void)? = nil
     @State private var choosingDate = false
     /// The hour grid's width, for what each week chip keeps (`WeekChip`).
     @State private var gridWidth: CGFloat = 0
@@ -285,7 +289,7 @@ struct CalendarView: View {
                                 .frame(width: Self.hoursWidth, alignment: .leading).padding(.top, 3)
                             ForEach(model.days, id: \.self) { day in
                                 VStack(alignment: .leading, spacing: 2) {
-                                    ForEach(page.events(on: day, hour: hour)) { block($0) }
+                                    ForEach(page.events(on: day, hour: hour)) { event in opening(event) { block(event) } }
                                 }
                                 .padding(.vertical, 3)
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -458,7 +462,7 @@ struct CalendarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(heading(day)).font(.system(size: 14, weight: .semibold))
                             .foregroundColor(day == model.today ? Theme.amberText : Theme.ink)
-                        ForEach(page.events(on: day)) { eventRow($0) }
+                        ForEach(page.events(on: day)) { event in opening(event) { eventRow(event) } }
                     }
                 }
             }
@@ -478,6 +482,15 @@ struct CalendarView: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
         .accessibilityElement(children: .combine)
+    }
+
+    /// A taf's work opens the taf, as the iPad's `opening(_:)`: a taf this person no longer has listed opens nothing.
+    @ViewBuilder private func opening<Content: View>(_ event: Agenda.Event, @ViewBuilder label: () -> Content) -> some View {
+        if let open, let taf = Agenda.taf(of: event, in: tafs) {
+            Button { open(taf) } label: { label() }.buttonStyle(.plain)
+        } else {
+            label()
+        }
     }
 
     private func heading(_ day: String) -> String {
