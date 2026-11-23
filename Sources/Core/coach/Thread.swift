@@ -114,6 +114,32 @@ enum Thread {
         /// A questions card's questions, each Coach's own (`Question`). A card whose questions, or
         /// any one of them, don't read isn't read at all, as the iPad's `LenientShown`.
         var questions: [Question] = []
+        /// planque's grant an approval or a sign-in asks about (`grant`), as the iPad's
+        /// `SetupComponent.grant`: what a newer request for the same connection is known by.
+        var grant: String? = nil
+        /// KIFF's draft of the taf's Cards an approval signs (`draft`), as the iPad's
+        /// `SetupComponent.draft`: read from KIFF by this id (`AccountClient.draft(id:)`).
+        var draft: String? = nil
+        /// tafs cloud's mark of what an approval's fingerprint covers (`signs`), as the iPad's
+        /// `SetupComponent.Signs`; nil from a tafs cloud that doesn't say.
+        var signs: Signs? = nil
+        /// An approval's answer as tafs cloud stores it, settled and in no language (`answer.answer`):
+        /// `approved`, `already approved`, `connected`, `declined` or `failed: <why>`, as the iPad's
+        /// `CardAnswer.answer`. Nil from a tafs cloud that doesn't send it.
+        var stored: String? = nil
+
+        /// tafs cloud's mark on an approval (`signs`), read leniently as the iPad's
+        /// `SetupComponent.Signs`: a field of another shape is none, never the card unread.
+        struct Signs: Equatable {
+            /// The taf's Card is in this fingerprint; nil when tafs cloud didn't say.
+            var card: Bool?
+            /// The Card section's heading when it isn't: "Its Card: you approve it next".
+            var words: String?
+            /// `tap` or `fingerprint`, as tafs cloud decides Approve; nil when it didn't say.
+            var takes: String?
+            /// The Card isn't signed by this approval: it comes next.
+            var cardNext: Bool { card == false }
+        }
 
         /// A hand-over's outcome (`answer.outcome`): the taf made, the version it became, why it
         /// failed, or the plan it needs.
@@ -203,6 +229,12 @@ enum Thread {
         var isChoice: Bool { type == "confirm" && !options.isEmpty }
         /// A card whose answer is a signature: approving a connection or a Card.
         var grants: Bool { type == "approval" || type == "sign_in" }
+        /// A card drawn as what it asks, with its pills or "Needs you · a question": a card with
+        /// words or an answer, never a drive's. A drive card is Coach asking to drive the phone's
+        /// own screen, approved only there (docs/drive.md): never a question to this Mac.
+        var drawsAsChoice: Bool {
+            type != "drive" && (title != nil || text != nil || waitsForPerson || answered != nil)
+        }
     }
 
     enum Item: Identifiable, Equatable {
@@ -245,16 +277,17 @@ enum Thread {
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider, grant, draft, signs }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent, improves, note }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
         enum ConnectionKeys: String, CodingKey { case done, words }
         enum WiderKeys: String, CodingKey { case words }
+        enum SignsKeys: String, CodingKey { case card, words, takes }
         enum WorkKeys: String, CodingKey { case ms, steps }
         enum WorkStepKeys: String, CodingKey { case words, failed, error, why, notMade = "not_made" }
         enum OptionKeys: String, CodingKey { case label, value }
-        enum AnswerKeys: String, CodingKey { case words, state, by, outcome }
+        enum AnswerKeys: String, CodingKey { case words, state, by, outcome, answer }
         enum HeldKeys: String, CodingKey { case exception }
 
         init(from decoder: Decoder) throws {
@@ -392,6 +425,18 @@ enum Thread {
                         made.widerWords = ((try? wider.decodeIfPresent(String.self, forKey: .words)) ?? nil)
                             .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                     }
+                    made.grant = text(.grant)
+                    made.draft = text(.draft)
+                    // As the iPad's `SetupComponent.Signs`: lenient, a field of another shape is none.
+                    if let signs = try? shown.nestedContainer(keyedBy: SignsKeys.self, forKey: .signs) {
+                        made.signs = Card.Signs(card: (try? signs.decodeIfPresent(Bool.self, forKey: .card)) ?? nil,
+                                                words: ((try? signs.decodeIfPresent(String.self, forKey: .words)) ?? nil)
+                                                    .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 },
+                                                takes: (try? signs.decodeIfPresent(String.self, forKey: .takes)) ?? nil)
+                    }
+                    // The settled answer, as the iPad's `CardAnswer.answer`: text, or none.
+                    made.stored = ((try? answer?.decodeIfPresent(String.self, forKey: .answer)) ?? nil)
+                        .flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0.trimmingCharacters(in: .whitespaces) }
                     items.append(.card(made, position: position))
                 case "held":
                     guard let held = try? item.nestedContainer(keyedBy: HeldKeys.self, forKey: .held),
@@ -442,6 +487,28 @@ enum Thread {
             guard items.indices.contains(index), let at = items[index].at else { return false }
             guard index > 0, let before = items[index - 1].at else { return true }
             return at.timeIntervalSince(before) >= 3600
+        }
+
+        /// The cards in the chat, in its order.
+        var cards: [Card] {
+            items.compactMap { item in if case .card(let card, _) = item { return card } else { return nil } }
+        }
+
+        /// Whether a newer approval in the chat asks about the same connection, as the iPad's
+        /// `SetupThread.replaced` (SetupComponent.swift:450-456, kiff/tafs#138): then this card is
+        /// history, and never shows that connection's live state or its error. Newer is a later
+        /// `at`, or a later place in the chat when either has none. A card with no grant never is.
+        func replaced(_ card: Card) -> Bool {
+            guard let grant = card.grant else { return false }
+            let placed = items.enumerated().compactMap { index, item -> (Int, Card)? in
+                if case .card(let shown, _) = item { return (index, shown) } else { return nil }
+            }
+            guard let mine = placed.first(where: { $0.1.key == card.key }) else { return false }
+            return placed.contains { index, other in
+                guard other.id != card.id, other.type == "approval", other.grant == grant else { return false }
+                if let at = other.at, let before = mine.1.at { return at > before }
+                return index > mine.0
+            }
         }
 
         /// Whether something in this chat waits for the person.

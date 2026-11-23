@@ -50,12 +50,34 @@ enum AppConnections {
         /// Whether planque sent the actions that work for it now: with its health, planque draws the row.
         let hasActions: Bool
         let signedIn: Bool?
+        /// The tools it was asked for (`request.tools`), as the iPad's `Grant.Request.Tool`: each
+        /// with its name in KIFF and the title Setup asked for it by. One that doesn't read is
+        /// left out, never the grant.
+        var tools: [Tool] = []
+
+        /// A tool a grant was asked for, as the iPad's `PlanqueClient.Grant.Request.Tool`.
+        struct Tool: Decodable, Equatable {
+            let tool: String
+            let name: String?
+            /// What it does, in the owner's words, as Setup asked for it.
+            let title: String?
+            enum CodingKeys: String, CodingKey { case tool, name, title }
+            init(tool: String, name: String? = nil, title: String? = nil) { self.tool = tool; self.name = name; self.title = title }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                tool = try c.decode(String.self, forKey: .tool)
+                name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? nil
+                title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+            }
+            /// Its name in KIFF and at the relay: the Card's action.
+            var action: String { name ?? tool }
+        }
 
         enum CodingKeys: String, CodingKey {
             case id, status, title, account, request, health, actions, entry
             case statusWords = "status_words", vendorName = "vendor", agentName = "agent_name", usedBy = "used_by", signedIn = "signed_in"
         }
-        enum RequestKeys: String, CodingKey { case server, agent, connector, kind }
+        enum RequestKeys: String, CodingKey { case server, agent, connector, kind, tools }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -81,6 +103,11 @@ enum AppConnections {
             throughProvider = request?.contains(.connector) == true && ((try? request?.decodeNil(forKey: .connector)) ?? true) == false
             kind = (try? request?.decodeIfPresent(String.self, forKey: .kind)) ?? nil
             vendor = text(.vendorName) ?? server
+            struct Lenient: Decodable {
+                let tool: Tool?
+                init(from decoder: Decoder) throws { tool = try? Tool(from: decoder) }
+            }
+            tools = (((try? request?.decodeIfPresent([Lenient].self, forKey: .tools)) ?? nil) ?? []).compactMap(\.tool)
         }
 
         /// planque draws this connection's row: its health and its actions.
@@ -93,6 +120,10 @@ enum AppConnections {
             return nil
         }
         var connected: Bool { status == "connected" }
+        /// planque holds its sign-in and reads what the vendor offers, as the iPad's `listed`.
+        var listed: Bool { status == "listed" }
+        /// planque failed it, or it was ended: its card says so, as the iPad's `setupCardState`.
+        var failed: Bool { status == "failed" || status == "disconnected" }
         var needsReconnect: Bool { status == "needs_reconnect" }
         var takesKey: Bool { kind == "api_key" }
         /// A provider's connection isn't signed in again in place.
@@ -113,6 +144,15 @@ enum AppConnections {
         let id: String
         let taf: String
         var grants: [Grant]
+    }
+
+    /// A tool's title from its approval, as the iPad's `AppModel.toolTitle` (AppModel.swift:5849-5852):
+    /// the first grant tool whose action is this name, by the title Setup asked for it by. Nil
+    /// when none has one: the tool is then said in words (`CallNames.toolWords`).
+    static func toolTitle(_ name: String, in grants: [Grant]) -> String? {
+        guard let title = grants.lazy.flatMap(\.tools).first(where: { $0.action == name })?.title,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return title
     }
 
     /// The account's live connections to an app, as the iPad's `connections(of:in:)`

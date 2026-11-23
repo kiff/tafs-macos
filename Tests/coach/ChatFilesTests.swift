@@ -133,4 +133,19 @@ let coachFileTests: [Test] = [
         files.remove(b.id)
         try expectEqual(files.count, 2)
     },
+    Test("improving a taf, the files wait for the next message and hold nothing; Send's words say what holds it, as the iPad's") {
+        var files = ChatFiles()
+        try expectEqual(files.heldBy(improving: true), false)
+        try expectEqual(files.sendKey(working: false, improving: false), "common.send")
+        try expectEqual(files.sendKey(working: true, improving: false), "coach.send_when_answer_done")
+        let up = PendingFile(id: UUID(), name: "a.pdf", mediaType: "application/pdf", thumbnail: nil, state: .uploading)
+        files.add(up)
+        try expectEqual(files.sendKey(working: false, improving: false), "chat.send_once_files_up")
+        try expectEqual(files.sendKey(working: true, improving: false), "chat.send_once_files_up")
+        // An improvement holds the files back: they hold nothing, and the words go alone.
+        try expectEqual(files.heldBy(improving: true), true)
+        try expectEqual(files.heldBy(improving: false), false)
+        try expectEqual(files.sendKey(working: false, improving: true), "common.send")
+        try expectEqual(files.sendKey(working: true, improving: true), "coach.send_when_answer_done")
+    },
 ]

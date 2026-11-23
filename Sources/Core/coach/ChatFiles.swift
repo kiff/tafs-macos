@@ -134,6 +134,19 @@ struct ChatFiles: Equatable {
     /// the chat is at work, since files go with a message of their own, never into a run.
     func holdsSend(working: Bool) -> Bool { uploading || (working && hasReady) }
 
+    /// Whether an improvement holds these files back, as the iPad's `improvementHoldsFiles`: its
+    /// first message carries none, so the words go alone and the files wait for the next one.
+    func heldBy(improving: Bool) -> Bool { improving && !isEmpty }
+
+    /// Send's words for VoiceOver, as the iPad's composer (SetupChatView.swift:781): once the files
+    /// are up while one still goes up and holds it; when the answer is done while the chat works;
+    /// else Send. Files an improvement holds back hold nothing.
+    func sendKey(working: Bool, improving: Bool) -> String {
+        let held = !heldBy(improving: improving) && holdsSend(working: working)
+        if held && uploading { return "chat.send_once_files_up" }
+        return working ? "coach.send_when_answer_done" : "common.send"
+    }
+
     /// The ready files, taken for the message being sent. Ones that failed stay.
     mutating func take() -> [PendingFile] {
         let ready = files.filter { $0.ref != nil }

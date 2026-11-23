@@ -41,4 +41,15 @@ enum CallNames {
         let words = name.split(whereSeparator: { $0 == "_" || $0 == "-" }).joined(separator: " ")
         return words.isEmpty ? tool : words
     }
+
+    /// A vendor as people say it, as the iPad's `KIFFMapping.vendorWords`: "stripe-mcp" or
+    /// "mcp.stripe.com" is "Stripe".
+    static func vendorWords(_ vendor: String) -> String {
+        var v = vendor.lowercased()
+        if v.hasPrefix("mcp.") { v.removeFirst(4) }
+        for suffix in ["-mcp", "_mcp", ".mcp"] where v.hasSuffix(suffix) { v.removeLast(suffix.count) }
+        if let dot = v.firstIndex(of: ".") { v = String(v[..<dot]) }
+        guard let first = v.first else { return vendor }
+        return first.uppercased() + v.dropFirst().replacingOccurrences(of: "-", with: " ")
+    }
 }
