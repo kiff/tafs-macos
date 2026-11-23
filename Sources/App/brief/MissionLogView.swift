@@ -10,6 +10,9 @@ struct MissionLogView: View {
     var zone: String?
     let load: () async -> MissionLog?
     let close: () -> Void
+    /// Ask Coach about the mission, as the iPad's (BriefView.swift:311-315): its title in Coach's box, Coach open. Only
+    /// for someone who may use Coach; nil otherwise.
+    var askCoach: (() -> Void)? = nil
     @State private var log: MissionLog?
     @State private var read = false
 
@@ -23,6 +26,13 @@ struct MissionLogView: View {
             .padding(20)
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    Text(words("mission.read_only")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    if let askCoach {
+                        Button(action: askCoach) { Label(words("coach.ask"), systemImage: "sparkle") }
+                            .buttonStyle(OutlineButtonStyle(color: Theme.coach))
+                            .frame(maxWidth: 220)
+                            .accessibilityIdentifier("mission.ask-coach")
+                    }
                     if let log {
                         ForEach(MissionLogDays.days(log.items, words: words, time: AccountTime(zone)), id: \.title) { day in
                             Eyebrow(text: day.title)
