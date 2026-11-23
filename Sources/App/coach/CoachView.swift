@@ -270,6 +270,16 @@ final class CoachModel: ObservableObject {
         newChat()
     }
 
+    /// A job handed to Coach from the Overview or the gallery, as the iPad's `handRecipeToCoach`
+    /// (AppModel.swift:8536-8542): a new conversation with the job's words in the box, to edit and
+    /// send. Nothing is sent. Before Coach is read, the new conversation starts once it is, and the
+    /// words wait in the box (`newChat` leaves the box as it is).
+    func handRecipe(_ words: String) {
+        guard isCoach else { return }
+        startNewTaf()
+        draft = words
+    }
+
     /// Coach's past chats, for Previous conversations, as the iPad's `setupChats`.
     @Published private(set) var chats: [CoachChat] = []
 
