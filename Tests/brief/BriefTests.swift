@@ -35,6 +35,16 @@ let missionLogAnswer = #"""
 private func decoded<T: Decodable>(_ body: String) throws -> T { try JSONDecoder().decode(T.self, from: Data(body.utf8)) }
 
 let briefTests: [Test] = [
+    Test("a mission's log offers Ask Coach as the iPad's, only where Coach may be used: its title in Coach's box (sources)") {
+        let log = try String(contentsOf: URL(fileURLWithPath: "Sources/App/brief/MissionLogView.swift"), encoding: .utf8)
+        try expect(log.contains("if let askCoach {") && log.contains(#"words("coach.ask")"#), "Ask Coach, when given")
+        try expect(log.contains(#"words("mission.read_only")"#), "read only, newest first")
+        let brief = try String(contentsOf: URL(fileURLWithPath: "Sources/App/brief/BriefView.swift"), encoding: .utf8)
+        // Given only through startNextMove, which the window gives only to someone who may use Coach.
+        try expect(brief.contains("askCoach: startNextMove.map { start in { log = nil; start(shown.title) } }"), "its title, the log closed")
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        try expect(window.contains("startNextMove: mayUseCoach ? startNextMove : nil"), "only for someone who may use Coach")
+    },
     Test("the brief is read as tafs cloud sends it: a decision it can't draw is left out, never the brief") {
         let brief: Brief = try decoded(briefAnswer)
         try expectEqual(brief.decisions.map(\.id), ["connection:taf_2:stripe", "hold:h_1", "step:ho_9"])
