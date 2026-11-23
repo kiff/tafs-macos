@@ -136,7 +136,7 @@ struct ReceiptSheet: View {
             Label(words("receipt.checked_on_device", ["device": words("device.mac")]), systemImage: "checkmark.seal.fill")
                 .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
             Text(words("receipt.checked_why")).font(.system(size: 13)).foregroundColor(Theme.soft)
-            issued
+            receiptFacts
             fullReceipt(signer: signer)
             copyButton
         }
@@ -159,6 +159,7 @@ struct ReceiptSheet: View {
                 .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
             Text(what).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             if let why { Text(why).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            receiptFacts
             fullReceipt(signer: nil)
             copyButton
         }
@@ -178,11 +179,12 @@ struct ReceiptSheet: View {
         }
     }
 
-    /// When KIFF issued it; the receipt's id and signer are under "Show the full receipt".
-    @ViewBuilder private var issued: some View {
-        if let at = steps.issuedAt {
-            Text(words("receipt.issued", ["at": dateTime(at)])).font(.system(size: 11.5, design: .monospaced)).foregroundColor(Theme.dim)
-        }
+    /// The decision and when KIFF issued it, as the iPad's `receiptFacts` (`RecordView.swift:569-576`),
+    /// in the checked and the failed panel; the receipt's id and signer are under "Show the full receipt".
+    private var receiptFacts: some View {
+        let lines = [entry.decisionWords(words)] + (steps.issuedAt.map { [words("receipt.issued", ["at": dateTime($0)])] } ?? [])
+        return Text(verbatim: lines.joined(separator: " · ")).font(.system(size: 11.5, design: .monospaced)).foregroundColor(Theme.dim)
+            .textSelection(.enabled)
     }
 
     /// Every step KIFF signed, with its hash, and the signature, as the iPad's.

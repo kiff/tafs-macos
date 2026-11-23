@@ -165,6 +165,10 @@ this Mac. Nothing opens outside the app.
 - **Open in the taf's chat** (`record.open_taf_chat`), full width, for a line whose taf the person
   lists: it closes the sheet (and a case's) and opens the taf's page on its chat, through the shell's
   own `open` (`EnvironmentValues.openTaf`, set by `ShellView` on the screen it draws).
+- **The receipt's facts line**, in the checked and the failed panel, as the iPad's `receiptFacts`
+  (RecordView.swift:569-576): its decision (`receipt.decision.*`, `Record.Entry.decisionWords`: who
+  answered a held call, else what its Card did) and when KIFF issued it (`receipt.issued`), 11.5
+  monospaced `dim`, selectable.
 - **The full receipt** (each step's hash, the signature's ends) and **Copy receipt**.
 - **A line without a KIFF receipt opens its facts only**, with Open in the taf's chat: no check, and
   nothing KIFF signed, as the iPad's.

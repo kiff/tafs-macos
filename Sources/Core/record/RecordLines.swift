@@ -46,6 +46,21 @@ extension Record.Entry {
         }
     }
 
+    /// The receipt's decision, in its facts line, as the iPad's `ReceiptView.decisionWords`
+    /// (`RecordView.swift:705-715`): who answered a held call, else what its Card did.
+    func decisionWords(_ words: Words) -> String {
+        if let answer {
+            let who = answerer(words)
+            return answer == "refused" ? words("receipt.decision.held_refused_by", ["who": who]) : words("receipt.decision.held_approved_once_by", ["who": who])
+        }
+        switch kind {
+        case "refused": return words("receipt.decision.refused_by_card")
+        // Still waiting: the Card held it, it didn't allow it.
+        case "held": return words("receipt.decision.held_by_card")
+        default: return ownerApproved ? words("receipt.decision.held_approved_by_you") : words("receipt.decision.allowed_by_card")
+        }
+    }
+
     /// What became of it at the tool.
     func resultLine(_ words: Words) -> String {
         switch kind {
