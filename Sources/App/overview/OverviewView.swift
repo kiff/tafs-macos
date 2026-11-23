@@ -59,6 +59,12 @@ final class OverviewModel: ObservableObject {
     }
 
     /// The taf being set up by this KIFF agent, as Home lists it (`setting_up`); nil for any other.
+    /// The tafs being set up, as Home last listed them: the Overview's and the sidebar's.
+    var settingUpList: [SettingUp] {
+        if case .loaded(let page) = state { return page.settingUp }
+        return []
+    }
+
     func settingUp(_ agent: String) -> SettingUp? {
         if case .loaded(let page) = state { return page.settingUp.first { $0.kiffAgent == agent } }
         return nil
@@ -495,6 +501,8 @@ struct SettingUpRow: View {
     @Environment(\.words) private var words
     let taf: SettingUp
     let discard: ((SettingUp) async -> String?)?
+    /// In the sidebar, among the tafs: drawn as a taf's row there (34 avatar, no panel), as the iPad's sidebar.
+    var inSidebar = false
     @State private var confirming = false
     @State private var discarding = false
     @State private var note: String?
@@ -502,7 +510,7 @@ struct SettingUpRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                TafAvatar(name: taf.name, color: taf.color, size: 32)
+                TafAvatar(name: taf.name, color: taf.color, size: inSidebar ? 34 : 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: taf.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                     if let finish = taf.finishWords {
@@ -516,8 +524,10 @@ struct SettingUpRow: View {
                 Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .padding(inSidebar ? 0 : 12)
+        .padding(.vertical, inSidebar ? 8 : 0)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(inSidebar ? Color.clear : Theme.panel))
+        .accessibilityElement(children: .contain)
     }
 
     private func button(_ shown: SettingUp.Discard.Words) -> some View {

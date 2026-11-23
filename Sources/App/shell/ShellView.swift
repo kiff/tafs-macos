@@ -15,6 +15,10 @@ struct ShellView: View {
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
+    /// The tafs being set up, among the person's tafs as the iPad's sidebar lists them (HomeSplitView.swift:343-357):
+    /// by name, with tafs cloud's Finish setting up line, and Discard for the person who started it (`discard`).
+    var settingUp: [SettingUp] = []
+    var discard: ((SettingUp) async -> String?)?
     /// The calls held for the person, listed under NEEDS YOU above the tafs.
     var held: [HeldRow] = []
     /// The open taf's page, drawn in place of the screen.
@@ -108,6 +112,7 @@ struct ShellView: View {
                         .padding(.horizontal, -10)
                         .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
                     }
+                    ForEach(settingUp) { SettingUpRow(taf: $0, discard: discard, inSidebar: true) }
                     jobs
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

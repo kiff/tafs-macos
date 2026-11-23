@@ -78,13 +78,17 @@ amber with a warning, and the warning takes the same colour.
   each (`not_counted.lines[].words`: "Coach, included · 3 runs"). A reason with no words, or
   one that doesn't read, is left out, never the others.
 - tafs cloud's note under them.
+- **Where to buy on a computer**, in the balance's panel, for whoever manages billing: "Buy Solo
+  or credits in the tafs app on your phone." (`billing.buy_on_phone`), and **Get Team on kiff.dev**
+  (`billing.team_on_web`), which opens `kiff.dev/dashboard/checkout` (`Usage.teamCheckout`), as
+  every desktop says it. Nothing is bought here.
 - Every line is drawn as sent (`Text(verbatim:)`).
 - **Each half is read on its own.** One that can't be read says so and leaves the other.
 
 ## Not on the Mac
 
 Buying credits or a plan, restoring purchases and raising the spend limit. The phones do
-these through their stores; the Mac has no store. So an admin answers a request here only by
+these through their stores; the Mac has no store, so it says where to buy (above). So an admin answers a request here only by
 declining it: the iPad's Raise the limit (signed with the approval key) and Approve (buying the
 pack) aren't on the Mac. Who bills the plan (`billingPanel`), Manage, and a taf's runs behind its
 line are not built.

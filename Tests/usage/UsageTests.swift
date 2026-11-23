@@ -63,4 +63,10 @@ let usageReadTests: [Test] = [
         let blank = balanceAnswer.replacingOccurrences(of: #""home_line":null"#, with: #""home_line":"  ""#)
         try expectEqual(try AccountClient.decoder.decode(Usage.Balance.self, from: Data(blank.utf8)).homeLine, nil)
     },
+    Test("on a computer, Team is bought on kiff.dev's checkout; Solo and credits are the phone's") {
+        try expectEqual(Usage.teamCheckout.absoluteString, "https://kiff.dev/dashboard/checkout")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(words("billing.buy_on_phone"), "Buy Solo or credits in the tafs app on your phone.")
+        try expectEqual(words("billing.team_on_web"), "Get Team on kiff.dev")
+    },
 ]

@@ -3,6 +3,10 @@ import Foundation
 /// Plan and usage, as tafs cloud says them: the balance now, and the period's credits. The
 /// app draws the words and the meter; it works out no amount itself.
 enum Usage {
+    /// Where Team is bought, on kiff.dev: the desktops have no store of their own, so Solo and credits are the phone's
+    /// (`billing.buy_on_phone`) and Team is this page's (`billing.team_on_web`).
+    static let teamCheckout = URL(string: "https://kiff.dev/dashboard/checkout")!
+
     /// The balance now (`GET /v1/usage/balance`).
     struct Balance: Decodable, Equatable {
         /// `ok`, `warning` or `waiting` (the tafs wait for credits, a limit or a plan).
