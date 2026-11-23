@@ -20,8 +20,7 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
 }
 
 /// What no source may name: planque's approve and confirm, and any grant's route but the grants read. One exception, in the
-/// open (the PM's 03:48, kiff/work#20): KIFF's draft confirm, exactly this line, in `KeyAct` alone, signed by the security
-/// key as Approve once is.
+/// open: KIFF's draft confirm, exactly this line, in `KeyAct` alone, signed by the security key.
 enum PlanqueBan {
     static let kiffDraftConfirm = #"case .confirmTrial(let id, _), .confirmDraft(let id, _): return "/v1/me/agent-drafts/\(CloudClient.escaped(id))/confirm""#
 
@@ -102,8 +101,8 @@ let planqueRoutesTests: [Test] = [
         for (path, text) in all {
             if let named = PlanqueBan.names(path: path, text: text) { throw Failure(description: "\(path) names \(named)") }
         }
-        // KIFF's draft confirm, the one such path a source names: once, in `KeyAct`, where the security key signs it (the
-        // PM's 03:48, kiff/work#20). planque's approve and confirm, and every grant's sub-route, stay banned.
+        // KIFF's draft confirm, the one such path a source names: once, in `KeyAct`, where the security key signs it.
+        // planque's approve and confirm, and every grant's sub-route, stay banned.
         let allowedIn = all.filter { $0.text.contains(PlanqueBan.kiffDraftConfirm) }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
         try expectEqual(allowedIn, ["KeyApproval.swift"])
         // Every line of code that names planque's account routes or a grants list, exactly: the
