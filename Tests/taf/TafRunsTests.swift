@@ -29,6 +29,21 @@ let runsPageAnswer = #"""
 """#
 
 let tafRunsTests: [Test] = [
+    Test("a request that waits on a step its taf handed the owner carries that step (your_step), as the iPad's TafWork.Request") {
+        let request = { (step: String) in
+            try AccountClient.decoder.decode(TafRuns.Request.self, from: Data((#"{"id":"r1","at":"2026-11-15T09:00:00Z","state":"needs_you","line":"Waits for your step","your_step":"# + step + "}").utf8))
+        }
+        let waiting = try request(#"{"handoff":"h1","taf":{"id":"t1","name":"Refunds"},"what":"Approve the transfer in Qonto","why":"Over the Card's limit","words":{"title":"Your step","done":"Done","skip":"Skip it"}}"#)
+        try expectEqual(waiting.yourStep?.handoff, "h1")
+        try expectEqual(waiting.yourStep?.what, "Approve the transfer in Qonto")
+        try expectEqual(waiting.yourStep?.words.done, "Done")
+        try expectEqual(waiting.line, "Waits for your step")
+        // A step that doesn't read is none, and the request is still read, with its line.
+        let odd = try request("7")
+        try expectEqual(odd.yourStep, nil)
+        try expectEqual(odd.line, "Waits for your step")
+        try expectEqual(try AccountClient.decoder.decode(TafRuns.Request.self, from: Data(#"{"id":"r2","at":"2026-11-15T09:00:00Z"}"#.utf8)).yourStep, nil)
+    },
     Test("the runs a taf kept read as the iPad's RunsPage: each run's words, what it used, where its result went") {
         let page = try AccountClient.decoder.decode(TafRuns.Page.self, from: Data(runsPageAnswer.utf8))
         try expectEqual(page.requests.map(\.id), ["r2", "r1"])
