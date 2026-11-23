@@ -79,7 +79,11 @@ one go on their own.
   (`approval.cancelled_nothing_approved_request_kept`); any other failure says it wasn't sent
   (`common.not_sent_unconfirmed`). Neither signs nor sends. Those words show as they are:
   only KIFF's own refusal reads "KIFF didn't take the answer: …" (`needs_you.refused.other`), as
-  the iPad's `lastError` (`AppModel.swift:2972-2979` against `:2994`).
+  the iPad's `lastError` (`AppModel.swift:2972-2979` against `:2994`). Its why is never KIFF's
+  code: a reason the iPad names (`refusalWords`: `self_review`, the approver rules, …) in its
+  words, else the app's line for the status, as the iPad's `KIFFError.server` reads through
+  `PlainError.words(status:)` (`StepRefusal.plainKey`). The same for Approve once, Extra room
+  and "Did this happen?" (`answerRefusedWords`).
   - **Mac difference:** the summary is the call's title, else its action, as its card shows
     it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
     for a call without arguments) isn't ported yet.
@@ -244,7 +248,9 @@ read that fails keeps the list.
   as the iPad's prompt ("Say it happened: {title}", "Say it didn't happen: {title}"). Then the
   call leaves the list and the list is read again; the first answer stands. A closed sheet
   sends nothing and says nothing, "Approve on your phone instead" says to approve on another
-  device, and KIFF's refusal says "KIFF didn't take the answer" with why. One answer at a
+  device. KIFF's refusal reads the list again, so a call answered elsewhere leaves at once,
+  and while the call is still listed it says "KIFF didn't take the answer" with why, in the
+  app's words. One answer at a
   time, as the held calls'. Offered only for someone who answers held calls
   (`NeedsYouModel.offersHappened`).
 - On a Mac without the key, for someone who answers held calls, the card says to approve on

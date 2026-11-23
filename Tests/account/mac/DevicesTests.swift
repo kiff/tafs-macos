@@ -89,6 +89,61 @@ let accountScreenTests: [Test] = [
         try expectEqual(model.passkeys.count, 2)
         try expectEqual(model.passkeysUnread, "503")
     }),
+    Test("Remove is offered only for one of the account's own, to an owner or admin, on a Mac with its security key", awaiting: { @MainActor in
+        let (model, _) = model([(200, passkeysAnswer)])
+        await model.loadPasskeys()
+        let (own, computers) = (model.passkeys[0], model.passkeys[1])
+        try expectEqual(model.offersRemove(own), false)
+        model.approveWithKey = { _, _ in Data() }
+        try expectEqual(model.offersRemove(own), false)
+        model.managesPasskeys = true
+        try expectEqual(model.offersRemove(own), true)
+        try expectEqual(model.offersRemove(computers), false)
+    }),
+    Test("a passkey removed on the security key: the act named as the iPad's prompt, then it leaves and the list is read again", awaiting: { @MainActor in
+        let after = #"{"passkeys":[{"name":"Mac's security key","device_id":"dev_1"}]}"#
+        let (model, transport) = model([(200, passkeysAnswer), (200, after)])
+        await model.loadPasskeys()
+        var approved: [(KeyAct, String)] = []
+        model.approveWithKey = { act, title in approved.append((act, title)); return Data() }
+        model.managesPasskeys = true
+        await model.removePasskey(model.passkeys[0])
+        try expectEqual(approved.map(\.0), [KeyAct.removePasskey(id: "pk_1")])
+        try expectEqual(approved.map(\.1), [Words.app("settings.devices.passkey_remove_prompt", ["name": "iPhone"])])
+        try expectEqual(model.passkeys.map(\.name), ["Mac's security key"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/me/passkeys", "/v1/me/passkeys"])
+        try expectEqual(model.passkeyNotRemoved, nil)
+        try expectEqual(model.removingPasskey, nil)
+        // A computer's own is never sent.
+        await model.removePasskey(model.passkeys[0])
+        try expectEqual(approved.count, 1)
+    }),
+    Test("removing a passkey: a closed key sheet says nothing; KIFF's refusal says it didn't go through, in the app's words", awaiting: { @MainActor in
+        let (model, transport) = model([(200, passkeysAnswer)])
+        await model.loadPasskeys()
+        model.managesPasskeys = true
+        model.approveWithKey = { _, _ in throw CancellationError() }
+        await model.removePasskey(model.passkeys[0])
+        try expectEqual(model.passkeyNotRemoved, nil)
+        try expectEqual(model.passkeys.count, 2)
+        model.approveWithKey = { _, _ in throw KIFFError.refused(status: 403, code: "approval_key_required") }
+        await model.removePasskey(model.passkeys[0])
+        let what = Words.app("settings.devices.passkey_remove_prompt", ["name": "iPhone"])
+        try expectEqual(model.passkeyNotRemoved, Words.app("common.didnt_go_through", ["what": what, "why": Words.app("error.not_allowed")]))
+        try expectEqual(model.passkeys.count, 2)
+        try expectEqual(transport.sent.count, 1)
+        model.approveWithKey = { _, _ in throw ApproveOnPhone() }
+        await model.removePasskey(model.passkeys[0])
+        try expectEqual(model.passkeyNotRemoved, Words.app("common.didnt_go_through", ["what": what, "why": Words.app("approval.device_can_not_approve_approve")]))
+    }),
+    Test("Remove's confirm and its last-passkey warning are the iPad's words, and Remove sits on its row (sources)") {
+        let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/Devices.swift"), encoding: .utf8)
+        try expect(source.contains(#"words("settings.devices.passkey_remove_named""#), "Remove {name}?")
+        try expect(source.contains(#"if Passkey.removesLast(passkey, among: model.passkeys) { Text(words("settings.devices.passkey_remove_last")) }"#), "the last one says so first")
+        try expect(source.contains("if model.offersRemove(passkey) {"), "only where offered")
+        let account = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AccountView.swift"), encoding: .utf8)
+        try expect(account.contains("managesPasskeys: model.me?.managesPasskeys ?? false"), "KIFF's role")
+    },
     Test("the default is that a Mac may not sign another device out", awaiting: { @MainActor in
         let transport = CannedTransport([])
         try expectEqual(DevicesModel(account: AccountClient(transport: transport, session: session)).canRemoveOthers, false)
@@ -118,6 +173,21 @@ let accountScreenTests: [Test] = [
             }
             try png.write(to: folder.appendingPathComponent("devices-\(language).png"))
         }
+    }),
+    Test("the screenshot: the passkeys with Remove, on a Mac with its security key", awaiting: { @MainActor in
+        let (model, _) = model([(200, two), (200, passkeysAnswer)])
+        model.approveWithKey = { _, _ in Data() }
+        // Set as the view's task would: a snapshot may draw before it runs.
+        model.managesPasskeys = true
+        await model.load()
+        await model.loadPasskeys()
+        let view = DevicesView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800), managesPasskeys: true)
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 800)), let png = Snapshot.png(bitmap) else {
+            throw Failure(description: "no PNG")
+        }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/devices-passkeys-remove.png"))
     }),
     Test("the screenshots: Devices with each Sign out and the passkeys, view only, light and dark", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")

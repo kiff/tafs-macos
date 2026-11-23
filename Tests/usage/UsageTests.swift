@@ -55,4 +55,39 @@ let usageReadTests: [Test] = [
         _ = try await client.credits(previous: true)
         try expectEqual(transport.sent[1].path, "/v1/usage/credits?period=previous")
     }),
+    Test("the plan's line at the foot is tafs cloud's home_line, only when it sends one") {
+        let none = try AccountClient.decoder.decode(Usage.Balance.self, from: Data(balanceAnswer.utf8))
+        try expectEqual(none.homeLine, nil)
+        let said = balanceAnswer.replacingOccurrences(of: #""home_line":null"#, with: #""home_line":"Your trial ends in 2 days""#)
+        try expectEqual(try AccountClient.decoder.decode(Usage.Balance.self, from: Data(said.utf8)).homeLine, "Your trial ends in 2 days")
+        let blank = balanceAnswer.replacingOccurrences(of: #""home_line":null"#, with: #""home_line":"  ""#)
+        try expectEqual(try AccountClient.decoder.decode(Usage.Balance.self, from: Data(blank.utf8)).homeLine, nil)
+    },
+    Test("where to buy follows tafs cloud's buy: the phone line only when packs or Solo are offered, Team not on Team") {
+        func balance(_ buy: String) throws -> Usage.Balance {
+            let json = balanceAnswer.replacingOccurrences(of: #""buy":{"solo":false,"packs":true}"#, with: #""buy":"# + buy)
+            return try AccountClient.decoder.decode(Usage.Balance.self, from: Data(json.utf8))
+        }
+        // The fixture: packs offered.
+        let packs = try balance(#"{"solo":false,"packs":true}"#)
+        try expect(packs.offersPacks && !packs.offersSolo, "packs offered")
+        try expect(Usage.whereToBuy(packs, plan: "solo") == (true, true), "the phone line and Team")
+        try expect(Usage.whereToBuy(packs, plan: nil) == (true, true), "plan not read: Team shown")
+        try expect(Usage.whereToBuy(packs, plan: "team") == (true, false), "on Team already: no Team link")
+        // Solo offered as an object, as the phones read anything set and not false.
+        let solo = try balance(#"{"solo":{"price":"x"},"packs":false}"#)
+        try expect(solo.offersSolo && !solo.offersPacks, "Solo offered")
+        try expect(Usage.whereToBuy(solo, plan: nil) == (true, true), "Solo: both")
+        // Nothing to sell, or buy null (a company's agreement): neither line.
+        for none in [#"{"solo":false,"packs":false}"#, #"{"solo":null,"packs":null}"#, #"{}"#, "null"] {
+            let b = try balance(none)
+            try expect(Usage.whereToBuy(b, plan: "company") == (false, false), "neither for buy \(none)")
+        }
+    },
+    Test("on a computer, Team is bought on kiff.dev's checkout; Solo and credits are the phone's") {
+        try expectEqual(Usage.teamCheckout.absoluteString, "https://kiff.dev/dashboard/checkout")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(words("billing.buy_on_phone"), "Buy Solo or credits in the tafs app on your phone.")
+        try expectEqual(words("billing.team_on_web"), "Get Team on kiff.dev")
+    },
 ]

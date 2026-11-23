@@ -41,7 +41,8 @@ let approvalsScreenTests: [Test] = [
         await model.load()
         guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
         await model.refuse(calls[0])
-        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": "approver_only"]))
+        // KIFF's code is for the log: the line is the app's for its status, as the iPad's `PlainError.words`.
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": Words.app("error.not_allowed")]))
         try expectEqual(model.count, 1)
     }),
     Test("Refuse asks for Touch ID or the Mac's password first, as the iPad's sign(_:reason:): closed, or failed, nothing is sent", awaiting: { @MainActor in
@@ -115,7 +116,7 @@ let approvalsScreenTests: [Test] = [
     }),
     Test("Did this happen?: a closed key sheet keeps the call and says nothing; the phone's choice and KIFF's refusal each say why", awaiting: { @MainActor in
         let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment"}]}"#
-        let (model, transport) = model([(200, list)])
+        let (model, transport) = model([(200, list), (200, list)])
         await model.loadUnproven(answersHolds: true)
         let call = model.unproven[0], key = NeedsYouModel.happenedKey(call)
         model.approveWithKey = { _, _ in throw CancellationError() }
@@ -126,11 +127,30 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(model.notTaken[key], Words.app("approval.device_can_not_approve_approve"))
         model.approveWithKey = { _, _ in throw KIFFError.refused(status: 409, code: "already_answered") }
         await model.answerHappened(call, happened: true)
-        try expectEqual(model.notTaken[key], Words.app("needs_you.refused.other", ["why": "already_answered"]))
+        // KIFF's refusal reads the list again; the call is still listed, so the app's line for the status says why.
+        try expectEqual(model.notTaken[key], Words.app("needs_you.refused.other", ["why": Words.app("error.changed")]))
         try expectEqual(model.unproven.map(\.proposal), ["p1"])
-        try expectEqual(transport.sent.count, 1)
+        try expectEqual(transport.sent.count, 2)
         // A held call's line isn't this answer's.
         try expectEqual(model.notTaken["p1"], nil)
+    }),
+    Test("Did this happen?: a call KIFF says was answered elsewhere leaves at once, with no line, as the list is read again", awaiting: { @MainActor in
+        let (model, transport) = model([(200, #"{"calls":[{"proposal":"p1","title":"Refund a payment"}]}"#), (200, #"{"calls":[]}"#)])
+        await model.loadUnproven(answersHolds: true)
+        let call = model.unproven[0]
+        model.approveWithKey = { _, _ in throw KIFFError.refused(status: 409, code: "already_answered") }
+        await model.answerHappened(call, happened: false)
+        try expectEqual(model.unproven, [])
+        try expectEqual(model.notTaken[NeedsYouModel.happenedKey(call)], nil)
+        try expectEqual(transport.sent.count, 2)
+    }),
+    Test("Did this happen?: this app's own refusal before anything was sent reads nothing again, and says its why", awaiting: { @MainActor in
+        let (other, sent) = model([(200, #"{"calls":[{"proposal":"p2","title":"Pay a bill"}]}"#)])
+        await other.loadUnproven(answersHolds: true)
+        other.approveWithKey = { _, _ in throw KIFFError.refused(status: 0, code: "no_key") }
+        await other.answerHappened(other.unproven[0], happened: true)
+        try expectEqual(sent.sent.count, 1)
+        try expectEqual(other.notTaken[NeedsYouModel.happenedKey(other.unproven[0])], Words.app("needs_you.refused.other", ["why": "no_key"]))
     }),
     Test("a step is answered as the iPad's: its hand-off read first, the device key signs kiff.handoff.v1, then it leaves the list", awaiting: { @MainActor in
         let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1","what":"Approve the transfer","words":{"done":"Done","skip":"Skip it"}}"#.utf8))
@@ -329,7 +349,11 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("approval.device_can_not_approve_approve"))
         model.answerWithKey = { _, _ in throw KIFFError.refused(status: 403, code: "passkey_not_this_device") }
         await model.approveOnce(calls[0])
-        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": "passkey_not_this_device"]))
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": Words.app("error.not_allowed")]))
+        // A reason KIFF names is the iPad's own words for it.
+        model.answerWithKey = { _, _ in throw KIFFError.refused(status: 403, code: "self_review") }
+        await model.approveOnce(calls[0])
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.self_review"))
         try expectEqual(model.count, 1)
     }),
     Test("a call KIFF says can't be approved once, or without its accounting version, offers no Approve once", awaiting: { @MainActor in
