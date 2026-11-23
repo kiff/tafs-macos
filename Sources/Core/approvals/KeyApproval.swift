@@ -111,9 +111,23 @@ extension PasskeySession {
     /// (`KIFFError`), so the card's line says it.
     func approveOnce(_ call: HeldCall, pin: SecurityKeyPIN?, now: Date = Date()) async throws {
         guard call.canApproveOnce else { throw KIFFError.refused(status: 0, code: "cannot_approve_once") }
+        try await answerWithKey(call, .approveOnce, pin: pin, now: now)
+    }
+
+    /// Extra room, on the security key, as the iPad's (kiff/tafs#211, 6.13): KIFF's `change-card`, which gives the
+    /// call's Card room for this total until it resets and lets this one call go on. KIFF takes it from the key as it
+    /// takes Approve once (`checkPasskeyAnswer`: both grant authority), over the same `kiff.answer.v1` with
+    /// `change-card`, sent to `POST /v1/me/card-exceptions/{id}/change-card`. Offered where approving once can't pass
+    /// a total, so KIFF's `can_approve_once` isn't asked; the accounting version still is.
+    func extraRoom(_ call: HeldCall, pin: SecurityKeyPIN?, now: Date = Date()) async throws {
+        try await answerWithKey(call, .changeCard, pin: pin, now: now)
+    }
+
+    /// One answer that grants authority, on the key: its assertion in `signature.passkey`, beside the same `signed_at`.
+    private func answerWithKey(_ call: HeldCall, _ answer: Answer, pin: SecurityKeyPIN?, now: Date) async throws {
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
         let signedAt = KIFFMessage.time(now)
-        let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: .approveOnce,
+        let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: answer,
                                                 accountingVersion: version, signedAt: signedAt, pin: pin)
         // The assertion's object as the key's answer gave it, and the same signed_at, in sorted keys.
         var body = Data(#"{"signature":{"passkey":"#.utf8)
@@ -121,10 +135,10 @@ extension PasskeySession {
         body.append(Data(#","signed_at":"\#(signedAt)"}}"#.utf8))
         let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
                        "Accept-Language": language, "User-Agent": "tafs-macos"]
-        // The route is the answer's own name (`approve-once`), never spelled here: no source names an approve route
+        // The route is the answer's own name (`Answer.rawValue`), never spelled here: no source names an approve route
         // (`PlanqueRoutesTests`), so a planque one can't slip in beside it.
-        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/" + Answer.approveOnce.rawValue
-        let (status, answer) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
-        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: answer) }
+        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/\(answer.rawValue)"
+        let (status, reply) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
+        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: reply) }
     }
 }

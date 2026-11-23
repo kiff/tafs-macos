@@ -171,7 +171,7 @@ struct SignedInView: View {
             accountHalt.approveWithKey = approveWithKey
             // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
             doorModels.signWithKey = signWithKey
-            needsYou.approveOnceWithKey = approveOnceWithKey
+            needsYou.answerWithKey = answerWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
@@ -206,7 +206,7 @@ struct SignedInView: View {
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
-            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, managesCards: accountModel.me?.managesCards ?? true,
                                                                                             openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
                                                                                             mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
                                                        beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
@@ -357,13 +357,18 @@ struct SignedInView: View {
         }
     }
 
-    /// Approve once on this Mac's security key (`PasskeySession.approveOnce`), named in the PIN sheet as the iPad's
-    /// prompt ("Answer {summary}"); nil without a key on the security key's route, so the card says to approve elsewhere.
-    private var approveOnceWithKey: ((HeldCall) async throws -> Void)? {
+    /// An answer that grants authority on this Mac's security key (`PasskeySession.approveOnce`, `extraRoom`), named in
+    /// the PIN sheet as the iPad's prompt ("Answer {summary}"); nil without a key on the security key's route, so the
+    /// card says to approve elsewhere. A refusal is never the key's.
+    private var answerWithKey: ((HeldCall, Answer) async throws -> Void)? {
         guard let passkey = passkeySession else { return nil }
-        return { call in
+        return { call, answer in
             let title = words("needs_you.prompt.answer", ["summary": call.title ?? call.action])
-            try await askSecurityKey(act: title) { pin in try await passkey.approveOnce(call, pin: pin) }
+            switch answer {
+            case .approveOnce: try await askSecurityKey(act: title) { pin in try await passkey.approveOnce(call, pin: pin) }
+            case .changeCard: try await askSecurityKey(act: title) { pin in try await passkey.extraRoom(call, pin: pin) }
+            case .reject: throw PasskeyRefusal.notAnApproval
+            }
         }
     }
 
