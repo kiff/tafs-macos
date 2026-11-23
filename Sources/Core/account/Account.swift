@@ -65,6 +65,10 @@ struct Me: Decodable, Equatable {
     /// Whether this person manages the account's Cards (KIFF's `cards.manage`), as the iPad's
     /// `managesCards`: halting every taf is theirs. A KIFF that doesn't say leaves it to KIFF.
     var managesCards: Bool { capabilities.map { $0.contains("cards.manage") } ?? true }
+    /// Whether "Allow this from now on" is live: the account's capabilities name `holds.allow`, as the iPad's
+    /// `allowIsLive`. The service says when, and the app never guesses: a list without it, or no list at all, shows no
+    /// button, so nobody taps into a route that isn't there yet.
+    var allowIsLive: Bool { capabilities?.contains("holds.allow") ?? false }
 
     /// Whether this person manages the account's billing (KIFF's `billing.manage`), as the iPad's
     /// `managesBilling` (AppModel.swift:1089-1091): they answer members' requests; anyone else

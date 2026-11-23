@@ -36,8 +36,12 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     let proposalID: String?
     /// What KIFF holds it as (`kind`): a Card unit request ("card_unit") isn't a held call.
     let kind: String?
+    /// Why KIFF holds it, one outcome per Card it breaches (`breaches[].outcome`), as the iPad's
+    /// `breachOutcomes`; nil when KIFF lists none. "Allow this from now on" is offered only when a Card change can lift
+    /// each of them (`HoldAllow.allowable`).
+    let breachOutcomes: [String]?
     /// The held step fills a field in the owner's Chrome (its `browser` block carries `fill` or `sealed_fill`;
-    /// kiff/tafs `docs/chrome.md`, "never an allowing answer without its release"). Only the paired phone's own release
+    /// "never an allowing answer without its release", the Chrome contract). Only the paired phone's own release
     /// opens a fill, and this Mac holds no approval key to make one: it offers no allowing answer for it, only the phone.
     let fillsInChrome: Bool
 
@@ -63,7 +67,7 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         case expiresAt = "expires_at", accountingVersion = "accounting_version"
         case parameters, parameterUnits = "parameter_units"
         case entityID = "entity_id", arguments
-        case proposalID = "proposal_id", kind, browser
+        case proposalID = "proposal_id", kind, breaches, browser
     }
 
     init(from decoder: Decoder) throws {
@@ -89,6 +93,8 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         hasArguments = c.contains(.arguments) && !((try? c.decodeNil(forKey: .arguments)) ?? true)
         proposalID = (try? c.decodeIfPresent(String.self, forKey: .proposalID)) ?? nil
         kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? nil
+        struct Breach: Decodable { let outcome: String }
+        breachOutcomes = ((try? c.decodeIfPresent([Breach].self, forKey: .breaches)) ?? nil)?.map(\.outcome)
         // Any value but null counts, so a fill this app can't read is still never allowed here.
         struct Browser: Decodable {
             let fills: Bool

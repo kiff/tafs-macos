@@ -15,10 +15,17 @@ extension AccountClient {
                     var unit: String?
                     var scale: Int?
                 }
+                /// The grant's scope: the one parameter it's limited on, and the values allowed.
+                struct Resources: Decodable, Equatable { let parameter: String; var values: [String]? }
                 let action: String
                 var title: String?
                 var perActionMax: [PerAction]?
-                enum CodingKeys: String, CodingKey { case action, title, perActionMax = "per_action_max" }
+                var resources: Resources?
+                var entityStates: [String]?
+                var nextSteps: [String]?
+                enum CodingKeys: String, CodingKey {
+                    case action, title, perActionMax = "per_action_max", resources, entityStates = "entity_states", nextSteps = "next_steps"
+                }
             }
             struct Aggregate: Decodable, Equatable {
                 let quantity: String
@@ -26,6 +33,28 @@ extension AccountClient {
                 let window: String
                 var unit: String?
                 var scale: Int?
+                /// What a total counts (`attempts`, `effects`); left out, KIFF counts attempts for a count and effects
+                /// for a sum.
+                var measure: String?
+                /// The parameter a total is kept per, if any.
+                var per: String?
+            }
+            /// A Card as it is in force, which a draft's Card revises (the iPad's `DraftCard.Terms`).
+            struct Terms: Decodable, Equatable {
+                var grants: [Grant]?
+                var aggregates: [Aggregate]?
+                var onExceed: String?
+                var subject: String?
+                var subjects: [String]?
+                var domain: String?
+                var environment: String?
+                var location: String?
+                var validFrom: String?
+                var validUntil: String?
+                enum CodingKeys: String, CodingKey {
+                    case grants, aggregates, onExceed = "on_exceed", subject, subjects, domain, environment, location
+                    case validFrom = "valid_from", validUntil = "valid_until"
+                }
             }
             var grants: [Grant]?
             var aggregates: [Aggregate]?
@@ -33,7 +62,28 @@ extension AccountClient {
             var onExceed: String?
             /// KIFF's own words for the Card, shown as they come.
             var kiffLines: [String]?
-            enum CodingKeys: String, CodingKey { case grants, aggregates, onExceed = "on_exceed", kiffLines = "lines" }
+            /// The Card in force this one revises, and that Card as it is: what "Allow this from now on" checks a
+            /// change against (`HoldAllow.matches`). A Card KIFF marks `unchanged` must read as in force.
+            var revises: String?
+            var current: Terms?
+            var unchanged: Bool?
+            var subject: String?
+            var subjects: [String]?
+            var domain: String?
+            var environment: String?
+            var location: String?
+            var validFrom: String?
+            var validUntil: String?
+            var holdExpiry: String?
+            var revokedAt: String?
+            enum CodingKeys: String, CodingKey {
+                case grants, aggregates, onExceed = "on_exceed", kiffLines = "lines", revises, current, unchanged
+                case subject, subjects, domain, environment, location, validFrom = "valid_from", validUntil = "valid_until"
+                case holdExpiry = "hold_expiry", revokedAt = "revoked_at"
+            }
+
+            /// A Card KIFF says doesn't change, with the Card in force to show for it.
+            var isUnchanged: Bool { unchanged == true && current != nil }
 
             var asksPastLimits: Bool { onExceed == "owner" }
         }
@@ -48,7 +98,15 @@ extension AccountClient {
         var noTools: Bool?
         /// The name it was submitted with, such as the taf's ("Refunds assistant").
         var label: String?
-        enum CodingKeys: String, CodingKey { case id, status, version, cards, label, agentID = "agent_id", noTools = "no_tools" }
+        /// Cards in force the draft retires.
+        var retires: [Retired]?
+        /// The held call it was made from ("Allow this from now on"), as KIFF keeps it.
+        var fromHold: String?
+        enum CodingKeys: String, CodingKey {
+            case id, status, version, cards, label, retires, agentID = "agent_id", noTools = "no_tools", fromHold = "from_hold"
+        }
+
+        struct Retired: Decodable, Equatable { let id: String }
 
         var confirmed: Bool { status == "confirmed" }
         /// KIFF took the owner's signature for it: confirmed, or confirmed and its key claimed since.

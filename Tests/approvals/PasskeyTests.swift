@@ -306,6 +306,10 @@ let approvalsPasskeyTests: [Test] = [
         for call in [cannot, unversioned] {
             do { try await passkey.approveOnce(call, pin: nil); throw Failure(description: "\(call.id) was sent") } catch is KIFFError {}
         }
+        // A fill in Chrome, however it's reached: neither Approve once nor Extra room asks the key.
+        let fill = try heldCall(#"{"id":"e3","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T","accounting_version":3,"browser":{"sealed_fill":{"sealed":"h"}}}"#)
+        do { try await passkey.approveOnce(fill, pin: nil); throw Failure(description: "the fill was sent") } catch is ApproveOnPhone {}
+        do { try await passkey.extraRoom(fill, pin: nil); throw Failure(description: "the fill was sent") } catch is ApproveOnPhone {}
         try await refused(.notAnApproval) {
             try await approver(key).answer(tenant: "t1", callID: "e1", answer: .reject, accountingVersion: 3, signedAt: "t", pin: nil)
         }

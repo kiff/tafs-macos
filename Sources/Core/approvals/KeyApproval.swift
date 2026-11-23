@@ -145,6 +145,9 @@ extension PasskeySession {
 
     /// One answer that grants authority, on the key: its assertion in `signature.passkey`, beside the same `signed_at`.
     private func answerWithKey(_ call: HeldCall, _ answer: Answer, pin: SecurityKeyPIN?, now: Date) async throws {
+        // A fill in Chrome opens only with the phone's release, which this Mac can't make: refused before the key is
+        // asked, whatever drew the answer ("never an allowing answer without its release", the Chrome contract).
+        guard !call.fillsInChrome else { throw ApproveOnPhone() }
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
         let signedAt = KIFFMessage.time(now)
         let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: answer,
