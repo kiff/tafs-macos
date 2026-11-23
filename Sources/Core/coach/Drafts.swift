@@ -117,7 +117,7 @@ extension AccountClient {
         /// "Refunds assistant's Card": the name it was submitted with, never its agent id, as the
         /// iPad's `cardTitle`.
         func cardTitle(_ words: Words) -> String {
-            // Through `visible`, as every other server text here (agentgabo's review): no direction mark can reorder it.
+            // Through `visible`, as every other server text here: no direction mark can reorder it.
             let name = CallNames.visible(label ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return name.isEmpty ? words("card.the_tafs_card") : words("coach.card_of", ["owner": name])
         }
@@ -145,7 +145,7 @@ extension AccountClient {
         /// amount's unit is KIFF's, or the number says it has none: never a guessed currency.
         static func lines(of card: Card, alike: Set<String>, _ words: Words) -> [String] {
             // KIFF's own lines say what an approval grants: through `visible`, so a direction override can't make a cap
-            // read otherwise than it is (agentgabo's review).
+            // read otherwise than it is.
             if let own = card.kiffLines, !own.isEmpty { return own.map(CallNames.visible) }
             var out: [String] = []
             for g in card.grants ?? [] {

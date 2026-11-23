@@ -157,7 +157,7 @@ struct TafView: View {
             // Versions, then who it's shared with, for whoever manages the taf.
             if !folded && (manages || filesEntry != nil) {
                 VStack(alignment: .leading, spacing: 6) {
-                    // One line, Files first: "Files · Version 5 · live", as the iPad's (docs/files.md, the owner's 19 Nov test).
+                    // One line, Files first: "Files · Version 5 · live", as the iPad's (docs/files.md).
                     HStack(spacing: 2) {
                         if let filesEntry {
                             filesEntry

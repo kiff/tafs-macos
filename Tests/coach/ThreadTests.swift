@@ -24,6 +24,19 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let coachThreadTests: [Test] = [
+    Test("a door card (Coach's taf_door_api) is read with its taf and its draft, as the iPad's SetupComponent; without either it's no door") {
+        let page = { (component: String) in
+            try JSONDecoder().decode(Thread.Page.self, from: Data(#"{"working":false,"items":[{"type":"card","card":{"key":"s1#door-1","session":"s1","component":\#(component)}}]}"#.utf8))
+        }
+        let door = { (p: Thread.Page) -> (String, String)? in
+            for item in p.items { if case .card(let card, _) = item, let d = card.door { return (d.taf, d.draft) } }
+            return nil
+        }
+        let read = try page(#"{"type":"taf_door_api","id":"door-1","taf_id":"taf-1","draft_id":"dd-1"}"#)
+        try expect(door(read).map { $0 == ("taf-1", "dd-1") } == true, "its taf and draft")
+        try expect(door(try page(#"{"type":"taf_door_api","id":"door-1","taf_id":"taf-1"}"#)) == nil, "no draft, no door")
+        try expect(door(try page(#"{"type":"notice","id":"n","taf_id":"taf-1","draft_id":"dd-1"}"#)) == nil, "another kind is no door")
+    },
     Test("Coach is the account's, or none before it is started, and reading it sends no time zone", awaiting: {
         let (client, transport) = cloud([(200, setupAnswer), (200, #"{"setup":null,"tools":null}"#)])
         let coach = try await client.coach()
