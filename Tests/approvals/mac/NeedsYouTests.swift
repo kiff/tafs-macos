@@ -322,4 +322,68 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(transport.sent.count, 1)
         try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("approval.device_can_not_approve_approve"))
     }),
+    Test("Allow this from now on: offered only when live, read on the tap, one key approval for the Card, then the call's own Approve once", awaiting: { @MainActor in
+        let held = #"{"exceptions":[{"id":"ce_9","subject":"refunds-1","action":"create_refund","title":"Refund a payment","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"breaches":[{"outcome":"per_action_exceeded"}]}]}"#
+        let cap = #"{"quantity":"amount","max":15000,"unit":"EUR","scale":2}"#
+        let draft = #"{"id":"dr_9","agent_id":"refunds-1","status":"draft","version":"v7","cards":[{"revises":"c1","grants":[{"action":"create_refund","per_action_max":[\#(cap.replacingOccurrences(of: "15000", with: "32000"))]}],"current":{"grants":[{"action":"create_refund","per_action_max":[\#(cap)]}]}}]}"#
+        let offer = #"{"offer":{"changes":[{"mandate_id":"c1","kind":"per_action","before":15000,"after":32000,"unit":"EUR","words_before":"Refunds up to €150 each","words_after":"Refunds up to €320 each"}],"draft":"dr_9","send_held":true}}"#
+        let transport = CannedTransport([(200, held), (200, offer), (200, draft), (200, held), (200, none)])
+        let account = AccountClient(transport: transport, session: session, signMessage: { _ in "SIG" })
+        let model = NeedsYouModel(account: account, route: .passkey, cloud: CloudClient(transport: transport, session: session))
+        await model.load()
+        guard case .loaded(let calls) = model.state, let call = calls.first else { throw Failure(description: "not loaded") }
+        try expect(!model.offersAllow(call, taf: "taf_1", managesCards: true, allowIsLive: true), "no key, no Allow")
+        var signed: [KeyAct] = [], answered: [String] = []
+        model.approveWithKey = { act, _ in signed.append(act); return Data() }
+        model.answerWithKey = { call, answer in answered.append(call.id + " " + answer.rawValue) }
+        try expect(!model.offersAllow(call, taf: "taf_1", managesCards: true, allowIsLive: false), "not live yet")
+        try expect(!model.offersAllow(call, taf: "taf_1", managesCards: false, allowIsLive: true), "not someone who manages the Cards")
+        try expect(!model.offersAllow(call, taf: nil, managesCards: true, allowIsLive: true), "a taf tafs cloud doesn't hold")
+        try expect(model.offersAllow(call, taf: "taf_1", managesCards: true, allowIsLive: true), "offered")
+        // The tap: tafs cloud's offer, then KIFF's draft, read here.
+        model.allow = AllowSheet(call: call, taf: "taf_1", busy: true)
+        let r1 = await model.loadAllow(round: false)
+        try expect(r1, "the draft is what was offered")
+        try expectEqual(model.allow?.sendHeld, true)
+        // One approval on the key: KIFF's plain draft confirm. Then the list again, and the call's own Approve once.
+        let r2 = await model.confirmAllow()
+        try expect(r2, "confirmed")
+        try expectEqual(signed, [.confirmDraft(id: "dr_9", version: "v7")])
+        try expectEqual(answered, ["ce_9 approve-once"])
+        try expectEqual(model.allow, nil)
+        try expectEqual(transport.sent.map { "\($0.method) \($0.path)" },
+                        ["GET /v1/me/card-exceptions?status=held", "POST /v1/tafs/taf_1/holds/ce_9/allow", "GET /v1/me/agent-drafts/dr_9",
+                         "GET /v1/me/card-exceptions?status=held", "GET /v1/me/card-exceptions?status=held"])
+    }),
+    Test("Allow this from now on signs nothing for a draft that isn't what was offered, and with the switch off the call still waits", awaiting: { @MainActor in
+        let held = #"{"exceptions":[{"id":"ce_9","subject":"refunds-1","action":"create_refund","title":"T","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"breaches":[{"outcome":"per_action_exceeded"}]}]}"#
+        let cap = #"{"quantity":"amount","max":15000,"unit":"EUR","scale":2}"#
+        let offer = #"{"offer":{"changes":[{"mandate_id":"c1","kind":"per_action","before":15000,"after":32000,"unit":"EUR"}],"draft":"dr_9"}}"#
+        func draft(_ max: Int) -> String {
+            #"{"id":"dr_9","agent_id":"refunds-1","status":"draft","version":"v7","cards":[{"revises":"c1","grants":[{"action":"create_refund","per_action_max":[\#(cap.replacingOccurrences(of: "15000", with: String(max)))]}],"current":{"grants":[{"action":"create_refund","per_action_max":[\#(cap)]}]}}]}"#
+        }
+        let transport = CannedTransport([(200, held), (200, offer), (200, draft(50000)), (200, offer), (200, draft(32000)), (200, held)])
+        let account = AccountClient(transport: transport, session: session, signMessage: { _ in "SIG" })
+        let model = NeedsYouModel(account: account, route: .passkey, cloud: CloudClient(transport: transport, session: session))
+        var signed: [KeyAct] = [], answered: [String] = []
+        model.approveWithKey = { act, _ in signed.append(act); return Data() }
+        model.answerWithKey = { call, answer in answered.append(call.id + " " + answer.rawValue) }
+        await model.load()
+        guard case .loaded(let calls) = model.state, let call = calls.first else { throw Failure(description: "not loaded") }
+        model.allow = AllowSheet(call: call, taf: "taf_1", busy: true)
+        let r3 = await model.loadAllow(round: false)
+        try expect(!r3, "another figure isn't what was offered")
+        let r4 = await model.confirmAllow()
+        try expect(!r4, "nothing to sign")
+        try expectEqual(signed, [])
+        // Rounded and read again: now it matches. The switch off: the Card changes, and the call keeps waiting.
+        let r5 = await model.loadAllow(round: true)
+        try expect(r5, "the rounded draft")
+        try expectEqual(model.allow?.rounded, true)
+        model.allow?.sendHeld = false
+        let r6 = await model.confirmAllow()
+        try expect(r6, "confirmed")
+        try expectEqual(signed, [.confirmDraft(id: "dr_9", version: "v7")])
+        try expectEqual(answered, [])
+    }),
 ]

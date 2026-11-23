@@ -44,16 +44,21 @@ final class NeedsYouModel: ObservableObject {
     @Published private(set) var homeWords: String?
     @Published private(set) var cardUnits = 0
     /// tafs cloud, for Set aside; nil where nothing is set aside.
-    private let cloud: CloudClient?
+    let cloud: CloudClient?
     /// This device's signed read of its connections, sent with Set aside, as the iPad's.
     private let proof: (() async -> String?)?
 
-    private let account: AccountClient
+    let account: AccountClient
     /// Where an approval is signed on this Mac.
     let route: ApprovalRoute
     /// An answer that grants authority on this Mac's security key, through its PIN sheet (`PasskeySession.approveOnce`,
     /// `extraRoom`), set by the window; nil where this Mac has no key, and the card says to approve on another device.
     var answerWithKey: ((HeldCall, Answer) async throws -> Void)?
+    /// Any act this Mac's security key approves (`KeyAct`), named in its sheet, set by the window: "Allow this from now
+    /// on" confirms KIFF's draft with it. Nil where this Mac has no key.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
+    /// "Allow this from now on", open on a held call (`AllowSheetView`).
+    @Published var allow: AllowSheet?
     /// The person confirms before the device key signs a step, as the iPad's `sign(_:reason:)`
     /// does: Touch ID, or the Mac's login password, which every Mac has. Throws when not
     /// confirmed; the prompt's words are tafs cloud's for the answer and the step.
@@ -385,6 +390,8 @@ struct NeedsYouView: View {
     /// Whether this person manages the account's Cards (KIFF's `cards.manage`): the over-total line says they can give
     /// extra room.
     var managesCards = true
+    /// Whether "Allow this from now on" is live for this account (tafs cloud lists `holds.allow`).
+    var allowIsLive = false
     /// Opens a taf where its door knocks are answered: its Activity.
     var openKnocks: (Home.Taf) -> Void = { _ in }
     /// Reads the lists again once a step is answered: the taf's run goes on.
@@ -432,6 +439,10 @@ struct NeedsYouView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
+        // "Allow this from now on", over Needs you, while it's open on a call.
+        .sheet(isPresented: Binding(get: { model.allow != nil }, set: { if !$0 { model.allow = nil } })) {
+            AllowSheetView(model: model).environment(\.words, words)
+        }
         .task {
             await model.load()
             await model.loadUnproven(answersHolds: answersHolds)
@@ -649,6 +660,14 @@ struct NeedsYouView: View {
         if model.offersApproveOnce(call) { approveOnceButton(call) }
         if !call.canApproveOnce { overTotal }
         if model.offersExtraRoom(call, managesCards: managesCards) { extraRoomButton(call) }
+        if let taf = tafs.first(where: { $0.kiffAgent == call.subject })?.tafID,
+           model.offersAllow(call, taf: taf, managesCards: managesCards, allowIsLive: allowIsLive) {
+            // The third answer, as the iPad's: a Card change, made on the tap, so calls like this go on their own.
+            Button(words("needs_you.allow_from_now_on")) { model.openAllow(call, taf: taf) }
+                .buttonStyle(OutlineButtonStyle())
+                .disabled(model.answering != nil)
+                .accessibilityIdentifier("needs_you.allow")
+        }
         nextSteps(call)
         // Refuse, as the iPad's outlined button: the card's width, in red.
         Button { Task { await model.refuse(call) } } label: {

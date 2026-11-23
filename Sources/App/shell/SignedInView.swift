@@ -179,6 +179,8 @@ struct SignedInView: View {
             // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
             doorModels.signWithKey = signWithKey
             needsYou.answerWithKey = answerWithKey
+            // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
+            needsYou.approveWithKey = approveWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
@@ -219,7 +221,7 @@ struct SignedInView: View {
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
-            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, managesCards: accountModel.me?.managesCards ?? true,
+            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, managesCards: accountModel.me?.managesCards ?? true, allowIsLive: accountModel.me?.allowIsLive ?? false,
                                                                                             openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
                                                                                             mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
                                                        beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))

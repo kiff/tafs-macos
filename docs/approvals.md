@@ -43,6 +43,30 @@ makes an answer count only for the hold as the person saw it.
   nothing is asked of the key or sent (`answerOnKey`). The card says "Approve on your phone instead", and Refuse stays.
   planque or KIFF refusing an allow without a release is the server's half, which every app relies on.
 
+### Allow this from now on (`HoldAllow`, `AllowSheetView`)
+
+The held card's third answer, as the iPad's (kiff/tafs `docs/allow-from-now-on.md`): a Card change so calls like this
+one go on their own.
+- **Offered** (`NeedsYouModel.offersAllow`) only:
+  - once tafs cloud lists `holds.allow` in the account's capabilities (`Me.allowIsLive`; none listed, no button);
+  - to someone who manages the Cards, on a Mac with its security key;
+  - for a call whose taf tafs cloud holds;
+  - on a hold every one of whose breaches a Card change can lift (`HoldAllow.allowable`). Never Coach's install, a Card
+    unit request, or a fill in Chrome (that would skip the phone's release).
+- **Read on the tap, never before:** tafs cloud's offer (`POST /v1/tafs/{id}/holds/{exception}/allow`, `{}` or
+  `{"round":true}` for Round up), then KIFF's draft, read by this Mac itself. A `none` says tafs cloud's words, and
+  nothing is signed.
+- **Signed only when the draft is what was offered** (`HoldAllow.matches`, every term the iPad compares: actions, caps,
+  scopes, states, next steps, totals with their window, measure and per-item parameter, what happens past a limit,
+  holders, where it applies, and when it starts and ends; no Card retired or added; this call's agent, and from this
+  hold when KIFF says). Otherwise "This change isn't what was offered", and nothing is signed.
+- **One approval on the security key** (`KeyAct.confirmDraft`): KIFF's plain draft confirm at the version this Mac read,
+  the same request as installing a tried version.
+- **The held call itself:** KIFF answers a held call inside a confirm only for Coach's install (`confirm_hold.go`), so
+  the confirm never names it. With "Let this one go out too" on, Needs you reads again once the Card has changed, and
+  the call, if it's still waiting and can be approved once, gets its own Approve once on the key, named "Answer
+  {summary}". Otherwise its card stays with its own answers. Nothing is shown as sent that KIFF didn't take.
+
 - **A Mac without a Secure Enclave never signs an approval.** `ApprovalRoute.of` says where
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
 - **A refusal is not sent** without the device key, without the hold's accounting version,
