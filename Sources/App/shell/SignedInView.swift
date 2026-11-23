@@ -15,6 +15,8 @@ struct SignedInView: View {
     @StateObject private var people: PeopleModel
     @StateObject private var accountHalt: HaltModel
     @StateObject private var exportChats: ExportChatsModel
+    /// Files, the account's: Account's row opens them.
+    @StateObject private var files: FilesModel
     /// Account › Chrome, on planque's safe routes.
     @StateObject private var chromes: ChromesModel
     @StateObject private var accountModel: AccountModel
@@ -62,8 +64,8 @@ struct SignedInView: View {
     private let securityKey: Data?
     /// The PIN sheet, while the security key is asked.
     @State private var pinSheet: PINSheetModel?
-    /// How often the calls waiting are read again while the window is open.
-    static let refreshEvery: TimeInterval = 30
+    /// What's read again while the window is open, and when (`WindowReads`, tafs docs/scale.md).
+    @State private var reads = WindowReads()
 
     /// planque, for the Setup read's proof: kept for this session, with this device's id once
     /// read, as the iPad's `planque` (its `deviceID` and `deviceLoader`).
@@ -95,6 +97,7 @@ struct SignedInView: View {
         _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
+        _files = StateObject(wrappedValue: FilesModel(cloud: cloud))
         // Account › Chrome: planque's safe routes, each signed by the device key for that one request; the enrolment's
         // armed signer is never used for them (`PlanqueClient.Safe`).
         let safePlanque = { [account, planque] () -> PlanqueClient in
@@ -184,16 +187,21 @@ struct SignedInView: View {
             connect.endSession()
         }
         .task {
-            // KIFF's and tafs cloud's lists are read again while the window is open.
+            // KIFF's and tafs cloud's lists are read again while the window is open, each on its own schedule, with jitter,
+            // and not after 10 minutes in the background (`WindowReads`).
             while !Task.isCancelled {
-                await readRound()
-                try? await Task.sleep(nanoseconds: UInt64(Self.refreshEvery * 1_000_000_000))
+                switch reads.plan(now: Date()) {
+                case .all: await readRound()
+                case .held: await readHeld()
+                case .nothing: break
+                }
+                try? await Task.sleep(nanoseconds: UInt64(WindowReads.wait(random: Double.random(in: 0...1)) * 1_000_000_000))
             }
         }
         // Back in front, the lists are read again at once, as the iPad's `refresh()` when its
         // scene becomes active (TafsApp.swift:60-68), not only at the next round.
         .onChange(of: scenePhase) { phase in
-            if phase == .active { Task { await readRound() } }
+            if reads.background(phase != .active, now: Date()) == .all { Task { await readRound() } }
         }
     }
 
@@ -260,6 +268,16 @@ struct SignedInView: View {
         // Your brief with each round, as the iPad's `refresh` reads it with the list.
         async let read: Void = brief.load()
         _ = await (held, tafs, read)
+        announceHeld()
+    }
+
+    /// The held calls alone, between the lists' reads: what Needs you and its alerts wait on.
+    private func readHeld() async {
+        await needsYou.load()
+        announceHeld()
+    }
+
+    private func announceHeld() {
         if case .loaded(let calls) = needsYou.state {
             notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
         }
@@ -499,7 +517,7 @@ struct SignedInView: View {
                                myEmail: accountModel.me?.email,
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
-                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, tab: tafTab).id(taf.id))
+                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, files: files, tab: tafTab).id(taf.id))
     }
 
     /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for
@@ -524,7 +542,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, chrome: chromes,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
             // A list read still on its way keeps nothing from here.

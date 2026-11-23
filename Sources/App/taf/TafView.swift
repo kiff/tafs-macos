@@ -128,6 +128,10 @@ struct TafView: View {
     var askCoach: ((String) -> Void)? = nil
     /// Connect apps, from the ring's +, for whoever manages the taf; nil draws no +.
     var openConnect: (() -> Void)? = nil
+    /// The account's files, for the taf's own Files entry on its header line; nil draws none.
+    var files: FilesModel? = nil
+    /// The taf's files, opened over its page.
+    @State private var filesOpen = false
     /// The Card in front of the stack; nil for the first, the live one.
     @State private var frontCard: String?
     @State var tab: Tab = .chat
@@ -140,10 +144,20 @@ struct TafView: View {
             header
             // Under the header, as the iPad's `headerLine`: its live version, which opens
             // Versions, then who it's shared with, for whoever manages the taf.
-            if manages && !folded {
+            if !folded && (manages || filesEntry != nil) {
                 VStack(alignment: .leading, spacing: 6) {
-                    if let pages { versionLine(pages) }
-                    if let shareLine { shareLine }
+                    // One line, Files first: "Files · Version 5 · live", as the iPad's (docs/files.md, the owner's 19 Nov test).
+                    HStack(spacing: 2) {
+                        if let filesEntry {
+                            filesEntry
+                            if manages && pages != nil {
+                                Text(verbatim: "·").font(.system(size: 15, weight: .bold)).foregroundColor(Theme.dim).padding(.horizontal, 4)
+                                    .accessibilityHidden(true)
+                            }
+                        }
+                        if manages, let pages { versionLine(pages) }
+                    }
+                    if manages, let shareLine { shareLine }
                 }
                 .transition(.opacity)
             }
@@ -151,9 +165,49 @@ struct TafView: View {
             tabContent
         }
         .onChange(of: tab) { _ in folded = false }
+        .sheet(isPresented: $filesOpen) {
+            if let files, let id = taf.tafID {
+                VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button(words("common.done")) { filesOpen = false }.keyboardShortcut(.cancelAction)
+                    }
+                    .padding(.horizontal, 20).padding(.top, 14)
+                    FilesView(model: files, taf: id, zone: me?.timeZone.flatMap(TimeZone.init(identifier:)) ?? .current)
+                }
+                .frame(width: 900, height: 620)
+                .environment(\.words, words)
+            }
+        }
         .padding(.horizontal, Look.inset - 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.background)
+    }
+
+    /// The taf's one way into its files, as the iPad's `TafFilesEntry`: "Files", with how many it has kept now, for a taf
+    /// tafs cloud runs; it shows with none yet too, so a taf's files are always found in the same place.
+    private var filesEntry: AnyView? {
+        guard let files, let id = taf.tafID else { return nil }
+        let count = files.files(taf: id).count
+        return AnyView(Button { filesOpen = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.on.doc").font(.system(size: 14, weight: .semibold)).accessibilityHidden(true)
+                Text(words("files.title")).font(.system(size: 14, weight: .semibold))
+                if count > 0 {
+                    Text(verbatim: words.number(count)).font(.system(size: 11, weight: .bold)).monospacedDigit().foregroundColor(Theme.panel)
+                        .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 20)
+                        .background(Capsule().fill(Theme.ink))
+                        .accessibilityHidden(true)
+                }
+            }
+            .foregroundColor(Theme.ink)
+            .frame(minHeight: 28).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(count > 0 ? "\(words("files.title")), \(words.count("files.taf_row", count))" : words("files.title"))
+        .accessibilityIdentifier("taf.files")
+        // Read each time the page opens, as the iPad's `.task(id: taf)`: a new file counts, and a failed read is tried again.
+        .task(id: id) { await files.load() })
     }
 
     /// Folds the header's line going down, and brings it back going up, as the iPad's `fold`.
