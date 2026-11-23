@@ -22,6 +22,8 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
 let planqueRoutesTests: [Test] = [
     Test("this Mac signs one route at planque, its enrolment: never a grant's approve or confirm") {
         try expectEqual(PlanqueClient.routes, ["enrolment"])
+        // And its safe routes, each signed per call, never armed: Chrome's list and unpairing one, both taking nothing.
+        try expectEqual([PlanqueClient.Safe.chromes, .unpairChrome("c/1")].map { $0.method + " " + $0.path }, ["GET chromes", "DELETE chromes/c%2F1"])
         for route in PlanqueClient.routes {
             try expect(!route.hasPrefix("grants"), "\(route) is a grant's route")
             try expect(!route.contains("approve") && !route.contains("confirm"), "\(route) approves or confirms")
