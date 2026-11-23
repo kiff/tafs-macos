@@ -433,6 +433,10 @@ struct SignedInView: View {
         let pages = TafPagesModel(cloud: cloud, taf: id, proof: { await setupProof() }, runs: runs)
         // Resume on this Mac's security key, when it has one (kiff/cloud#96), for this taf's KIFF agent.
         pages.halt.approveWithKey = approveWithKey
+        // A version's trial: KIFF's draft read here, its confirm on the security key, going back with the device key.
+        pages.account = account
+        pages.confirmWithKey = approveWithKey
+        pages.tafName = taf.name
         pages.halt.agent = taf.kiffAgent
         pages.halt.name = taf.name
         // Revoke, as the iPad's: each Card revoked in KIFF, then the list read again.
