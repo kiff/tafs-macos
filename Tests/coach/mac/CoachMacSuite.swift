@@ -1,2 +1,2 @@
 /// The coach part's tests that need a Mac.
-let coachMacTests: [Test] = coachScreenTests + coachSendMacTests + coachStreamMacTests + coachCardMacTests + coachExperienceMacTests + coachWrapTests + coachQuestionsMacTests + coachFilesMacTests + coachDictationMacTests + coachStartMacTests + coachArchiveMacTests + coachWiderMacTests + coachWaitingOpenMacTests + coachPanelMacTests + coachShapeMacTests
+let coachMacTests: [Test] = coachScreenTests + coachSendMacTests + coachStreamMacTests + coachCardMacTests + coachExperienceMacTests + coachWrapTests + coachQuestionsMacTests + coachFilesMacTests + coachDictationMacTests + coachStartMacTests + coachArchiveMacTests + coachWiderMacTests + coachWaitingOpenMacTests + coachPanelMacTests + coachShapeMacTests + coachLoopCardMacTests
