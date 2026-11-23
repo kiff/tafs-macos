@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @MainActor
@@ -195,6 +196,8 @@ struct UsageView: View {
                     panel { Text(verbatim: message).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true) }
                 }
                 if let u = model.usage {
+                    // In the iPad's order: who bills, then asking an admin, then members' requests.
+                    billingPanel(u)
                     askPanel(u)
                     requestsPanel(u)
                 }
@@ -219,6 +222,34 @@ struct UsageView: View {
             AskAdminView(model: model, raise: model.usage.flatMap(Self.asks)).environment(\.words, words)
         }
         .sheet(item: $declining) { DeclineRequestView(model: model, request: $0).environment(\.words, words) }
+    }
+
+    /// Who bills the plan, in one line, as the iPad's `billingPanel` (UsageView.swift:121-153):
+    /// Apple's with Manage. After a move from Solo to Company, while Solo still renews with
+    /// Apple, a line says so with Cancel Solo. Both open the Apple account's subscriptions in the
+    /// App Store, as the iPad's `manageSubscriptions`; the app never points anywhere else to buy.
+    @ViewBuilder private func billingPanel(_ u: KIFFUsage) -> some View {
+        if let line = u.billingLine {
+            panel {
+                HStack {
+                    Text(words(line)).font(.system(size: 15)).foregroundColor(Theme.ink)
+                    Spacer()
+                    if u.managedByApple {
+                        Button(words("usage.manage")) { NSWorkspace.shared.open(KIFFUsage.appleSubscriptions) }
+                            .buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
+                    }
+                }
+                if let until = u.soloStillRenews {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(words("usage.company_billed_kiff_solo_bought", ["time": AppDates.formatter(words, date: .long).string(from: until)]))
+                            .font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Button(words("usage.cancel_solo")) { NSWorkspace.shared.open(KIFFUsage.appleSubscriptions) }
+                            .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                    }
+                }
+            }
+        }
     }
 
     /// For someone who doesn't manage billing, on a plan where they can ask, as the iPad's
