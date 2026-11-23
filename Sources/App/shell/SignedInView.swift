@@ -63,6 +63,8 @@ struct SignedInView: View {
     private let route: ApprovalRoute
     /// The sample is open (`Sample`, `SampleTransport`): Account says so, and Clear the sample leaves it.
     private let inSample: Bool
+    /// The sample's next round (`SampleTransport.playNext`); nil outside the sample.
+    private let playNextSample: (() -> Bool)?
     /// This Mac's device key, its public half (SPKI DER), for planque's enrolment.
     private let deviceKey: Data
     /// The credential of the security key that goes with this Mac (`SecurityKeyStore`), if any.
@@ -78,7 +80,7 @@ struct SignedInView: View {
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
          addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data(), securityKey: Data? = nil,
-         startOn: Screen = .overview, inSample: Bool = false) {
+         startOn: Screen = .overview, inSample: Bool = false, playNextSample: (() -> Bool)? = nil) {
         self.account = account
         _selection = State(initialValue: startOn)
         let planque = PlanqueClient()
@@ -98,6 +100,7 @@ struct SignedInView: View {
         self.securityKey = securityKey
         self.route = route
         self.inSample = inSample
+        self.playNextSample = playNextSample
         _brief = StateObject(wrappedValue: BriefModel(cloud: cloud))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
@@ -245,7 +248,9 @@ struct SignedInView: View {
                                                         needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
                                                         people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach,
-                                                        chromeOffered: chromes.chromes != nil, discard: { await discardSettingUp($0) }))
+                                                        chromeOffered: chromes.chromes != nil, discard: { await discardSettingUp($0) },
+                                                        // The sample's next round, then every list read again, as after any act here.
+                                                        playNextSample: playNextSample.map { play in { if play() { Task { await readRound() } } } }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar, tafs: overview.tafs, open: { open($0) }))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))

@@ -26,7 +26,15 @@ iPad's own, from the shared strings (`sample.*`).
 - **A taf's page:** its chat (its hello, and for Support replies the iPad's sample question), its
   Setup (its job as its workflow), and its runs, notes and work, none yet.
 - **Account:** Mode reads Sample data (`settings.mode_sample`). The account approves nothing
-  (`view`), and its devices, passkeys, groups and members are empty.
+  (`view`). **Devices** lists the iPad's three (`SampleScreens.devices`): this Mac, an iPhone used
+  three hours ago, and a Mac yesterday, each "tafs on …". Its passkeys, groups and members are
+  empty.
+- **Play the next sample actions** (`sample.play_next`), at the Overview's foot with "Sample
+  data. A new taf starts in Coach." (`home.sample_foot`), as the iPad's Home: each taf plays its
+  script's next call (`playNextDemoActions()`), up to the last, and every list is read again.
+  The scripts are the iPad's whole `TafTemplates`. A call its Card holds for you joins Needs you,
+  and one its Card refuses outright (`never`) is in the Record as "refused by its Card", never
+  sent: the third round has Deploys' `DROP TABLE sessions_old`.
 
 ## What it never does
 
@@ -41,6 +49,5 @@ iPad's own, from the shared strings (`sample.*`).
 
 ## Not yet
 
-The demo's later rounds (the iPad's pull to play the next), the sample chat's live replies
-(`sampleReply`), the sample's devices and alerts, and keeping it between launches (the iPad's
-`SampleStore`).
+The sample chat's live replies (`sampleReply`), the sample's alerts, and keeping it between
+launches (the iPad's `SampleStore`).
