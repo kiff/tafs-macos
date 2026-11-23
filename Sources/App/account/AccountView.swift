@@ -104,7 +104,7 @@ final class AccountModel: ObservableObject {
 
 /// A page of Account, opened from its row: Back returns to the page before.
 enum AccountPage: Equatable {
-    case language, alerts, people, devices, kiffAccount, timeZone
+    case language, alerts, people, devices, kiffAccount, timeZone, chrome
 }
 
 /// Account, to the iPad's layout: a large title and grouped panels of rows.
@@ -118,6 +118,8 @@ struct AccountView: View {
     var exportChats: ExportChatsModel? = nil
     /// Alerts on this Mac, for this account; nil leaves its row out.
     var alerts: AlertsModel? = nil
+    /// Account › Chrome: its row shows only once planque lists Chromes for this person (`chromes` read).
+    var chrome: ChromesModel? = nil
     /// A taf's name by its KIFF agent, for what each group uses.
     var tafName: (String) -> String? = { _ in nil }
     /// Opens another screen of the sidebar from its row.
@@ -155,6 +157,7 @@ struct AccountView: View {
         case .devices: DevicesView(model: devices, signOutThisMac: signOut, addThisMac: addsThisMac ? addThisMac : nil)
         case .kiffAccount: KiffAccountPage(model: model, exportChats: exportChats, openZone: { pages.append(.timeZone) })
         case .timeZone: TimeZonePicker(model: model)
+        case .chrome: if let chrome { ChromesView(model: chrome) }
         }
     }
 
@@ -211,6 +214,11 @@ struct AccountView: View {
             }
             link(words("settings.devices.title")) { pages.append(.devices) }
             divider
+            // Chrome, after Devices, as the iPad's: only once planque offers Chromes.
+            if let chrome, chrome.chromes != nil {
+                link(words("chrome.title")) { pages.append(.chrome) }
+                divider
+            }
             link(words("connect.apps.title")) { open(.connectApps) }
         }
         // The Plan card always, as on the iPad: tafs cloud's plan line in its tone's
