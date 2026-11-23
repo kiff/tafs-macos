@@ -1,2 +1,2 @@
 /// The coach part's tests that need no Mac.
-let coachTests: [Test] = coachThreadTests + coachSendTests + coachStreamTests + coachCardTests + coachExperienceTests + coachWorkRowsTests + coachQuestionTests + coachFileTests + coachDictatingTests + coachStartTests + coachArchiveTests + coachImprovementTests + coachWatchDaysTests + coachApprovalTests + coachShapeTests + coachToolsTests
+let coachTests: [Test] = coachThreadTests + coachSendTests + coachStreamTests + coachCardTests + coachExperienceTests + coachWorkRowsTests + coachQuestionTests + coachFileTests + coachDictatingTests + coachStartTests + coachArchiveTests + coachImprovementTests + coachWatchDaysTests + coachBackoffTests + coachApprovalTests + coachShapeTests + coachToolsTests

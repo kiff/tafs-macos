@@ -255,10 +255,10 @@ let approvalsScreenTests: [Test] = [
         guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
         try expect(!model.offersApproveOnce(calls[0]), "no key, no Approve once")
         var approved: [String] = []
-        model.approveOnceWithKey = { approved.append($0.id) }
+        model.answerWithKey = { call, answer in approved.append(call.id + " " + answer.rawValue) }
         try expect(model.offersApproveOnce(calls[0]), "with the key")
         await model.approveOnce(calls[0])
-        try expectEqual(approved, ["exc_1"])
+        try expectEqual(approved, ["exc_1 approve-once"])
         // The key's request is its own (PasskeySession.approveOnce); here the list is read again, never the device key's answer.
         try expectEqual(transport.sent.map(\.path), ["/v1/me/card-exceptions?status=held", "/v1/me/card-exceptions?status=held"])
         try expectEqual(model.state, .loaded([]))
@@ -268,13 +268,13 @@ let approvalsScreenTests: [Test] = [
         let (model, _) = model([(200, one)], route: .passkey)
         await model.load()
         guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
-        model.approveOnceWithKey = { _ in throw CancellationError() }
+        model.answerWithKey = { _, _ in throw CancellationError() }
         await model.approveOnce(calls[0])
         try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), nil)
-        model.approveOnceWithKey = { _ in throw ApproveOnPhone() }
+        model.answerWithKey = { _, _ in throw ApproveOnPhone() }
         await model.approveOnce(calls[0])
         try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("approval.device_can_not_approve_approve"))
-        model.approveOnceWithKey = { _ in throw KIFFError.refused(status: 403, code: "passkey_not_this_device") }
+        model.answerWithKey = { _, _ in throw KIFFError.refused(status: 403, code: "passkey_not_this_device") }
         await model.approveOnce(calls[0])
         try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("needs_you.refused.other", ["why": "passkey_not_this_device"]))
         try expectEqual(model.count, 1)
@@ -282,9 +282,27 @@ let approvalsScreenTests: [Test] = [
     Test("a call KIFF says can't be approved once, or without its accounting version, offers no Approve once", awaiting: { @MainActor in
         let cannot = #"{"exceptions":[{"id":"e1","subject":"a","action":"b","title":"T","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"can_approve_once":false},{"id":"e2","subject":"a","action":"b","title":"T","created_at":"2026-11-14T18:00:00Z"}]}"#
         let (model, _) = model([(200, cannot)], route: .passkey)
-        model.approveOnceWithKey = { _ in }
+        model.answerWithKey = { _, _ in }
         await model.load()
         guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(calls.map { model.offersApproveOnce($0) }, [false, false])
+    }),
+    Test("Extra room goes through the key only over a total, for someone who manages the Cards; a next step refuses with it", awaiting: { @MainActor in
+        let over = #"{"exceptions":[{"id":"e1","subject":"a","action":"b","title":"T","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"can_approve_once":false,"next_steps":["Return first"]}]}"#
+        let (model, transport) = model([(200, over), (200, none), (200, "{}"), (200, none)], route: .passkey)
+        await model.load()
+        guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
+        try expect(!model.offersExtraRoom(calls[0], managesCards: true), "no key, no Extra room")
+        var asked: [String] = []
+        model.answerWithKey = { call, answer in asked.append(call.id + " " + answer.rawValue) }
+        try expect(model.offersExtraRoom(calls[0], managesCards: true), "the manager, with the key")
+        try expect(!model.offersExtraRoom(calls[0], managesCards: false), "not for someone who doesn't manage the Cards")
+        try expect(!model.offersApproveOnce(calls[0]), "approving once can't pass a total")
+        await model.extraRoom(calls[0])
+        try expectEqual(asked, ["e1 change-card"])
+        // A next step is the device key's refusal, with the step: never the security key's.
+        await model.refuse(calls[0], nextStep: "Return first")
+        try expectEqual(asked, ["e1 change-card"])
+        try expectEqual(transport.sent.map(\.path).filter { $0.hasSuffix("/reject") }, ["/v1/me/card-exceptions/e1/reject"])
     }),
 ]

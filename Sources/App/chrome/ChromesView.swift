@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Account › Chrome, as the iPad's `ChromesView` (tafs docs/chrome.md) and Linux's (tafs-linux#89): the Chromes paired to
+/// Account › Chrome, as the iPad's `ChromesView` (the "Your Chrome" contract, `chrome.md` in tafs' docs) and Linux's (tafs-linux#89): the Chromes paired to
 /// the account, each named with its browser and system, and Unpair, which ends that Chrome's connections at planque
 /// ("Your Chrome" 3). Read and unpaired on planque's safe routes, each signed by this Mac's device key for that one request
 /// (`PlanqueClient.Safe`). Pairing a Chrome stays the phone's: it binds the phone's approval key, which the extension trusts.

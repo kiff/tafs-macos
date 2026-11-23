@@ -105,6 +105,10 @@ struct AccountClient {
     var sign: ((HTTPRequest) throws -> String)?
     /// Signs one of KIFF's messages with the device key: the signature in standard base64.
     var signMessage: ((String) throws -> String)?
+    /// Where the session's device key is kept (`SigningKey.keyStore`): `enclave` for the Secure
+    /// Enclave, `software` otherwise; nil when not known. Only an `enclave` key ends a connection
+    /// here, after Touch ID (`ConnectionEnding`); anything else goes to the phone.
+    var keyStore: String?
 
     /// Who is signed in, and how this session approves.
     func me() async throws -> Me { try read(try await send("GET", "/v1/me")) }
