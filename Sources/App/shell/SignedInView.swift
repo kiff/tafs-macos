@@ -15,6 +15,10 @@ struct SignedInView: View {
     @StateObject private var people: PeopleModel
     @StateObject private var accountHalt: HaltModel
     @StateObject private var exportChats: ExportChatsModel
+    /// Files, the account's: Account's row opens them.
+    @StateObject private var files: FilesModel
+    /// Account › Chrome, on planque's safe routes.
+    @StateObject private var chromes: ChromesModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -93,6 +97,21 @@ struct SignedInView: View {
         _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
+        _files = StateObject(wrappedValue: FilesModel(cloud: cloud))
+        // Account › Chrome: planque's safe routes, each signed by the device key for that one request; the enrolment's
+        // armed signer is never used for them (`PlanqueClient.Safe`).
+        let safePlanque = { [account, planque] () -> PlanqueClient in
+            planque.tenant = account.session.tenant
+            if planque.transport == nil { planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!) }
+            return planque
+        }
+        _chromes = StateObject(wrappedValue: ChromesModel(read: { [account] in
+            guard let sign = account.signMessage else { return nil }
+            return try await safePlanque().chromes(signedBy: sign)
+        }, unpair: { [account] id in
+            guard let sign = account.signMessage else { throw PlanqueClient.PlanqueError.notSigning }
+            _ = try await safePlanque().safe(.unpairChrome(id), signedBy: sign)
+        }))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
@@ -146,12 +165,16 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Account's Chrome row shows once planque lists Chromes: read once with the window.
+        .task { await chromes.load() }
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
         .onAppear {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
-            needsYou.approveOnceWithKey = approveOnceWithKey
+            // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
+            doorModels.signWithKey = signWithKey
+            needsYou.answerWithKey = answerWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
@@ -187,7 +210,7 @@ struct SignedInView: View {
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
             switch screen {
             // A taf's knocks are answered on its Activity, so its row opens there.
-            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true,
+            case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, managesCards: accountModel.me?.managesCards ?? true,
                                                                                             openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
                                                                                             mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
                                                        beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
@@ -338,13 +361,18 @@ struct SignedInView: View {
         }
     }
 
-    /// Approve once on this Mac's security key (`PasskeySession.approveOnce`), named in the PIN sheet as the iPad's
-    /// prompt ("Answer {summary}"); nil without a key on the security key's route, so the card says to approve elsewhere.
-    private var approveOnceWithKey: ((HeldCall) async throws -> Void)? {
+    /// An answer that grants authority on this Mac's security key (`PasskeySession.approveOnce`, `extraRoom`), named in
+    /// the PIN sheet as the iPad's prompt ("Answer {summary}"); nil without a key on the security key's route, so the
+    /// card says to approve elsewhere. A refusal is never the key's.
+    private var answerWithKey: ((HeldCall, Answer) async throws -> Void)? {
         guard let passkey = passkeySession else { return nil }
-        return { call in
+        return { call, answer in
             let title = words("needs_you.prompt.answer", ["summary": call.title ?? call.action])
-            try await askSecurityKey(act: title) { pin in try await passkey.approveOnce(call, pin: pin) }
+            switch answer {
+            case .approveOnce: try await askSecurityKey(act: title) { pin in try await passkey.approveOnce(call, pin: pin) }
+            case .changeCard: try await askSecurityKey(act: title) { pin in try await passkey.extraRoom(call, pin: pin) }
+            case .reject: throw PasskeyRefusal.notAnApproval
+            }
         }
     }
 
@@ -474,7 +502,7 @@ struct SignedInView: View {
                                myEmail: accountModel.me?.email,
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
-                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, tab: tafTab).id(taf.id))
+                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, files: files, tab: tafTab).id(taf.id))
     }
 
     /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for
@@ -499,7 +527,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
             // A list read still on its way keeps nothing from here.

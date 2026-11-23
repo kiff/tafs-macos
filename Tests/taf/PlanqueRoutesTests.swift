@@ -22,6 +22,8 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
 let planqueRoutesTests: [Test] = [
     Test("send signs one route at planque, the enrolment: never a grant's approve, confirm or key") {
         try expectEqual(PlanqueClient.routes, ["enrolment"])
+        // And its safe routes, each signed per call, never armed: Chrome's list and unpairing one, both taking nothing.
+        try expectEqual([PlanqueClient.Safe.chromes, .unpairChrome("c/1")].map { $0.method + " " + $0.path }, ["GET chromes", "DELETE chromes/c%2F1"])
         for route in PlanqueClient.routes {
             try expect(!route.hasPrefix("grants"), "\(route) is a grant's route")
             try expect(!route.contains("approve") && !route.contains("confirm") && !route.contains("key"), "\(route) approves, confirms or keys")
@@ -103,6 +105,8 @@ let planqueRoutesTests: [Test] = [
             #"PlanqueClient.swift: "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#,
             #"PlanqueClient.swift: let account = "/v1/accounts/\(CloudClient.escaped(tenant))""#,
             #"PlanqueClient.swift: let path = "/v1/accounts/\(CloudClient.escaped(tenant))/grants""#,
+            // Account › Chrome's safe routes (#173): `GET chromes` and `DELETE chromes/{id}`, built from `Safe.path`.
+            #"PlanqueClient.swift: let uri = "/v1/accounts/\(CloudClient.escaped(tenant))/\(route.path)""#,
         ])
         try expectEqual(code("/grants"), [
             #"AppConnections.swift: var path: String { "/v1/accounts/\(CloudClient.escaped(tenant))/grants" }"#,
@@ -120,8 +124,10 @@ let planqueRoutesTests: [Test] = [
         let client = naming[0].text
         try expectEqual(client.components(separatedBy: "grants/").count - 1, 1)
         try expect(client.contains(#""/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#), "the DELETE's path, the grant's id last")
-        // One DELETE in the client, the disconnect's; it signs the empty body.
-        try expectEqual(client.components(separatedBy: #""DELETE""#).count - 1, 2)
+        // Two DELETEs in the client: the disconnect's (named twice, signed and sent), and Account › Chrome's unpair (#173,
+        // `Safe.unpairChrome`, a safe route of its own). Each signs the empty body.
+        try expectEqual(client.components(separatedBy: #""DELETE""#).count - 1, 3)
+        try expect(client.contains(#"case .unpairChrome: return "DELETE""#), "the third is the Chrome's unpair")
         try expect(client.contains(#"method: "DELETE", uri: uri, bodyHash: Self.emptyBodyHash"#), "the DELETE signs no body")
         try expect(client.contains(#"HTTPRequest(method: "DELETE", path: uri"#), "the DELETE is sent as signed")
         // The grants proof stays a read: GET, over the grants list, and nothing else.

@@ -31,7 +31,7 @@ struct DoorBadge: View {
 }
 
 /// A panel as the iPad's `Panel`: 16 in, on the panel's fill, with an edge when asked.
-private struct DoorPanel<Content: View>: View {
+struct DoorPanel<Content: View>: View {
     var stroke: Color? = nil
     @ViewBuilder let content: () -> Content
 
@@ -150,7 +150,9 @@ struct DoorScreen: View {
             }
             Button(words("common.cancel"), role: .cancel) {}
         } message: {
-            Text(words("door.remove_body", ["taf": taf.name]))
+            // An API door's keys stop working with it, in its own words; any other door's line otherwise.
+            Text(confirmRemove?.kind == "api" ? words("door.api.remove_body", ["app": confirmRemove?.label ?? "", "taf": taf.name])
+                 : words("door.remove_body", ["taf": taf.name]))
         }
     }
 
@@ -159,7 +161,9 @@ struct DoorScreen: View {
             if let settings = door?.words?.settings {
                 Text(verbatim: settings).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
             }
-            if let door { panel(door) } else {
+            if let door, door.kind == "api" {
+                APIDoorPanel(door: door, taf: taf, doors: doors, remove: { confirmRemove = door })
+            } else if let door { panel(door) } else {
                 Text(words("door.door_removed")).font(.system(size: 15)).foregroundColor(Theme.soft)
             }
             // Strangers' knocks wait on the owner; a paired sender's message, kept from its knock,

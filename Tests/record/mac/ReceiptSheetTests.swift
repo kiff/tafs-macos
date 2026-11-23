@@ -38,11 +38,14 @@ let receiptSheetTests: [Test] = [
         await model.openReceipt(try line())
         try expectEqual(model.receiptCheck, .failed(.notKiff))
     }),
-    Test("a line with no receipt opens nothing and reads nothing", awaiting: { @MainActor in
+    Test("a line with no receipt opens its facts only, as the iPad's, and reads nothing", awaiting: { @MainActor in
         let (model, transport) = model(kiff: [])
         let json = #"{"id":"e2","at":"2026-10-21T00:41:03Z","kind":"done","title":"Refund","detail":"","time":"02:41","taf":{"id":"taf_1","name":"Refunds"},"call":{"proposal_id":"p"}}"#
-        await model.openReceipt(try AccountClient.decoder.decode(Record.Entry.self, from: Data(json.utf8)))
-        try expectEqual(model.receiptEntry, nil)
+        let entry = try AccountClient.decoder.decode(Record.Entry.self, from: Data(json.utf8))
+        await model.openReceipt(entry)
+        try expectEqual(model.receiptEntry, entry)
+        try expectEqual(model.receiptCheck, nil)
+        try expectEqual(model.receiptError, nil)
         try expectEqual(transport.sent.count, 0)
     }),
     Test("KIFF's refusal says why in plain words, and Try again reads it again", awaiting: { @MainActor in

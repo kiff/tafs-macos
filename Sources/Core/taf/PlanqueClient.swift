@@ -175,6 +175,74 @@ final class PlanqueClient {
         "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))"
     }
 
+    /// planque's safe routes this Mac signs, as Linux's `planque::Safe` (tafs-linux#89): Account › Chrome's list, and
+    /// unpairing one Chrome, which takes authority away (planque ends its connections, "Your Chrome" 3). Each is a GET or
+    /// a DELETE with an empty body, signed per call by the device key (`planque.request.v1`), never through the armed
+    /// `signer`, and never with a session token. Nothing here approves, confirms or pairs: pairing a Chrome stays the
+    /// phone's, as it binds the phone's approval key.
+    enum Safe: Equatable {
+        case chromes
+        case unpairChrome(String)
+
+        var method: String {
+            switch self {
+            case .chromes: return "GET"
+            case .unpairChrome: return "DELETE"
+            }
+        }
+
+        /// Under the account's routes.
+        var path: String {
+            switch self {
+            case .chromes: return "chromes"
+            case .unpairChrome(let id): return "chromes/\(CloudClient.escaped(id))"
+            }
+        }
+    }
+
+    /// One safe route, signed by `sign` (the device key) for this one request. planque's answer, else its refusal.
+    func safe(_ route: Safe, signedBy sign: (String) throws -> String) async throws -> Data {
+        guard let tenant, let transport else { throw PlanqueError.notSigning }
+        if deviceID == nil, let load = deviceLoader { deviceID = await load() }
+        guard let device = deviceID else { throw PlanqueError.noDevice }
+        let uri = "/v1/accounts/\(CloudClient.escaped(tenant))/\(route.path)"
+        let at = SigningTime.next()
+        let message = Self.message(base: baseURL, tenant: tenant, method: route.method, uri: uri, bodyHash: Self.emptyBodyHash, signedAt: at)
+        let request = HTTPRequest(method: route.method, path: uri, headers: [
+            "Accept": "application/json", "User-Agent": "tafs-macos", "X-Time-Zone": TimeZone.current.identifier,
+            "Planque-Device-Signature": "t=\(at),v1=\(try sign(message)),d=\(device)",
+        ])
+        let (status, answer) = try await transport.send(request)
+        guard (200..<300).contains(status) else {
+            let said = Self.refusal(answer)
+            throw PlanqueError.server(status: status, message: said.error ?? "", words: said.words)
+        }
+        return answer
+    }
+
+    /// A Chrome paired to the account, as planque lists it: its name, and the browser and system its extension reported.
+    struct Chrome: Decodable, Equatable, Identifiable {
+        let id: String
+        let name: String
+        var browser: String?
+        var os: String?
+        enum CodingKeys: String, CodingKey { case id = "chrome_id", name, browser, os }
+    }
+
+    /// The Chromes paired to the account; nil while planque doesn't offer them (404), or this person may only view (403),
+    /// and Account shows no Chrome row, as the iPad's `chromes` nil.
+    func chromes(signedBy sign: (String) throws -> String) async throws -> [Chrome]? {
+        do {
+            struct List: Decodable { let chromes: [Lenient] }
+            struct Lenient: Decodable { let chrome: Chrome?; init(from decoder: Decoder) throws { chrome = try? Chrome(from: decoder) } }
+            let data = try await safe(.chromes, signedBy: sign)
+            guard let list = try? JSONDecoder().decode(List.self, from: data) else { throw KIFFError.unreadable }
+            return list.chromes.compactMap(\.chrome)
+        } catch PlanqueError.server(let status, _, _) where status == 404 || status == 403 {
+            return nil
+        }
+    }
+
     /// The device signs its own read; the cloud only forwards this proof.
     func grantsReadProof(signedBy sign: (String) throws -> String) async throws -> String {
         guard let tenant else { throw PlanqueError.notSigning }

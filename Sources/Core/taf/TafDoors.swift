@@ -11,8 +11,13 @@ enum TafDoors {
             var name: String? = nil
             /// Paired by tafs: the owner's own sign-in email.
             var auto: Bool = false
+            /// An API door's key (`api`): its last four, when it was made and last used, as tafs cloud writes them.
+            /// Never the key itself.
+            var last4: String? = nil
+            var madeAt: String? = nil
+            var lastUsedAt: String? = nil
 
-            enum CodingKeys: String, CodingKey { case id, name, auto }
+            enum CodingKeys: String, CodingKey { case id, name, auto, last4, madeAt = "made_at", lastUsedAt = "last_used_at" }
             init(id: String, name: String? = nil, auto: Bool = false) {
                 self.id = id; self.name = name; self.auto = auto
             }
@@ -21,7 +26,13 @@ enum TafDoors {
                 id = try c.decode(String.self, forKey: .id)
                 name = try? c.decodeIfPresent(String.self, forKey: .name)
                 auto = (try? c.decode(Bool.self, forKey: .auto)) ?? false
+                last4 = (try? c.decodeIfPresent(String.self, forKey: .last4)) ?? nil
+                madeAt = (try? c.decodeIfPresent(String.self, forKey: .madeAt)) ?? nil
+                lastUsedAt = (try? c.decodeIfPresent(String.self, forKey: .lastUsedAt)) ?? nil
             }
+
+            /// What a key is called: its name, else its last four.
+            var shownName: String { name ?? last4.map { "…" + $0 } ?? id }
         }
 
         let id: String
@@ -48,6 +59,19 @@ enum TafDoors {
         var grant: String? = nil
         var channel: String? = nil
         var trigger: String? = nil
+        /// An API door's last request: its state, when, and tafs cloud's word for that state.
+        var lastRequest: LastRequest? = nil
+
+        struct LastRequest: Decodable, Equatable {
+            let status: String
+            let at: String
+            var words: String? = nil
+            /// tafs cloud's word, trimmed; none until it sends one, never the raw `status`.
+            var shownWords: String? {
+                let w = words?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return w.isEmpty ? nil : w
+            }
+        }
 
         /// Where the door stands, what a tap on it does, and that its settings are below.
         struct Words: Decodable, Equatable {
@@ -58,7 +82,7 @@ enum TafDoors {
 
         enum CodingKeys: String, CodingKey {
             case id, app, kind, label, open, address, proof, how, keys, today, limit, resting, words, grant, channel, trigger
-            case othersToday = "others_today", othersLimit = "others_limit"
+            case othersToday = "others_today", othersLimit = "others_limit", lastRequest = "last_request"
         }
 
         var holdsKeys: Bool { proof == "proven" }
@@ -204,6 +228,18 @@ extension CloudClient {
 
     func setDoorOpen(_ taf: String, door id: String, open: Bool) async throws -> TafDoors.Door {
         try door(try await doorChange("PATCH", doorsPath(taf) + "/\(Self.escaped(id))", body: ["open": open]))
+    }
+
+    /// An API door's act on this Mac's security key (`KeyAct.reopenAPIDoor`, `revokeAPIDoorKey`, `removeAPIDoor`): the act's
+    /// own request, with the key's assertion over exactly it (tafs cloud's `doorSigned`, as a removal). The door as tafs
+    /// cloud answers, when it answers one.
+    func signedDoorChange(_ act: KeyAct, assertion: String) async throws -> TafDoors.Door? {
+        var headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json",
+                       "Accept-Language": language, "User-Agent": "tafs-macos", Passkeys.headerName: assertion]
+        if !act.body.isEmpty { headers["Content-Type"] = "application/json" }
+        let (status, answer) = try await transport.send(HTTPRequest(method: act.method, path: act.path, headers: headers, body: act.body))
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: answer) }
+        return try? AccountClient.decoder.decode(DoorAnswer.self, from: answer).door
     }
 
     func removeDoor(_ taf: String, door id: String) async throws {

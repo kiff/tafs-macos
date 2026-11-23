@@ -277,7 +277,7 @@ struct ShellView: View {
 
     /// Each screen arrives in its own pull request. Until then its place shows its name.
     @ViewBuilder private var detail: some View {
-        if let page = tafPage { page } else if let built = screen(selection) { built } else { placeholder }
+        if let page = tafPage { page } else if let built = screen(selection) { built.environment(\EnvironmentValues.openTaf, open) } else { placeholder }
     }
 
     private var placeholder: some View {

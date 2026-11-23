@@ -31,6 +31,13 @@ enum KeyAct: Equatable {
     /// Removing a taf for good (the iPad's `removeTaf`): tafs cloud's `DELETE /v1/tafs/{id}`, empty body, signed before
     /// its Cards are revoked and sent after (`PasskeySession.assertion`).
     case removeTaf(String)
+    /// An API door's acts (the iPad's `DoorsModel.reopen`, `revoke`, `removeAPI`), each tafs cloud's own request, signed
+    /// as a removal is: opening a paused door again (`PATCH …/doors/{door}` with `{"open":true}`), revoking one of its keys
+    /// (`DELETE …/keys/{key}`), and removing the door (`DELETE …/doors/{door}`). Pausing is never signed. A new key stays
+    /// the phone's (the PM's 00:19): this Mac can't keep a key shown once from screen recording or the clipboard.
+    case reopenAPIDoor(taf: String, door: String)
+    case revokeAPIDoorKey(taf: String, door: String, key: String)
+    case removeAPIDoor(taf: String, door: String)
 
     var method: String {
         switch self {
@@ -38,6 +45,8 @@ enum KeyAct: Equatable {
         case .timeZone: return "PUT"
         case .resume: return "POST"
         case .removeTaf: return "DELETE"
+        case .reopenAPIDoor: return "PATCH"
+        case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         }
     }
 
@@ -47,6 +56,10 @@ enum KeyAct: Equatable {
         case .timeZone: return "/v1/me/time-zone"
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
+        case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
+            return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
+        case .revokeAPIDoorKey(let taf, let door, let key):
+            return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys/\(CloudClient.escaped(key))"
         }
     }
 
@@ -60,6 +73,9 @@ enum KeyAct: Equatable {
             return (try? encoder.encode(["time_zone": zone])) ?? Data()
         case .resume: return Data("{}".utf8)
         case .removeTaf: return Data()
+        // The iPad's `reopenBody`, these exact bytes.
+        case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
+        case .revokeAPIDoorKey, .removeAPIDoor: return Data()
         }
     }
 
@@ -71,6 +87,10 @@ enum KeyAct: Equatable {
         // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
         case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
         case .removeTaf: return words("taf.remove.prompt", ["taf": device])
+        // The door's app, or the key's name, in `device`'s place, as the iPad's reasons; Remove door as its button says.
+        case .reopenAPIDoor: return words("door.api.open_reason", ["app": device])
+        case .revokeAPIDoorKey: return words("door.api.revoke_reason", ["key": device])
+        case .removeAPIDoor: return words("door.remove_door")
         }
     }
 }
@@ -91,9 +111,23 @@ extension PasskeySession {
     /// (`KIFFError`), so the card's line says it.
     func approveOnce(_ call: HeldCall, pin: SecurityKeyPIN?, now: Date = Date()) async throws {
         guard call.canApproveOnce else { throw KIFFError.refused(status: 0, code: "cannot_approve_once") }
+        try await answerWithKey(call, .approveOnce, pin: pin, now: now)
+    }
+
+    /// Extra room, on the security key, as the iPad's (kiff/tafs#211, 6.13): KIFF's `change-card`, which gives the
+    /// call's Card room for this total until it resets and lets this one call go on. KIFF takes it from the key as it
+    /// takes Approve once (`checkPasskeyAnswer`: both grant authority), over the same `kiff.answer.v1` with
+    /// `change-card`, sent to `POST /v1/me/card-exceptions/{id}/change-card`. Offered where approving once can't pass
+    /// a total, so KIFF's `can_approve_once` isn't asked; the accounting version still is.
+    func extraRoom(_ call: HeldCall, pin: SecurityKeyPIN?, now: Date = Date()) async throws {
+        try await answerWithKey(call, .changeCard, pin: pin, now: now)
+    }
+
+    /// One answer that grants authority, on the key: its assertion in `signature.passkey`, beside the same `signed_at`.
+    private func answerWithKey(_ call: HeldCall, _ answer: Answer, pin: SecurityKeyPIN?, now: Date) async throws {
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
         let signedAt = KIFFMessage.time(now)
-        let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: .approveOnce,
+        let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: answer,
                                                 accountingVersion: version, signedAt: signedAt, pin: pin)
         // The assertion's object as the key's answer gave it, and the same signed_at, in sorted keys.
         var body = Data(#"{"signature":{"passkey":"#.utf8)
@@ -101,10 +135,10 @@ extension PasskeySession {
         body.append(Data(#","signed_at":"\#(signedAt)"}}"#.utf8))
         let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Content-Type": "application/json",
                        "Accept-Language": language, "User-Agent": "tafs-macos"]
-        // The route is the answer's own name (`approve-once`), never spelled here: no source names an approve route
+        // The route is the answer's own name (`Answer.rawValue`), never spelled here: no source names an approve route
         // (`PlanqueRoutesTests`), so a planque one can't slip in beside it.
-        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/" + Answer.approveOnce.rawValue
-        let (status, answer) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
-        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: answer) }
+        let path = "/v1/me/card-exceptions/\(CloudClient.escaped(call.id))/\(answer.rawValue)"
+        let (status, reply) = try await transport.send(HTTPRequest(method: "POST", path: path, headers: headers, body: body))
+        guard (200..<300).contains(status) else { throw KIFFError(status: status, body: reply) }
     }
 }
