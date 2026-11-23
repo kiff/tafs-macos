@@ -69,7 +69,52 @@ final class DoorsModel: ObservableObject {
         _ = await work { try await cloud.setDoorOpen(taf, door: door.id, open: open) }
     }
 
+    /// An API door's acts on this Mac's security key, through its PIN sheet, set by the window; nil where this Mac has no
+    /// key, and each says to approve on another device.
+    var signWithKey: ((KeyAct, String) async throws -> String)?
+
+    /// Opens a paused API door again, on the key, as the iPad's `reopen`: it re-admits a caller the owner may have paused
+    /// for misuse. Pausing is `setOpen(false)`, never signed.
+    func reopenAPI(_ door: TafDoors.Door) async {
+        _ = await signed(.reopenAPIDoor(taf: taf, door: door.id), named: door.label)
+    }
+
+    /// Revokes one of an API door's keys, on the key, as the iPad's `revoke`: its next request is refused.
+    func revokeAPIKey(_ door: TafDoors.Door, _ key: TafDoors.Door.Key) async {
+        guard let changed = await signed(.revokeAPIDoorKey(taf: taf, door: door.id, key: key.id), named: key.shownName) else { return }
+        if changed == nil, let i = doors.firstIndex(where: { $0.id == door.id }) { doors[i].keys.removeAll { $0.id == key.id } }
+    }
+
+    /// One API door act on the key: the act's request, with the key's assertion over it. Nil when it didn't go (a closed
+    /// sheet says nothing; anything else says why), else the door tafs cloud answered, when it answered one.
+    private func signed(_ act: KeyAct, named: String) async -> TafDoors.Door?? {
+        guard let sign = signWithKey else {
+            error = Words.app("approval.device_can_not_approve_approve")
+            return nil
+        }
+        let cloud = cloud
+        busy = true
+        defer { busy = false }
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: named))
+            let door = try await cloud.signedDoorChange(act, assertion: assertion)
+            if let door, let i = doors.firstIndex(where: { $0.id == door.id }) { doors[i] = door }
+            error = nil
+            return .some(door)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            self.error = NeedsYouModel.why(error)
+            return nil
+        }
+    }
+
     func remove(_ door: TafDoors.Door) async {
+        // An API door is removed on the key, as the iPad's `removeAPI`: its keys stop working with it.
+        if door.kind == "api" {
+            if await signed(.removeAPIDoor(taf: taf, door: door.id), named: door.label) != nil { doors.removeAll { $0.id == door.id } }
+            return
+        }
         // A Slack door with a channel subscription: the iPad takes planque's subscription back
         // first, signed (`removeSlackDoor`); with no planque connection it says to start
         // connected tools first and removes nothing. This Mac has none.
@@ -134,11 +179,16 @@ final class DoorsModel: ObservableObject {
 @MainActor
 final class DoorModels: ObservableObject {
     private var models: [String: DoorsModel] = [:]
+    /// The security key's approval, handed to each taf's doors for an API door's acts; nil without a key.
+    var signWithKey: ((KeyAct, String) async throws -> String)? {
+        didSet { for model in models.values { model.signWithKey = signWithKey } }
+    }
 
     func model(for taf: Home.Taf, cloud: CloudClient) -> DoorsModel? {
         if let model = models[taf.id] { return model }
         guard let id = taf.tafID else { return nil }
         let model = DoorsModel(cloud: cloud, taf: id)
+        model.signWithKey = signWithKey
         models[taf.id] = model
         return model
     }

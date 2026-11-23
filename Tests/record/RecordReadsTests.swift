@@ -132,8 +132,19 @@ let recordReadsTests: [Test] = [
         try expectEqual(try line("refused", #","answer":{"decision":"refused","by":"admin"}"#), "refused by an admin · nothing sent")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once","by":"finance_lead"}"#), "approved by someone with the role finance lead · done")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once"}"#), "approved by someone else · done")
-        // Held, KIFF may no longer hold it: tafs cloud's own line stands.
-        try expectEqual(try line("held", detail: "Waiting for you"), "Waiting for you")
+        // Held, while waiting (KIFF's held list unread, or holding it): who decided and what became of it,
+        // as the iPad's; "no longer waiting" is in RecordNamingTests.
+        try expectEqual(try line("held", detail: "Waiting for you"), "waiting for you · nothing sent yet")
+        // The receipt's decision, in its facts line, as the iPad's decisionWords.
+        func decision(_ kind: String, _ extra: String = "") throws -> String {
+            try entry(call("a", kind: kind, call: #"{"proposal_id":"p",\#(signed)\#(extra)}"#)).decisionWords(en)
+        }
+        try expectEqual(try decision("done"), "allowed by the Card")
+        try expectEqual(try decision("refused"), "refused by the Card")
+        try expectEqual(try decision("held"), "held for you by the Card")
+        try expectEqual(try decision("approved"), "held → approved by you")
+        try expectEqual(try decision("done", #","answer":{"decision":"approved_once","you":true}"#), "held → approved once by you")
+        try expectEqual(try decision("refused", #","answer":{"decision":"refused","by":"admin"}"#), "held → refused by an admin")
         // No receipt and no answer: tafs cloud's line, as the iPad's own.
         try expectEqual(try entry(call("b", detail: "Done, within its Card")).line(en), "Done, within its Card")
         // A receipt without its trace isn't one.
@@ -143,8 +154,8 @@ let recordReadsTests: [Test] = [
             let say = try Words(language: language, folder: strings)
             for kind in ["done", "not_done", "sending", "unknown", "refused", "revoked", "approved", "started"] {
                 let e = try entry(call("a", kind: kind, call: #"{"proposal_id":"p",\#(signed),"answer":{"decision":"refused","by":"viewer"}}"#))
-                for part in [e.decidedLine(say), e.resultLine(say), e.answerer(say)] {
-                    try expect(!part.contains("record.") && !part.contains("people.") && !part.contains("card.") && !part.isEmpty, "\(language) \(kind): \(part)")
+                for part in [e.decidedLine(say), e.resultLine(say), e.answerer(say), e.decisionWords(say)] {
+                    try expect(!part.contains("receipt.") && !part.contains("record.") && !part.contains("people.") && !part.contains("card.") && !part.isEmpty, "\(language) \(kind): \(part)")
                 }
             }
         }

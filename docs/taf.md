@@ -233,6 +233,28 @@ app (an email address, a WhatsApp number), with the answer going back the same w
   subscription first, signed; without planque it says to start from Connected apps first
   (`door.start_connected_tools_first_slack`), and so does this Mac.
 
+### A door from another application (`APIDoorPanel`)
+
+Ported from the iPad's `APIDoorViews.swift` and `TafsCloud+APIDoors.swift`: a door whose `kind` is `api`, a company's
+own software handing the taf work with a key (tafs docs/doors.md). Drawn for what tafs cloud sends; its
+`TAFS_API_DOORS` decides, never the app.
+- **Its panel:** "From another application" and its name, Open; requests refused until it's open again
+  (`door.api.paused`); today's count against its cap; its last request in tafs cloud's words only, never the raw
+  status. Then its keys (at most two), each by its name, else its last four, with when it was made and last used, and
+  **Revoke**; at most two keys; the boundary line; **Remove door**.
+- **On this Mac's security key**, as a taf's removal is: tafs cloud's `doorSigned` takes `KIFF-Passkey-Assertion`
+  through `checkSigned`. Each is the act's own request, approved once (`KeyAct`), named in the PIN sheet as the iPad's
+  reasons:
+  - **Open it again:** `PATCH /v1/tafs/{taf}/doors/{door}` with exactly `{"open":true}` ("Open {app}'s door again").
+  - **Revoke a key:** `DELETE …/doors/{door}/keys/{key}` ("Revoke “{key}”"), asked first with what it means.
+  - **Remove door:** `DELETE …/doors/{door}`, asked first with the API door's own body (its keys stop working).
+- **Pausing is never signed:** `PATCH` with `{"open":false}` on the session, as every door's switch.
+- **A closed sheet** sends nothing and says nothing; without a key on this Mac, each says to approve on another
+  device.
+- **Not here:** **New key**, which stays the phone's (the PM's 00:19): a key is shown once, and this Mac can't keep it
+  out of screen recording or the clipboard's history. Also not here: the API instructions and Coach's drafted door
+  (`DoorDraftCard`).
+
 ## Tests
 
 `scripts/test.sh taf`: the Cards as tafs cloud sends them, a Card that doesn't read, a Card
