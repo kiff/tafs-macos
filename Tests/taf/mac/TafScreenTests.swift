@@ -91,7 +91,15 @@ let tafScreenTests: [Test] = [
         guard case .loaded(let setup) = model.setup else { throw Failure(description: "not read") }
         try expectEqual(setup.connections.map(\.reconnect), [true])
         try expect(setup.connectAgain != nil, "Connect again's words")
+        try expect(setup.connectAgain?.usable == true, "drawn: its connection, title and words")
     }),
+    Test("a taf's Connect again is drawn for whoever manages it, with its button gated: nothing is sent from this Mac (sources)") {
+        let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/taf/TafTabsView.swift"), encoding: .utf8)
+        try expect(source.contains("if let again = setup.connectAgain, again.usable, manages { connectAgain(again) }"), "as the iPad's usable, manages")
+        // The button is the gate: its click says to approve on another device, with no action of its own.
+        try expect(source.contains(#"GatedAction(title: again.title, id: "connect-again|" + again.grant, color: Theme.amberText, gated: $gated)"#),
+                   "Connect again's button by tafs cloud's title, with no perform")
+    },
     Test("an app's week opens the Activity of its calls with tafs cloud's query; a filter chosen after leaves it", awaiting: { @MainActor in
         let (model, transport) = try await pages(setup: "taf-setup-connected.json")
         guard case .loaded(let setup) = model.setup, let query = TafSetup.nodes(setup.connections).first?.app.activityQuery else { throw Failure(description: "no app's query") }
