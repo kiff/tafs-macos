@@ -166,7 +166,9 @@ rows are offered whenever the taf is tafs cloud's, while its Setup is read or co
   be the iPad's type; what it doesn't send takes the iPad's defaults.
 - **Starts when:** its schedule (tafs cloud's words, − and + through the sizes it offers,
   each filling its third of the row as the iPad's, when it runs next, and what it does if still
-  working: Skip it or Run after), the app events it listens to (Stop, to take one out), its
+  working: Skip it or Run after), the app events it listens to (Stop, to take one out; one waiting for approval shows its whole filters as sent,
+  pretty-printed, as the iPad's `AppEventApprovalSheet`, then says to approve on another device: approving signs planque's
+  trigger, a route this Mac never signs), its
   doors for whoever manages the taf (the Doors list, below, as the iPad's
   `TafSetupViews.swift:26-45`), the follow-ups it set itself (Remove, with when they end), then
   **Change when it starts with Coach** for someone who manages the taf and may use Coach (the
