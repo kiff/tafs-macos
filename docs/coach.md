@@ -1,7 +1,7 @@
 # Coach
 
 Coach is where a taf is set up, an app is connected and a taf is changed, in conversation.
-**Today this screen reads Coach's chat, writes to Coach, and answers its choices. Its approvals can't be given from it yet.**
+**Today this screen reads Coach's chat, writes to Coach, and answers its choices. Approving a connection or a Card stays the phone's: each card is drawn up to the approval, with Decline, and says where to approve.**
 
 ## What is read (`Coach`, `Thread`, `CloudClient`)
 
@@ -10,6 +10,12 @@ Coach is where a taf is set up, an app is connected and a taf is changed, in con
 | `coach()` | `GET /v1/setup` | The account's Coach, or none before Coach is started. A plain read: unlike the phones' first read it sends no time zone, so it changes nothing on the account. |
 | `thread(of:session:)` | `GET /v1/tafs/{id}/conversation[/{session}]` | The chat as one ordered list (`items`): messages, cards and held calls by time; with a session, that chat's alone. |
 | `chats(of:)` | `GET /v1/tafs/{id}/chats` | Coach's chats (`session`, `started`, `updated`, `title`), each one strictly. |
+| `coachAndTools()` | `GET /v1/setup` | The same read as `coach()`, its answer's `tools` read too: Coach's tools still to give (`CoachTools`, below). Nothing more is sent. |
+| `ConnectionsSource.grants()` | planque, `GET /v1/accounts/{tenant}/grants` | The account's grants, with this device's proof (`Planque-Device-Signature`, no prompt), as Connect apps reads them: what an approval's connection line, a hand-over's tool titles and "Taking shape" read. Only Coach's own chat in the signed-in window reads it, once its cards name a grant or a hand-over lists tools, and again as they change. |
+| `AccountClient.draft(id:)` | KIFF, `GET /v1/me/agent-drafts/{id}` | The Card KIFF drafted for an approval (`component.draft`), as the iPad's `KIFFClient.draft(id:)`: with the session, unsigned. Read once each card names it, again as its answer changes, and on Try again. |
+
+planque's grants and KIFF's drafts are kept in memory only, and dropped at sign-out: they name the
+connected apps' accounts and the taf's Card terms. Nothing of them is written to disk, logged or sent on.
 
 The app draws the list as it comes. It places and folds nothing itself.
 
@@ -21,13 +27,16 @@ The app draws the list as it comes. It places and folds nothing itself.
 | The plan (`steps`) | tafs cloud's `line` and the step in hand with its mark; opened, every step with its mark, the one in hand semibold, a skipped one struck through |
 | A choice (`confirm`) | What it asks, then a white pill for each answer. Answered: one folded line, "{question} · {chosen}" |
 | Questions (`questions`) | The iPad's `QuestionsCard`: Coach's words, its title as an eyebrow with "{n} of {total} answered", each question numbered with its options and **Something else…**, then **Send answers** and **Chat about this**. Answered: one folded line, "Your answers · {tafs cloud's words}" |
-| An approval that waits | Edged in amber: "Needs you · approve", what it asks, tafs cloud's wider line when it sends one, **Decline**, and where to approve |
+| An approval that waits | As the iPad's `SetupApproval` (`SetupChatView.swift:1620-1802`), up to the approval: edged in amber, "Needs you · approve", what it asks, the connection's line from planque's grant ("Stripe is connected", "Signed in at Stripe · reading what it offers") or tafs cloud's, the Card KIFF drafted for it (its title and KIFF's lines; under tafs cloud's `signs.words`, dimmed, when the Card is approved next; "Reading KIFF's words for this connection…" until read, or why not with **Try again**), or tafs cloud's words for a Card approved next, tafs cloud's wider line when it sends one, **Decline**, and where to approve |
+| An approval that didn't go through | Edged in red, "Didn't go through", tafs cloud's line for a refused request whole, else planque's why, else "It didn't go through. Nothing was connected."; "Coach mode has to change this request before you can approve it." when planque failed its grant, else where to approve |
+| An approval a newer one replaced | As the iPad's `replaced` (`SetupComponent.swift:450-456`): another approval for the same grant, shown later, makes it history. One line with a grey ↓: "Approved · Setup asked for more below", "Declined · Setup asked again below" or "Setup changed this request: see below", even while it waits. A ⌄ opens it: "Earlier request" with **Fold**, its words and "A newer request for this connection is below.", and nothing to answer |
 | A sign-in that waits | Edged in amber: "Needs you · sign in", "Sign in at {app}", its note, tafs cloud's wider line when it sends one, where to sign in, and **Not now** |
-| An approval already answered | One folded line, ticked in green with tafs cloud's line for the connection; a decline ("Declined · {title}") with a grey minus. A ⌄ at its end: a click opens the card again, as the iPad's `SetupApproval` (`SetupChatView.swift:1513-1530`), edged in green (amber once declined), "Approved" or "Declined" with **Fold**, then its title, its words and the connection's line. Nothing on it answers again |
+| An approval already answered | One folded line, as the iPad's `outcome` (`SetupChatView.swift:1597-1618`): ticked in green, "Approved · {the Card it signed}" with KIFF's lines under it, else "Approved · {title}", "Already approved · …", or by the vendor; a decline ("Declined · {title}") with a grey minus. Read from tafs cloud's settled `answer`, else its exact English: nothing reads as approved by default. A ⌄ at its end: a click opens the card again, edged in green (amber once declined), "Approved" or "Declined" with **Fold**, then the card as above. Nothing on it answers again |
 | A note (`notice`) | A panel in its tone's colour, its title in that colour |
-| The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools in words ("list emails", never `list_emails`), and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
+| The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools by the title their approval asked for them by ("Refund a payment", the iPad's `toolTitle`), else in words ("list emails", never `list_emails`), and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
 | A new version (`result` whose taf `improves` one) | As the iPad's `improvement` (`SetupChatView.swift:1380-1420`): edged in green, "New version · the taf's name", what it does, tafs cloud's note of what changed ("Can now list your Google Calendar events."), and no tools. Made: **See version {n}**, which opens that taf's Versions; "Version {n} is made." when the taf isn't listed. Being made: the same button, greyed, "Preparing the new version…" with a spinner. Not made: "{taf}'s new version wasn't made: {why}." and "Coach knows, and hands it over again." Nothing goes live from it |
 | A call KIFF held | "Needs you · approve". It is answered in Needs you. |
+| A drive's card (`drive`) | Nothing: Coach driving the phone's own screen is the phone's (docs/drive.md), never a question to this Mac |
 | Anything else (a drive's end, a kind this app doesn't know) | Nothing |
 
 - **A run's steps** are tafs cloud's words for them, never a tool's name: a tick, a red mark
@@ -39,8 +48,13 @@ The app draws the list as it comes. It places and folds nothing itself.
 - **A connection made while Coach is shown** shows its receipt, with board 5 (docs/connections.md ›
   The receipt). While a connection card waits, Coach's chat is read again every 4 seconds, at
   most 75 times, while Coach is on screen.
-- **Approve is not on the Mac yet.** The card says where to approve. **Decline** and **Not
-  now** answer it with `declined` or `not now`, and grant nothing.
+- **Approve stays the phone's.** Approving a connection or a Card grants at planque (the phone's
+  approval key, then planque's approve) or confirms KIFF's Card (`POST /v1/me/agent-drafts/{id}/confirm`),
+  or signs both as one pair: none is an act this Mac's security key approves (`KeyAct`, docs/approvals.md),
+  and nothing is ever signed at planque from here. The card says where to approve. **Decline** and **Not
+  now** answer it with `declined` or `not now`, and grant nothing, as the iPad's (outside its `ApprovalGate`).
+  planque's own words for the request, its terms and the profile words the phone's Approve matches aren't
+  drawn here: they go with Approve.
 - **A sign-in wider than the job is said on the card** (`WiderLine`, as the iPad's): when the
   app's sign-in can't be narrowed to what the taf uses, tafs cloud marks a waiting approval or
   sign-in card `wider: {words}`, in the reader's language. Its words are drawn as sent, 14
@@ -275,7 +289,8 @@ on Windows' passkey route (tafs-windows `CoachStart.StartAsync`), for an account
   rebuilds the window, and its going ends what the old one started (`coach.signedOut()`, the taf
   chat's, and a PIN sheet left open), as the iPad's `accountGeneration` (`AppModel.swift:887`, `:1472`).
 - **Not here yet:** tafs cloud's first start, the tools batch and Coach's Cards signed once
-  (`startCoachTogether`, `RequestsTogether` on the key); the tools step; keeping planque's
+  (`startCoachTogether`, `RequestsTogether` on the key); giving Coach's tools (the step is drawn, below);
+  keeping planque's
   enrolment across launches (it lasts this session; asked again, planque answers `kept`, and
   nothing is minted). The iPad's "Starting asks for {biometry} once." isn't shown on this route:
   the shared words have no line for the security key there, and the PIN sheet says what it asks.
@@ -468,8 +483,11 @@ chat and a taf's alike:
   long edge.
 - **Send takes the ready files** with the words, as a message of its own: by id
   (`attachments`), words optional. Send waits while a file is still going up, and while files
-  are ready but the chat is at work, or while a new conversation improves a taf: its first
-  message carries none, and they wait in the tray. A message with files that doesn't go goes
+  are ready but the chat is at work. A new conversation that improves a taf sends its words alone,
+  as the iPad's `improvementHoldsFiles`: its first message carries none, the files wait in the tray for
+  the next one, and the box says so ("Files go with your next message: send this one first, then
+  attach them."). Send's VoiceOver words say what holds it: "Send once the files are up", "Send when
+  this answer is done". A message with files that doesn't go goes
   back to the composer, words and files, with why above the box; one refused for want of the
   AI-data consent goes back too: Allow then only allows, and they wait to send again.
 - **A sent message's files** show under it, and each opens: tafs cloud says where it is
@@ -529,11 +547,42 @@ onto more rows** rather than squeeze; and the message box as a rounded panel (co
 the foot, its field at 16 and a 40-point send circle, on a bar with a faint shadow upward.
 A message still going is at 0.7.
 
+## "Taking shape" (`SetupShape`, `SetupShapePanel`)
+
+As the iPad's `SetupShapePanel` and `SetupShape` (kiff/tafs#85): beside Coach's conversation, 420
+wide behind a 1-point rule, once Coach is 780 or wider (dragged wide, or ⤢). The plan then shows
+there, not in the conversation.
+
+- Its eyebrow, "Taking shape"; the taf's name once handed over, else the plan's title; with nothing
+  yet, "As the conversation goes, the plan, the apps being connected and the taf's Card show here."
+- The plan with each step's mark, "Plan · {done} of {total}", and "Needs you" under the step at work
+  while a card waits; with no plan, one step for each card that asked something, and where it stands.
+- The tools it connects, from planque's grants: each vendor with Connected, Signed in, Waiting for you
+  or Not connected (with planque's why), and once connected the tools it brings.
+- The Card KIFF drafted, in KIFF's lines, edged dashed until confirmed, with "A draft until you approve it in the conversation."
+- **Mac difference:** the iPad shows it once planque is set up on that phone (`planqueReady`), which this
+  Mac is only after a Start made on it; here it shows while planque is read for Coach with this Mac's
+  proof, as Windows shows it while planque is there to read tools.
+
+## Coach's tools (`CoachTools`, `CoachToolsRow`, `CoachToolsSheet`)
+
+As the iPad's `CoachToolsStep.swift`, from `GET /v1/setup`'s `tools`, read with Coach:
+
+- **The row**, above the conversation, while tafs cloud says the tools aren't given: tafs cloud's line
+  ("Coach's tools are waiting for you · Give them"), else "Coach's tools", in amber, with a chevron.
+- **The step**, from the row: tafs cloud's title; for `to_give`, its intro, the groups up front, each
+  tool (what it does, why) and Coach's Cards in KIFF's words under the step's fold, and its ask; for
+  `taken`, which name another tool holds; anything else, that it isn't known. Then **Not now**, which
+  only closes it. Every word is tafs cloud's or KIFF's; the app's own stand in only where none came.
+- **Give is the phone's:** it signs tafs cloud's batch of connections and Coach's Cards' draft with the
+  approval key. Its place says where to approve. No body is kept here, and nothing is sent from it.
+- Not here: Start's own screen of the same (`CoachToolsGiven(start: true)`, with Coach's first Start),
+  and the step opening by itself after an install or a first Start.
+
 ## Not yet
 
-Approving a connection or a Card,
-and Coach mode over a taf's page. Each is its own pull request; the ones
-that grant authority come with their approval.
+Approving a connection or a Card (the phone's: see above), giving Coach's tools, and Coach mode over a
+taf's page. Each is its own pull request; the ones that grant authority come with their approval.
 
 ## Tests
 
@@ -541,4 +590,7 @@ that grant authority come with their approval.
 items that don't read, a card's key, an unreadable answer; what is and isn't a message, the
 send's exact body, each refusal, the following's pace and its limit, Retry, and both answers
 to the consent; a run's work, each kind of card, declining, the live steps, and what `Rich`
-reads. It writes `build/screenshots/coach-*.png`.
+reads; an approval's answer, state and lines, `replaced`, KIFF's draft and its lines, the draft read,
+a drive's card never a question (`ApprovalTests`); "Taking shape" (`SetupShapeTests`); Coach's tools
+(`CoachToolsTests`). It writes `build/screenshots/coach-*.png`, `coach-shape-en.png`,
+`coach-replaced-en.png` and `coach-tools-en.png` among them.
