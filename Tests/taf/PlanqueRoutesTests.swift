@@ -30,9 +30,13 @@ enum PlanqueBan {
     /// No grant's sub-route at all, however a path is put together (planque `server.go`). `/keys` isn't one.
     static let subRoute = try! NSRegularExpression(pattern: #"/(key|approve|confirm|connect-fresh|sign-in|tools|chrome|describe|read|catalog|channels)\b"#)
 
-    /// The banned text this source names, else nil. KIFF's draft confirm line is taken out first, in `KeyAct` only.
+    /// The banned text this source names, else nil. KIFF's draft confirm line is taken out first, in `KeyAct` only. A line that
+    /// is only a comment names no route (a doc's path, `docs/chrome.md`, isn't one), as `code(_:)` below reads them; a route in
+    /// code, a comment after it included, is still read.
     static func names(path: String, text: String) -> String? {
-        var text = text
+        var text = text.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
         if path.hasSuffix("Sources/Core/approvals/KeyApproval.swift") { text = text.replacingOccurrences(of: kiffDraftConfirm, with: "") }
         if let named = banned.first(where: { text.contains($0) }) { return named }
         return subRoute.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) > 0 ? "a grant's sub-route" : nil
@@ -213,11 +217,16 @@ let howItWorksTests: [Test] = [
             ("Sources/Core/approvals/KeyApproval.swift", #"return "/v1/me/agent-drafts/" + "x/confirm""#),
             ("Sources/X.swift", #"let l = "grants""#),
             ("Sources/X.swift", #"let p = base + "/sign-in""#),
+            // A sub-route in code still fails, with a comment after it or a comment line before it.
+            ("Sources/X.swift", #"let p = base + "/chrome" // docs/chrome.md"#),
+            ("Sources/X.swift", "/// docs/chrome.md\n" + #"let p = base + "/chrome""#),
         ]
         for (path, text) in fakes {
             try expect(PlanqueBan.names(path: path, text: text) != nil, "\(text) in \(path) slips through")
         }
         // The one allowed line, in `KeyAct`, passes.
         try expectEqual(PlanqueBan.names(path: "Sources/Core/approvals/KeyApproval.swift", text: PlanqueBan.kiffDraftConfirm), nil)
+        // A comment naming a doc's path names no route.
+        try expectEqual(PlanqueBan.names(path: "Sources/X.swift", text: "    /// kiff/tafs `docs/chrome.md`, \"never an allowing answer\""), nil)
     },
 ]
