@@ -251,3 +251,25 @@ trials and notes, for their rights of access and portability.
   (`SignInModel`), as the iPad's `removeOpenedFiles` in `useSession` and `forgetSession`
   (`AppModel.swift:879`, `:1334`). So a person's chats never stay on the Mac after them.
 
+
+## Account › Chrome (`ChromesModel`, `ChromesView`, `PlanqueClient.Safe`)
+
+Ported from the iPad's `ChromeViews.swift` (`ChromesView`) to tafs `docs/chrome.md` ("Your Chrome"), as Linux's
+tafs-linux#89.
+- **Its row**, after Devices, shows only once planque lists Chromes for this person: none while planque doesn't offer
+  them (404) or for someone who may only view (403), as the iPad's while `chromes` is nil. Read once with the window.
+- **The page:** each Chrome by the name it was paired with, and "{browser} on {system}" when planque knows both;
+  "No Chrome is paired." with none; the footer, then **Pair a Chrome**, and the profile note.
+- **Unpair**, behind "Unpair {name}": planque ends that Chrome's connections on the same call (planque#364, "Your
+  Chrome" 3), so nothing is left pointing at a Chrome that's gone. The list is read again either way. A failure says
+  "Unpair {name} didn't go through." with why.
+- **Pair a Chrome stays the phone's:** pairing binds the phone's approval key, which the extension then trusts. A
+  click says to approve on another device, and nothing is sent.
+- **What this Mac signs at planque** widens from its enrolment alone (and the grants read's proof) to planque's safe
+  routes, as Linux's `planque::Safe`: `GET …/chromes` and `DELETE …/chromes/{id}`. Each is an empty-bodied request,
+  signed by the device key for that one request (`planque.request.v1`), with no session token, on planque's own host.
+  None goes through the enrolment's armed signer, which stays armed only around the enrolment. Nothing approves,
+  confirms or pairs. agentgabo confirmed on kiff/work#20 (22 Nov) that planque's safe routes take a software device key.
+  `PlanqueRoutesTests` pins both lists.
+- **Not here yet:** each Chrome's own connections, and naming them in Unpair's question ("Your Chrome" 3 and 4).
+  planque's grant read names each connection's Chrome; they wait on tafs' words for those lines, as on Linux.
