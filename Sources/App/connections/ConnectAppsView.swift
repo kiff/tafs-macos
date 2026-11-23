@@ -45,8 +45,8 @@ final class ConnectAppsModel: ObservableObject {
     init(cloud: CloudClient, connections: ConnectionsSource? = nil, touchID: TouchIDOnly? = nil) {
         self.cloud = cloud
         self.connections = connections
-        let s = cloud.session
-        self.touchID = touchID ?? .system(session: "\(s.tenant)|\(s.subject)|\(s.deviceID ?? "")")
+        // Touch ID through this sign-in's ending key (`EndingKey`): none, and the phone.
+        self.touchID = touchID ?? .system(session: cloud.session)
     }
 
     /// The session is ending (a sign-out, or the window rebuilt for another session): an ending
@@ -68,18 +68,22 @@ final class ConnectAppsModel: ObservableObject {
     /// Remove access, Cancel the request or Cancel the sign-in, as the iPad's
     /// `disconnect(grantID:)`: Touch ID with the question's title (`prompt`), then planque's
     /// `DELETE`, then the connections read again. A closed prompt says nothing; a refusal says
-    /// `connect.not_disconnected`. `id` is the action's, for its note.
+    /// `connect.not_disconnected`; a Mac that no longer ends one itself (no ending key now, or
+    /// one the system invalidated) says to approve on the phone. `id` is the action's, for its note.
     func disconnect(_ grantID: String, prompt: String, id: String) async {
         guard !ending.contains(id), !sessionEnded else { return }
-        guard endRoute == .touchID, let end = connections?.end else { return }
+        guard endRoute == .touchID, let source = connections, let end = source.end else {
+            notes[id] = Words.app(ConnectionEnding.phoneLine)
+            return
+        }
         ending.insert(id)
         notes[id] = nil
         defer { ending.remove(id) }
-        let outcome = await ConnectionEnding.end([grantID], prompt: prompt, confirm: touchID.confirm, delete: end,
+        let outcome = await ConnectionEnding.end([grantID], tenant: source.tenant, prompt: prompt, confirm: touchID.confirm, delete: end,
                                                  current: { [weak self] in self?.current ?? false }, Words.app)
         if outcome.stopped { return }
         if !outcome.unconfirmed { await readAgain() }
-        notes[id] = ConnectionEnding.disconnectNote(outcome)
+        notes[id] = ConnectionEnding.disconnectNote(outcome, Words.app)
     }
 
     /// Clear, as the iPad's `clearRemovedConnections`: of `ids`, only those tafs cloud lists as a
@@ -87,7 +91,11 @@ final class ConnectAppsModel: ObservableObject {
     /// for each, then the connections read again and how it went.
     func clear(_ ids: [String]) async {
         let id = "clear"
-        guard !ending.contains(id), !sessionEnded, endRoute == .touchID, let end = connections?.end else { return }
+        guard !ending.contains(id), !sessionEnded else { return }
+        guard endRoute == .touchID, let source = connections, let end = source.end else {
+            notes[id] = Words.app(ConnectionEnding.phoneLine)
+            return
+        }
         let plan = ConnectionEnding.clearPlan(ids, listed: AppConnections.removedListed(removedTafs))
         guard !plan.ending.isEmpty || !plan.keptFor.isEmpty else { return }
         guard !plan.ending.isEmpty else {
@@ -98,7 +106,7 @@ final class ConnectAppsModel: ObservableObject {
         notes[id] = nil
         defer { ending.remove(id) }
         let prompt = Words.app.count("connect.clear_removed.title", plan.ending.count)
-        let outcome = await ConnectionEnding.end(plan.ending, prompt: prompt, confirm: touchID.confirm, delete: end,
+        let outcome = await ConnectionEnding.end(plan.ending, tenant: source.tenant, prompt: prompt, confirm: touchID.confirm, delete: end,
                                                  current: { [weak self] in self?.current ?? false }, Words.app)
         if outcome.stopped { return }
         if !outcome.unconfirmed { await readAgain() }
