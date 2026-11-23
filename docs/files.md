@@ -7,7 +7,7 @@ own switch decides: with Files off (404) there are none.
 ## Where
 
 - **Account › Files**, after Connect apps in People & apps, as the iPad's row: the account's files.
-- **A taf's Files**, first on its header line ("Files · Version 5 · live", the owner's 19 Nov test), for every taf
+- **A taf's Files**, first on its header line ("Files · Version 5 · live"), for every taf
   tafs cloud runs, with how many it has kept now; it shows with none yet too. It opens the taf's files over its page.
   The header line now shows for anyone with a Files entry; its version and who it's shared with stay the manager's.
 
@@ -39,7 +39,7 @@ As the iPad's full width: the list and the open file side by side, the first fil
 
 ## Names and text (`FileText`)
 
-As the iPad's (qa-kiff's musts): a name is what follows the last `/` or `\`, with control and direction characters
+As the iPad's: a name is what follows the last `/` or `\`, with control and direction characters
 (U+202A–U+202E, U+2066–U+2069, U+200E, U+200F, U+061C) taken out; nothing, "." or ".." is the file's id. A preview
 keeps its lines and tabs and drops every other control or direction character, even if tafs cloud's own cleaning
 let one through.

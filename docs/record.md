@@ -199,8 +199,8 @@ draws the step's words, as the iPad does for anyone it gives no button.
 
 A receipt's Chrome shots: the iPad reads the pictures a paired Chrome kept before the call's steps
 (`chromeShots(op:)`) and offers each with "See the page before this step" (`chrome.shot_open`), opening
-`ChromeShotView`; they come with ChromeViews.swift. **Report this payment**, at the foot of the
-sheet, is the desktop-macos lane's (`RecordModel.report`), not on this branch.
+`ChromeShotView`; they come with ChromeViews.swift. **Report this payment** is at the foot of the
+sheet (`RecordModel.report`; ReportPaymentSheet.swift's row in the checklist).
 
 ## Tests
 
