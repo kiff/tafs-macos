@@ -226,6 +226,7 @@ struct SignedInView: View {
         // Every choice in the sidebar closes the taf's page, the screen already open too.
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
         return ShellView(selection: choosing, needsYou: needsYou.needsYouCount(onScreen: coachChatOnScreen), needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.listedTafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  sharedWithMe: { Access.sharedWithMe(access[$0.id]) },
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account,
                   gallery: overview.gallery, openGallery: { showingGallery = $0 }, openRecipe: { openRecipe = $0 }, newTaf: newTaf, screen: { screen in
