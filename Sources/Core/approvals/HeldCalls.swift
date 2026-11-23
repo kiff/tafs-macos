@@ -36,6 +36,10 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     let proposalID: String?
     /// What KIFF holds it as (`kind`): a Card unit request ("card_unit") isn't a held call.
     let kind: String?
+    /// The held step fills a field in the owner's Chrome (its `browser` block carries `fill` or `sealed_fill`;
+    /// kiff/tafs `docs/chrome.md`, "never an allowing answer without its release"). Only the paired phone's own release
+    /// opens a fill, and this Mac holds no approval key to make one: it offers no allowing answer for it, only the phone.
+    let fillsInChrome: Bool
 
     /// The calls KIFF holds, by proposal id (else the hold's own id), as the iPad reads them for the
     /// Record's "no longer waiting" (`AppModel.isWaiting`, AppModel.swift:706-712, 2664): a Card unit
@@ -59,7 +63,7 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         case expiresAt = "expires_at", accountingVersion = "accounting_version"
         case parameters, parameterUnits = "parameter_units"
         case entityID = "entity_id", arguments
-        case proposalID = "proposal_id", kind
+        case proposalID = "proposal_id", kind, browser
     }
 
     init(from decoder: Decoder) throws {
@@ -85,6 +89,22 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         hasArguments = c.contains(.arguments) && !((try? c.decodeNil(forKey: .arguments)) ?? true)
         proposalID = (try? c.decodeIfPresent(String.self, forKey: .proposalID)) ?? nil
         kind = (try? c.decodeIfPresent(String.self, forKey: .kind)) ?? nil
+        // Any value but null counts, so a fill this app can't read is still never allowed here.
+        struct Browser: Decodable {
+            let fills: Bool
+            enum CodingKeys: String, CodingKey { case fill, sealedFill = "sealed_fill" }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                func given(_ key: CodingKeys) -> Bool { c.contains(key) && !((try? c.decodeNil(forKey: key)) ?? false) }
+                fills = given(.fill) || given(.sealedFill)
+            }
+        }
+        if c.contains(.browser), !((try? c.decodeNil(forKey: .browser)) ?? false) {
+            // A browser block that doesn't read as an object can't be checked: taken as a fill, never allowed here.
+            fillsInChrome = (try? c.decode(Browser.self, forKey: .browser))?.fills ?? true
+        } else {
+            fillsInChrome = false
+        }
         struct Unit: Decodable { let unit: String; let scale: Int }
         let parameters = ((try? c.decodeIfPresent([String: Int64].self, forKey: .parameters)) ?? nil) ?? [:]
         let units = ((try? c.decodeIfPresent([String: Unit].self, forKey: .parameterUnits)) ?? nil) ?? [:]

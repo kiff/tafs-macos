@@ -36,6 +36,13 @@ makes an answer count only for the hold as the person saw it.
 | **Approve once** (`approve-once`) | Yes | **This Mac's security key** (`PasskeySession.approveOnce`, below), on the security key's route. Without a key, the phone. |
 | **Extra room** (`change-card`) | Yes | **This Mac's security key** (`PasskeySession.extraRoom`), over a total approving once can't pass, for whoever manages the Cards. Without a key, the phone. |
 
+- **A held step that fills a field in Chrome is never allowed from this Mac** (kiff/tafs `docs/chrome.md`: "never an
+  allowing answer without its release"). Only the paired phone's own release opens a fill, and this Mac holds no approval
+  key to make one. So a held call whose `browser` block carries `fill` or `sealed_fill` (`HeldCall.fillsInChrome`; any
+  value but null, and a block that doesn't read counts as one) offers no Approve once and no Extra room. Asked directly,
+  nothing is asked of the key or sent (`answerOnKey`). The card says "Approve on your phone instead", and Refuse stays.
+  planque or KIFF refusing an allow without a release is the server's half, which every app relies on.
+
 - **A Mac without a Secure Enclave never signs an approval.** `ApprovalRoute.of` says where
   an approval goes; KIFF also refuses that Mac's key on every route that grants authority.
 - **A refusal is not sent** without the device key, without the hold's accounting version,

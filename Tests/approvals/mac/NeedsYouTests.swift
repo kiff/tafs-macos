@@ -305,4 +305,21 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(asked, ["e1 change-card"])
         try expectEqual(transport.sent.map(\.path).filter { $0.hasSuffix("/reject") }, ["/v1/me/card-exceptions/e1/reject"])
     }),
+    Test("a held step that fills a field in Chrome offers no Approve once and no Extra room on this Mac: the phone's release", awaiting: { @MainActor in
+        let fill = #"{"exceptions":[{"id":"f1","subject":"a","action":"browser.act","title":"Fill a saved sign-in","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"browser":{"site":"shop.example","sealed_fill":{"sealed":"h"}}},{"id":"f2","subject":"a","action":"browser.act","title":"T","created_at":"2026-11-14T18:00:00Z","accounting_version":3,"can_approve_once":false,"browser":{"fill":{"field_ref":"x"}}}]}"#
+        let (model, transport) = model([(200, fill)], route: .passkey)
+        var asked: [String] = []
+        model.answerWithKey = { call, answer in asked.append(call.id + " " + answer.rawValue) }
+        await model.load()
+        guard case .loaded(let calls) = model.state else { throw Failure(description: "not loaded") }
+        try expectEqual(calls.map(\.fillsInChrome), [true, true])
+        try expect(!model.offersApproveOnce(calls[0]), "no Approve once for a fill")
+        try expect(!model.offersExtraRoom(calls[1], managesCards: true), "no Extra room for a fill")
+        // Even asked directly, nothing is asked of the key or sent, and the card says to approve on the phone.
+        await model.approveOnce(calls[0])
+        await model.extraRoom(calls[1])
+        try expectEqual(asked, [])
+        try expectEqual(transport.sent.count, 1)
+        try expectEqual(NeedsYouView.notTakenLine(model, calls[0]), Words.app("approval.device_can_not_approve_approve"))
+    }),
 ]
