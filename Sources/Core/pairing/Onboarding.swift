@@ -5,7 +5,7 @@ import Foundation
 /// system's own sheet, three cards on how tafs works, and the first Home. While it's off, the welcome and the sign-in
 /// are as they ship.
 enum Onboarding {
-    /// On in every build, as the iPad's since tafs#1708 (PM, kiff/work#20, 20:18). The download isn't published, and a
+    /// On in every build, as the iPad's since tafs#1708. The download isn't published, and a
     /// live Mac sign-in pass on the test account comes before any release.
     static let on = true
 

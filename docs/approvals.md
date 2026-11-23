@@ -257,7 +257,7 @@ with that computer ("Goes with its computer", no Remove of its own): signing the
 Devices removes it. The key itself can be plugged in elsewhere, so its PIN is asked for each
 approval.
 
-**On since kiff/cloud#96** (`Features.macPasskeyApprovals = true`; the PM's decision (i), 22 Nov): a Mac
+**On since kiff/cloud#96** (`Features.macPasskeyApprovals = true`): a Mac
 whose device key is in software (no Secure Enclave) pairs its security key too, with
 `kind: passkey`, `key_store: software`, its credential in the QR and `credential_proof` always, and
 the key is kept only when KIFF's claim answers `approval_mode: passkey`. Then that key alone

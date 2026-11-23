@@ -477,7 +477,7 @@ final class CoachModel: ObservableObject {
             let data = try await store.get(url)
             guard gen == accountGeneration else { return nil }
             // tafs cloud's id and the file's name, each made one safe component, so the copy stays in its own folder
-            // whatever the server sends ("../x", "/etc/x", ".."), as dev-android's Android fix (kiff/work#20).
+            // whatever the server sends ("../x", "/etc/x", ".."), as the Android app does.
             guard let dir = LocalName.file(ref.id, in: Self.openedFiles, fallback: "attachment"),
                   let local = LocalName.file(ref.name, in: dir) else { throw KIFFError.unreadable }
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

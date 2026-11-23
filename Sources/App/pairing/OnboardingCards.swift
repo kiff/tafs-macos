@@ -17,7 +17,7 @@ enum OnboardingPage: Int, CaseIterable, Identifiable {
     }
 
     /// The last card names this Mac's own way to approve: a desktop that approves on the phone (`control_lead_desktop`),
-    /// since a Mac on macOS 12 has no Touch ID to approve with (kiff/work#9).
+    /// since a Mac on macOS 12 has no Touch ID to approve with.
     var leadKey: String {
         switch self {
         case .tafs: return "onboarding.tafs_lead"

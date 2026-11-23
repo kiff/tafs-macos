@@ -246,7 +246,7 @@ let pairingSecurityKeyTests: [Test] = [
         try expectEqual(String(decoding: transport.sent[1].body, as: UTF8.self), #"{"nonce":"n","proof":"PROOF","pub":"PUB"}"#)
     }),
 
-    Test("the creation proof is on, and so are passkey approvals since kiff/cloud#96 (the PM's decision (i))") {
+    Test("the creation proof is on, and so are passkey approvals since kiff/cloud#96") {
         try expectEqual(Features.macPairingPasskeyProof, true)
         try expectEqual(Features.macPasskeyApprovals, true)
     },
