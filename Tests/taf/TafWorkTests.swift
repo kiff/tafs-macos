@@ -17,6 +17,16 @@ private let workAnswer = #"""
 """#
 
 let tafWorkTests: [Test] = [
+    Test("Results go to's Not sent lists the requests whose reply was given up on, as the iPad's notSent") {
+        let work = try AccountClient.decoder.decode(TafWork.self, from: Data(workAnswer.utf8))
+        // r1 has deliveries to send again; r2 waits on its owner and has none; a skipped firing is never one.
+        try expectEqual(work.unsent.map(\.id), ["r1"])
+        try expectEqual(work.unsent.first?.line, "Refunded order 4471")
+        try expectEqual(work.unsent.first?.deliveries.first(where: \.sendAgain)?.sendPlace, "door_reply")
+        // A delivery that wasn't given up on is no reason to list its request.
+        let sent = workAnswer.replacingOccurrences(of: #""send_again":true"#, with: #""send_again":false"#)
+        try expectEqual(try AccountClient.decoder.decode(TafWork.self, from: Data(sent.utf8)).unsent, [])
+    },
     Test("a taf's work reads as the iPad's TafWork: its rows newest first, its oldest waiting case, the owner's promise") {
         let work = try AccountClient.decoder.decode(TafWork.self, from: Data(workAnswer.utf8))
         try expectEqual(work.rows.map(\.id).first, "r|r2")
