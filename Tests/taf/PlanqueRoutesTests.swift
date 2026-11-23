@@ -156,7 +156,7 @@ let planqueRoutesTests: [Test] = [
         let calling = try sources().filter { $0.text.contains(".disconnect(grantID:") }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
         try expectEqual(calling, ["AppConnections.swift"])
         let ending = try String(contentsOf: URL(fileURLWithPath: "Sources/Core/connections/ConnectionEnding.swift"), encoding: .utf8)
-        guard let confirmAt = ending.range(of: "try await confirm(prompt)"), let deleteAt = ending.range(of: "try await delete(id)") else {
+        guard let confirmAt = ending.range(of: "try await confirm(prompt, confirmation(tenant: tenant, ids: ids))"), let deleteAt = ending.range(of: "try await delete(id)") else {
             throw Failure(description: "the ending's steps")
         }
         try expect(confirmAt.lowerBound < deleteAt.lowerBound, "Touch ID comes before the DELETE")

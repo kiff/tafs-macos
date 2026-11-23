@@ -73,6 +73,8 @@ struct TafsApp: App {
                            securityKey: PairingSecurityKey(words: words, authenticator: FidoKey(), readTries: { try await FidoKey().triesLeft() }),
                            // KIFF's sign-in page for the new welcome's Continue (`Onboarding.on`): the system's private sheet.
                            sheet: SystemKIFFSheet(),
+                           // Touch ID's ending key, made at sign-in, deleted at sign-out (`EndingKey`).
+                           endingKey: EndingKey.hook(store: store),
                            // The view-only session a pairing replaced is ended at KIFF with its own key.
                            endSession: { old, oldKey in
                                try? await AccountClient(session: old, key: oldKey, language: words.language).signOut()

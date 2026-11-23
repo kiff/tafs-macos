@@ -4,6 +4,20 @@ private let english = { try! Words(language: "en", folder: URL(fileURLWithPath: 
 
 private struct Refused: Error {}
 
+/// The ending key's Keychain item, counted: what was written and deleted.
+private final class KeptKey {
+    var record: Data?
+    var writes = 0
+    var removes = 0
+    func save(_ data: Data) { writes += 1; record = data }
+    func remove() { removes += 1; record = nil }
+    func check(session: String, biometrics: @escaping () -> Bool = { true }, loads: @escaping (Data) -> Bool = { _ in true },
+               sign: @escaping (Data, String, Data) async throws -> Void = { _, _, _ in }) -> ConnectionEnding.EndingKeyCheck {
+        ConnectionEnding.EndingKeyCheck(session: session, read: { [unowned self] in self.record }, remove: { [unowned self] in self.remove() },
+                                        biometrics: biometrics, loads: loads, sign: sign)
+    }
+}
+
 /// A removed taf's connections as tafs cloud lists them: `d` no taf uses, `k` Chargebacks' Card uses.
 private func listed() throws -> [String: Apps.RemovedTaf.Grant] {
     let removed = try AccountClient.decoder.decode([Apps.RemovedTaf].self, from: Data(#"""
@@ -54,48 +68,52 @@ let connectionEndingTests: [Test] = [
     Test("Touch ID is asked once, with the question as its reason, then each connection is ended in turn", awaiting: {
         var asked: [String] = []
         var sent: [String] = []
-        let out = await ConnectionEnding.end(["a", "b"], prompt: "Remove access to Stripe for Rae?", confirm: { asked.append($0) },
+        var signed: [Data] = []
+        let out = await ConnectionEnding.end(["a", "b"], tenant: "acme-1", prompt: "Remove access to Stripe for Rae?",
+                                             confirm: { asked.append($0); signed.append($1) },
                                              delete: { sent.append($0) }, current: { true }, english)
         try expectEqual(asked, ["Remove access to Stripe for Rae?"])
+        // The iPad's own confirmation is what the ending key signs.
+        try expectEqual(signed, [Data("tafs.disconnect.v1|acme-1|a,b".utf8)])
         try expectEqual(sent, ["a", "b"])
         try expectEqual(out, ConnectionEnding.Outcome())
-        try expectEqual(ConnectionEnding.disconnectNote(out), nil)
+        try expectEqual(ConnectionEnding.disconnectNote(out, english), nil)
     }),
     Test("a closed Touch ID prompt sends nothing: Disconnect says nothing, Clear says it wasn't done", awaiting: {
         var sent: [String] = []
-        let out = await ConnectionEnding.end(["a"], prompt: "?", confirm: { _ in throw OwnerPrompt.Closed() },
+        let out = await ConnectionEnding.end(["a"], tenant: "t", prompt: "?", confirm: { _, _ in throw OwnerPrompt.Closed() },
                                              delete: { sent.append($0) }, current: { true }, english)
         try expect(sent.isEmpty, "nothing sent")
         try expectEqual(out, ConnectionEnding.Outcome(left: 1, unconfirmed: true))
-        try expectEqual(ConnectionEnding.disconnectNote(out), nil)
+        try expectEqual(ConnectionEnding.disconnectNote(out, english), nil)
         try expectEqual(ConnectionEnding.clearNote(out, ending: 1, keptFor: [], english), "Not done: it wasn't confirmed.")
         // Nothing to end: nothing asked.
         var asked = 0
-        let none = await ConnectionEnding.end([], prompt: "?", confirm: { _ in asked += 1 }, delete: { sent.append($0) }, current: { true }, english)
+        let none = await ConnectionEnding.end([], tenant: "t", prompt: "?", confirm: { _, _ in asked += 1 }, delete: { sent.append($0) }, current: { true }, english)
         try expectEqual(none, ConnectionEnding.Outcome())
         try expectEqual(asked, 0)
     }),
     Test("a refusal is counted and said, and the next connection is still ended", awaiting: {
         var sent: [String] = []
-        let out = await ConnectionEnding.end(["a", "b"], prompt: "?", confirm: { _ in }, delete: { id in
+        let out = await ConnectionEnding.end(["a", "b"], tenant: "t", prompt: "?", confirm: { _, _ in }, delete: { id in
             sent.append(id)
             if id == "a" { throw PlanqueClient.PlanqueError.server(status: 503, message: "", words: "planque is down.") }
         }, current: { true }, english)
         try expectEqual(sent, ["a", "b"])
         try expectEqual(out.left, 1)
         try expectEqual(out.why, "Access not removed. planque is down.")
-        try expectEqual(ConnectionEnding.disconnectNote(out), "Access not removed. planque is down.")
+        try expectEqual(ConnectionEnding.disconnectNote(out, english), "Access not removed. planque is down.")
         try expectEqual(ConnectionEnding.clearNote(out, ending: 2, keptFor: [], english), "Cleared 1. 1 couldn't be cleared. Try again.")
     }),
     Test("signed out on the way: nothing more is sent, and nothing is said", awaiting: {
         var sent: [String] = []
         var live = true
-        let out = await ConnectionEnding.end(["a", "b"], prompt: "?", confirm: { _ in }, delete: { id in sent.append(id); live = false },
+        let out = await ConnectionEnding.end(["a", "b"], tenant: "t", prompt: "?", confirm: { _, _ in }, delete: { id in sent.append(id); live = false },
                                              current: { live }, english)
         try expectEqual(sent, ["a"])
         try expect(out.stopped && out.left == 1, "stopped with one left: \(out)")
         try expectEqual(ConnectionEnding.clearNote(out, ending: 2, keptFor: [], english), nil)
-        try expectEqual(ConnectionEnding.disconnectNote(out), nil)
+        try expectEqual(ConnectionEnding.disconnectNote(out, english), nil)
     }),
     Test("Clear ends only what tafs cloud lists with no Card using it, and keeps what a Card uses") {
         let plan = ConnectionEnding.clearPlan(["d", "k", "x"], listed: try listed())
@@ -120,46 +138,174 @@ let connectionEndingTests: [Test] = [
             }
         }
     },
-    Test("Touch ID alone, never the Mac's password: the check is biometrics only, with no password button") {
+    Test("Touch ID alone, never the Mac's password: the ending key's access control is biometrics only, with no password button") {
         let check = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/TouchIDOnly.swift"), encoding: .utf8)
-        try expectEqual(check.components(separatedBy: ".deviceOwnerAuthenticationWithBiometrics").count - 1, 3)
-        try expectEqual(check.components(separatedBy: ".deviceOwnerAuthentication").count - 1, 3)
+        // Touch ID is only read (`canEvaluatePolicy`), never evaluated as a policy that takes the password.
+        try expectEqual(check.components(separatedBy: ".deviceOwnerAuthenticationWithBiometrics").count - 1, 1)
+        try expectEqual(check.components(separatedBy: ".deviceOwnerAuthentication").count - 1, 1)
+        try expect(!check.contains("evaluatePolicy("), "no policy prompt: the key's signature is the check")
+        // The ending key's access control: exactly these flags, made in one place.
+        try expectEqual(check.components(separatedBy: "SecAccessControlCreateWithFlags(").count - 1, 1)
+        try expect(check.contains("SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly, [.privateKeyUsage, .biometryCurrentSet], nil)"),
+                   "exactly [.privateKeyUsage, .biometryCurrentSet]")
+        for other in [".biometryAny", ".touchIDAny", ".touchIDCurrentSet", ".userPresence", ".devicePasscode", ".or]", ".or,", ".applicationPassword",
+                      ".watch", ".companion", "kSecAttrAccessibleAfterFirstUnlock", "kSecAttrAccessibleAlways"] {
+            try expect(!check.contains(other), "the ending key never takes \(other)")
+        }
+        try expect(check.contains("SecureEnclave.P256.Signing.PrivateKey(accessControl: access)"), "made in the Secure Enclave with it")
+        // The prompt: the question as its reason, no password button, and the signature checked.
+        try expect(check.contains("context.localizedReason = reason"), "the question is the reason")
         try expect(check.contains(#"context.localizedFallbackTitle = """#), "no password button")
-        try expect(check.contains("catch where NeedsYouModel.closed(error)"), "its password button counts as closed")
+        try expect(check.contains("context.interactionNotAllowed = true"), "reading the key asks nothing")
+        try expect(check.contains("key.publicKey.isValidSignature(signature, for: message)"), "the signature is checked with the key's own public half")
+        try expect(check.contains("catch where NeedsYouModel.closed(error)"), "a closed prompt counts as closed")
+        // An invalidated key's usual error (CryptoTokenKit -9 or -5 with no LAError beneath) is the
+        // key gone, never "not passed": only CryptoTokenKit's cancel (-4) counts on its own.
+        try expect(!check.contains("[-4, -5, -9]") && check.contains(#"ns.domain == "CryptoTokenKit" && ns.code == -4"#),
+                   "CryptoTokenKit's -5 and -9 aren't a closed prompt")
+        try expect(!check.contains(".invalidContext"), "an invalid context isn't a closed prompt")
+        // The fingers record is gone.
+        for gone in ["evaluatedPolicyDomainState", "tafs.touch-id.fingers", "FingersChanged"] {
+            try expect(!check.contains(gone), "no \(gone)")
+        }
+        let core = try String(contentsOf: URL(fileURLWithPath: "Sources/Core/connections/ConnectionEnding.swift"), encoding: .utf8)
+        try expect(!core.contains("enum Fingers") && !core.contains("fingersRecord"), "no fingers record")
         // Nothing that ends a connection asks the owner's prompt, which lets the password in.
         for path in ["Sources/App/connections/ConnectAppsView.swift", "Sources/App/connections/AppConnectionsView.swift",
                      "Sources/App/connections/TouchIDOnly.swift", "Sources/Core/connections/ConnectionEnding.swift",
-                     "Sources/Core/connections/AppConnections.swift"] {
+                     "Sources/Core/connections/EndingKeyCheck.swift", "Sources/Core/connections/AppConnections.swift"] {
             let text = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
             try expect(!text.contains("confirmOwner("), "\(path) asks the owner's prompt")
             try expect(!text.contains("confirmOwnerForCore"), "\(path) asks the owner's prompt")
         }
         let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/ConnectAppsView.swift"), encoding: .utf8)
         try expectEqual(model.components(separatedBy: "confirm: touchID.confirm").count - 1, 2)
-        try expect(model.contains("touchID ?? .system(session:"), "Touch ID only, by default, held to this session's fingers")
-        // The fingers Touch ID passed with are checked against the ones kept, after the prompt.
-        try expect(check.contains("context.evaluatedPolicyDomainState"), "the enrolled set is read")
-        try expect(check.contains("== .same else {\n                throw FingersChanged()"), "a changed set after the prompt sends nothing")
+        try expect(model.contains("touchID ?? .system(session: cloud.session)"), "Touch ID only, by default, through this sign-in's ending key")
     },
-    Test("a finger added since the session began ends nothing here: Touch ID goes to the phone until the next sign-in") {
-        let session = "t1|u1|dev_1"
-        let first = Data([1, 2, 3])
-        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: session, now: first), .first)
-        let kept = ConnectionEnding.fingersRecord(session: session, now: first)
-        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: first), .same)
-        // A finger added (or one removed): another set.
-        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: Data([1, 2, 4])), .changed)
-        // None enrolled, or none readable: never Touch ID.
-        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: nil), .changed)
-        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: session, now: Data()), .changed)
-        // The next sign-in is another session: its first set is kept anew.
-        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: "t1|u1|dev_2", now: Data([9])), .first)
-        // A session id with a line break can't be told apart from its record: never Touch ID.
-        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: "t1\n", now: first), .changed)
-        // A set whose bytes hold a line break still reads as itself.
-        let broken = Data([0x0A, 7, 0x0A])
-        try expectEqual(ConnectionEnding.fingers(recorded: ConnectionEnding.fingersRecord(session: session, now: broken), session: session, now: broken), .same)
+    Test("the ending key is made at sign-in, kept, and deleted at sign-out; the sign-in's code asks nothing") {
+        let check = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/TouchIDOnly.swift"), encoding: .utf8)
+        // Only sign-in's hook writes it; the check reads, and deletes only a key gone.
+        try expectEqual(check.components(separatedBy: "store.save(").count - 1, 1)
+        try expect(check.contains("save: { try store.save($0, for: EndingKey.account) }"), "the hook keeps it")
+        try expect(check.contains("forgotten: { store.delete(EndingKey.account) })"), "sign-out deletes it")
+        try expect(check.contains(#"enclave: keyStore == "enclave" && SecureEnclave.isAvailable"#), "only beside a Secure Enclave device key")
+        let signIn = try String(contentsOf: URL(fileURLWithPath: "Sources/App/pairing/SignInModel.swift"), encoding: .utf8)
+        guard let out = signIn.range(of: "func signedOut() {") else { throw Failure(description: "signedOut") }
+        let body = signIn[out.lowerBound...].prefix(600)
+        try expect(body.contains("endingKey.forgotten()"), "sign-out deletes the ending key")
+        try expectEqual(signIn.components(separatedBy: "endingKey.kept(got, ").count - 1, 2)
+        try expectEqual(signIn.components(separatedBy: "try sessions.save(got)\n").count - 1, 2)
+        let app = try String(contentsOf: URL(fileURLWithPath: "Sources/App/entry/TafsApp.swift"), encoding: .utf8)
+        try expect(app.contains("endingKey: EndingKey.hook(store: store)"), "the app's sign-in makes it")
+        // Sign-in itself never names Touch ID's frameworks: the hook is the connections' own.
+        let fm = FileManager.default
+        for file in try fm.contentsOfDirectory(atPath: "Sources/App/pairing") where file.hasSuffix(".swift") {
+            let text = try String(contentsOf: URL(fileURLWithPath: "Sources/App/pairing/\(file)"), encoding: .utf8)
+            for asking in ["import LocalAuthentication", "LAContext", "SecAccessControl", "biometry"] {
+                try expect(!text.contains(asking), "\(file) names \(asking)")
+            }
+        }
     },
+    Test("the ending key's record is this sign-in's handle: none, another sign-in's or a broken one is no key") {
+        let record = ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([0x0A, 7]))
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: record, session: "s1"), Data([0x0A, 7]))
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: nil, session: "s1"), nil)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: record, session: "s2"), nil)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: record, session: "s"), nil)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: Data("s1".utf8), session: "s1"), nil)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: ConnectionEnding.endingKeyRecord(session: "s1", handle: Data()), session: "s1"), nil)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: record, session: ""), nil)
+        try expectEqual(ConnectionEnding.confirmation(tenant: "t_01", ids: ["g_01"]), Data("tafs.disconnect.v1|t_01|g_01".utf8))
+    },
+    Test("at sign-in: the old ending key goes, and a new one is made only beside a Secure Enclave key with Touch ID") {
+        let kept = KeptKey()
+        kept.record = ConnectionEnding.endingKeyRecord(session: "old", handle: Data([1]))
+        var made = 0
+        ConnectionEnding.keepEndingKey(session: "s1", enclave: true, biometrics: { true }, create: { made += 1; return Data([9]) },
+                                       save: kept.save, remove: kept.remove)
+        try expectEqual(made, 1)
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: kept.record, session: "s1"), Data([9]))
+        // A software key, or no Touch ID: none made, and the one before is gone.
+        for (enclave, biometrics) in [(false, true), (true, false), (false, false)] {
+            kept.record = ConnectionEnding.endingKeyRecord(session: "old", handle: Data([1]))
+            ConnectionEnding.keepEndingKey(session: "s1", enclave: enclave, biometrics: { biometrics }, create: { made += 1; return Data([9]) },
+                                           save: kept.save, remove: kept.remove)
+            try expectEqual(kept.record, nil)
+        }
+        try expectEqual(made, 1)
+        // A key that can't be made, or kept: none, and the sign-in goes on.
+        ConnectionEnding.keepEndingKey(session: "s1", enclave: true, biometrics: { true }, create: { throw Refused() },
+                                       save: kept.save, remove: kept.remove)
+        try expectEqual(kept.record, nil)
+        ConnectionEnding.keepEndingKey(session: "s1", enclave: true, biometrics: { true }, create: { Data([9]) },
+                                       save: { _ in throw Refused() }, remove: kept.remove)
+        try expectEqual(kept.record, nil)
+        ConnectionEnding.keepEndingKey(session: "s1", enclave: true, biometrics: { true }, create: { Data() }, save: kept.save, remove: kept.remove)
+        try expectEqual(kept.record, nil)
+    },
+    Test("Touch ID's check reads only: no ending key, another sign-in's, or one that doesn't load is the phone", awaiting: {
+        let kept = KeptKey()
+        var loads = true
+        var biometrics = true
+        let check = kept.check(session: "s1", biometrics: { biometrics }, loads: { _ in loads })
+        // No record: the phone (a session from before the ending key has none).
+        try expect(!check.available(), "no record")
+        try expectEqual(ConnectionEnding.route(enclaveKey: true, biometrics: check.available()), .phone)
+        kept.record = ConnectionEnding.endingKeyRecord(session: "s2", handle: Data([9]))
+        try expect(!check.available(), "another sign-in's")
+        kept.record = ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([9]))
+        try expect(check.available(), "this sign-in's")
+        try expectEqual(ConnectionEnding.route(enclaveKey: true, biometrics: check.available()), .touchID)
+        loads = false
+        try expect(!check.available(), "a key that doesn't load")
+        loads = true
+        biometrics = false
+        try expect(!check.available(), "Touch ID that can't be checked")
+        // Reading writes nothing, and deletes nothing.
+        try expectEqual(kept.writes + kept.removes, 0)
+        try expectEqual(kept.record, ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([9])))
+        // No key: confirming throws before anything is asked.
+        kept.record = nil
+        var asked = 0
+        do { try await kept.check(session: "s1", sign: { _, _, _ in asked += 1 }).confirm("?", Data()); throw Failure(description: "passed") }
+        catch is ConnectionEnding.KeyGone {}
+        try expectEqual(asked, 0)
+    }),
+    Test("a key the system invalidated (fingers changed) is deleted, sends nothing and says to use the phone; a closed prompt keeps it", awaiting: {
+        let kept = KeptKey()
+        kept.record = ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([9]))
+        var signed: [(Data, String, Data)] = []
+        let passes = kept.check(session: "s1", sign: { signed.append(($0, $1, $2)) })
+        try await passes.confirm("Remove access?", Data("m".utf8))
+        try expectEqual(signed.map(\.0), [Data([9])])
+        try expectEqual(signed.map(\.1), ["Remove access?"])
+        try expectEqual(signed.map(\.2), [Data("m".utf8)])
+        // Closed, failed or locked out: nothing sent, the key stays, Disconnect is silent and Clear not done.
+        var sent: [String] = []
+        let closed = kept.check(session: "s1", sign: { _, _, _ in throw OwnerPrompt.Closed() })
+        let out = await ConnectionEnding.end(["a"], tenant: "t", prompt: "?", confirm: closed.confirm, delete: { sent.append($0) }, current: { true }, english)
+        try expect(sent.isEmpty && out.unconfirmed && !out.phone, "nothing sent: \(out)")
+        try expectEqual(ConnectionEnding.disconnectNote(out, english), nil)
+        try expectEqual(ConnectionEnding.clearNote(out, ending: 1, keptFor: [], english), "Not done: it wasn't confirmed.")
+        try expect(closed.available(), "the key stays")
+        // Invalidated: deleted, nothing sent, and the phone's line, until the next sign-in.
+        let gone = kept.check(session: "s1", sign: { _, _, _ in throw ConnectionEnding.KeyGone() })
+        let lost = await ConnectionEnding.end(["a"], tenant: "t", prompt: "?", confirm: gone.confirm, delete: { sent.append($0) }, current: { true }, english)
+        try expect(sent.isEmpty && lost.unconfirmed && lost.phone, "nothing sent: \(lost)")
+        try expectEqual(kept.record, nil)
+        try expect(!gone.available(), "the phone now")
+        let phone = english(ConnectionEnding.phoneLine)
+        try expectEqual(ConnectionEnding.disconnectNote(lost, english), phone)
+        try expectEqual(ConnectionEnding.clearNote(lost, ending: 1, keptFor: [], english), phone)
+        // A newer sign-in's key, kept meanwhile, isn't the one deleted.
+        kept.record = ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([9]))
+        let racing = kept.check(session: "s1", sign: { _, _, _ in
+            kept.record = ConnectionEnding.endingKeyRecord(session: "s1", handle: Data([8]))
+            throw ConnectionEnding.KeyGone()
+        })
+        do { try await racing.confirm("?", Data()); throw Failure(description: "passed") } catch is ConnectionEnding.KeyGone {}
+        try expectEqual(ConnectionEnding.endingKeyHandle(recorded: kept.record, session: "s1"), Data([8]))
+    }),
     Test("once the session ends, an ending on its way sends nothing more: the model's check, and the window's") {
         let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/ConnectAppsView.swift"), encoding: .utf8)
         try expectEqual(model.components(separatedBy: "current: { [weak self] in self?.current ?? false }").count - 1, 2)
