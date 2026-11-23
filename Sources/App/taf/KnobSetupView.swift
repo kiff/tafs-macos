@@ -577,8 +577,17 @@ private struct AppEventRow: View {
                 Text(verbatim: item.words).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             if item.approval?.state == "needed", item.ok == "approve" {
-                // Approving signs, behind Face ID on the iPad: here, the line for an
-                // approval made on another device.
+                // What the iPad's `AppEventApprovalSheet` shows before it signs: the server's whole filters, as sent.
+                // Approving signs planque's trigger for the grant, a route this Mac never signs (`PlanqueRoutesTests`):
+                // here, the filters to read, then the line for an approval made on another device.
+                if let filters = Knob.filtersText(item.approval) {
+                    Text(words("knob.listen_only_events_matching_filters")).font(.system(size: 13)).foregroundColor(Theme.ink)
+                    Text(verbatim: filters).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.ink)
+                        .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raised))
+                        .accessibilityIdentifier("event.filters")
+                }
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             } else if item.approval?.state == "approved" || item.on {
