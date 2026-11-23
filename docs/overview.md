@@ -135,14 +135,18 @@ Ported from the iPad's `RecipeGallery.swift` (`RecipeGallerySheet`, `GalleryMode
   label for it.
 - What's chosen in the gallery is acted on once it has closed: a job goes to Coach's box, own
   words open Coach.
+- **The list is read again by itself**, as the iPad's `refresh`: when the screen opens, at once
+  when the app comes back to the front (the iPad's scene becoming active), and after this Mac's
+  own acts that change it (an answer in Needs you, a halt, chats set aside). The iPad has no
+  timer: it also reads after a run it saw at work ends, or a call is held in its chat. This Mac
+  also reads the lists every 5 minutes while the window is open (`WindowReads`, held calls every
+  minute), which catches those within that time.
 
 ## Not yet
 
 - Handing a recipe to a **new** Coach conversation (`newSetupChat`, `setupHanded`): its words
   go in the box of the conversation Coach shows.
 - A contract fixture for the gallery in kiff/tafs's `contracts/`: the shape is the iPad's reader.
-- Reading the list again by itself, apart from the window's round. It is read when the screen
-  opens, with each 30-second round, and at once when the app comes back to the front.
 
 ## Tests
 

@@ -497,6 +497,8 @@ struct TafSetupTab: View {
     var openConnect: (() -> Void)? = nil
     @State private var startsOpen = false
     @State private var resultsOpen = false
+    /// Connect again clicked: its line says to approve on another device.
+    @State private var gated: String?
 
     var body: some View {
         ScrollView {
@@ -549,7 +551,8 @@ struct TafSetupTab: View {
     @ViewBuilder private var first: some View {
         if case .loaded(let setup) = model.setup {
             ForEach(setup.exceptions) { CardUnitPanel(exception: $0) }
-            if let again = setup.connectAgain { connectAgain(again) }
+            // For whoever manages the taf, with all tafs cloud says of it, as the iPad's `again.usable, manages`.
+            if let again = setup.connectAgain, again.usable, manages { connectAgain(again) }
         }
     }
 
@@ -573,12 +576,15 @@ struct TafSetupTab: View {
         Label(title, systemImage: symbol).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
     }
 
-    /// The taf's own sign-in expired: tafs cloud's words for it, edged in amber. Connecting again
-    /// is a sign-in, done on the phone for now: no button here.
+    /// The taf's own sign-in expired, as the iPad's `ConnectAgainPanel`: tafs cloud's words for it in amber, edged in
+    /// amber, then its button by tafs cloud's title. Connecting again is a sign-in, which grants access and is never
+    /// done from this Mac: the button says to approve on another device and sends nothing, as Sign in again does in
+    /// Connect apps.
     private func connectAgain(_ again: TafSetup.ConnectAgain) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(verbatim: again.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
-            if let words = again.words { Text(verbatim: words).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: again.words ?? "").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                .fixedSize(horizontal: false, vertical: true)
+            GatedAction(title: again.title, id: "connect-again|" + again.grant, color: Theme.amberText, gated: $gated)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
