@@ -47,6 +47,12 @@ enum KeyAct: Equatable {
     case reopenAPIDoor(taf: String, door: String)
     case revokeAPIDoorKey(taf: String, door: String, key: String)
     case removeAPIDoor(taf: String, door: String)
+    /// Sharing a taf's KIFF agent with a group or one person (the iPad's `KIFFClient.share(agent:with:)`):
+    /// `POST /v1/agents/{agent}/grants` with the share, and stopping (`unshare(agent:from:)`): `DELETE` with the group
+    /// or the subject in the query and `{}`. KIFF takes each as an approval (`PhoneApprovalRules`), so each is the key's,
+    /// one change at a time.
+    case share(agent: String, Shares.Share)
+    case unshare(agent: String, Shares.Share)
     /// The owner's answer to "Did this happen?" (the iPad's `KIFFClient.answerHappened`): KIFF's
     /// `POST /v1/me/did-this-happen/{proposal}` with `{"happened":true}` or `false`. It's an approval route (kiff/cloud's
     /// `PhoneApprovalRules`: No gives a Card its room back), so it's the security key's, once, for this one call. The
@@ -63,6 +69,8 @@ enum KeyAct: Equatable {
         case .discardSettingUp: return "POST"
         case .reopenAPIDoor: return "PATCH"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
+        case .share: return "POST"
+        case .unshare: return "DELETE"
         case .happened: return "POST"
         }
     }
@@ -79,6 +87,13 @@ enum KeyAct: Equatable {
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
         case .revokeAPIDoorKey(let taf, let door, let key):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys/\(CloudClient.escaped(key))"
+        case .share(let agent, _): return "/v1/agents/\(CloudClient.escaped(agent))/grants"
+        case .unshare(let agent, let share):
+            // The iPad's `escapedQuery`: letters, digits and -._~ only.
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+            func q(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s }
+            let query = share.group.map { "group=\(q($0))" } ?? share.subject.map { "subject=\(q($0))" } ?? ""
+            return "/v1/agents/\(CloudClient.escaped(agent))/grants?\(query)"
         case .happened(let proposal, _): return "/v1/me/did-this-happen/\(CloudClient.escaped(proposal))"
         }
     }
@@ -99,6 +114,13 @@ enum KeyAct: Equatable {
         // The iPad's `reopenBody`, these exact bytes.
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
         case .revokeAPIDoorKey, .removeAPIDoor: return Data()
+        case .share(_, let share):
+            // The share alone, `{"group":…}` or `{"subject":…}`, as the iPad sends it.
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? encoder.encode(share)) ?? Data()
+        // The iPad sends an empty object with the DELETE.
+        case .unshare: return Data("{}".utf8)
         // The iPad's body, `["happened": happened]`, these exact bytes.
         case .happened(_, let happened): return Data(happened ? #"{"happened":true}"#.utf8 : #"{"happened":false}"#.utf8)
         }
@@ -120,6 +142,8 @@ enum KeyAct: Equatable {
         case .reopenAPIDoor: return words("door.api.open_reason", ["app": device])
         case .revokeAPIDoorKey: return words("door.api.revoke_reason", ["key": device])
         case .removeAPIDoor: return words("door.remove_door")
+        // The iPad's reason for the whole change, "Share {taf}", with the taf in `device`'s place.
+        case .share, .unshare: return words("people.share.title", ["taf": device])
         // The iPad's prompts, "Say it happened: {title}" and "Say it didn't happen: {title}", the call's title in
         // `device`'s place.
         case .happened(_, let happened):

@@ -199,6 +199,25 @@ let approvalsPasskeyTests: [Test] = [
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(act.title(words, device: "MacBook"), "Sign MacBook out of your account")
     }),
+    Test("sharing a taf on the key: one act a change, the iPad's requests (POST the share, DELETE with its query and {}), named Share {taf}") {
+        let toGroup = KeyAct.share(agent: "agent 1", Shares.Share(group: "grp_1"))
+        try expectEqual(toGroup.method + " " + toGroup.path, "POST /v1/agents/agent%201/grants")
+        try expectEqual(String(decoding: toGroup.body, as: UTF8.self), #"{"group":"grp_1"}"#)
+        let toPerson = KeyAct.share(agent: "a1", Shares.Share(subject: "u|7"))
+        try expectEqual(String(decoding: toPerson.body, as: UTF8.self), #"{"subject":"u|7"}"#)
+        let stop = KeyAct.unshare(agent: "a1", Shares.Share(subject: "ana@acme.com"))
+        try expectEqual(stop.method + " " + stop.path, "DELETE /v1/agents/a1/grants?subject=ana%40acme.com")
+        try expectEqual(String(decoding: stop.body, as: UTF8.self), "{}")
+        try expectEqual(KeyAct.unshare(agent: "a1", Shares.Share(group: "g&1")).path, "/v1/agents/a1/grants?group=g%261")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(toGroup.title(words, device: "Refunds"), "Share Refunds")
+        // Added first, groups before people, then the ones stopped: one approval each.
+        let changes = Shares.changes(agent: "a1", had: [Shares.Share(group: "old"), Shares.Share(subject: "u2")],
+                                     chosen: [Shares.Share(subject: "u2"), Shares.Share(subject: "u9"), Shares.Share(group: "new")])
+        try expectEqual(changes, [.share(agent: "a1", Shares.Share(group: "new")), .share(agent: "a1", Shares.Share(subject: "u9")),
+                                  .unshare(agent: "a1", Shares.Share(group: "old"))])
+        try expectEqual(Shares.changes(agent: "a1", had: [Shares.Share(group: "g")], chosen: [Shares.Share(group: "g")]), [])
+    },
     Test("Resume on the key: KIFF's agent or the whole account, with {}, named as the iPad's reason; tafs cloud's release is a DELETE", awaiting: {
         let one = KeyAct.resume(agent: "agent_1"), all = KeyAct.resume(agent: nil)
         try expectEqual(one.method + " " + one.path, "POST /v1/agents/agent_1/resume")

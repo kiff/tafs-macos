@@ -556,7 +556,8 @@ struct SignedInView: View {
                                openUsage: { Self.showUsage(openTaf: &self.openTaf, selection: &self.selection) }, me: accountModel.me,
                                doors: doorModels.model(for: taf, cloud: cloud), doorsOffered: !overview.doorsOffered.isEmpty,
                                myEmail: accountModel.me?.email,
-                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
+                               shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email,
+                                                    taf: taf.name, approveWithKey: approveWithKey),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
                                openConnect: { self.openTaf = nil; self.selection = .connectApps }, files: files,
                                record: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone, tab: tafTab).id(taf.id))
