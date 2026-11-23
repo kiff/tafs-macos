@@ -161,6 +161,7 @@ struct SignedInView: View {
             tafChat?.signedOut()
             pinSheet?.cancel()
             brief.endSession()
+            connect.endSession()
         }
         .task {
             // KIFF's and tafs cloud's lists are read again while the window is open.
@@ -504,6 +505,8 @@ struct SignedInView: View {
             // A list read still on its way keeps nothing from here.
             overview.endSession()
             brief.endSession()
+            // An ending of a connection on its way sends nothing more (`ConnectAppsModel.endSession`).
+            connect.endSession()
             // No answer outlives the session it was started in.
             needsYou.cancelAnswers()
             usage.cancelAnswers()

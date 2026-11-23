@@ -2,8 +2,10 @@
 
 The account's own connections, then the catalog of apps a taf can use. **This screen lists.**
 An app is connected through Coach, where its Card is approved with it, so the row's Connect,
-Ask Coach and Sign in again, and "Not listed? Ask Coach", open Coach. This screen sends nothing
-but `GET`. A connected app's chevron opens "Your {app} connections", which only reads. Once the app is connected, its receipt shows over Coach (below, "The receipt").
+Ask Coach and Sign in again, and "Not listed? Ask Coach", open Coach. This screen reads (`GET`),
+and ends a connection (planque's `DELETE`) only on a Touch ID Mac whose device key is in the
+Secure Enclave (docs/approvals.md › Ending access with Touch ID). A connected app's chevron opens
+"Your {app} connections", which reads, and ends one only on that Mac too. Once the app is connected, its receipt shows over Coach (below, "The receipt").
 
 ## What is read (`Apps`, `CloudClient.apps(_:cursor:)`)
 
@@ -97,7 +99,9 @@ points, docs/overview.md).
 ## Your {app} connections (`AppConnections`, `ConnectionsSource`, `AppConnectionsView`)
 
 A connected app's connections, as the iPad's `AppConnectionsView` (`ConnectAppsView.swift:488-722`)
-and its model (`AppModel.swift:7025-7083`). It only reads.
+and its model (`AppModel.swift:7025-7083`). It reads, and ends a connection (planque's `DELETE`)
+only on a Touch ID Mac whose device key is in the Secure Enclave (below, and docs/approvals.md ›
+Ending access with Touch ID).
 
 - **Read** from planque, as the iPad's `PlanqueClient.grants(signedBy:)`:
   `GET /v1/accounts/{tenant}/grants` on planque, the tenant escaped (`CloudClient.escaped`),

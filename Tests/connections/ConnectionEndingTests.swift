@@ -136,7 +136,38 @@ let connectionEndingTests: [Test] = [
         }
         let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/ConnectAppsView.swift"), encoding: .utf8)
         try expectEqual(model.components(separatedBy: "confirm: touchID.confirm").count - 1, 2)
-        try expect(model.contains("touchID: TouchIDOnly = .system"), "Touch ID only, by default")
+        try expect(model.contains("touchID ?? .system(session:"), "Touch ID only, by default, held to this session's fingers")
+        // The fingers Touch ID passed with are checked against the ones kept, after the prompt.
+        try expect(check.contains("context.evaluatedPolicyDomainState"), "the enrolled set is read")
+        try expect(check.contains("== .same else {\n                throw FingersChanged()"), "a changed set after the prompt sends nothing")
+    },
+    Test("a finger added since the session began ends nothing here: Touch ID goes to the phone until the next sign-in") {
+        let session = "t1|u1|dev_1"
+        let first = Data([1, 2, 3])
+        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: session, now: first), .first)
+        let kept = ConnectionEnding.fingersRecord(session: session, now: first)
+        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: first), .same)
+        // A finger added (or one removed): another set.
+        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: Data([1, 2, 4])), .changed)
+        // None enrolled, or none readable: never Touch ID.
+        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: session, now: nil), .changed)
+        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: session, now: Data()), .changed)
+        // The next sign-in is another session: its first set is kept anew.
+        try expectEqual(ConnectionEnding.fingers(recorded: kept, session: "t1|u1|dev_2", now: Data([9])), .first)
+        // A session id with a line break can't be told apart from its record: never Touch ID.
+        try expectEqual(ConnectionEnding.fingers(recorded: nil, session: "t1\n", now: first), .changed)
+        // A set whose bytes hold a line break still reads as itself.
+        let broken = Data([0x0A, 7, 0x0A])
+        try expectEqual(ConnectionEnding.fingers(recorded: ConnectionEnding.fingersRecord(session: session, now: broken), session: session, now: broken), .same)
+    },
+    Test("once the session ends, an ending on its way sends nothing more: the model's check, and the window's") {
+        let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/ConnectAppsView.swift"), encoding: .utf8)
+        try expectEqual(model.components(separatedBy: "current: { [weak self] in self?.current ?? false }").count - 1, 2)
+        try expect(!model.contains("current: { !Task.isCancelled }"), "a task nobody cancels is no session check")
+        try expect(model.contains("private var current: Bool { !sessionEnded && !Task.isCancelled }"), "the session's end stops it")
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        // On sign-out, and whenever the window goes with its session.
+        try expectEqual(window.components(separatedBy: "connect.endSession()").count - 1, 2)
     },
     Test("only an ending is done here: Sign in again and Replace the key stay on the phone") {
         let view = try String(contentsOf: URL(fileURLWithPath: "Sources/App/connections/AppConnectionsView.swift"), encoding: .utf8)

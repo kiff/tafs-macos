@@ -81,6 +81,39 @@ let planqueRoutesTests: [Test] = [
                 try expect(!text.contains(banned), "\(path) names \(banned)")
             }
         }
+        // No grant's sub-route at all, however a path is put together: planque's key, approve,
+        // confirm, connect-fresh, sign-in and the rest (planque `server.go`). `/keys` (KIFF's and
+        // a door's) isn't one.
+        let subRoute = try NSRegularExpression(pattern: #"/(key|approve|confirm|connect-fresh|sign-in|tools|chrome|describe|read|catalog|channels)\b"#)
+        for (path, text) in all {
+            try expect(subRoute.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) == 0, "\(path) names a grant's sub-route")
+        }
+        // Every line of code that names planque's account routes or a grants list, exactly: the
+        // enrolment's root, the grants read (its proof and the source's), the DELETE's path, and
+        // KIFF's read of a taf's shares. A line built from any of them is a new line, and fails here.
+        func code(_ needle: String) -> [String] {
+            all.flatMap { file in
+                file.text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { $0.contains(needle) && !$0.hasPrefix("//") }
+                    .map { "\(URL(fileURLWithPath: file.path).lastPathComponent): \($0)" }
+            }.sorted()
+        }
+        try expectEqual(code("/v1/accounts/"), [
+            #"AppConnections.swift: var path: String { "/v1/accounts/\(CloudClient.escaped(tenant))/grants" }"#,
+            #"PlanqueClient.swift: "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#,
+            #"PlanqueClient.swift: let account = "/v1/accounts/\(CloudClient.escaped(tenant))""#,
+            #"PlanqueClient.swift: let path = "/v1/accounts/\(CloudClient.escaped(tenant))/grants""#,
+        ])
+        try expectEqual(code("/grants"), [
+            #"AppConnections.swift: var path: String { "/v1/accounts/\(CloudClient.escaped(tenant))/grants" }"#,
+            #"PlanqueClient.swift: "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#,
+            #"PlanqueClient.swift: let path = "/v1/accounts/\(CloudClient.escaped(tenant))/grants""#,
+            #"Shares.swift: let list: List = try read(try await send("GET", "/v1/agents/\(agent.addingPercentEncoding(withAllowedCharacters: allowed) ?? agent)/grants"))"#,
+        ])
+        // The two grants reads are read as paths, never added to: nothing follows them but a GET.
+        for (path, text) in all {
+            try expect(!text.contains("path + \"/") && !text.contains("path + \"\\(") && !text.contains("account + "), "\(path) adds to a path")
+        }
         // `grants/` once, in the client, in the DELETE's path and nowhere else.
         let naming = all.filter { $0.text.contains("grants/") }
         try expectEqual(naming.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["PlanqueClient.swift"])

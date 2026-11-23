@@ -28,6 +28,34 @@ enum ConnectionEnding {
         enclaveKey && biometrics ? .touchID : .phone
     }
 
+    /// Whether Touch ID's enrolled fingers are still the ones this session first saw
+    /// (`LAContext.evaluatedPolicyDomainState`). On a Mac, anyone who knows its password can add a
+    /// finger in System Settings, so a finger added since would let the password in: a changed
+    /// set ends nothing here until the next sign-in, as the iPad's approval key is renewed when
+    /// its biometrics change.
+    enum Fingers: Equatable {
+        /// The set recorded for this session: Touch ID may end a connection.
+        case same
+        /// Another set, or none: the phone, until the next sign-in.
+        case changed
+        /// Nothing recorded for this session yet: `now` is recorded (`fingersRecord`).
+        case first
+    }
+
+    /// Reads the record kept for `session` (`fingersRecord`) against the set Touch ID has `now`.
+    static func fingers(recorded: Data?, session: String, now: Data?) -> Fingers {
+        // No set, or an id that can't be told apart from its record: never Touch ID.
+        guard let now, !now.isEmpty, !session.utf8.contains(0x0A) else { return .changed }
+        guard let recorded, let cut = recorded.firstIndex(of: 0x0A),
+              recorded[recorded.startIndex..<cut] == Data(session.utf8) else { return .first }
+        return recorded[recorded.index(after: cut)...] == now ? .same : .changed
+    }
+
+    /// What is kept for `session`: the session's id, a line break, then the set's opaque state.
+    static func fingersRecord(session: String, now: Data) -> Data {
+        Data(session.utf8) + Data([0x0A]) + now
+    }
+
     /// How an ending went, as Windows' `EndAsync` answers it.
     struct Outcome: Equatable {
         /// Connections asked to end that weren't.

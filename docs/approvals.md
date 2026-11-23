@@ -90,6 +90,10 @@ ends. The second is ending a connection (`PlanqueClient.disconnect`), and only o
   passed with the call;
 - no file under `Sources` names `/approve`, `/confirm`, `/connect-fresh`, a path under a grant or a
   POST to the grants; `grants/` is named once, in the DELETE's path;
+- no file names any grant's sub-route (`/key`, `/approve`, `/confirm`, `/connect-fresh`,
+  `/sign-in`, `/tools` and the rest of planque's), however a path is put together, and every line
+  of code that names `/v1/accounts/` or `/grants` is one of a fixed few: the enrolment's root, the
+  grants read, the DELETE's path, and KIFF's read of a taf's shares;
 - the client is made in one place and its own signer is armed only around the enrolment: the
   DELETE never arms it;
 - the DELETE is called from one place (`ConnectionsSource`), and only after Touch ID
@@ -109,7 +113,7 @@ iPad's `disconnect(grantID:)` and `clearRemovedConnections`, and as Windows' `En
    in the Secure Enclave (`AccountClient.keyStore == "enclave"`, from `SigningKey.keyStore`) **and**
    `LAContext.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics)` is true now. Anything
    else goes to the phone: a software key, a Mac without Touch ID, Touch ID not set up or locked
-   out. That Mac asks nothing, sends nothing and shows "This device can't approve. Approve on
+   out, or Touch ID's fingers changed since the session began (below). That Mac asks nothing, sends nothing and shows "This device can't approve. Approve on
    another device signed in to your account." (`approval.device_can_not_approve_approve`), as
    before. planque and KIFF would take a software key's DELETE too (a safe route takes any device
    key), so this rule is the app's own.
@@ -118,12 +122,22 @@ iPad's `disconnect(grantID:)` and `clearRemovedConnections`, and as Windows' `En
    password button. Its reason is the question's title ("Remove access to Stripe for Rae?",
    "Clear 2 connections from removed tafs?"). It is never `.deviceOwnerAuthentication` and never
    `NeedsYouModel.confirmOwner`, which let the Mac's password in. A closed prompt, or its fallback,
-   counts as closed. "Approve on your phone instead" (`approval.security_key.on_phone`) shows beside
+   counts as closed. **A finger added since doesn't count** (`ConnectionEnding.Fingers`): on a Mac,
+   anyone who knows its password can add a finger in System Settings, which asks only that
+   password. So the enrolled set (`LAContext.evaluatedPolicyDomainState`) is kept the first time
+   the session's window checks Touch ID, in the Keychain for this Mac only
+   (`tafs.touch-id.fingers`, with the session's tenant, subject and device id). Each check reads it
+   again, before the prompt and from the prompt that passed; a set that isn't the kept one sends
+   nothing, and that Mac goes to the phone until the next sign-in, as the iPad renews its approval
+   key when its biometrics change. "Approve on your phone instead" (`approval.security_key.on_phone`) shows beside
    the action.
 3. **Then planque's DELETE**, one per connection, signed by the device key with no prompt. The key
    has no access control (`DeviceKey`): the Touch ID check is the confirmation, as Windows Hello is
    before the TPM key. Clear asks Touch ID once for all of them. A refusal is counted and the next
-   connection is still tried. Once the session changes, nothing more is sent.
+   connection is still tried. Once the session changes, nothing more is sent: the window ends the
+   model's session on sign-out and when it goes (`ConnectAppsModel.endSession`, as the iPad's
+   `accountGeneration`), and an ending checks it after Touch ID and after each DELETE, even one
+   whose prompt was still open.
 4. **Then the connections and the removed tafs are read again.** What's said:
    - Disconnect says nothing when the prompt was closed (the iPad's choice; Windows says "not done").
      A refusal says `connect.not_disconnected` ("Access not removed. {why}").

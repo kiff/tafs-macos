@@ -39,12 +39,23 @@ final class ConnectAppsModel: ObservableObject {
     private let touchID: TouchIDOnly
     private var cursor: String?
     private var asked = 0
+    /// The session this model was made for ended (`endSession`): no ending sends anything more.
+    private var sessionEnded = false
 
-    init(cloud: CloudClient, connections: ConnectionsSource? = nil, touchID: TouchIDOnly = .system) {
+    init(cloud: CloudClient, connections: ConnectionsSource? = nil, touchID: TouchIDOnly? = nil) {
         self.cloud = cloud
         self.connections = connections
-        self.touchID = touchID
+        let s = cloud.session
+        self.touchID = touchID ?? .system(session: "\(s.tenant)|\(s.subject)|\(s.deviceID ?? "")")
     }
+
+    /// The session is ending (a sign-out, or the window rebuilt for another session): an ending
+    /// on its way, even one whose Touch ID prompt is still open, sends nothing more, as the
+    /// iPad's `accountGeneration`.
+    func endSession() { sessionEnded = true }
+
+    /// Whether an ending may still send: the session it began in is still this one.
+    private var current: Bool { !sessionEnded && !Task.isCancelled }
 
     /// Where ending a connection is done (`ConnectionEnding.route`): here, with Touch ID, only on
     /// a Mac whose session key is in the Secure Enclave and that can check Touch ID now; else on
@@ -59,13 +70,13 @@ final class ConnectAppsModel: ObservableObject {
     /// `DELETE`, then the connections read again. A closed prompt says nothing; a refusal says
     /// `connect.not_disconnected`. `id` is the action's, for its note.
     func disconnect(_ grantID: String, prompt: String, id: String) async {
-        guard !ending.contains(id) else { return }
+        guard !ending.contains(id), !sessionEnded else { return }
         guard endRoute == .touchID, let end = connections?.end else { return }
         ending.insert(id)
         notes[id] = nil
         defer { ending.remove(id) }
         let outcome = await ConnectionEnding.end([grantID], prompt: prompt, confirm: touchID.confirm, delete: end,
-                                                 current: { !Task.isCancelled }, Words.app)
+                                                 current: { [weak self] in self?.current ?? false }, Words.app)
         if outcome.stopped { return }
         if !outcome.unconfirmed { await readAgain() }
         notes[id] = ConnectionEnding.disconnectNote(outcome)
@@ -76,7 +87,7 @@ final class ConnectAppsModel: ObservableObject {
     /// for each, then the connections read again and how it went.
     func clear(_ ids: [String]) async {
         let id = "clear"
-        guard !ending.contains(id), endRoute == .touchID, let end = connections?.end else { return }
+        guard !ending.contains(id), !sessionEnded, endRoute == .touchID, let end = connections?.end else { return }
         let plan = ConnectionEnding.clearPlan(ids, listed: AppConnections.removedListed(removedTafs))
         guard !plan.ending.isEmpty || !plan.keptFor.isEmpty else { return }
         guard !plan.ending.isEmpty else {
@@ -88,7 +99,7 @@ final class ConnectAppsModel: ObservableObject {
         defer { ending.remove(id) }
         let prompt = Words.app.count("connect.clear_removed.title", plan.ending.count)
         let outcome = await ConnectionEnding.end(plan.ending, prompt: prompt, confirm: touchID.confirm, delete: end,
-                                                 current: { !Task.isCancelled }, Words.app)
+                                                 current: { [weak self] in self?.current ?? false }, Words.app)
         if outcome.stopped { return }
         if !outcome.unconfirmed { await readAgain() }
         notes[id] = ConnectionEnding.clearNote(outcome, ending: plan.ending.count, keptFor: plan.keptFor, Words.app)
