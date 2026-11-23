@@ -143,7 +143,8 @@ let approvalsScreenTests: [Test] = [
         try expectEqual(model.unproven, [])
         try expectEqual(model.notTaken[NeedsYouModel.happenedKey(call)], nil)
         try expectEqual(transport.sent.count, 2)
-        // This app's own refusal before anything was sent reads nothing again.
+    }),
+    Test("Did this happen?: this app's own refusal before anything was sent reads nothing again, and says its why", awaiting: { @MainActor in
         let (other, sent) = model([(200, #"{"calls":[{"proposal":"p2","title":"Pay a bill"}]}"#)])
         await other.loadUnproven(answersHolds: true)
         other.approveWithKey = { _, _ in throw KIFFError.refused(status: 0, code: "no_key") }
