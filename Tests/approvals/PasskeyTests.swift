@@ -321,4 +321,20 @@ let approvalsPasskeyTests: [Test] = [
             try expectEqual(code, "passkey_not_this_device")
         }
     }),
+    Test("Extra room on the key: KIFF's change-card over the same kiff.answer.v1, sent to change-card; never without its version", awaiting: {
+        let key = FakeKey()
+        let transport = CannedTransport([(200, "{}")])
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+        let passkey = PasskeySession(transport: transport, session: session, approver: approver(key))
+        // Over a total: KIFF says it can't be approved once, which Extra room doesn't ask.
+        let call = try heldCall(#"{"id":"e1","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T","accounting_version":4,"can_approve_once":false}"#)
+        let now = Date(timeIntervalSince1970: 1_794_679_800)
+        try await passkey.extraRoom(call, pin: nil, now: now)
+        let message = "kiff.answer.v1\nt1\ne1\nchange-card\n\n\n4\n" + KIFFMessage.time(now)
+        try expectEqual(key.asked, [testSHA256(PasskeyApprover.clientDataJSON(Data(message.utf8), sha256: testSHA256))])
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/me/card-exceptions/e1/change-card"])
+        let unversioned = try heldCall(#"{"id":"e2","subject":"a","action":"b","created_at":"2026-11-14T18:00:00Z","title":"T","can_approve_once":false}"#)
+        do { try await passkey.extraRoom(unversioned, pin: nil); throw Failure(description: "sent") } catch is KIFFError {}
+        try expectEqual(key.asked.count, 1)
+    }),
 ]
