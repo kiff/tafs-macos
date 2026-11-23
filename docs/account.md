@@ -206,10 +206,13 @@ As the iPad's `AccountView` (`SignInView.swift:404-450`), from Account's KIFF ac
 - **Delete account…**, in red, apart, with what it deletes under it
   (`sign_in.deletes_every_taf_runs_chats`), only for someone KIFF lets delete it
   (`account.delete`). On the iPad deleting is signed by the device key behind Face ID, then
-  erases tafs cloud's, planque's and KIFF's sides (`deleteAccount`). This Mac doesn't port that
-  yet, so it keeps the view-only rule: the row is drawn, and **its click sends nothing**: it
-  says "This device can't approve. Approve on another device signed in to your account."
-  (`approval.device_can_not_approve_approve`). There's no Delete account sheet on the Mac.
+  erases tafs cloud's, planque's and KIFF's sides (`deleteAccount`). **Not on macOS 12:** KIFF
+  takes a deletion only when its intent (`tafs.delete-account.v2`) is signed by the session's
+  phone approval key (`acceptDeletion` answers `approval_key_required` otherwise), and this Mac
+  holds none; there's no security-key or passkey path for it. So the row is drawn, and **its click
+  sends nothing**: it says "This device can't approve. Approve on another device signed in to
+  your account." (`approval.device_can_not_approve_approve`). There's no Delete account sheet on
+  the Mac, and no source names a deletion route (a test pins it).
 
 ## The time zone (`TimeZonePicker`, `AccountZone`)
 

@@ -167,4 +167,21 @@ let accountControlsTests: [Test] = [
         try expectEqual(try me(#"{"tenant_slug":"acme","capabilities":["account.delete"]}"#).mayDeleteAccount, true)
         try expectEqual(try me(#"{"tenant_slug":"acme"}"#).mayDeleteAccount, true)
     },
+    Test("deleting the account is the phone's: no source names a deletion route, and the Delete row only says to approve elsewhere") {
+        // KIFF takes a deletion only signed by the phone's approval key (`acceptDeletion`, `tafs.delete-account.v2`), which
+        // this Mac doesn't hold, so the Delete row sends nothing (docs/account.md, the checklist's DeleteAccountView).
+        var texts: [String] = []
+        let all = FileManager.default.enumerator(atPath: "Sources")?.compactMap { $0 as? String } ?? []
+        for path in all where path.hasSuffix(".swift") {
+            texts.append(try String(contentsOf: URL(fileURLWithPath: "Sources/" + path), encoding: .utf8))
+        }
+        try expect(!texts.isEmpty, "the sources were read")
+        for route in ["/v1/account/delete", "/v1/me/delete", "delete-account.v", "eraseAccount"] {
+            try expect(!texts.contains { $0.contains(route) }, "a source names \(route)")
+        }
+        let view = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/KiffAccountView.swift"), encoding: .utf8)
+        try expect(view.contains(#"AccountRow.action(words("settings.delete_account.row"), color: Theme.no) { deleteRefused = true }"#),
+                   "the row's click only sets what it says")
+        try expect(view.contains(#"words("approval.device_can_not_approve_approve")"#), "it says to approve on another device")
+    },
 ]

@@ -73,12 +73,12 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 
 | iPad file | Lines | What | Models |
 | :- | -: | :- | :- |
-| DeleteAccountView.swift | 60 | Deleting the account | |
 
 ## Not for macOS 12
 
 | iPad file | Lines | Why |
 | :- | -: | :- |
+| DeleteAccountView.swift | 60 | KIFF takes a deletion only when its intent (`tafs.delete-account.v2`) is signed by the phone's approval key (`acceptDeletion`), and this Mac holds none: there's no security-key path. Account's Delete row is drawn for whoever may delete, and says to approve on another device; nothing is sent (docs/account.md). |
 | DriveViews.swift | 73 | The phone's: Coach drives the phone's own screen (tafs docs/drive.md is the iOS and Android contract). As Windows (tafs-windows#242). |
 | HomeView.swift | 403 | The phone's compact home (`TafsTab` draws it only below regular width, HomeSplitView.swift:10-14). This Mac always has the sidebar: its Overview is `ShareViews`' `OverviewView`, and no taf's recipes are `HomeRecipes`. Its board 2, no tafs yet, is the Overview's with no taf and no job listed. The first Home (Ask Coach, How tafs works, with `Onboarding.on`) is the Overview's with no taf. |
 | PairComputerView.swift | 222 | The phone's side of pairing: its camera reads a computer's code. This Mac is the computer being added. |
