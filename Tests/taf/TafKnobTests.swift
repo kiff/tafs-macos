@@ -120,4 +120,11 @@ let tafKnobTests: [Test] = [
         let me = try AccountClient.decoder.decode(Me.self, from: Data(#"{"time_zone":"Europe/Paris"}"#.utf8))
         try expectEqual(me.timeZone, "Europe/Paris")
     },
+    Test("an app event's filters read as the iPad's sheet shows them before signing: the whole config, sorted, slashes as written") {
+        let approval = try JSONDecoder().decode(Knob.Item.Approval.self, from: Data(#"{"state":"needed","grant":"g1","event":"issue.created","config":{"repo":"acme/api","labels":["bug"]}}"#.utf8))
+        try expectEqual(Knob.filtersText(approval), "{\n  \"labels\" : [\n    \"bug\"\n  ],\n  \"repo\" : \"acme/api\"\n}")
+        try expectEqual(Knob.filtersText(nil), nil)
+        let empty = try JSONDecoder().decode(Knob.Item.Approval.self, from: Data(#"{"state":"needed","grant":"g1","event":"e","config":{}}"#.utf8))
+        try expectEqual(Knob.filtersText(empty), nil)
+    },
 ]
