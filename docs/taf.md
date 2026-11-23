@@ -253,9 +253,11 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
   device.
 - **API instructions**, a row under the boundary line, as the iPad's (`APIInstructionsView`): a sheet with where to
   send work (`APIInstructions.endpoint`), an example request that reads the key from the caller's own secret
-  (`$TAFS_API_KEY`), that the key isn't here, and the boundary. **The endpoint is only ever on tafs cloud's own host,
-  over HTTPS** (as the iPad's since `9fa9d97`, Windows' and Linux's): an address on another host, another scheme, a
-  port or a user becomes its path on tafs cloud, since the example sends the developer's key.
+  (`$TAFS_API_KEY`), single-quoted, that the key isn't here, and the boundary. **The endpoint is always rebuilt on
+  tafs cloud's own address, over HTTPS**, keeping the door's path only when it's plain (`^/[A-Za-z0-9/_.~-]*$`), never
+  a query or a fragment; anything else is tafs cloud's address alone. That's qa-kiff's shared rule
+  (`vectors/api-door-endpoint.json`), hardening the iPad's host pin: the example is a shell line pasted with the
+  developer's key, so it never names another host, and a path can't carry `$ ( ) ; & '` into the shell.
 - **Not here:** **New key**, which stays the phone's: a key is shown once, and this Mac can't keep it
   out of screen recording or the clipboard's history. Also not here: Coach's drafted door (`DoorDraftCard`).
 

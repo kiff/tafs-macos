@@ -8,31 +8,32 @@ enum APIInstructions {
     /// tafs cloud's own address, which every endpoint is on.
     static let cloud = URL(string: CloudClient.base)!
 
-    /// A door's address on tafs cloud, whole. Only ever on tafs cloud's own host, over HTTPS (as the iPad's since
-    /// `9fa9d97`, Windows' and Linux's): a whole address elsewhere, or one whose scheme has no host of its own
-    /// (`foo:x@evil.example/…`), becomes its path on tafs cloud, so the example, which sends the developer's key,
-    /// never names another host.
+    /// A door's address on tafs cloud: **always rebuilt on tafs cloud's own address**, keeping only the address's path,
+    /// and only when that path is plain (`^/[A-Za-z0-9/_.~-]*$`, unreserved characters); never a query or a fragment.
+    /// Anything else is tafs cloud's address alone, with its slash. It's qa-kiff's shared rule (kiff/work#24, 23 Nov,
+    /// `vectors/api-door-endpoint.json`), which hardens the iPad's `APIDoorText.endpoint`. The example is a shell
+    /// line a developer pastes, with their key, so it never names another host, and a path can't carry `$ ( ) ; & '`.
+    /// tafs cloud's own door paths (`/v1/doors/api/door_…/requests`) are always plain.
     static func endpoint(_ address: String, base: URL = cloud) -> String {
-        let address = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = URLComponents(string: address)
-        if let parts, parts.scheme?.lowercased() == "https", let host = parts.host, !host.isEmpty,
-           host.lowercased() == base.host?.lowercased(), parts.port == nil, parts.user == nil, parts.password == nil {
-            return address
-        }
-        // The path alone, set on tafs cloud's own address: whatever it holds stays in the path, never the host.
-        var path = parts?.path ?? address
-        while path.hasPrefix("/") || path.hasPrefix("\\") { path.removeFirst() }
-        guard var on = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return base.absoluteString }
-        on.path = "/" + path
-        on.query = nil
-        on.fragment = nil
-        guard let url = on.url, url.scheme == "https", url.host?.lowercased() == base.host?.lowercased(),
-              url.port == base.port, url.user == nil else { return base.absoluteString }
-        return url.absoluteString
+        let root = base.absoluteString.hasSuffix("/") ? base.absoluteString : base.absoluteString + "/"
+        guard let parts = URLComponents(string: address.trimmingCharacters(in: .whitespacesAndNewlines)) else { return root }
+        // Escaped as sent, so `%24` is never read back as `$`; a relative path is from the root.
+        var path = parts.percentEncodedPath
+        if !path.hasPrefix("/") { path = "/" + path }
+        guard isPlainPath(path) else { return root }
+        return root + path.dropFirst()
+    }
+
+    /// Whether a path holds only unreserved characters and slashes: nothing a shell reads, nothing escaped.
+    static func isPlainPath(_ path: String) -> Bool {
+        path.range(of: #"^/[A-Za-z0-9/_.~-]*$"#, options: .regularExpression) != nil
     }
 
     /// An example request, as the iPad's. It reads the key from the caller's own secret: the key is never written in it.
+    /// The endpoint is single-quoted (qa-kiff's hardening), so whatever slipped past the plain path stays inert in a shell.
     static func example(endpoint: String) -> String {
-        "curl -X POST \(endpoint) \\\n  -H \"Authorization: Bearer $TAFS_API_KEY\" \\\n  -H \"Idempotency-Key: <your request id>\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"input\": {}}'"
+        // A quote in it would close the quoting: it's dropped (a plain endpoint never has one).
+        let quoted = endpoint.replacingOccurrences(of: "'", with: "")
+        return "curl -X POST '\(quoted)' \\\n  -H \"Authorization: Bearer $TAFS_API_KEY\" \\\n  -H \"Idempotency-Key: <your request id>\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"input\": {}}'"
     }
 }
