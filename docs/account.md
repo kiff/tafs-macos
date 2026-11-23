@@ -208,8 +208,11 @@ As the iPad's `AccountView` (`SignInView.swift:404-450`), from Account's KIFF ac
   (`account.delete`). On the iPad deleting is signed by the device key behind Face ID, then
   erases tafs cloud's, planque's and KIFF's sides (`deleteAccount`). **Not on macOS 12:** KIFF
   takes a deletion only when its intent (`tafs.delete-account.v2`) is signed by the session's
-  phone approval key (`acceptDeletion` answers `approval_key_required` otherwise), and this Mac
-  holds none; there's no security-key or passkey path for it. So the row is drawn, and **its click
+  approval key (`acceptDeletion` answers `approval_key_required` otherwise), and has no
+  security-key or passkey path for it. This app signs in with a passkey (`approval: .passkey`: it
+  approves with the phone or a USB security key, docs/macos-13.md), so its session holds no
+  approval key. If the Mac ever signs in with its Secure Enclave approval key, this row can be
+  ported. So the row is drawn, and **its click
   sends nothing**: it says "This device can't approve. Approve on another device signed in to
   your account." (`approval.device_can_not_approve_approve`). There's no Delete account sheet on
   the Mac, and no source names a deletion route (a test pins it).

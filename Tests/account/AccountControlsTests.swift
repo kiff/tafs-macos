@@ -168,8 +168,9 @@ let accountControlsTests: [Test] = [
         try expectEqual(try me(#"{"tenant_slug":"acme"}"#).mayDeleteAccount, true)
     },
     Test("deleting the account is the phone's: no source names a deletion route, and the Delete row only says to approve elsewhere") {
-        // KIFF takes a deletion only signed by the phone's approval key (`acceptDeletion`, `tafs.delete-account.v2`), which
-        // this Mac doesn't hold, so the Delete row sends nothing (docs/account.md, the checklist's DeleteAccountView).
+        // KIFF takes a deletion only signed by the session's approval key (`acceptDeletion`, `tafs.delete-account.v2`), and
+        // this app signs in with a passkey, so its session holds none: the Delete row sends nothing (docs/account.md, the
+        // checklist's DeleteAccountView).
         var texts: [String] = []
         let all = FileManager.default.enumerator(atPath: "Sources")?.compactMap { $0 as? String } ?? []
         for path in all where path.hasSuffix(".swift") {
