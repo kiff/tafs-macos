@@ -11,3 +11,19 @@
 /Sources/Core/taf/PlanqueClient.swift @kiff-qa @agentgabo
 /scripts/fido.sh                      @kiff-qa @agentgabo
 /.github/                             @kiff-qa @agentgabo
+
+# What holds a key or a session, or sends the bearer and the passkey assertion (agentgabo's review, as Windows' list).
+/Sources/App/account/SecurityKeyStore.swift       @kiff-qa @agentgabo
+/Sources/App/account/SessionStore.swift           @kiff-qa @agentgabo
+/Sources/Core/account/Account.swift               @kiff-qa @agentgabo
+/Sources/Core/connections/PlanqueEnrolment.swift  @kiff-qa @agentgabo
+/Sources/Core/base/CloudClient.swift              @kiff-qa @agentgabo
+
+# The tests and docs that pin those areas.
+/Tests/approvals/                                 @kiff-qa @agentgabo
+/Tests/pairing/                                   @kiff-qa @agentgabo
+/Tests/account/AccountTests.swift                 @kiff-qa @agentgabo
+/Tests/account/mac/SessionTests.swift             @kiff-qa @agentgabo
+/Tests/account/mac/DevicesTests.swift             @kiff-qa @agentgabo
+/docs/approvals.md                                @kiff-qa @agentgabo
+/docs/pairing.md                                  @kiff-qa @agentgabo
