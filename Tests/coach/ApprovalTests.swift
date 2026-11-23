@@ -94,7 +94,15 @@ let coachApprovalTests: [Test] = [
         try expectEqual(ApprovalLines.requestRefused(.failed(nil), grant: failed), true)
         try expectEqual(ApprovalLines.requestRefused(.needsYou, grant: failed), false)
         let approved = try card(approval("a", answer: #"{"state":"answered","words":"Approved","answer":"approved"}"#))
-        try expectEqual(ApprovalLines.state(approved, grant: failed), .done)
+        try expectEqual(ApprovalLines.state(approved, grant: failed), .failed("Stripe refused the tool name"))
+        try expectEqual(ApprovalLines.state(approved, grant: nil), .done)
+        // Decline as the iPad's: waiting or failed, answered too, but not replaced or refused by planque.
+        let disconnected = try grant(#"{"id":"g_stripe","status":"disconnected","request":{"server":"mcp.stripe.com","agent":"a"}}"#)
+        try expectEqual(ApprovalLines.declinable(approved, ApprovalLines.state(approved, grant: disconnected), replaced: false, grant: disconnected), true)
+        try expectEqual(ApprovalLines.declinable(approved, ApprovalLines.state(approved, grant: failed), replaced: false, grant: failed), false)
+        try expectEqual(ApprovalLines.declinable(approved, .done, replaced: false, grant: nil), false)
+        try expectEqual(ApprovalLines.declinable(waiting, .needsYou, replaced: false, grant: nil), true)
+        try expectEqual(ApprovalLines.declinable(waiting, .needsYou, replaced: true, grant: nil), false)
         try expectEqual(ApprovalLines.eyebrow(.done, replaced: false, words).0, "Approved")
         try expectEqual(ApprovalLines.eyebrow(.needsYou, replaced: false, words).1, .amber)
         try expectEqual(ApprovalLines.eyebrow(.failed(nil), replaced: false, words).1, .no)
@@ -165,10 +173,13 @@ let coachApprovalTests: [Test] = [
         try expectEqual(ApprovalLines.drawsDraft(nextNoWords, d), false)
         // An app's first sign-in has no draft: tafs cloud's words for the Card next, and only then.
         let first = try card(approval("a", #","signs":{"card":false,"words":"Its Card: you approve it next"}"#))
-        try expectEqual(ApprovalLines.cardNextWords(first), "Its Card: you approve it next")
-        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","signs":{"card":true,"words":"Its Card"}"#))), nil)
-        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","draft":"d","signs":{"card":false,"words":"Its Card"}"#))), nil)
-        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","connection":{"done":true,"words":"Stripe is connected"},"signs":{"words":"Its Card"}"#))), nil)
+        let read = try grant(#"{"id":"g_stripe","status":"pending","request":{"server":"mcp.stripe.com","agent":"a"}}"#)
+        try expectEqual(ApprovalLines.cardNextWords(first, grant: read), "Its Card: you approve it next")
+        // Not until planque's grant for it is read, as the iPad's `grant != nil`.
+        try expectEqual(ApprovalLines.cardNextWords(first, grant: nil), nil)
+        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","signs":{"card":true,"words":"Its Card"}"#)), grant: read), nil)
+        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","draft":"d","signs":{"card":false,"words":"Its Card"}"#)), grant: read), nil)
+        try expectEqual(ApprovalLines.cardNextWords(try card(approval("a", #","connection":{"done":true,"words":"Stripe is connected"},"signs":{"words":"Its Card"}"#)), grant: read), nil)
     }),
     Test("an answered approval reads as one line: the Card it signed, else Coach's title, else the vendor", awaiting: {
         let confirmed = try draft(approvalDraftAnswer.replacingOccurrences(of: #""status":"draft""#, with: #""status":"confirmed""#))

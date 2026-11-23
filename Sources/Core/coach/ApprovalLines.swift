@@ -68,8 +68,13 @@ enum ApprovalLines {
     }
 
     static func state(_ card: Thread.Card, grant: AppConnections.Grant?) -> State {
+        // As the iPad's `approvalFinished` (AppModel.swift:9295-9302): planque failed the grant
+        // after the owner approved, so the card says so with planque's why, whatever the answer
+        // said. The Mac reads the grant only with the card in the thread, as the iPad's
+        // `grantsReadFor` asks.
+        let grantFailed = grant?.failed == true
         switch answer(card) {
-        case .approved?, .alreadyApproved?: return .done
+        case .approved?, .alreadyApproved?: if !grantFailed { return .done }
         case .declined?: return .declined
         case .failed?: return .failed(nil)
         case nil: break
@@ -165,9 +170,10 @@ enum ApprovalLines {
 
     /// tafs cloud's words for a Card approved next, on a card with no draft (an app's first
     /// sign-in), as the iPad's `cardNextWords`: none when its mark says the Card is signed now,
-    /// or the connection is already made.
-    static func cardNextWords(_ card: Thread.Card) -> String? {
-        guard card.draft == nil, card.signs?.card != true, card.connectionWords == nil else { return nil }
+    /// or the connection is already made; none, too, until planque's grant for it is read, as the
+    /// iPad draws them only with a grant (SetupChatView.swift:1737).
+    static func cardNextWords(_ card: Thread.Card, grant: AppConnections.Grant?) -> String? {
+        guard grant != nil, card.draft == nil, card.signs?.card != true, card.connectionWords == nil else { return nil }
         return card.signs?.words
     }
 
@@ -189,5 +195,13 @@ enum ApprovalLines {
     /// `requestRefused` (AppModel.swift:10113-10117). The phone's own refusals it remembers aren't here.
     static func requestRefused(_ state: State, grant: AppConnections.Grant?) -> Bool {
         state.isFailure && grant?.status == "failed"
+    }
+
+    /// Whether an approval offers Decline, as the iPad's `SetupApproval` (SetupChatView.swift:1757-1764):
+    /// not replaced, not a request planque refused, and waiting or failed, even one already
+    /// answered that didn't go through. Declining grants nothing, so it is never signed.
+    static func declinable(_ card: Thread.Card, _ state: State, replaced: Bool, grant: AppConnections.Grant?) -> Bool {
+        guard card.type == "approval", !replaced, !requestRefused(state, grant: grant) else { return false }
+        return state == .needsYou || state.isFailure
     }
 }

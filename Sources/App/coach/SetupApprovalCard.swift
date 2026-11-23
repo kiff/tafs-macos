@@ -32,7 +32,7 @@ struct SetupApprovalCard: View {
                 }
             }
             asked
-            ApprovalDraft(model: model, card: card, replaced: replaced)
+            ApprovalDraft(model: model, card: card, replaced: replaced, grant: grant)
             // A sign-in that asks for more than the job, said above the buttons, in tafs cloud's words.
             if !replaced, let wider = card.widerWords { WiderLine(words: wider) }
             outcome
@@ -84,9 +84,10 @@ struct SetupApprovalCard: View {
         } else if state == .needsYou || state.isFailure {
             if model.answering == card.key {
                 Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
-            } else if card.waitsForPerson {
-                // Saying no grants nothing, so it's never signed: any Mac may, as the iPad's Decline.
-                OutlineAction(title: words("coach.answer.decline")) { Task { await model.decline(card) } }
+            } else if ApprovalLines.declinable(card, state, replaced: replaced, grant: grant) {
+                // Saying no grants nothing, so it's never signed: any Mac may, as the iPad's Decline,
+                // on a failed card already answered too.
+                OutlineAction(title: words("coach.approval.decline")) { Task { await model.decline(card) } }
                     .disabled(model.answering != nil)
             }
             if !canApprove {
@@ -104,12 +105,14 @@ struct SetupApprovalCard: View {
 /// The taf's Card as the approval would sign it, in KIFF's lines for the draft it names, as the
 /// iPad's card draws it (SetupChatView.swift:1706-1745): under tafs cloud's words, dimmed, when the
 /// Card is approved next; said while KIFF's draft is read, or why it couldn't be, with Try again;
-/// or, with no draft, tafs cloud's words for a Card approved next.
+/// or, with no draft and planque's grant read, tafs cloud's words for a Card approved next.
 struct ApprovalDraft: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
     let card: Thread.Card
     let replaced: Bool
+    /// planque's grant for it: tafs cloud's words for a Card next are drawn only once it is read.
+    let grant: AppConnections.Grant?
 
     var body: some View {
         let read = card.draft.flatMap { model.drafts[$0] }
@@ -130,7 +133,7 @@ struct ApprovalDraft: View {
                 } else {
                     Text(words("coach.reading_kiff_words")).font(.system(size: 13)).foregroundColor(Theme.dim)
                 }
-            } else if let next = ApprovalLines.cardNextWords(card) {
+            } else if let next = ApprovalLines.cardNextWords(card, grant: grant) {
                 Text(verbatim: next).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("approval.card-next")

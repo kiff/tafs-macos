@@ -49,7 +49,18 @@ enum CallNames {
         if v.hasPrefix("mcp.") { v.removeFirst(4) }
         for suffix in ["-mcp", "_mcp", ".mcp"] where v.hasSuffix(suffix) { v.removeLast(suffix.count) }
         if let dot = v.firstIndex(of: ".") { v = String(v[..<dot]) }
-        guard let first = v.first else { return vendor }
-        return first.uppercased() + v.dropFirst().replacingOccurrences(of: "-", with: " ")
+        guard let first = v.first else { return visible(vendor) }
+        return visible(first.uppercased() + v.dropFirst().replacingOccurrences(of: "-", with: " "))
+    }
+
+    /// A vendor's line as the approval draws it, as the iPad's `KIFFMapping.visible`: no direction
+    /// character (`Words.withoutDirection`), so a name can't reorder what stands beside it; any
+    /// other control character becomes a space.
+    static func visible(_ text: String) -> String {
+        var kept = String.UnicodeScalarView()
+        for scalar in Words.withoutDirection(text).unicodeScalars {
+            kept.append(scalar.properties.generalCategory == .control ? " " : scalar)
+        }
+        return String(kept)
     }
 }

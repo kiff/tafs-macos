@@ -703,7 +703,13 @@ final class CoachModel: ObservableObject {
 
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
     func decline(_ card: Thread.Card) async {
-        guard case .loaded(let coach, _) = state, answering == nil, card.waitsForPerson, card.grants else { return }
+        guard case .loaded(let coach, _) = state, answering == nil, card.grants else { return }
+        // A sign-in while it waits; an approval as the iPad offers Decline, failed ones answered too.
+        if card.type == "approval" {
+            guard ApprovalLines.declinable(card, ApprovalLines.state(card, grant: grant(for: card)), replaced: replaced(card), grant: grant(for: card)) else { return }
+        } else {
+            guard card.waitsForPerson else { return }
+        }
         answering = card.key
         defer { answering = nil }
         do {
