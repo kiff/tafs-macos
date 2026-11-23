@@ -191,6 +191,16 @@ let approvalsHeldTests: [Test] = [
         let wrongType = try? await account.didThisHappen()
         try expect(wrongType == nil, "an amount that isn't a number doesn't read")
     }),
+    Test("Did this happen?'s answer is the iPad's request, the security key's act: POST to its proposal, happened true or false") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let yes = KeyAct.happened(proposal: "p/1", true), no = KeyAct.happened(proposal: "p/1", false)
+        try expectEqual(yes.method + " " + yes.path, "POST /v1/me/did-this-happen/p%2F1")
+        try expectEqual(no.path, yes.path)
+        try expectEqual(String(decoding: yes.body, as: UTF8.self), #"{"happened":true}"#)
+        try expectEqual(String(decoding: no.body, as: UTF8.self), #"{"happened":false}"#)
+        try expectEqual(yes.title(words, device: "Refund a payment"), "Say it happened: Refund a payment")
+        try expectEqual(no.title(words, device: "Refund a payment"), "Say it didn't happen: Refund a payment")
+    },
     Test("who answers held calls is KIFF's holds.answer; a KIFF that doesn't say leaves it to KIFF") {
         let me = { (json: String) in try AccountClient.decoder.decode(Me.self, from: Data(json.utf8)) }
         try expectEqual(try me(#"{"capabilities":["holds.answer"]}"#).answersHolds, true)

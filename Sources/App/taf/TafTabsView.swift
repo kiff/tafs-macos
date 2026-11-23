@@ -345,6 +345,11 @@ struct TafActivityTab: View {
     var openConnect: (() -> Void)? = nil
     /// A call's sheet, as the Record opens it: its receipt, checked on this Mac; nil draws the rows as they are.
     var openSheet: ((Record.Entry) -> Void)? = nil
+    /// Needs you's model, for a step a request waits on in its work (`TafWorkPanel`); nil draws its line.
+    var needsYou: NeedsYouModel? = nil
+    /// Whether this person answers held calls, and the lists read again after a step is answered.
+    var answersHolds = true
+    var answered: () async -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -355,7 +360,8 @@ struct TafActivityTab: View {
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
-                TafWorkPanel(model: model, homeHealth: taf.health, manages: manages, openUsage: openUsage)
+                TafWorkPanel(model: model, homeHealth: taf.health, manages: manages, openUsage: openUsage,
+                             needsYou: needsYou, answersHolds: answersHolds, answered: answered)
                 // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
                 RunsPanel(model: model, taf: taf)
                 RetainedRuns(model: model)

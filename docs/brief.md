@@ -54,7 +54,9 @@ brief), then two columns.
 by day in the account's zone, as the Record titles its days. Each entry says who (a taf by its
 name, "A taf" once it's removed, Coach for the lead, "You" or the person's name), its kind as a
 coloured word, the time, its words, its evidence (references only, never data) and its value. A
-removed taf's entries stay, greyed.
+removed taf's entries stay, greyed. Under its title, "Read only · newest first", and, for someone who may use Coach,
+**Ask Coach**, as the iPad's: the log closes, and Coach opens with the mission's title in its box, as the next move's
+Start does (`startNextMove`); nothing is sent until they send it.
 
 ## Mac differences
 
@@ -62,10 +64,10 @@ removed taf's entries stay, greyed.
   sidebar item. Two columns always, as the iPad's regular width.
 - **A held call has no page of its own on the Mac:** Needs you's list holds its card, and Approve
   isn't on macOS 12 yet. So opening any decision shows Needs you's list.
-- **No alert routing by `brief_kind`:** the Mac's alerts are its own, posted for held calls while
-  the app is open (`Notifier`), and none comes from tafs cloud's push yet. A clicked alert opens
+- **No alert routing by `brief_kind`, not for macOS 12:** it comes with tafs cloud's push, which reaches a Mac only
+  in a signed build with the push entitlement. The Mac's alerts are its own, posted for held calls while the app is
+  open (`Notifier`). A clicked alert opens
   Needs you, which is the brief once there is one.
-- **The mission log's Ask Coach** isn't here yet.
 - **No sample brief:** the Mac has no sample mode.
 
 ## Tests

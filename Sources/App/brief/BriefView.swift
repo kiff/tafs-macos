@@ -28,7 +28,8 @@ struct BriefScreen<NeedsYouList: View>: View {
         if let brief = model.brief, !showingList {
             screen(brief)
                 .sheet(item: $log) { shown in
-                    MissionLogView(title: shown.title, zone: zone, load: { await model.missionLog(shown.mission) }, close: { log = nil })
+                    MissionLogView(title: shown.title, zone: zone, load: { await model.missionLog(shown.mission) }, close: { log = nil },
+                                   askCoach: startNextMove.map { start in { log = nil; start(shown.title) } })
                         .environment(\.words, words)
                 }
         } else {
