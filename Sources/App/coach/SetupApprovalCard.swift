@@ -84,9 +84,10 @@ struct SetupApprovalCard: View {
         } else if state == .needsYou || state.isFailure {
             if model.answering == card.key {
                 Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
-            } else if card.waitsForPerson {
-                // Saying no grants nothing, so it's never signed: any Mac may, as the iPad's Decline.
-                OutlineAction(title: words("coach.answer.decline")) { Task { await model.decline(card) } }
+            } else if ApprovalLines.declinable(card, state, replaced: replaced, grant: grant) {
+                // Saying no grants nothing, so it's never signed: any Mac may, as the iPad's Decline,
+                // on a failed card already answered too.
+                OutlineAction(title: words("coach.approval.decline")) { Task { await model.decline(card) } }
                     .disabled(model.answering != nil)
             }
             if !canApprove {
