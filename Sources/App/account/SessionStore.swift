@@ -25,5 +25,7 @@ extension AccountClient {
         }, signMessage: { message in
             try key.sign(Data(message.utf8)).base64EncodedString()
         })
+        // Which key signed in: only one in the Secure Enclave ends a connection here (`ConnectionEnding`).
+        keyStore = key.keyStore
     }
 }

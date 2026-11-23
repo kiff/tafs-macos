@@ -20,14 +20,14 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
 }
 
 let planqueRoutesTests: [Test] = [
-    Test("this Mac signs one route at planque, its enrolment: never a grant's approve or confirm") {
+    Test("send signs one route at planque, the enrolment: never a grant's approve, confirm or key") {
         try expectEqual(PlanqueClient.routes, ["enrolment"])
         for route in PlanqueClient.routes {
             try expect(!route.hasPrefix("grants"), "\(route) is a grant's route")
-            try expect(!route.contains("approve") && !route.contains("confirm"), "\(route) approves or confirms")
+            try expect(!route.contains("approve") && !route.contains("confirm") && !route.contains("key"), "\(route) approves, confirms or keys")
         }
     },
-    Test("the enrolment is the one signed request: POST to the account's enrolment, signed once", awaiting: {
+    Test("the enrolment is one signed request: POST to the account's enrolment, signed once", awaiting: {
         let transport = CannedTransport([(200, #"{"tenant":"acme-1","device":"fp","kept":true}"#)])
         var signs = 0
         let planque = armed(transport, signs: { signs += 1 })
@@ -35,20 +35,69 @@ let planqueRoutesTests: [Test] = [
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/accounts/acme-1/enrolment"])
         try expectEqual(signs, 1)
     }),
-    Test("no source names planque's approve or confirm routes, or any grant's route but the grants read") {
+    Test("ending a connection is one DELETE of the grant, no body, signed v1 once by the signer it's given, with this device", awaiting: {
+        let transport = CannedTransport([(200, #"{"id":"g 1","status":"disconnected"}"#)])
+        let planque = PlanqueClient()
+        planque.tenant = "t/1"
+        planque.deviceID = "dev_9"
+        var signed: [String] = []
+        try await planque.disconnect(grantID: "g 1", signedBy: { signed.append($0); return "SIG" }, over: transport)
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["DELETE /v1/accounts/t%2F1/grants/g%201"])
+        let request = transport.sent[0]
+        try expect(request.body.isEmpty, "no body")
+        try expect(request.headers["Content-Type"] == nil, "no Content-Type")
+        try expect(request.headers["Authorization"] == nil, "no session goes to planque")
+        try expectEqual(signed.count, 1)
+        let lines = signed[0].components(separatedBy: "\n")
+        try expectEqual(Array(lines.prefix(6)), ["planque.request.v1", PlanqueClient.baseURL, "t/1", "DELETE", "/v1/accounts/t%2F1/grants/g%201", PlanqueClient.emptyBodyHash])
+        let header = request.headers["Planque-Device-Signature"] ?? ""
+        try expect(header.hasPrefix("t=\(lines[6]),v1=SIG,d=dev_9") && !header.contains("w="), "v1, with this device and no window: \(header)")
+        // The client's own signer was never armed for it.
+        try expect(planque.signer == nil, "the shared signer stays unarmed")
+    }),
+    Test("ending a connection signs and sends nothing without a tenant or a device, and says planque's refusal", awaiting: {
+        let none = CannedTransport([])
+        var signs = 0
+        let bare = PlanqueClient()
+        bare.deviceID = "dev_9"
+        do { try await bare.disconnect(grantID: "g1", signedBy: { _ in signs += 1; return "SIG" }, over: none); throw Failure(description: "sent") }
+        catch PlanqueClient.PlanqueError.notSigning {}
+        let nobody = PlanqueClient()
+        nobody.tenant = "acme-1"
+        nobody.deviceLoader = { nil }
+        do { try await nobody.disconnect(grantID: "g1", signedBy: { _ in signs += 1; return "SIG" }, over: none); throw Failure(description: "sent") }
+        catch PlanqueClient.PlanqueError.noDevice {}
+        try expectEqual(signs, 0)
+        try expect(none.sent.isEmpty, "nothing sent")
+        let refusing = CannedTransport([(404, #"{"error":"no such grant","words":"That connection is gone."}"#)])
+        do { try await armed(refusing, signs: {}).disconnect(grantID: "g1", signedBy: { _ in "SIG" }, over: refusing); throw Failure(description: "taken") }
+        catch PlanqueClient.PlanqueError.server(404, "no such grant", "That connection is gone.") {}
+    }),
+    Test("only the DELETE names a grant's route; no source names approve, confirm, a grant's key or a fresh connection") {
         let all = try sources()
         try expect(all.count > 50, "the app's sources: \(all.count)")
         for (path, text) in all {
-            for banned in ["grants/", "/approve", "/confirm"] {
+            for banned in ["/approve", "/confirm", "/connect-fresh", "grants/\\(CloudClient.escaped(grantID))/", "\"grants\""] {
                 try expect(!text.contains(banned), "\(path) names \(banned)")
             }
         }
+        // `grants/` once, in the client, in the DELETE's path and nowhere else.
+        let naming = all.filter { $0.text.contains("grants/") }
+        try expectEqual(naming.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["PlanqueClient.swift"])
+        let client = naming[0].text
+        try expectEqual(client.components(separatedBy: "grants/").count - 1, 1)
+        try expect(client.contains(#""/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#), "the DELETE's path, the grant's id last")
+        // One DELETE in the client, the disconnect's; it signs the empty body.
+        try expectEqual(client.components(separatedBy: #""DELETE""#).count - 1, 2)
+        try expect(client.contains(#"method: "DELETE", uri: uri, bodyHash: Self.emptyBodyHash"#), "the DELETE signs no body")
+        try expect(client.contains(#"HTTPRequest(method: "DELETE", path: uri"#), "the DELETE is sent as signed")
         // The grants proof stays a read: GET, over the grants list, and nothing else.
-        let client = try String(contentsOf: URL(fileURLWithPath: "Sources/Core/taf/PlanqueClient.swift"), encoding: .utf8)
         try expect(client.contains(#"method: "GET", uri: path"#), "the grants proof signs a GET")
-        // One request to planque's account routes in the client: the enrolment's.
+        // One request to planque's account routes through `send`: the enrolment's.
         let planqueSends = try NSRegularExpression(pattern: #"send\("[A-Z]+", "[^/]"#)
         try expectEqual(planqueSends.numberOfMatches(in: client, range: NSRange(client.startIndex..., in: client)), 1)
+        // The DELETE takes its signer: it never arms the client's.
+        try expect(!client.contains("self.signer =") && !client.contains("signer = sign"), "the client never arms itself")
     },
     Test("the PlanqueClient is made in one place, and armed to sign only around the enrolment, then cleared") {
         let made = try sources().filter { $0.text.contains("PlanqueClient()") }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
@@ -64,9 +113,18 @@ let planqueRoutesTests: [Test] = [
         let between = String(text[armedAt.upperBound..<enrolAt.lowerBound])
         try expect(between.contains("defer { planque.signer = nil }"), "cleared on every path once the enrolment ends")
     },
+    Test("the DELETE is called from one place, the connections' source, and only after Touch ID") {
+        let calling = try sources().filter { $0.text.contains(".disconnect(grantID:") }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
+        try expectEqual(calling, ["AppConnections.swift"])
+        let ending = try String(contentsOf: URL(fileURLWithPath: "Sources/Core/connections/ConnectionEnding.swift"), encoding: .utf8)
+        guard let confirmAt = ending.range(of: "try await confirm(prompt)"), let deleteAt = ending.range(of: "try await delete(id)") else {
+            throw Failure(description: "the ending's steps")
+        }
+        try expect(confirmAt.lowerBound < deleteAt.lowerBound, "Touch ID comes before the DELETE")
+    },
     Test("a path other than the enrolment is refused before anything is signed or sent", awaiting: {
         // `send` is private, so no caller outside the client can reach it; its list is the guard
-        // for a later method added inside it. The only way in today is `enrol`, as above.
+        // for a later method added inside it. The only ways in are `enrol` and `disconnect`, as above.
         try expect(!PlanqueClient.routes.contains("grants/g1/approve") && !PlanqueClient.routes.contains("grants/g1/confirm"), "approve and confirm aren't routes")
     }),
 ]
