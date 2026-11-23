@@ -511,6 +511,40 @@ enum Thread {
             }
         }
 
+        /// An answer the person sent the old way, as a message, as the iPad's
+        /// `SetupThread.Answer(_:)` (SetupComponent.swift:306-313): "[<type> <id>] <answer>".
+        /// Nil for any other message.
+        static func answerMessage(_ text: String) -> (type: String, id: String, text: String)? {
+            guard text.hasPrefix("["), let close = text.firstIndex(of: "]") else { return nil }
+            let head = text[text.index(after: text.startIndex)..<close].split(separator: " ", maxSplits: 1)
+            guard head.count == 2, !head[0].isEmpty, !head[1].isEmpty, !head[1].contains(" ") else { return nil }
+            return (String(head[0]), String(head[1]), text[text.index(after: close)...].trimmingCharacters(in: .whitespaces))
+        }
+
+        /// The person's answer to a card sent the old way, as the iPad's `SetupThread.answer(to:)`
+        /// (SetupComponent.swift:330-339) when kiff/agents recorded none: the latest of their
+        /// messages after the card, answering its type and id, that didn't fail. Nil when tafs
+        /// cloud recorded an answer, or none was sent.
+        func oldAnswer(_ card: Card) -> String? {
+            guard card.answerState == nil,
+                  let mine = items.firstIndex(where: { if case .card(let shown, _) = $0 { return shown.key == card.key } else { return false } })
+            else { return nil }
+            for item in items[(mine + 1)...].reversed() {
+                guard case .message(let m, _) = item, m.fromPerson, let a = Self.answerMessage(m.text),
+                      a.type == card.type, a.id == card.id, !a.text.hasPrefix("failed") else { continue }
+                return a.text
+            }
+            return nil
+        }
+
+        /// Whether a message of the person's is an answer to a card this chat shows, as the iPad's
+        /// `SetupChatView` (557-560): it reads once, on the card's folded line, so no bubble repeats
+        /// it. One that didn't go through keeps its bubble, which says so.
+        func answersCard(_ message: Message) -> Bool {
+            guard message.fromPerson, let a = Self.answerMessage(message.text), !a.text.hasPrefix("failed") else { return false }
+            return items.contains { if case .card(let shown, _) = $0 { return shown.id == a.id && shown.type == a.type } else { return false } }
+        }
+
         /// Whether something in this chat waits for the person.
         var waitsForPerson: Bool {
             items.contains { item in
