@@ -10,6 +10,8 @@ struct TafsApp: App {
     init() {
         // The launch's time, for how long the first window and the first list take.
         _ = LaunchClock.started
+        // A file copy a quit or a crash left behind (`FilesModel.copiesFolder`): none is kept past its screen.
+        FilesModel.clearCopies()
     }
 
     private var words: Words { language.words }

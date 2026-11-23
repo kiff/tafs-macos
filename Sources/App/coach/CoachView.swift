@@ -201,6 +201,12 @@ final class CoachModel: ObservableObject {
         return page.replaced(card)
     }
 
+    /// An answer to `card` sent the old way, as a message (`Thread.Page.oldAnswer`).
+    func oldAnswer(_ card: Thread.Card) -> String? {
+        guard case .loaded(_, let page) = state else { return nil }
+        return page.oldAnswer(card)
+    }
+
     /// What "Taking shape" shows, from what Coach holds (`SetupShape`).
     func shape(_ words: Words) -> SetupShape? {
         guard isCoach, case .loaded(_, let page) = state else { return nil }
@@ -686,7 +692,7 @@ final class CoachModel: ObservableObject {
             guard gen == accountGeneration else { return }
             notAnswered[ref.key] = nil
             settle(answered.session)
-            await follow(coach)
+            await followAnswered(answered.run, coach)
         } catch let refusal as CloudRefusal where refusal.status == 409 {
             guard gen == accountGeneration else { return }
             notAnswered[ref.key] = nil
@@ -701,6 +707,21 @@ final class CoachModel: ObservableObject {
             guard gen == accountGeneration else { return }
             notAnswered[ref.key] = Words.app("coach.answer_did_not_reach_setup")
         }
+    }
+
+    /// The run an answer started, followed as it's written, as the iPad's `followAnswered`
+    /// (AppModel.swift:9545-9556): its stream from the first event, drawn as an answer being
+    /// written. A stream that can't open leaves the thread to be read until the run ends.
+    private func followAnswered(_ run: String, _ coach: Coach) async {
+        let mine = conversation
+        if let streamer, let request = cloud.resumeRequest(coach.id, run: run), let opened = try? await streamer.lines(request) {
+            guard mine == conversation else { return }
+            let task = Task { await self.stream(opened, coach, mine, ownsPending: false) }
+            streaming = task
+            await task.value
+            return
+        }
+        await follow(coach)
     }
 
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
@@ -849,7 +870,9 @@ final class CoachModel: ObservableObject {
 
     /// Draws the answer as its events come, then reads the thread, which has it whole. A
     /// stream that breaks, at any point, only ends the drawing: the thread has the rest.
-    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach, _ started: Int) async {
+    /// `ownsPending`: the stream is the answer to `pending`, the message being sent; a card's
+    /// answer's run (`followAnswered`) isn't, and leaves a message being sent as it is.
+    private func stream(_ lines: AsyncThrowingStream<String, Error>, _ coach: Coach, _ started: Int, ownsPending: Bool = true) async {
         var reader = EventReader()
         var answer = LiveAnswer()
         var mine = started
@@ -861,7 +884,7 @@ final class CoachModel: ObservableObject {
                 guard let event = reader.read(line) else { continue }
                 if case .session(let session, let newSession, let id) = event {
                     if followNew(session, newSession: newSession, coach) { mine = conversation } else { settle(session) }
-                    pending?.id = id
+                    if ownsPending { pending?.id = id }
                 }
                 if case .end(let words) = event {
                     stopped = words
@@ -885,7 +908,7 @@ final class CoachModel: ObservableObject {
         guard mine == conversation else { return }
         // The message was taken even if the thread didn't show it in time: it is not left
         // looking unsent, with a Retry that would send it again.
-        if pending?.failed == nil { pending = nil }
+        if ownsPending, pending?.failed == nil { pending = nil }
     }
 
     private func reload(_ coach: Coach) async {
@@ -1313,7 +1336,8 @@ struct CoachView: View {
                         if page.showsTime(at: index), let at = item.at {
                             Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
                         }
-                        self.item(item)
+                        // An answer to a card shown here reads once, on the card's folded line.
+                        if !Self.hidden(item, in: page) { self.item(item) }
                     }
                     if let pending = model.pending { unsent(pending) }
                     if let live = model.live { writing(live) }
@@ -1669,6 +1693,12 @@ struct CoachView: View {
     }
 
     /// A time in the chat: the time today, else the date and the time.
+    /// A message of the person's that answers a card this chat shows (`Thread.Page.answersCard`).
+    static func hidden(_ item: Thread.Item, in page: Thread.Page) -> Bool {
+        if case .message(let m, _) = item { return page.answersCard(m) }
+        return false
+    }
+
     static func when(_ at: Date, words: Words) -> String {
         AppDates.formatter(words, date: Calendar.current.isDateInToday(at) ? .none : .medium, time: .short).string(from: at)
     }
@@ -1952,6 +1982,9 @@ struct CoachView: View {
     @ViewBuilder private func questions(_ card: Thread.Card) -> some View {
         if card.answerState == "answered" {
             outcomeLine("checkmark.circle.fill", Theme.ok, words("coach.questions.your_answers") + (card.answered ?? ""))
+        } else if let old = model.oldAnswer(card) {
+            // Sent the old way, as a message: read back in Coach's labels and the person's words.
+            outcomeLine("checkmark.circle.fill", Theme.ok, words("coach.questions.your_answers") + (QuestionAnswers.words(old, questions: card.questions, words) ?? old))
         } else if model.isCoach, mayUseCoach, card.isQuestions {
             QuestionsCard(model: model, card: card, mayUseCoach: mayUseCoach)
         } else {

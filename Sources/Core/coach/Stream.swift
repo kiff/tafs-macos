@@ -142,6 +142,17 @@ protocol LineStream {
 }
 
 extension CloudClient {
+    /// The request that follows a run already going as it's written, from its first event, as
+    /// the iPad's `resumeRun(_:run:after:)` (`KIFF/TafsCloud.swift:1752-1764`): the run a card's
+    /// answer started (`CardAnswered.run`). It sends nothing.
+    func resumeRequest(_ taf: String, run: String, after: Int = 0) -> HTTPRequest? {
+        guard !run.isEmpty else { return nil }
+        return HTTPRequest(method: "GET", path: "/v1/tafs/\(Self.escaped(taf))/runs/\(Self.escaped(run))/stream?after=\(max(0, after))", headers: [
+            "Authorization": "Bearer \(session.accessToken)", "Accept": "text/event-stream",
+            "Accept-Language": language, "User-Agent": "tafs-macos",
+        ])
+    }
+
     /// The request that sends a message with its answer streamed. Nil when what was typed
     /// isn't a message.
     func streamRequest(_ typed: String, to taf: String, target: ChatTarget = .live, files: [AttachmentRef] = []) -> HTTPRequest? {

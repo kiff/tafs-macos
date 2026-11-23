@@ -23,7 +23,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 scripts/build.sh && scripts/dmg.sh            # signed ad hoc: for a check, not for anyone's Mac
 ```
 
-`dmg.sh` signs the app with `App/tafs.entitlements`, which holds only the microphone (`com.apple.security.device.audio-input`): under the hardened runtime, dictation needs it. It prints the app's entitlements and stops if that one is missing. It then opens the image it made, as a person would, and checks that `tafs.app` and the `Applications` link are there and that the app is still signed.
+`dmg.sh` signs the app with `App/tafs.entitlements`, which holds only the microphone (`com.apple.security.device.audio-input`) and the camera (`com.apple.security.device.camera`): under the hardened runtime, dictation needs the first and Take photo the second. It prints the app's entitlements and stops if either is missing. It then opens the image it made, as a person would, and checks that `tafs.app` and the `Applications` link are there and that the app is still signed.
 
 ## The secrets
 

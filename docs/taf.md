@@ -207,7 +207,12 @@ rows are offered whenever the taf is tafs cloud's, while its Setup is read or co
   dial's own read error is cleared by the next read that works; any other stays, as the
   iPad's `lastErrorFrom`.
 
-Not here yet: Not sent with Send again (the taf's work).
+**Not sent** (`NotSentPanel`, the iPad's `notSent`, `TafSetupViews.swift:438-475`): under Results go to's places,
+the taf's requests whose reply was given up on after its tries (`TafWork.unsent`: a delivery tafs cloud
+marks `send_again`), each in tafs cloud's words, edged in amber, with **Send again** for whoever
+manages the taf, through the same place and call as the work's own (`POST …/requests/{run}/deliveries/{place}/send`),
+"Sending again…" while it goes. The work is read when the sheet opens. A failed read of the work, or a
+Send again that failed, is said there in red. Nothing given up on, nothing drawn.
 
 ## Doors (`TafDoors`, `DoorsModel`, `TafDoorsViews`)
 

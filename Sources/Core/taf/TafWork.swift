@@ -54,6 +54,15 @@ struct TafWork: Decodable, Equatable {
         (requests.map(TafRuns.Row.request) + skipped.map(TafRuns.Row.skipped)).sorted { $0.at > $1.at }
     }
 
+    /// The requests whose reply was given up on after its tries (a delivery tafs cloud marks
+    /// `send_again`), newest first: Results go to's Not sent, as the iPad's `notSent`.
+    var unsent: [TafRuns.Request] {
+        rows.compactMap { row in
+            if case .request(let r) = row, r.deliveries.contains(where: \.sendAgain) { return r }
+            return nil
+        }
+    }
+
     /// The line to draw above its health: none when it's the health's first reason, as tafs cloud says it on an idle
     /// taf ("…, so nothing ran"), so the page says it once.
     func shownLine(health: Home.Taf.Health?) -> String? {
