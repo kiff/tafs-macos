@@ -78,10 +78,13 @@ amber with a warning, and the warning takes the same colour.
   each (`not_counted.lines[].words`: "Coach, included · 3 runs"). A reason with no words, or
   one that doesn't read, is left out, never the others.
 - tafs cloud's note under them.
-- **Where to buy on a computer**, in the balance's panel, for whoever manages billing: "Buy Solo
-  or credits in the tafs app on your phone." (`billing.buy_on_phone`), and **Get Team on kiff.dev**
-  (`billing.team_on_web`), which opens `kiff.dev/dashboard/checkout` (`Usage.teamCheckout`), as
-  every desktop says it. Nothing is bought here.
+- **Where to buy on a computer**, in the balance's panel, for whoever manages billing, only as
+  tafs cloud's balance `buy` offers it (`Usage.whereToBuy`), as the other desktops and the iPad:
+  "Buy Solo or credits in the tafs app on your phone." (`billing.buy_on_phone`) when `buy` offers
+  packs or Solo (`true`, or set and not `false` or null), and then **Get Team on kiff.dev**
+  (`billing.team_on_web`, opening `kiff.dev/dashboard/checkout`, `Usage.teamCheckout`) unless the
+  plan is Team already. With `buy` null (a company's agreement) or nothing offered, neither.
+  Nothing is bought here.
 - Every line is drawn as sent (`Text(verbatim:)`).
 - **Each half is read on its own.** One that can't be read says so and leaves the other.
 

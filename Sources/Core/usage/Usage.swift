@@ -25,10 +25,14 @@ enum Usage {
         /// The First month pack can be bought now (`buy.first_month.ready`), as the iPad's
         /// `firstMonthReady`: the packs a member may ask for list it first only then.
         let firstMonthReady: Bool
+        /// What tafs cloud offers to buy (`buy.packs`, `buy.solo`): offered when `true`, or set and not `false` or
+        /// null. Where to buy on a computer follows them; `buy` itself null (a company's agreement) offers neither.
+        let offersPacks: Bool
+        let offersSolo: Bool
 
         enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone", homeLine = "home_line" }
         enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy }
-        enum BuyKeys: String, CodingKey { case firstMonth = "first_month" }
+        enum BuyKeys: String, CodingKey { case firstMonth = "first_month", packs, solo }
         enum FirstMonthKeys: String, CodingKey { case ready }
 
         init(from decoder: Decoder) throws {
@@ -47,6 +51,8 @@ enum Usage {
             let buy = try? c.nestedContainer(keyedBy: BuyKeys.self, forKey: .buy)
             let first = buy.flatMap { try? $0.nestedContainer(keyedBy: FirstMonthKeys.self, forKey: .firstMonth) }
             firstMonthReady = first.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .ready)) ?? nil } == true
+            offersPacks = buy.map { Usage.offered($0, .packs) } ?? false
+            offersSolo = buy.map { Usage.offered($0, .solo) } ?? false
         }
 
         var waiting: Bool { state == "waiting" }
@@ -114,6 +120,20 @@ enum Usage {
         }
 
         private struct Skipped: Decodable {}
+    }
+
+    /// Whether `buy` offers one thing: `true`, or any value that isn't `false` or null (an object, as the phones read it).
+    static func offered(_ buy: KeyedDecodingContainer<Balance.BuyKeys>, _ key: Balance.BuyKeys) -> Bool {
+        guard buy.contains(key), (try? buy.decodeNil(forKey: key)) == false else { return false }
+        if let flag = try? buy.decode(Bool.self, forKey: key) { return flag }
+        return true
+    }
+
+    /// Where to buy on a computer, as every desktop and the iPad decide it from the balance's `buy`: the phone line only
+    /// when packs or Solo are offered, and the Team link only then and not on Team already (`plan` is KIFF's).
+    static func whereToBuy(_ balance: Balance, plan: String?) -> (phone: Bool, team: Bool) {
+        let offered = balance.offersPacks || balance.offersSolo
+        return (offered, offered && plan != "team")
     }
 
     static func text(_ value: String?) -> String? {
