@@ -35,7 +35,12 @@ struct TafCardTab: View {
             if let pages { VersionsView(model: pages) { versionsOpen = false }.environment(\.words, words) }
         }
         .sheet(isPresented: $usageOpen) {
-            if let pages { TafCreditsView(model: pages.credits, name: taf.name) { usageOpen = false }.environment(\.words, words) }
+            // A run's Ask Coach is Coach on this taf (`improveInCoach`, given only where Coach may be used and the taf is
+            // managed); the iPad's opens Coach as it was.
+            if let pages {
+                TafCreditsView(model: pages.credits, name: taf.name, manages: manages, askCoach: improveInCoach) { usageOpen = false }
+                    .environment(\.words, words)
+            }
         }
     }
 

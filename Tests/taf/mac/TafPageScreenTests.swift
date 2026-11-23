@@ -183,6 +183,48 @@ let tafPageMacTests: [Test] = [
         // Drawn last: the sheet reads again when it shows.
         _ = try shoot(TafCreditsView(model: model, name: "Unanswered emails", close: {}).environment(\.words, pageWords()), "taf-usage", size: CGSize(width: 520, height: 520))
     }),
+    Test("a run opens its request in the sheet: read once, Back to the runs, Try again after a failed read", awaiting: { @MainActor in
+        let detail = #"{"id":"r1","from":"From the website door","line":"Refund order 4471","steps":[{"label":"Read the order","state":"done"},{"label":"Reply","state":"failed","line":"The reply wasn't delivered"}],"deliveries":[{"place":"door_reply","state":"given_up","send_again":true}]}"#
+        let transport = CannedTransport([(503, #"{"error":"down","words":"tafs cloud is busy."}"#), (200, detail)])
+        let model = TafCreditsModel(cloud: CloudClient(transport: transport, session: pageSession), taf: "taf-1", previous: true)
+        await model.open("r1")
+        try expectEqual(model.opened, "r1")
+        try expectEqual(model.detail, nil)
+        try expectEqual(model.detailError, "tafs cloud is busy.")
+        await model.readDetail()
+        try expectEqual(model.detail?.line, "Refund order 4471")
+        try expectEqual(model.detailError, nil)
+        try expectEqual(transport.sent.map(\.path), ["/v1/tafs/taf-1/requests/r1", "/v1/tafs/taf-1/requests/r1"])
+        // Drawn with Send again and Ask Coach, for someone who manages the taf.
+        _ = try shoot(TafCreditsView(model: model, name: "Unanswered emails", manages: true, askCoach: {}, close: {}).environment(\.words, pageWords()),
+                      "taf-usage-request", size: CGSize(width: 520, height: 520))
+        model.closeDetail()
+        try expectEqual(model.opened, nil)
+        try expectEqual(model.detail, nil)
+    }),
+    Test("a run's Send again is tafs cloud's unsigned call, then the request is read again; a failure says why under it", awaiting: { @MainActor in
+        let detail = #"{"id":"r1","from":"From the website door","line":"Refund order 4471","steps":[],"deliveries":[{"place":"door_reply","state":"given_up","send_again":true}]}"#
+        let transport = CannedTransport([(200, detail), (200, "{}"), (200, detail), (503, #"{"error":"down","words":"tafs cloud is busy."}"#), (200, detail)])
+        let model = TafCreditsModel(cloud: CloudClient(transport: transport, session: pageSession), taf: "taf-1")
+        await model.open("r1")
+        await model.sendAgain(run: "r1", place: "door_reply")
+        try expectEqual(transport.sent[1].method + " " + transport.sent[1].path, "POST /v1/tafs/taf-1/requests/r1/deliveries/door_reply/send")
+        try expectEqual(transport.sent[1].headers["KIFF-Device-Signature"], nil)
+        try expectEqual(model.detailError, nil)
+        try expectEqual(model.sendingAgain, [])
+        await model.sendAgain(run: "r1", place: "door_reply")
+        try expectEqual(model.detailError, "tafs cloud is busy.")
+        try expectEqual(transport.sent.count, 5)
+    }),
+    Test("a run's request offers Send again only to whoever manages the taf, and Ask Coach only where given (sources)") {
+        let view = try String(contentsOf: URL(fileURLWithPath: "Sources/App/taf/TafCreditsView.swift"), encoding: .utf8)
+        try expect(view.contains("if delivery.sendAgain, manages {"), "Send again for whoever manages it")
+        try expect(view.contains("if run.opens {"), "a run opens only while tafs cloud says it can")
+        let usage = try String(contentsOf: URL(fileURLWithPath: "Sources/App/usage/UsageView.swift"), encoding: .utf8)
+        try expect(usage.contains("askCoach: manages ? openCoach : nil"), "Ask Coach only for a managed taf")
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        try expect(window.contains("openCoach: mayUseCoach ? openCoach : nil"), "only where Coach may be used")
+    },
     Test("See all reads every note; Forget takes one away at once, puts it back when refused, and one already gone stays gone", awaiting: { @MainActor in
         let notes = #"{"notes":[{"id":"n1","path":"/customers/acme.md","content":"Acme pays by card.","updated_at":"2026-11-16T09:00:00Z"},{"id":"n2","path":"/how-you-like-it.md","content":"Short replies.","updated_at":"2026-11-15T09:00:00Z"}]}"#
         let transport = CannedTransport([(200, notes), (503, #"{"error":"down"}"#), (404, #"{"error":"not_found"}"#)])

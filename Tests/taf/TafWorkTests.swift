@@ -17,6 +17,17 @@ private let workAnswer = #"""
 """#
 
 let tafWorkTests: [Test] = [
+    Test("a run's request reads as the iPad's RequestDetail, from its own path, and each step's mark is the iPad's", awaiting: {
+        let answer = #"{"id":"r1","from":"From the website door","line":"Refund order 4471","steps":[{"label":"Read the order","state":"done"},{"label":"Refund it","line":"Waiting on Stripe","state":"next"},{"label":"Reply","state":"failed"}],"deliveries":[{"place":"door_reply","state":"given_up","send_again":true}]}"#
+        let transport = CannedTransport([(200, answer)])
+        let detail = try await CloudClient(transport: transport, session: session).request(of: "taf 1", run: "r/1")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf%201/requests/r%2F1")
+        try expectEqual(detail.from, "From the website door")
+        try expectEqual(detail.steps.map(RequestDetail.mark), [.done, .next, .stopped])
+        try expectEqual(detail.steps[1].line, "Waiting on Stripe")
+        try expectEqual(detail.deliveries.first?.sendPlace, "door_reply")
+        try expectEqual(detail.deliveries.first?.sendAgain, true)
+    }),
     Test("a taf's work reads as the iPad's TafWork: its rows newest first, its oldest waiting case, the owner's promise") {
         let work = try AccountClient.decoder.decode(TafWork.self, from: Data(workAnswer.utf8))
         try expectEqual(work.rows.map(\.id).first, "r|r2")

@@ -186,6 +186,11 @@ struct UsageView: View {
     /// A taf's name by its tafs cloud id, while it's listed: its line opens its runs only then, as
     /// the iPad's opens only for a taf (a removed taf's line doesn't).
     var tafName: (String) -> String? = { _ in nil }
+    /// Whether this person manages a taf, by its tafs cloud id: a run's request offers Send again only then.
+    var manages: (String) -> Bool = { _ in false }
+    /// Coach, for a run's Ask Coach, given only where Coach may be used; a run's request offers it only for a taf
+    /// this person manages, as the iPad's `offersAskCoach`.
+    var openCoach: (() -> Void)? = nil
     @State private var asking = false
     @State private var declining: PackRequest?
     /// A taf's runs, opened from its line.
@@ -238,7 +243,9 @@ struct UsageView: View {
         }
         .sheet(item: $declining) { DeclineRequestView(model: model, request: $0).environment(\.words, words) }
         .sheet(item: $runs) { open in
-            TafCreditsView(model: open.model, name: open.name) { runs = nil }.environment(\.words, words)
+            let manages = manages(open.model.taf)
+            TafCreditsView(model: open.model, name: open.name, manages: manages, askCoach: manages ? openCoach : nil) { runs = nil }
+                .environment(\.words, words)
         }
     }
 
