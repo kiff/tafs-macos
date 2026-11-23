@@ -1,9 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// The account's files on screen, as the iPad's `FilesModel`: read, opened, saved and deleted. Nothing of a file is kept
-/// on this Mac: its start is read when it opens, and its bytes only when Download asks, straight to where the person
-/// picks, with no copy left anywhere else.
+/// The account's files on screen, as the iPad's `FilesModel`: read, opened, saved, shared and deleted. Its start is read
+/// when it opens. Its bytes are read only when Download asks (straight to where the person picks), or, as the iPad's
+/// `FileCopy`, into a private copy while the file is open: for the system's preview of a type with no text start, and
+/// for Share. That copy goes when the file closes.
 @MainActor
 final class FilesModel: ObservableObject {
     enum State: Equatable {
@@ -16,8 +17,10 @@ final class FilesModel: ObservableObject {
     enum PreviewRead: Equatable {
         /// tafs cloud's cleaned start, drawn as plain text.
         case text(FilePreviewText)
-        /// No text start: a type tafs cloud gives none for, or one it answered without. Its details, Download and Delete
-        /// stay. The Mac draws no system preview of the bytes, so no bytes are read to draw.
+        /// The bytes on this Mac, drawn by the system: only for a type that has no text start, as the iPad's `.copy`.
+        case copy(URL)
+        /// tafs cloud answered a text type with no start: no preview is drawn, and no bytes read. Its details, Download,
+        /// Share and Delete stay.
         case noPreview
         /// tafs cloud couldn't be reached for a type that has a text start: the "couldn't reach" line.
         case unreachable
@@ -30,6 +33,11 @@ final class FilesModel: ObservableObject {
     @Published private(set) var deleting: Set<String> = []
     /// The files open now: a start that answers after its file closed isn't kept.
     private var open: Set<String> = []
+    /// The open files' private copies, by file: for the system's preview and for Share. Each goes when its file closes.
+    private var copies: [String: URL] = [:]
+    /// Where the copies are, one folder a file, under this app's own caches: never kept past the file's screen.
+    static let copiesFolder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("tafs-file-copies", isDirectory: true)
 
     private let readAll: () async throws -> [DeliveredFile]
     private let readPreview: (String) async throws -> FilePreviewText?
@@ -74,11 +82,16 @@ final class FilesModel: ObservableObject {
         open.insert(file.id)
         guard previews[file.id] == nil else { return }
         let text = FileText.textTypes.contains(file.type.uppercased())
-        let read: PreviewRead
+        var read: PreviewRead
         do {
             read = try await readPreview(file.id).map(PreviewRead.text) ?? .noPreview
         } catch {
             read = text ? .unreachable : .noPreview
+        }
+        // A type with no text start, as the iPad's `readPreview`: its bytes, for the system to draw. A text type's raw
+        // bytes are never drawn in its cleaned start's place.
+        if read == .noPreview, !text {
+            do { read = .copy(try await localCopy(of: file)) } catch { read = .unreachable }
         }
         // Closed while it was read: its start isn't kept.
         guard open.contains(file.id) else { return }
@@ -90,6 +103,43 @@ final class FilesModel: ObservableObject {
         open.remove(file.id)
         previews[file.id] = nil
         notes[file.id] = nil
+        removeCopy(file.id)
+    }
+
+    /// The file's own bytes in a private copy while it's open, as the iPad's `localCopy(of:)`: read once, with no token
+    /// and no redirect, named as the file is, in a folder of its own.
+    func localCopy(of file: DeliveredFile) async throws -> URL {
+        if let copy = copies[file.id], FileManager.default.fileExists(atPath: copy.path) { return copy }
+        let data = try await fetch(try await readDownload(file.id))
+        guard let folder = LocalName.file(file.id, in: Self.copiesFolder, fallback: "file"),
+              let copy = LocalName.file(file.name, in: folder) else { throw KIFFError.unreadable }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try data.write(to: copy, options: .atomic)
+        // Closed while it was read: no copy is left.
+        guard open.contains(file.id) else {
+            try? FileManager.default.removeItem(at: folder)
+            throw CancellationError()
+        }
+        copies[file.id] = copy
+        return copy
+    }
+
+    /// Share: the file itself, from its private copy, read only now. Nil, with the iPad's words, when it couldn't be.
+    func shareCopy(of file: DeliveredFile) async -> URL? {
+        notes[file.id] = nil
+        do {
+            return try await localCopy(of: file)
+        } catch is CancellationError {
+            return nil
+        } catch {
+            notes[file.id] = Words.app("error.offline")
+            return nil
+        }
+    }
+
+    private func removeCopy(_ id: String) {
+        guard let copy = copies.removeValue(forKey: id) else { return }
+        try? FileManager.default.removeItem(at: copy.deletingLastPathComponent())
     }
 
     /// Download: the file's own bytes, read only now, written straight to where the person picked. Nothing else is
@@ -122,6 +172,7 @@ final class FilesModel: ObservableObject {
         if case .loaded(let all) = state { state = .loaded(all.filter { $0.id != file.id }) }
         previews[file.id] = nil
         notes[file.id] = nil
+        removeCopy(file.id)
         return true
     }
 }

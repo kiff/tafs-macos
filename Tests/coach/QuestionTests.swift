@@ -27,6 +27,46 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let coachQuestionTests: [Test] = [
+    Test("an answer sent the old way, as a message, is read back in Coach's labels and the person's words, and its bubble isn't drawn") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let thread = #"""
+        {"working":false,"items":[
+          {"type":"card","card":{"key":"s1:q-1","session":"s1","component":{"id":"q-1","type":"questions","waits":"owner","questions":[
+            {"id":"mode","text":"Test mode first?","options":[{"value":"test","label":"Test mode"},{"value":"live","label":"Live"}]},
+            {"id":"apps","text":"Which apps?","multi":true,"options":[{"value":"stripe","label":"Stripe"},{"value":"qonto","label":"Qonto"}]},
+            {"id":"cap","text":"A cap?","options":[{"value":"none","label":"None"}]}]}}},
+          {"type":"message","message":{"from":"owner","kind":"message","text":"[questions q-1] failed: no network"}},
+          {"type":"message","message":{"from":"owner","kind":"message","text":"[questions q-1] {\"apps\":{\"values\":[\"stripe\",\"qonto\"]},\"cap\":{\"own\":\"300 € on weekdays\"},\"mode\":{\"value\":\"test\"}}"}},
+          {"type":"message","message":{"from":"owner","kind":"message","text":"[questions q-9] {\"x\":{\"value\":\"y\"}}"}},
+          {"type":"message","message":{"from":"taf","kind":"message","text":"[questions q-1] {\"mode\":{\"value\":\"live\"}}"}}
+        ]}
+        """#
+        let page = try JSONDecoder().decode(Thread.Page.self, from: Data(thread.utf8))
+        let card = page.cards[0]
+        guard let old = page.oldAnswer(card) else { throw Failure(description: "no old answer read") }
+        try expectEqual(QuestionAnswers.words(old, questions: card.questions, words), "Test mode · Stripe, Qonto · In your words: “300 € on weekdays”")
+        // Only the person's answers to a card shown here are hidden; a failed one keeps its bubble.
+        let messages = page.items.compactMap { item -> Thread.Message? in if case .message(let m, _) = item { return m } else { return nil } }
+        try expectEqual(messages.map(page.answersCard), [false, true, false, false])
+        // Not answers: none, and nothing read back.
+        try expectEqual(QuestionAnswers.words("hello", questions: card.questions, words), nil)
+        try expectEqual(Thread.Page.answerMessage("[questions] x")?.id, nil)
+        try expect(Thread.Page.answerMessage("no bracket") == nil, "no bracket is no answer")
+        // tafs cloud's recorded answer wins: an answered card reads no old one.
+        try expectEqual(try cards()[1].answerState, "answered")
+        try expectEqual(try JSONDecoder().decode(Thread.Page.self, from: Data(questionsThread.utf8)).oldAnswer(try cards()[1]), nil)
+    },
+    Test("a card's answer follows its run as it's written, as the iPad's resumeRun: one GET from the first event, sending nothing") {
+        let client = CloudClient(transport: CannedTransport([]), session: session, language: "fr")
+        guard let request = client.resumeRequest("taf coach", run: "run_1") else { throw Failure(description: "no request") }
+        try expectEqual(request.method, "GET")
+        try expectEqual(request.path, "/v1/tafs/taf%20coach/runs/run_1/stream?after=0")
+        try expectEqual(request.headers["Accept"], "text/event-stream")
+        try expectEqual(request.headers["Authorization"], "Bearer tok")
+        try expectEqual(request.headers["Accept-Language"], "fr")
+        try expect(request.body.isEmpty, "nothing sent")
+        try expectEqual(client.resumeRequest("t", run: ""), nil)
+    },
     Test("a questions card is read with each question as Coach wrote it; one with a question that doesn't read isn't read, as the iPad's LenientShown") {
         let all = try cards()
         try expectEqual(all.map(\.id), ["q-1", "q-0"])

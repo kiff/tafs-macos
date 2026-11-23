@@ -72,5 +72,12 @@ let coachDictatingTests: [Test] = [
         let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(info["NSMicrophoneUsageDescription"] as? String, words("voice.tafs_turns_your_voice_into"))
         try expectEqual(info["NSSpeechRecognitionUsageDescription"] as? String, words("voice.tafs_turns_your_voice_into"))
+        // The camera, for Take photo, in the iPad's words (its project.yml) without the pairing code, which a Mac never reads.
+        try expectEqual(info["NSCameraUsageDescription"] as? String,
+                        "tafs takes a photo to attach to your message. A photo goes only with that message, to your own chat.")
+        // Under the hardened runtime: the microphone and the camera, and nothing else.
+        let ent = try Data(contentsOf: URL(fileURLWithPath: "App/tafs.entitlements"))
+        guard let rights = try PropertyListSerialization.propertyList(from: ent, format: nil) as? [String: Any] else { throw Failure(description: "no entitlements") }
+        try expectEqual(Set(rights.keys), ["com.apple.security.device.audio-input", "com.apple.security.device.camera"])
     },
 ]

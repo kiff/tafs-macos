@@ -1,4 +1,5 @@
 import AppKit
+import Quartz
 import SwiftUI
 
 /// Files (tafs docs/files.md), as the iPad's `FilesView` at its full width: the account's files, or one taf's, newest
@@ -173,8 +174,9 @@ enum FileSize {
     static func words(_ bytes: Int) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }
 }
 
-/// An open file, as the iPad's `FileDetailView`: tafs cloud's cleaned start as plain text, Download, the taf and run it
-/// came from, who sees it and when it goes; Delete now apart, at the end, behind a confirm.
+/// An open file, as the iPad's `FileDetailView`: tafs cloud's cleaned start as plain text, or the system's preview of a type
+/// with no text start; Download and Share (the file itself, never a link); the taf and run it came from, who sees it and
+/// when it goes; Delete now apart, at the end, behind a confirm.
 struct FileDetailView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: FilesModel
@@ -182,6 +184,10 @@ struct FileDetailView: View {
     /// After Delete now: the side's selection clears.
     let deleted: () -> Void
     @State private var confirming = false
+    /// Share is reading the file's bytes.
+    @State private var sharing = false
+    /// Where macOS's share menu opens from: Share's own place, once drawn.
+    @State private var shareAnchor = ShareAnchorBox()
 
     var body: some View {
         ScrollView {
@@ -193,6 +199,11 @@ struct FileDetailView: View {
                 preview
                 HStack(spacing: 10) {
                     Button(words("files.download")) { save() }.buttonStyle(PrimaryButtonStyle()).frame(maxWidth: 220)
+                    // The file itself through macOS's share menu, its bytes read only when it's shared.
+                    Button(words("files.share")) { share() }
+                        .buttonStyle(OutlineButtonStyle()).frame(maxWidth: 160)
+                        .background(ShareAnchor(box: shareAnchor))
+                        .disabled(sharing)
                 }
                 if let note = model.notes[file.id] {
                     Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
@@ -234,6 +245,11 @@ struct FileDetailView: View {
         case .unreachable?:
             Text(words("common.could_not_read_why", ["what": words("files.title"), "why": words("error.offline")]))
                 .font(.system(size: 14)).foregroundColor(Theme.no)
+        case .copy(let url)?:
+            // No text start from tafs cloud: the system draws the file, from its copy on this Mac.
+            FileQuickLook(url: url)
+                .frame(height: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         case .noPreview?:
             EmptyView()
         case nil:
@@ -262,6 +278,18 @@ struct FileDetailView: View {
         }
     }
 
+    /// Share: the file's private copy, read now, in macOS's share menu at Share's place.
+    private func share() {
+        sharing = true
+        Task {
+            if let url = await model.shareCopy(of: file), let anchor = shareAnchor.view {
+                let picker = NSSharingServicePicker(items: [url])
+                picker.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+            }
+            sharing = false
+        }
+    }
+
     /// Download: where to, as the person picks, named as the file is; then its bytes, straight there.
     private func save() {
         let panel = NSSavePanel()
@@ -270,4 +298,40 @@ struct FileDetailView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await model.download(file, to: url) }
     }
+}
+
+/// The system's preview of a file on this Mac, as the iPad's `FilePreview`: Quick Look, in place. Nothing goes to a viewer
+/// service.
+struct FileQuickLook: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> QLPreviewView {
+        let view = QLPreviewView(frame: .zero, style: .normal) ?? QLPreviewView()
+        view.previewItem = url as NSURL
+        return view
+    }
+
+    func updateNSView(_ view: QLPreviewView, context: Context) {
+        if (view.previewItem as? NSURL) as URL? != url { view.previewItem = url as NSURL }
+    }
+
+    static func dismantleNSView(_ view: QLPreviewView, coordinator: ()) {
+        view.close()
+    }
+}
+
+/// Share's place, once its view is drawn.
+final class ShareAnchorBox {
+    weak var view: NSView?
+}
+
+/// A view in Share's place, for macOS's share menu to open from.
+private struct ShareAnchor: NSViewRepresentable {
+    let box: ShareAnchorBox
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        box.view = view
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) { box.view = nsView }
 }
