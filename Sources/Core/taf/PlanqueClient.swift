@@ -183,19 +183,25 @@ final class PlanqueClient {
     enum Safe: Equatable {
         case chromes
         case unpairChrome(String)
+        /// The pictures kept for one operation's Chrome steps, without their bytes (`ChromeShots`): a read.
+        case chromeShots(operation: String)
+        /// One step's picture: a read.
+        case chromeShot(step: String)
 
         var method: String {
             switch self {
-            case .chromes: return "GET"
+            case .chromes, .chromeShots, .chromeShot: return "GET"
             case .unpairChrome: return "DELETE"
             }
         }
 
-        /// Under the account's routes.
+        /// Under the account's routes. The operation is escaped into the query, which is part of what's signed.
         var path: String {
             switch self {
             case .chromes: return "chromes"
             case .unpairChrome(let id): return "chromes/\(CloudClient.escaped(id))"
+            case .chromeShots(let operation): return "chromes/screenshots?op=\(ChromeShots.queryEscaped(operation))"
+            case .chromeShot(let step): return "chromes/screenshots/\(CloudClient.escaped(step))"
             }
         }
     }

@@ -14,6 +14,9 @@ struct ReceiptSheet: View {
     var tafs: [Home.Taf] = []
     /// The account's time zone, for When.
     var timeZone: String? = nil
+    /// The pictures a paired Chrome kept before this line's steps, read once the sheet opens; none until then.
+    @State private var shots: [ChromeShots.Ref] = []
+    @State private var openedShot: ChromeShots.Ref?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -26,6 +29,7 @@ struct ReceiptSheet: View {
                         whatHappened
                         checkPanel
                     }
+                    shotLinks
                     reportPanel
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -34,6 +38,36 @@ struct ReceiptSheet: View {
         .padding(20)
         .frame(width: 600, height: 640)
         .background(Theme.background)
+        .task { await loadShots() }
+        .sheet(item: $openedShot) { shot in
+            ChromeShotSheet(step: shot.step, read: model.chromeShot, timeZone: timeZone) { openedShot = nil }.environment(\.words, words)
+        }
+    }
+
+    /// "See the page before this step", one per picture kept for the line's operation, as the iPad's receipt: with its time
+    /// when there's more than one. None while planque keeps none, or the list can't be read.
+    @ViewBuilder private var shotLinks: some View {
+        ForEach(shots) { shot in
+            Button { openedShot = shot } label: {
+                HStack {
+                    Label(words("chrome.shot_open"), systemImage: "photo")
+                    if shots.count > 1 {
+                        Spacer()
+                        Text(verbatim: AccountTime(timeZone).zonedShown(shot.takenAt, date: .omitted, time: .standard, words: words))
+                            .font(.system(size: 13)).foregroundColor(Theme.dim)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(OutlineButtonStyle())
+            .accessibilityIdentifier("record.chromeShot")
+        }
+    }
+
+    /// A line that was a Chrome step has pictures; anything else, or a list that can't be read, shows none.
+    private func loadShots() async {
+        guard let operation = entry.proposalID, let list = model.chromeShots else { return }
+        shots = (try? await list(operation)) ?? []
     }
 
     /// How it went, by its kind's colour, then the line, as the iPad's (RecordView.swift:385-391); Done.

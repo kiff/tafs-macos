@@ -175,6 +175,21 @@ this Mac. Nothing opens outside the app.
 - **Mac differences:** Open in the taf's chat sits under the facts, where the iPad has it last; no
   Share. A receipt opened from inside a case's sheet is a sheet on that sheet.
 
+## The page before a Chrome step (`ChromeShots`, `ChromeShotSheet`)
+
+As the iPad's `ChromeShotView` and its receipt: a Record line whose operation a paired Chrome acted for lists "See the page
+before this step", one per picture planque kept (with its time when there's more than one), and each opens "Before this
+step": the picture, when it was taken in the account's time zone, and "Kept for 30 days, then deleted."
+- **The reads:** planque's safe routes, signed by this Mac's device key for that one request, with no session token
+  (`PlanqueClient.Safe.chromeShots`, `.chromeShot`): `GET /v1/accounts/{t}/chromes/screenshots?op={proposal_id}` and
+  `…/chromes/screenshots/{step}`. The operation is escaped inside the signed query, so it can't add a parameter. None
+  signed out. A list that can't be read, or a 404 (planque keeps none, or its switch is off), shows no link.
+- **The picture is shown only if it checks out** (`ChromeShots.read`): base64url without padding, 12 bytes to 120 KB,
+  RIFF/WEBP, the SHA-256 planque kept, the step asked for, and an RFC 3339 time. Anything else says "The picture
+  couldn't be loaded", and a 404 says "No picture is kept for this step".
+- **It's decoded on this Mac at most 2048 on its longest side** (`ChromeShotSheet.decoded`, ImageIO's thumbnail of the
+  whole picture), whatever size the file declares, and the bytes are never written to disk.
+
 ## Not yet
 
 A next step's buttons (Connect again, signing in again where the vendor signed tafs out; Ask
