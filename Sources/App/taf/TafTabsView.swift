@@ -343,6 +343,13 @@ struct TafActivityTab: View {
     var askCoach: ((String) -> Void)? = nil
     /// Connect apps, where an app is connected again.
     var openConnect: (() -> Void)? = nil
+    /// A call's sheet, as the Record opens it: its receipt, checked on this Mac; nil draws the rows as they are.
+    var openSheet: ((Record.Entry) -> Void)? = nil
+    /// Needs you's model, for a step a request waits on in its work (`TafWorkPanel`); nil draws its line.
+    var needsYou: NeedsYouModel? = nil
+    /// Whether this person answers held calls, and the lists read again after a step is answered.
+    var answersHolds = true
+    var answered: () async -> Void = {}
 
     var body: some View {
         ScrollView {
@@ -353,7 +360,8 @@ struct TafActivityTab: View {
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }
-                TafWorkPanel(model: model, homeHealth: taf.health, manages: manages, openUsage: openUsage)
+                TafWorkPanel(model: model, homeHealth: taf.health, manages: manages, openUsage: openUsage,
+                             needsYou: needsYou, answersHolds: answersHolds, answered: answered)
                 // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
                 RunsPanel(model: model, taf: taf)
                 RetainedRuns(model: model)
@@ -408,13 +416,30 @@ struct TafActivityTab: View {
     }
 
     /// One call, as the iPad's `SourceActivityRow` (TafPresentationViews.swift:328-363): a plain
-    /// row, not boxed: tafs cloud's title and detail, and its time with its amount under it.
+    /// row, not boxed: tafs cloud's title and detail, and its time with its amount under it. It
+    /// opens the call's sheet, receipt or not, whenever KIFF's call names its taf (the iPad's
+    /// `evidence`); then its next step, under it.
     private func row(_ entry: TafActivity.Entry) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let openSheet, let line = entry.sheet(on: Record.Entry.Taf(id: taf.tafID ?? "", name: taf.name)) {
+                Button { openSheet(line) } label: { face(entry).contentShape(Rectangle()) }
+                    .buttonStyle(.plain)
+                    .help(words("record.shows_receipt"))
+            } else {
+                face(entry)
+            }
+            if let next = entry.next, !next.words.trimmingCharacters(in: .whitespaces).isEmpty { nextStep(next, of: entry) }
+        }
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A call's face: tafs cloud's title and detail, and its time with its amount under it.
+    private func face(_ entry: TafActivity.Entry) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 if let detail = entry.detail { Text(verbatim: detail).font(.system(size: 13)).foregroundColor(Theme.soft) }
-                if let next = entry.next, !next.words.trimmingCharacters(in: .whitespaces).isEmpty { nextStep(next, of: entry) }
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -423,8 +448,6 @@ struct TafActivityTab: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 5)
-        .accessibilityElement(children: .contain)
     }
 
     /// A not-done call's next step, as the iPad's `NextStepRow`: Connect apps, or Ask Coach (Coach on this taf, its first

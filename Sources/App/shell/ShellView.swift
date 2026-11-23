@@ -211,9 +211,6 @@ struct ShellView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    /// A taf in the sidebar, as the iPad's `tafRow`: its 34 avatar, its name (15 semibold), and
-    /// tafs cloud's line for where its work stands (13). The line is soft, not the iPad's dim:
-    /// dim is under 4.5:1 on the raised ground.
     /// The person's own tafs, in the list's order.
     private var ownTafs: [Home.Taf] { tafs.filter { !sharedWithMe($0) } }
     /// The tafs shared with this person, in the list's order.
@@ -231,6 +228,9 @@ struct ShellView: View {
         .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
     }
 
+    /// A taf in the sidebar, as the iPad's `tafRow`: its 34 avatar, its name (15 semibold), and
+    /// tafs cloud's line for where its work stands (13). The line is soft, not the iPad's dim:
+    /// dim is under 4.5:1 on the raised ground.
     private func tafRow(_ taf: Home.Taf) -> some View {
         HStack(spacing: 12) {
             TafAvatar(name: taf.name, color: taf.color, size: 34)
