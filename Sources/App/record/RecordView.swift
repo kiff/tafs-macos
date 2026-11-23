@@ -289,6 +289,28 @@ final class RecordModel: ObservableObject {
         }
     }
 
+    /// "Report this payment", per Record line, as the iPad's `ReportPaymentSheet.Phase`: asking until sent.
+    enum ReportPhase: Equatable { case asking, sending, done, failed }
+    @Published private(set) var reportPhase: [String: ReportPhase] = [:]
+    /// Reads the tafs again once a report halted one, set by the window.
+    var halted: () async -> Void = {}
+
+    /// Reports the payment, as the iPad's `reportPayment`: KIFF marks its receipt and tafs cloud halts its taf. One click,
+    /// no note, nothing signed: it only takes authority away. Once tafs cloud answers, the button is gone and the tafs are
+    /// read again; a failure says nothing changed, and the button stays to try again.
+    func report(_ entry: Record.Entry) async {
+        guard entry.offersReport(reportedNow: reportPhase[entry.id] == .done), reportPhase[entry.id] != .sending,
+              let trace = entry.report?.traceID else { return }
+        reportPhase[entry.id] = .sending
+        do {
+            try await cloud.reportPayment(traceID: trace)
+            reportPhase[entry.id] = .done
+            await halted()
+        } catch {
+            reportPhase[entry.id] = .failed
+        }
+    }
+
     func closeReceipt() {
         receiptEntry = nil
         receiptRaw = nil

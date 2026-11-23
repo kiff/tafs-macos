@@ -35,6 +35,8 @@ struct SignedInView: View {
     @State private var selection: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
+    /// A discard tafs cloud refused while KIFF still held Cards in force: those Cards, by agent, revoked on the next try.
+    @State private var discardCardsLeft: [String: [String]] = [:]
     @State private var tafChat: CoachModel?
     @State private var tafPages: TafPagesModel?
     /// What this person may do with each taf, as KIFF says, by KIFF agent.
@@ -172,6 +174,8 @@ struct SignedInView: View {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
+            // A reported payment halts its taf: the list is read again.
+            record.halted = { await readTafs() }
             // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
             doorModels.signWithKey = signWithKey
             needsYou.answerWithKey = answerWithKey
@@ -222,7 +226,8 @@ struct SignedInView: View {
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open,
                                                         needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
                                                         people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
-                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach))
+                                                        mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach,
+                                                        discard: { await discardSettingUp($0) }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
@@ -396,6 +401,19 @@ struct SignedInView: View {
     private var signWithKey: ((KeyAct, String) async throws -> String)? {
         guard let passkey = passkeySession else { return nil }
         return { act, title in try await askSecurityKey(act: title) { pin in try await passkey.assertion(for: act, pin: pin) } }
+    }
+
+    /// Discard for a taf being set up that this person started (Home's `setting_up[].discard`), as the iPad's
+    /// `discardSettingUp`, on the security key (`SettingUpDiscard`); without a key, it says to approve on another device.
+    private func discardSettingUp(_ setting: SettingUp) async -> String? {
+        guard let sign = signWithKey else { return words("approval.device_can_not_approve_approve") }
+        let account = account, cloud = cloud
+        let done = await SettingUpDiscard.discard(setting, cardsLeftBefore: discardCardsLeft[setting.kiffAgent] ?? [], words: words,
+                                                  sign: sign, revoke: { try await account.revoke(cardID: $0) },
+                                                  send: { try await cloud.discardSettingUp(setting.kiffAgent, assertion: $0) })
+        discardCardsLeft[setting.kiffAgent] = done.cardsLeft.isEmpty ? nil : done.cardsLeft
+        await readTafs()
+        return done.said
     }
 
     /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries

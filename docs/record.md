@@ -245,3 +245,23 @@ It writes `build/screenshots/record-*.png` and `receipt-*.png`, among them
   "Taf · what it did · amount" in 14 semibold with its time at the right in 12 monospaced
   `dim`, then who decided and what became of it, at 13 `soft`.
 
+
+## Report this payment (`Record.Entry.report`, `ReceiptSheet`)
+
+Ported from the iPad's `ReportPaymentSheet.swift` and `TafsCloud+Record.swift` (`reportPayment`), for a payment the
+person didn't expect (docs/record.md in tafs).
+
+- **Offered where tafs cloud sends it:** an entry's `report` (`trace_id`, and `at`, when the payment was made) comes
+  only on a payment this reader may report (an owner or admin, `cards.manage`, as KIFF's route asks) that has a receipt
+  and isn't reported yet. `reported_at` takes it away, as does a report made here. An offer that doesn't read is none,
+  and the line still reads.
+- **At the receipt's foot**, in a panel, since the receipt is already a sheet on this Mac (the iPad opens a second
+  one): "Report this payment", then the app's own words with the line's taf, amount and date
+  (`record.report.intro`: "Report a payment you didn't expect: {taf} paid {amount} on {date}. We halt {taf} until
+  you've looked."), and **Report and halt {taf}** in red.
+- **One click, nothing signed:** `POST /v1/record/{trace_id}/report` with no body. It only takes authority away (KIFF
+  marks its receipt and tafs cloud halts the taf, as the halt button does), so no key or password is asked; resuming
+  stays behind an approval. Reporting again answers the same.
+- **Then:** "Reported. {taf} is halted and the receipt is kept. If money left your account, contact your card issuer
+  too." in place of the panel, and the tafs are read again (the taf shows halted). A failure says "Couldn't send the
+  report. Nothing changed. Try again." and the button stays.

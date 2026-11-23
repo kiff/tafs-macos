@@ -125,44 +125,64 @@ iPad's `disconnect(grantID:)` and `clearRemovedConnections`, and as Windows' `En
 (`ConnectionEnding`, `ConnectAppsModel.disconnect`, `clear`):
 
 1. **The route** (`ConnectionEnding.route`). It is Touch ID only when the session's device key is
-   in the Secure Enclave (`AccountClient.keyStore == "enclave"`, from `SigningKey.keyStore`) **and**
+   in the Secure Enclave (`AccountClient.keyStore == "enclave"`, from `SigningKey.keyStore`), this
+   sign-in has an **ending key** that loads (below), **and**
    `LAContext.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics)` is true now. Anything
    else goes to the phone: a software key, a Mac without Touch ID, Touch ID not set up or locked
-   out, or Touch ID's fingers changed since the session began (below). That Mac asks nothing, sends nothing and shows "This device can't approve. Approve on
-   another device signed in to your account." (`approval.device_can_not_approve_approve`), as
-   before. planque and KIFF would take a software key's DELETE too (a safe route takes any device
-   key), so this rule is the app's own.
-2. **The question first**, the iPad's (`GateQuestion`). Then **Touch ID alone** (`TouchIDOnly`):
-   `.deviceOwnerAuthenticationWithBiometrics` with `localizedFallbackTitle = ""`, so there's no
-   password button. Its reason is the question's title ("Remove access to Stripe for Rae?",
-   "Clear 2 connections from removed tafs?"). It is never `.deviceOwnerAuthentication` and never
-   `NeedsYouModel.confirmOwner`, which let the Mac's password in. A closed prompt, or its fallback,
-   counts as closed. **A finger added since doesn't count** (`ConnectionEnding.Fingers`): on a Mac,
-   anyone who knows its password can add a finger in System Settings, which asks only that
-   password. So the enrolled set (`LAContext.evaluatedPolicyDomainState`) is kept the first time
-   the session's window checks Touch ID, in the Keychain for this Mac only
-   (`tafs.touch-id.fingers`, with the session's tenant, subject and device id). Each check reads it
-   again, before the prompt and from the prompt that passed; a set that isn't the kept one sends
-   nothing, and that Mac goes to the phone until the next sign-in, as the iPad renews its approval
-   key when its biometrics change. "Approve on your phone instead" (`approval.security_key.on_phone`) shows beside
-   the action.
-3. **Then planque's DELETE**, one per connection, signed by the device key with no prompt. The key
+   out, no ending key (a session from before the ending key has none and uses the phone until the
+   next sign-in), or an ending key the system invalidated. That Mac asks nothing, sends nothing
+   and shows "This device can't approve. Approve on another device signed in to your account."
+   (`approval.device_can_not_approve_approve`), as before; a click that finds the route is no
+   longer Touch ID shows that line under the action too, never nothing. planque and KIFF would
+   take a software key's DELETE too (a safe route takes any device key), so this rule is the
+   app's own. Reading the route writes nothing.
+2. **The ending key** (`EndingKey`, `ConnectionEnding.EndingKeyCheck`). At sign-in, next to where
+   the session is kept (`SignInModel`, through `EndingKeyHook`), a Mac whose device key is in the
+   Secure Enclave and that can check Touch ID makes a second Secure Enclave key, with
+   `SecAccessControlCreateWithFlags(nil, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+   [.privateKeyUsage, .biometryCurrentSet], nil)` and nothing else. Making it never prompts and
+   never stops a sign-in: if anything fails there is no ending key, and the Mac uses the phone.
+   It is bound to the fingers enrolled at that moment. On a Mac anyone who knows its password can
+   add a finger in System Settings, which asks only that password; the system then invalidates
+   the key, so a finger added (or removed) since sign-in can never pass, and the Mac uses the
+   phone until the next sign-in. The Keychain holds only the key's handle (the Secure Enclave's
+   wrapped reference, never the key), under `tafs.ending-key`, for this Mac only, with the
+   SHA-256 of the session's token: a handle kept for another sign-in is no key. Each sign-in
+   deletes the one before it and makes its own; sign-out deletes it.
+3. **The question first**, the iPad's (`GateQuestion`). Then **Touch ID alone** (`TouchIDOnly`):
+   the ending key is loaded with an `LAContext` whose `localizedReason` is the question's title
+   ("Remove access to Stripe for Rae?", "Clear 2 connections from removed tafs?") and whose
+   `localizedFallbackTitle = ""`, and signs the iPad's own confirmation,
+   `tafs.disconnect.v1|{tenant}|{ids joined by ,}`. The system asks for Touch ID to sign;
+   `.biometryCurrentSet` allows no password. The signature is checked against the key's public
+   half, then thrown away, as the iPad's: it is never sent. It is never
+   `.deviceOwnerAuthentication` and never `NeedsYouModel.confirmOwner`, which let the Mac's
+   password in. **Any failed or closed Touch ID check sends nothing**: a closed prompt, a failed
+   match, a lockout. A key the system invalidated (the fingers changed) is found at the click, as
+   the signature fails; it is deleted, and the action says to approve on the phone. Any failure
+   the app can't place is taken as that: the key goes, never a way around it. "Approve on your phone instead" (`approval.security_key.on_phone`)
+   shows beside the action.
+4. **Then planque's DELETE**, one per connection, signed by the device key with no prompt. The key
    has no access control (`DeviceKey`): the Touch ID check is the confirmation, as Windows Hello is
-   before the TPM key. Clear asks Touch ID once for all of them. A refusal is counted and the next
-   connection is still tried. Once the session changes, nothing more is sent: the window ends the
+   before the TPM key, and the ending key's signature is that check. Clear asks Touch ID once for
+   all of them. A refusal is counted and the next connection is still tried. Once the session changes, nothing more is sent: the window ends the
    model's session on sign-out and when it goes (`ConnectAppsModel.endSession`, as the iPad's
    `accountGeneration`), and an ending checks it after Touch ID and after each DELETE, even one
    whose prompt was still open.
-4. **Then the connections and the removed tafs are read again.** What's said:
-   - Disconnect says nothing when the prompt was closed (the iPad's choice; Windows says "not done").
+5. **Then the connections and the removed tafs are read again.** What's said:
+   - Disconnect says nothing when the Touch ID check failed or was closed (the iPad's choice;
+     Windows says "not done").
      A refusal says `connect.not_disconnected` ("Access not removed. {why}").
-   - Clear says "Not done: it wasn't confirmed." (`common.not_done_unconfirmed`) when the prompt was
-     closed. Otherwise it says how it went (`connect.clear_removed.cleared`, `connect.kept.for_card(s)`,
+   - Clear says "Not done: it wasn't confirmed." (`common.not_done_unconfirmed`) when the check
+     failed or was closed. Otherwise it says how it went (`connect.clear_removed.cleared`, `connect.kept.for_card(s)`,
      `connect.could_not_cleared_try_again`).
+   - Either says "This device can't approve. Approve on another device signed in to your
+     account." when the ending key was gone (invalidated, or no longer this sign-in's).
 
-The iPad also signs `tafs.disconnect.v1|{tenant}|{ids}` as its Face ID step and then throws the
-signature away. This Mac doesn't: its device key never prompts, so that signature would prove
-nothing. Windows doesn't sign it either.
+The iPad signs `tafs.disconnect.v1|{tenant}|{ids}` as its Face ID step and then throws the
+signature away. This Mac does the same with its ending key, whose `.biometryCurrentSet` makes the
+signature Touch ID's own; the device key, which never prompts, signs only the DELETE. Windows
+doesn't sign it.
 
 Nothing that grants access changes. Connecting, **Sign in again**, **Replace the key**, a key, and
 every approval and confirmation stay the phone's or the security key's, on every Mac.

@@ -134,11 +134,18 @@ Ending access with Touch ID).
   {count} connections from removed tafs?" with its body. **Ending one is done here on a Touch ID
   Mac** (docs/approvals.md › Ending access with Touch ID). These are Remove access, Cancel the
   request, Cancel the sign-in, Clear, and Remove on a connection's page. On a Mac whose device key
-  is in the Secure Enclave and that can check Touch ID now, a yes asks Touch ID alone (never the
-  Mac's password), with the question as its reason. Then the device key signs planque's
+  is in the Secure Enclave, that can check Touch ID now and whose sign-in made an **ending key**,
+  a yes asks Touch ID alone (never the Mac's password), with the question as its reason: the
+  ending key signs the iPad's `tafs.disconnect.v1|{tenant}|{ids}`, a signature that is never
+  sent. The ending key is a second Secure Enclave key made at sign-in, bound to the fingers
+  enrolled then (`.biometryCurrentSet`); the system invalidates it when fingers change, and the
+  Mac uses the phone until the next sign-in. A session from before the ending key has none and
+  uses the phone. Sign-out deletes it. Then the device key signs planque's
   `DELETE /v1/accounts/{tenant}/grants/{id}` (no body) for each connection, and the connections
-  are read again. "Approve on your phone instead" shows beside it. A closed prompt sends nothing:
-  Disconnect says nothing, and Clear says "Not done: it wasn't confirmed." A refusal says "Access
+  are read again. "Approve on your phone instead" shows beside it. Any failed or closed Touch ID
+  check sends nothing: Disconnect says nothing, and Clear says "Not done: it wasn't confirmed."
+  A key found invalidated at the click is deleted, and the action says "This device can't
+  approve. Approve on another device signed in to your account." A refusal says "Access
   not removed. {why}", and Clear says how many it cleared, kept and couldn't clear. **On any
   other Mac**, and always for Sign in again and Replace the key (which grant access; the iPad
   doesn't ask first for those), it shows "This device can't approve. Approve on another device

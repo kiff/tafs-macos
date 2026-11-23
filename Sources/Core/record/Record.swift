@@ -70,7 +70,35 @@ enum Record {
         /// needs to open the call's sheet (its `evidence`), receipt or not.
         let hasActor: Bool
 
-        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call, next }
+        enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call, next
+            case report, reportedAt = "reported_at"
+        }
+
+        /// "Report this payment" (docs/record.md): its receipt's id and when the payment was made, only where tafs cloud
+        /// offers it (a payment this reader may report, not reported yet); nil draws no button.
+        let report: ReportOffer?
+        /// When this payment was reported, as KIFF keeps it on its receipt: it takes the button away.
+        let reportedAt: Date?
+
+        /// tafs cloud's offer to report a payment: the receipt's id for `POST /v1/record/{trace_id}/report`, and when the
+        /// payment was made, which the sheet writes as its date.
+        struct ReportOffer: Decodable, Equatable {
+            let traceID: String
+            var at: Date?
+            enum CodingKeys: String, CodingKey { case traceID = "trace_id", at }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                traceID = try c.decode(String.self, forKey: .traceID)
+                at = (try? c.decodeIfPresent(String.self, forKey: .at)).flatMap { $0.flatMap(Record.time) }
+            }
+        }
+
+        /// The button shows where tafs cloud sent an offer, and the payment isn't reported yet (here or before).
+        func offersReport(reportedNow: Bool = false) -> Bool {
+            guard let report, !report.traceID.isEmpty else { return false }
+            return reportedAt == nil && !reportedNow
+        }
+
 
         /// The part of KIFF's call the receipt sheet reads. Each part that doesn't read is left out, and
         /// the line still reads.
@@ -148,6 +176,8 @@ enum Record {
             answeredByYou = call?.answer?.you == true
             readOnly = call?.readOnly == true
             ownerApproved = kind == "approved" || (call?.outcome == "allowed" && call?.held == true)
+            report = (try? c.decodeIfPresent(ReportOffer.self, forKey: .report)) ?? nil
+            reportedAt = text(.reportedAt).flatMap(Record.time)
             proposalID = call?.proposalID
             entityID = call?.entityID.map(Record.visible)
             onHash = call?.onHash
@@ -186,6 +216,13 @@ enum Record {
             taf = (try? c.decodeIfPresent(String.self, forKey: .taf)) ?? nil
             message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil
         }
+    }
+
+    /// An RFC 3339 time as tafs cloud writes it, with or without fractions of a second.
+    static func time(_ text: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
     /// A call's KIFF receipt: its id, and whether KIFF has signed it yet.
@@ -367,6 +404,14 @@ enum Record {
 }
 
 extension CloudClient {
+    /// Reports a payment the person didn't expect (`POST /v1/record/{trace_id}/report`, no body): KIFF marks its receipt
+    /// and tafs cloud halts the taf, as the halt button does. It only takes authority away, so nothing is signed and no key
+    /// is asked; resuming stays behind an approval. Reporting again answers the same. A refusal is tafs cloud's
+    /// (`CloudRefusal`).
+    func reportPayment(traceID: String) async throws {
+        _ = try await post("/v1/record/\(Self.escaped(traceID))/report", [:])
+    }
+
     /// The Record searched by `q` (an order, an invoice, an amount or an action); `cursor`
     /// continues the same search.
     func record(_ q: String = "", cursor: String? = nil, saying: Bool = false) async throws -> Record.Page {
