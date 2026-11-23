@@ -201,7 +201,7 @@ enum Plural {
         case "ko", "ja", "zh", "id", "vi", "th", "km", "lo", "ms":
             return "other"
         // "one" is 0 and 1.
-        case "hy", "bn":
+        case "hy", "bn", "hi":
             return n <= 1 ? "one" : "other"
         // Hebrew's "many" left CLDR in 42.
         case "he":
