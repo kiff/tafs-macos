@@ -151,6 +151,8 @@ struct SignedInView: View {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
+            // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
+            doorModels.signWithKey = signWithKey
             needsYou.answerWithKey = answerWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
