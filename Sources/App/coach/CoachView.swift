@@ -559,10 +559,11 @@ final class CoachModel: ObservableObject {
     // MARK: Files (the iPad's AppModel.swift:4723-4835)
 
     /// Where this chat's files go on tafs cloud: Coach's, or the taf's. Nil where nothing can be
-    /// attached: before the chat is read, or a new conversation that improves a taf, whose first
-    /// message tafs cloud writes (the iPad's `filesTarget`).
+    /// attached: before the chat is read, a new conversation that improves a taf, whose first
+    /// message tafs cloud writes, or a version's trial chat, as the iPad's `filesTarget`
+    /// (`trialChats[tafID] == nil`).
     var filesTarget: String? {
-        guard case .loaded(let coach, _) = state else { return nil }
+        guard !trial, case .loaded(let coach, _) = state else { return nil }
         if isCoach { return improving == nil ? coach.id : nil }
         return coach.id
     }
