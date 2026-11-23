@@ -154,7 +154,7 @@ The grants proof (`grantsReadProof`) is a read: it signs `GET …/grants` and no
 ### Ending access with Touch ID
 
 The owner's decision (22 Nov): ending access is signed here on a Mac with Touch ID. **The same check confirms a
-change to the account's groups** (the PM's (a), 23 Nov; docs/account.md › People & groups): the ending key signs the
+change to the account's groups** (docs/account.md › People & groups): the ending key signs the
 iPad's `tafs.people.v1|{tenant}|{what}` there, then KIFF's group request goes signed by the device key. What follows
 is written for ending access; groups take the same route, key and Touch ID. This covers **Remove access**, **Cancel the request**, **Cancel the sign-in** and
 **Clear** (the removed tafs' connections), on a connection's row and on its page. It works as the
