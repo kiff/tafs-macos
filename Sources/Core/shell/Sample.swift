@@ -170,6 +170,54 @@ enum Sample {
               "capabilities": ["holds.answer", "cards.manage", "billing.manage"]])
     }
 
+    /// Plan & usage's balance (`GET /v1/usage/balance`), as the iPad's `sampleBalance`: Solo, about half the
+    /// period's credits left.
+    static func balance(words: Words) -> Data {
+        json(["balance": ["state": "ok", "meter_pct": 48, "words": words("sample.credits.balance_words"),
+                          "detail": words("sample.credits.balance_detail"), "credits_panel": true],
+              "plan_line": words("sample.credits.plan_line"), "plan_tone": "ok"])
+    }
+
+    /// The period's credits (`GET /v1/usage/credits`, `?period=previous` for the one before), as the iPad's
+    /// `sampleCredits`.
+    static func credits(words: Words, previous: Bool) -> Data {
+        if previous {
+            return json(["credits": 2310, "runs": 126, "words": words("sample.credits.last_period"),
+                         "tafs": [["taf": "sample-support", "credits": 1480, "runs": 74, "words": words("sample.credits.refunds_last")],
+                                  ["taf": "sample-parcels", "credits": 830, "runs": 52, "words": words("sample.credits.invoices_last")]],
+                         "note": words("sample.credits.note")])
+        }
+        return json(["credits": 1240, "runs": 69, "words": words("sample.credits.this_period"),
+                     "tafs": [["taf": "sample-support", "credits": 820, "runs": 41, "words": words("sample.credits.refunds_this")],
+                              ["taf": "sample-parcels", "credits": 420, "runs": 28, "words": words("sample.credits.invoices_this")]],
+                     "not_counted": ["runs": 9, "words": words("sample.credits.not_counted"),
+                                     "lines": [["why": "coach", "runs": 6, "words": words("sample.credits.not_counted_coach")],
+                                               ["why": "trial", "runs": 2, "words": words("sample.credits.not_counted_trials")],
+                                               ["why": "failed", "runs": 1, "words": words("sample.credits.not_counted_failed")]]],
+                     "note": words("sample.credits.note")])
+    }
+
+    /// The Record (`GET /v1/record`): what the first two rounds did, newest first. Each call done within its Card,
+    /// and each one held, waiting for the owner.
+    static func record(words: Words, now: Date) -> Data {
+        let clock = DateFormatter()
+        clock.locale = Locale(identifier: words.language)
+        clock.timeStyle = .short
+        clock.dateStyle = .none
+        let made: [(Taf, Call, Bool)] = tafs.flatMap { taf in
+            taf.script.prefix(2).map { call in (taf, call, rule(taf, call.action)?.ask == true) }
+        }
+        let entries: [[String: Any]] = made.enumerated().map { index, item in
+            let (taf, call, waits) = item
+            let at = now.addingTimeInterval(Double(-300 * (index + 1)))
+            return ["id": "sample-record-\(taf.key)-\(call.action)", "at": time(at), "kind": waits ? "held" : "done",
+                    "title": words(call.summary), "detail": words(waits ? "record.waiting_for_you" : "record.done_within_card"),
+                    "time": clock.string(from: at), "call": ["proposal_id": "sample-\(taf.key)-\(call.action)"],
+                    "taf": ["id": tafID(taf), "name": words("sample.\(taf.key).name")]]
+        }
+        return json(["entries": entries])
+    }
+
     /// The answer the sample gives a request: its reads from the sample, every other read empty, and a write or an
     /// approval refused, with nothing done.
     static func answer(method: String, path: String, words: Words, now: Date) -> (Int, Data) {
@@ -185,6 +233,9 @@ enum Sample {
         case "/v1/me/devices": return (200, json(["devices": []]))
         case "/v1/me/passkeys": return (200, json(["passkeys": []]))
         case "/v1/groups": return (200, json(["groups": []]))
+        case "/v1/usage/balance": return (200, balance(words: words))
+        case "/v1/usage/credits": return (200, credits(words: words, previous: path.contains("period=previous")))
+        case "/v1/record": return (200, record(words: words, now: now))
         case "/v1/tenant/members": return (200, json(["members": []]))
         default: return (404, json(["error": "not_found", "words": notInSample(words)]))
         }

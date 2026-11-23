@@ -48,4 +48,18 @@ let shellSampleTests: [Test] = [
         try expectEqual(status, 404)
         try expectEqual(Sample.session.deviceID, nil)
     }),
+    Test("Plan & usage reads the iPad's sample balance and both periods' credits; the Record, each call done or waiting", awaiting: {
+        let (_, cloud, _) = clients()
+        let balance = try await cloud.balance()
+        try expectEqual(balance.words, english()("sample.credits.balance_words"))
+        let now = try await cloud.credits()
+        try expectEqual(now.words, english()("sample.credits.this_period"))
+        try expectEqual(now.rows.map(\.taf), ["sample-support", "sample-parcels"])
+        let before = try await cloud.credits(previous: true)
+        try expectEqual(before.words, english()("sample.credits.last_period"))
+        let record = try await cloud.record()
+        try expectEqual(record.entries.count, 10)
+        try expectEqual(record.entries.filter { $0.kind == "held" }.count, 3)
+        try expectEqual(record.entries.first?.taf.name, "Support replies")
+    }),
 ]
