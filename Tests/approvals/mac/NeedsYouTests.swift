@@ -91,6 +91,47 @@ let approvalsScreenTests: [Test] = [
         await model.loadUnproven(answersHolds: true)
         try expectEqual(model.unproven.map(\.proposal), ["p1"])
     }),
+    Test("Did this happen?'s Yes and No are offered only on a Mac with its security key, for someone who answers held calls", awaiting: { @MainActor in
+        let (model, _) = model([])
+        try expectEqual(model.offersHappened(answersHolds: true), false)
+        model.approveWithKey = { _, _ in Data() }
+        try expectEqual(model.offersHappened(answersHolds: true), true)
+        try expectEqual(model.offersHappened(answersHolds: false), false)
+    }),
+    Test("Did this happen? answered on the security key: the act named as the iPad's prompt, then the call leaves and the list is read again", awaiting: { @MainActor in
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment"},{"proposal":"p2","title":"Pay a bill"}]}"#
+        let after = #"{"calls":[{"proposal":"p2","title":"Pay a bill"}]}"#
+        let (model, transport) = model([(200, list), (200, after)])
+        var approved: [(KeyAct, String)] = []
+        model.approveWithKey = { act, title in approved.append((act, title)); return Data() }
+        await model.loadUnproven(answersHolds: true)
+        await model.answerHappened(model.unproven[0], happened: false)
+        try expectEqual(approved.map(\.0), [KeyAct.happened(proposal: "p1", false)])
+        try expectEqual(approved.map(\.1), [Words.app("needs_you.prompt.did_not_happen", ["title": "Refund a payment"])])
+        try expectEqual(model.unproven.map(\.proposal), ["p2"])
+        try expectEqual(transport.sent.map(\.path), ["/v1/me/did-this-happen", "/v1/me/did-this-happen"])
+        try expectEqual(model.answering, nil)
+        try expectEqual(model.notTaken[NeedsYouModel.happenedKey(model.unproven[0])], nil)
+    }),
+    Test("Did this happen?: a closed key sheet keeps the call and says nothing; the phone's choice and KIFF's refusal each say why", awaiting: { @MainActor in
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment"}]}"#
+        let (model, transport) = model([(200, list)])
+        await model.loadUnproven(answersHolds: true)
+        let call = model.unproven[0], key = NeedsYouModel.happenedKey(call)
+        model.approveWithKey = { _, _ in throw CancellationError() }
+        await model.answerHappened(call, happened: true)
+        try expectEqual(model.notTaken[key], nil)
+        model.approveWithKey = { _, _ in throw ApproveOnPhone() }
+        await model.answerHappened(call, happened: true)
+        try expectEqual(model.notTaken[key], Words.app("approval.device_can_not_approve_approve"))
+        model.approveWithKey = { _, _ in throw KIFFError.refused(status: 409, code: "already_answered") }
+        await model.answerHappened(call, happened: true)
+        try expectEqual(model.notTaken[key], Words.app("needs_you.refused.other", ["why": "already_answered"]))
+        try expectEqual(model.unproven.map(\.proposal), ["p1"])
+        try expectEqual(transport.sent.count, 1)
+        // A held call's line isn't this answer's.
+        try expectEqual(model.notTaken["p1"], nil)
+    }),
     Test("a step is answered as the iPad's: its hand-off read first, the device key signs kiff.handoff.v1, then it leaves the list", awaiting: { @MainActor in
         let step = try JSONDecoder().decode(YourStep.self, from: Data(#"{"handoff":"h1","what":"Approve the transfer","words":{"done":"Done","skip":"Skip it"}}"#.utf8))
         var signed: [String] = []
@@ -156,6 +197,18 @@ let approvalsScreenTests: [Test] = [
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
         try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-happened-en.png"))
+    }),
+    Test("the screenshot: Did this happen? with No and Yes on the security key", awaiting: { @MainActor in
+        let list = #"{"calls":[{"proposal":"p1","title":"Refund a payment","words":"Refund a payment: 40.00 EUR.","status_words":"Its answer was lost, so KIFF can't tell whether it went through."}]}"#
+        let (model, _) = model([(200, none), (200, list)], route: .passkey)
+        model.approveWithKey = { _, _ in Data() }
+        await model.load()
+        await model.loadUnproven(answersHolds: true)
+        let view = NeedsYouView(model: model, now: Date(timeIntervalSince1970: 1_794_679_800))
+            .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 600)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try png.write(to: URL(fileURLWithPath: "build/screenshots/needs-you-happened-key-en.png"))
     }),
     Test("the screenshots: Needs you with a call, and with none, in three languages", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
