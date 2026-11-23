@@ -91,6 +91,7 @@ let connectionEndingMacTests: [Test] = [
         let other = Session(accessToken: "another", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
         let theirs = ConnectionEnding.endingKeyRecord(session: EndingKey.binding(other), handle: Data([9]))
         try store.save(theirs, for: EndingKey.account)
+        model.refreshRoute()
         try expectEqual(model.endRoute, .phone)
         try expectEqual(store.load(EndingKey.account), theirs)
     }),

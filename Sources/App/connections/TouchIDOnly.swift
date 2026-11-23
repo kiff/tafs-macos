@@ -119,18 +119,31 @@ enum EndingKey {
         guard key.publicKey.isValidSignature(signature, for: message) else { throw ConnectionEnding.KeyGone() }
     }
 
-    /// Touch ID didn't pass, the key still stands: a failed match, a lockout, or Touch ID not
-    /// there now (the system's words, or CryptoTokenKit's cancel, failed and needs-authentication).
+    /// Touch ID didn't pass, the key still stands: only what says so. The system's own words
+    /// (`LAError`, as thrown or beneath CryptoTokenKit's): a cancel, a failed match, a lockout, or
+    /// Touch ID not there or not askable now; or CryptoTokenKit's cancel (-4). CryptoTokenKit's
+    /// needs-authentication (-9) or failed (-5) with none of these beneath it is the usual error of
+    /// a key whose access control can't be met, as one the system invalidated when the fingers
+    /// changed: that is not this, so the key is deleted and the Mac goes to the phone.
     static func notPassed(_ error: Error) -> Bool {
         let ns = error as NSError
-        if ns.domain == "CryptoTokenKit", [-4, -5, -9].contains(ns.code) { return true }
-        switch (error as? LAError)?.code {
-        case .authenticationFailed?, .biometryLockout?, .biometryNotAvailable?, .biometryNotEnrolled?,
-             .notInteractive?, .invalidContext?, .passcodeNotSet?:
-            return true
-        default:
-            if let under = ns.userInfo[NSUnderlyingErrorKey] as? Error { return NeedsYouModel.closed(under) || EndingKey.notPassed(under) }
-            return false
+        if let la = laCode(error) ?? (ns.userInfo[NSUnderlyingErrorKey] as? Error).flatMap(laCode) {
+            switch la {
+            case .userCancel, .systemCancel, .appCancel, .userFallback, .authenticationFailed, .biometryLockout,
+                 .biometryNotAvailable, .notInteractive:
+                return true
+            default:
+                return false
+            }
         }
+        return ns.domain == "CryptoTokenKit" && ns.code == -4
+    }
+
+    /// The system's code for a LocalAuthentication error, whichever way it came.
+    private static func laCode(_ error: Error) -> LAError.Code? {
+        if let la = error as? LAError { return la.code }
+        let ns = error as NSError
+        guard ns.domain == LAErrorDomain else { return nil }
+        return LAError.Code(rawValue: ns.code)
     }
 }

@@ -159,6 +159,11 @@ let connectionEndingTests: [Test] = [
         try expect(check.contains("context.interactionNotAllowed = true"), "reading the key asks nothing")
         try expect(check.contains("key.publicKey.isValidSignature(signature, for: message)"), "the signature is checked with the key's own public half")
         try expect(check.contains("catch where NeedsYouModel.closed(error)"), "a closed prompt counts as closed")
+        // An invalidated key's usual error (CryptoTokenKit -9 or -5 with no LAError beneath) is the
+        // key gone, never "not passed": only CryptoTokenKit's cancel (-4) counts on its own.
+        try expect(!check.contains("[-4, -5, -9]") && check.contains(#"ns.domain == "CryptoTokenKit" && ns.code == -4"#),
+                   "CryptoTokenKit's -5 and -9 aren't a closed prompt")
+        try expect(!check.contains(".invalidContext"), "an invalid context isn't a closed prompt")
         // The fingers record is gone.
         for gone in ["evaluatedPolicyDomainState", "tafs.touch-id.fingers", "FingersChanged"] {
             try expect(!check.contains(gone), "no \(gone)")
