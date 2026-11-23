@@ -4,6 +4,12 @@ import Foundation
 /// occurrence in the account's zone and gives each its day and time there, so the app
 /// places it without converting a zone, and both apps draw the same.
 enum Agenda {
+    /// The listed taf an event opens, as the iPad's `opening(_:)` with `tafID(forCloud:)`: the one Home lists under tafs
+    /// cloud's id for it. None for a taf this person no longer has listed, which opens nothing.
+    static func taf(of event: Event, in tafs: [Home.Taf]) -> Home.Taf? {
+        tafs.first { $0.tafID == event.taf }
+    }
+
     /// One occurrence: a schedule's firing, a follow-up the taf set itself, or a run's next try.
     struct Event: Decodable, Identifiable, Equatable {
         let taf: String
