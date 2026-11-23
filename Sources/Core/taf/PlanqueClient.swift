@@ -1,11 +1,13 @@
 import Foundation
 
 /// planque, which keeps a taf's vendor sign-ins so they never reach this Mac, tafs cloud, the
-/// agent or KIFF, as the iPad's `PlanqueClient`. This Mac asks two things of it: its proof
+/// agent or KIFF, as the iPad's `PlanqueClient`. This Mac asks three things of it: its proof
 /// that this device reads its own account's grants (`grantsReadProof`), which tafs cloud
-/// forwards with a taf's Setup read; and this device's enrolment (`enrol`), each request
-/// signed by the device key with this device's id (`Planque-Device-Signature`). It never
-/// approves or confirms a grant (`routes`).
+/// forwards with a taf's Setup read; this device's enrolment (`enrol`); and, on a Mac whose
+/// device key is in the Secure Enclave, after a Touch ID-only check, the end of one connection
+/// (`disconnect`), which takes access away and grants none. Each request is signed by the device
+/// key with this device's id (`Planque-Device-Signature`). It never approves or confirms a
+/// grant, sends a key or connects one (`routes`; docs/approvals.md).
 final class PlanqueClient {
     enum PlanqueError: Error, Equatable {
         case notSigning
@@ -20,10 +22,11 @@ final class PlanqueClient {
         case server(status: Int, message: String, words: String?)
     }
 
-    /// The only routes under the account this Mac signs at planque: its enrolment. Never a
+    /// The only routes under the account `send` signs at planque: its enrolment. Never a
     /// grant's `approve` or `confirm`, the iPad's two routes under a grant: this Mac
     /// approves nothing at planque, so `send` refuses any other path before anything is signed or
-    /// sent. Adding one is a change to this list, which `PlanqueRoutesTests` pins.
+    /// sent. Adding one is a change to this list, which `PlanqueRoutesTests` pins. Ending a
+    /// connection (`disconnect`) is its own method, `DELETE` only, which `PlanqueRoutesTests` pins too.
     static let routes: Set<String> = ["enrolment"]
 
     /// planque's address, as the iPad's `baseURL`.
@@ -133,6 +136,43 @@ final class PlanqueClient {
     /// `refusalCode` (`PlanqueClient.swift:622-624`).
     static func refusalCode(_ data: Data) -> String? {
         ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["code"] as? String
+    }
+
+    // MARK: Ending a connection
+
+    /// Ends one connection at planque, as the iPad's `disconnect(grantID:)`
+    /// (`PlanqueClient.swift:598-600`): `DELETE` of the grant, with no body, signed v1 by the device
+    /// key with this device's id. It takes access away and grants none: planque removes its tools
+    /// from KIFF and signs out at the vendor. The only grant route this Mac signs, and only once
+    /// the person passed Touch ID (`ConnectionEnding`, docs/approvals.md). Its signer comes with
+    /// the call, so the client's own `signer` stays armed only around the enrolment. A grant
+    /// planque already ended answers 200 too.
+    func disconnect(grantID: String, signedBy sign: (String) throws -> String, over transport: Transport) async throws {
+        guard let tenant, !grantID.isEmpty else { throw PlanqueError.notSigning }
+        if deviceID == nil, let load = deviceLoader { deviceID = await load() }
+        guard let device = deviceID else { throw PlanqueError.noDevice }
+        let uri = Self.disconnectPath(tenant: tenant, grantID: grantID)
+        let at = SigningTime.next()
+        // No body, as the iPad's: the empty body's hash is what's signed, and no Content-Type.
+        let message = Self.message(base: baseURL, tenant: tenant, method: "DELETE", uri: uri, bodyHash: Self.emptyBodyHash, signedAt: at)
+        let request = HTTPRequest(method: "DELETE", path: uri, headers: [
+            "Accept": "application/json", "User-Agent": "tafs-macos",
+            // This Mac's zone, for the times in planque's words; not part of what's signed.
+            "X-Time-Zone": TimeZone.current.identifier,
+            "Planque-Device-Signature": "t=\(at),v1=\(try sign(message)),d=\(device)",
+        ])
+        let (status, answer) = try await transport.send(request)
+        guard (200..<300).contains(status) else {
+            lastRefusalCode = Self.refusalCode(answer)
+            let said = Self.refusal(answer)
+            throw PlanqueError.server(status: status, message: said.error ?? "", words: said.words)
+        }
+    }
+
+    /// The one grant's path this Mac signs, as the iPad's and Windows' `DisconnectPath`: the
+    /// account and the grant, each escaped as one segment.
+    static func disconnectPath(tenant: String, grantID: String) -> String {
+        "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))"
     }
 
     /// The device signs its own read; the cloud only forwards this proof.

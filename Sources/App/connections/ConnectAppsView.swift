@@ -25,15 +25,91 @@ final class ConnectAppsModel: ObservableObject {
     /// The app whose connections are open ("Your {app} connections"), from its row's chevron.
     @Published var opened: Apps.App?
 
+    /// The connections being ended now, by the action's id (a grant's `|end`, or `clear`): its
+    /// button waits until planque answered and the list was read again.
+    @Published private(set) var ending: Set<String> = []
+    /// What an ending said afterwards, by the action's id: planque's refusal, Clear's count, or
+    /// that it wasn't done.
+    @Published private(set) var notes: [String: String] = [:]
+
     private let cloud: CloudClient
     /// Where this Mac reads its connections; nil reads none.
     private let connections: ConnectionsSource?
+    /// Touch ID, biometrics only, before this Mac ends a connection (`TouchIDOnly`).
+    private let touchID: TouchIDOnly
     private var cursor: String?
     private var asked = 0
+    /// The session this model was made for ended (`endSession`): no ending sends anything more.
+    private var sessionEnded = false
 
-    init(cloud: CloudClient, connections: ConnectionsSource? = nil) {
+    init(cloud: CloudClient, connections: ConnectionsSource? = nil, touchID: TouchIDOnly? = nil) {
         self.cloud = cloud
         self.connections = connections
+        let s = cloud.session
+        self.touchID = touchID ?? .system(session: "\(s.tenant)|\(s.subject)|\(s.deviceID ?? "")")
+    }
+
+    /// The session is ending (a sign-out, or the window rebuilt for another session): an ending
+    /// on its way, even one whose Touch ID prompt is still open, sends nothing more, as the
+    /// iPad's `accountGeneration`.
+    func endSession() { sessionEnded = true }
+
+    /// Whether an ending may still send: the session it began in is still this one.
+    private var current: Bool { !sessionEnded && !Task.isCancelled }
+
+    /// Where ending a connection is done (`ConnectionEnding.route`): here, with Touch ID, only on
+    /// a Mac whose session key is in the Secure Enclave and that can check Touch ID now; else on
+    /// the phone, and this Mac sends nothing.
+    var endRoute: ConnectionEnding.Route {
+        guard let source = connections, source.end != nil else { return .phone }
+        return ConnectionEnding.route(enclaveKey: source.enclaveKey, biometrics: touchID.available())
+    }
+
+    /// Remove access, Cancel the request or Cancel the sign-in, as the iPad's
+    /// `disconnect(grantID:)`: Touch ID with the question's title (`prompt`), then planque's
+    /// `DELETE`, then the connections read again. A closed prompt says nothing; a refusal says
+    /// `connect.not_disconnected`. `id` is the action's, for its note.
+    func disconnect(_ grantID: String, prompt: String, id: String) async {
+        guard !ending.contains(id), !sessionEnded else { return }
+        guard endRoute == .touchID, let end = connections?.end else { return }
+        ending.insert(id)
+        notes[id] = nil
+        defer { ending.remove(id) }
+        let outcome = await ConnectionEnding.end([grantID], prompt: prompt, confirm: touchID.confirm, delete: end,
+                                                 current: { [weak self] in self?.current ?? false }, Words.app)
+        if outcome.stopped { return }
+        if !outcome.unconfirmed { await readAgain() }
+        notes[id] = ConnectionEnding.disconnectNote(outcome)
+    }
+
+    /// Clear, as the iPad's `clearRemovedConnections`: of `ids`, only those tafs cloud lists as a
+    /// removed taf's with no live Card using them; one Touch ID for all, then planque's `DELETE`
+    /// for each, then the connections read again and how it went.
+    func clear(_ ids: [String]) async {
+        let id = "clear"
+        guard !ending.contains(id), !sessionEnded, endRoute == .touchID, let end = connections?.end else { return }
+        let plan = ConnectionEnding.clearPlan(ids, listed: AppConnections.removedListed(removedTafs))
+        guard !plan.ending.isEmpty || !plan.keptFor.isEmpty else { return }
+        guard !plan.ending.isEmpty else {
+            notes[id] = ConnectionEnding.cleared(done: 0, kept: plan.keptFor.count, keptFor: plan.keptFor.flatMap { $0 }, left: 0, Words.app)
+            return
+        }
+        ending.insert(id)
+        notes[id] = nil
+        defer { ending.remove(id) }
+        let prompt = Words.app.count("connect.clear_removed.title", plan.ending.count)
+        let outcome = await ConnectionEnding.end(plan.ending, prompt: prompt, confirm: touchID.confirm, delete: end,
+                                                 current: { [weak self] in self?.current ?? false }, Words.app)
+        if outcome.stopped { return }
+        if !outcome.unconfirmed { await readAgain() }
+        notes[id] = ConnectionEnding.clearNote(outcome, ending: plan.ending.count, keptFor: plan.keptFor, Words.app)
+    }
+
+    /// The connections and the removed tafs read again after an ending, as the iPad's
+    /// `refreshConnections` and `loadConnectApps`.
+    private func readAgain() async {
+        if !search.isEmpty { await readConnections() }
+        await load()
     }
 
     var yours: [Apps.App] { apps.filter(\.isYours) }
@@ -110,7 +186,7 @@ final class ConnectAppsModel: ObservableObject {
 /// app is connected through Coach, where its Card is approved with it, so Connect, Ask Coach,
 /// Sign in again and "Not listed? Ask Coach" open Coach. Where no taf can have an app, its
 /// Connect is off and "Make one first" says why, over Discover. A connected app's chevron opens
-/// its connections (`AppConnectionsView`), which only read.
+/// its connections (`AppConnectionsView`), where only ending one is done here, with Touch ID.
 struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
