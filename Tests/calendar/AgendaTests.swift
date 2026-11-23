@@ -12,6 +12,15 @@ let agendaPage = #"""
 """#
 
 let calendarTests: [Test] = [
+    Test("an event opens the taf Home lists under its id, and a taf no longer listed opens nothing") {
+        let event = try AccountClient.decoder.decode(Agenda.Event.self, from: Data(#"{"taf":"taf_1","name":"Refunds","color":1,"kind":"schedule","at":"2026-11-16T08:00:00Z","day":"2026-11-16","time":"09:00","minute":540,"words":"Every day at 09:00","count":1}"#.utf8))
+        let refunds = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_refunds","id":"taf_1","name":"Refunds","state":"idle"}"#.utf8))
+        let other = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_other","id":"taf_9","name":"Other","state":"idle"}"#.utf8))
+        let local = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_local","name":"Local","state":"idle"}"#.utf8))
+        try expectEqual(Agenda.taf(of: event, in: [other, local, refunds])?.kiffAgent, "a_refunds")
+        try expectEqual(Agenda.taf(of: event, in: [other, local])?.kiffAgent, nil)
+        try expectEqual(Agenda.taf(of: event, in: [])?.kiffAgent, nil)
+    },
     Test("the calendar is read as tafs cloud sends it, and an event that doesn't read is left out", awaiting: {
         let transport = CannedTransport([(200, agendaPage)])
         let page = try await CloudClient(transport: transport, session: session).calendar(from: "2026-11-16", to: "2026-11-22")
