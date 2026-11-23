@@ -120,6 +120,16 @@ extension CloudClient {
         return answer.trial
     }
 
+    /// The trial's chat, read as a taf's thread is.
+    func trialThread(of taf: String) async throws -> Thread.Page {
+        try await get("/v1/tafs/\(Self.escaped(taf))/trial/conversation")
+    }
+
+    /// One message to the trial: a turn of the version being tried, in its own chat. Text only.
+    func trialMessage(to taf: String, text: String) async throws {
+        _ = try await post("/v1/tafs/\(Self.escaped(taf))/trial/messages", ["text": text])
+    }
+
     /// Install: once KIFF confirmed the trial's draft, that version goes live and the trial ends.
     func installTrial(of taf: String) async throws -> Trials.Summary {
         struct Answer: Decodable { let ended: Trials.Summary }

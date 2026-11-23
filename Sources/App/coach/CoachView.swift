@@ -65,6 +65,8 @@ final class CoachModel: ObservableObject {
     private let cloud: CloudClient
     /// Opens the answer's stream; nil sends plainly and reads the thread again instead.
     private let streamer: LineStream?
+    /// A version's trial chat (`Trials`): its thread and messages are the trial's own routes, text only, never streamed.
+    var trial = false
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
     private var following = 0
@@ -230,6 +232,7 @@ final class CoachModel: ObservableObject {
         if fresh { return nil }
         // Only Coach's own thread carries the proof, as on the iPad.
         var signed: String?
+        if trial { return try await cloud.trialThread(of: coach.id) }
         if isCoach, let make = proof { signed = await make() }
         return try await cloud.thread(of: coach.id, session: isCoach ? chat : nil, proof: signed)
     }
@@ -777,6 +780,13 @@ final class CoachModel: ObservableObject {
         do {
             // An improvement's first message goes through tafs cloud, which adds the taf's
             // context; the conversation goes on as any other (the iPad's `deliverSetup`).
+            // A trial's turn goes to the trial's own chat, then it's followed as any other.
+            if trial {
+                try await cloud.trialMessage(to: coach.id, text: text)
+                guard mine == conversation else { return true }
+                await follow(coach)
+                return true
+            }
             if isCoach, let taf = improving {
                 let sent = try await cloud.improve(taf.id, text: text)
                 guard mine == conversation else { return true }
