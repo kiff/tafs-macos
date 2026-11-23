@@ -1,5 +1,5 @@
 # Every change asks for a code owner's review: kiff-qa, kiffagents, or agentgabo when kiff-qa wrote it.
-# kiffagents never approves kiffagents' own pull requests (the owner's yes, kiff/work#20, 23 Nov 00:46).
+# kiffagents never approves kiffagents' own pull requests.
 *    @kiff-qa @agentgabo @kiffagents
 
 # Keys, signing, approvals, pairing and sign-in, and this file and CI: kiff-qa or agentgabo only. The last matching
@@ -12,7 +12,7 @@
 /scripts/fido.sh                      @kiff-qa @agentgabo
 /.github/                             @kiff-qa @agentgabo
 
-# What holds a key or a session, or sends the bearer and the passkey assertion (agentgabo's review, as Windows' list).
+# What holds a key or a session, or sends the bearer and the passkey assertion (as Windows' list).
 /Sources/App/account/SecurityKeyStore.swift       @kiff-qa @agentgabo
 /Sources/App/account/SessionStore.swift           @kiff-qa @agentgabo
 /Sources/Core/account/Account.swift               @kiff-qa @agentgabo
