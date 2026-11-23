@@ -125,6 +125,16 @@ let coachFilesMacTests: [Test] = [
         chat.signedOut()
         try expectEqual(url.map { FileManager.default.fileExists(atPath: $0.path) }, false)
     }),
+    Test("a version's trial chat takes no files, as the iPad's filesTarget (trialChats), and its paperclip isn't offered", awaiting: { @MainActor in
+        let (chat, transport, _) = await coach([])
+        try expectEqual(chat.filesTarget, "taf-coach")
+        chat.trial = true
+        try expectEqual(chat.filesTarget, nil)
+        let sent = transport.sent.count
+        await chat.attach(pdf)
+        try expectEqual(transport.sent.count, sent)
+        try expectEqual(chat.files.isEmpty, true)
+    }),
     Test("a new conversation that improves a taf takes no files, as the iPad's filesTarget", awaiting: { @MainActor in
         let (chat, transport, _) = await coach([])
         chat.improve(CoachModel.Improving(id: "taf-9", name: "Refunds"))

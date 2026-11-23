@@ -53,6 +53,34 @@ let coachThreadTests: [Test] = [
         try expectEqual(page.items[5], .other(type: "drive", position: 5))
         try expectEqual(page.waitsForPerson, true)
     }),
+    Test("a taf's words carry tafs cloud's run lines and a refused connection's lines, as written; none on the person's or a kickoff") {
+        let json = #"""
+        {"items":[
+          {"type":"message","message":{"from":"taf","kind":"message","text":"Done.","delivered":" Sent to Google Sheets · Refunds 2026 ","counted":"From the record: 5 done · 1 refused",
+            "refused":{"words":"Coach couldn't connect Shippo yet","why":"  ","next":"Ask Coach to try again."}}},
+          {"type":"message","message":{"from":"taf","kind":"message","text":"Nothing new.","delivered":"  ","refused":{"words":" ","next":""}}},
+          {"type":"message","message":{"from":"owner","kind":"message","text":"Go","delivered":"x","counted":"y","refused":{"words":"z","next":"w"}}},
+          {"type":"message","message":{"from":"taf","kind":"kickoff","text":"Run","counted":"y"}}
+        ]}
+        """#
+        let messages: [Thread.Message] = try JSONDecoder().decode(Thread.Page.self, from: Data(json.utf8)).items.compactMap {
+            if case .message(let m, _) = $0 { return m } else { return nil }
+        }
+        try expectEqual(messages.count, 4)
+        try expectEqual(messages[0].runLines.above, "Sent to Google Sheets · Refunds 2026")
+        try expectEqual(messages[0].runLines.under, "From the record: 5 done · 1 refused")
+        try expectEqual(messages[0].refusedLines?.lines, ["Coach couldn't connect Shippo yet", "Ask Coach to try again."])
+        try expectEqual(messages[0].refusedLines?.why, nil)
+        // Blank lines are none.
+        try expectEqual(messages[1].runLines.above, nil)
+        try expectEqual(messages[1].refusedLines, nil)
+        // The person's message and a run's kickoff carry none, whatever is sent.
+        for m in messages[2...] {
+            try expectEqual(m.runLines.above, nil)
+            try expectEqual(m.runLines.under, nil)
+            try expectEqual(m.refusedLines, nil)
+        }
+    },
     Test("a card is known by its key, never only by the name the model gave it") {
         let both = #"{"items":[{"type":"card","card":{"key":"s2:confirm-1","component":{"id":"confirm-1","waits":"owner"}}},{"type":"card","card":{"key":"s3:confirm-1","component":{"id":"confirm-1"}}}]}"#
         let page = try JSONDecoder().decode(Thread.Page.self, from: Data(both.utf8))
