@@ -31,6 +31,11 @@ enum KeyAct: Equatable {
     /// Removing a taf for good (the iPad's `removeTaf`): tafs cloud's `DELETE /v1/tafs/{id}`, empty body, signed before
     /// its Cards are revoked and sent after (`PasskeySession.assertion`).
     case removeTaf(String)
+    /// A version's trial Card (the iPad's `confirmDraftAsTrial`): KIFF's `POST /v1/me/agent-drafts/{id}/confirm` with
+    /// `{"as":"trial","version":…}`; and installing it (`confirmDraft`), the same without `as`. Each grants authority, so
+    /// each is the security key's, once, for that draft at the version the person read.
+    case confirmTrial(id: String, version: String)
+    case confirmDraft(id: String, version: String)
     /// An API door's acts (the iPad's `DoorsModel.reopen`, `revoke`, `removeAPI`), each tafs cloud's own request, signed
     /// as a removal is: opening a paused door again (`PATCH …/doors/{door}` with `{"open":true}`), revoking one of its keys
     /// (`DELETE …/keys/{key}`), and removing the door (`DELETE …/doors/{door}`). Pausing is never signed. A new key stays
@@ -45,6 +50,7 @@ enum KeyAct: Equatable {
         case .timeZone: return "PUT"
         case .resume: return "POST"
         case .removeTaf: return "DELETE"
+        case .confirmTrial, .confirmDraft: return "POST"
         case .reopenAPIDoor: return "PATCH"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         }
@@ -56,6 +62,7 @@ enum KeyAct: Equatable {
         case .timeZone: return "/v1/me/time-zone"
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
+        case .confirmTrial(let id, _), .confirmDraft(let id, _): return "/v1/me/agent-drafts/\(CloudClient.escaped(id))/confirm"
         case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
         case .revokeAPIDoorKey(let taf, let door, let key):
@@ -73,6 +80,8 @@ enum KeyAct: Equatable {
             return (try? encoder.encode(["time_zone": zone])) ?? Data()
         case .resume: return Data("{}".utf8)
         case .removeTaf: return Data()
+        case .confirmTrial(_, let version): return KeyAct.confirmBody(version: version, asTrial: true)
+        case .confirmDraft(_, let version): return KeyAct.confirmBody(version: version, asTrial: false)
         // The iPad's `reopenBody`, these exact bytes.
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
         case .revokeAPIDoorKey, .removeAPIDoor: return Data()
@@ -87,6 +96,8 @@ enum KeyAct: Equatable {
         // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
         case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
         case .removeTaf: return words("taf.remove.prompt", ["taf": device])
+        // The iPad's prompt, filled with the version and the taf by the caller, in `device`'s place.
+        case .confirmTrial, .confirmDraft: return device
         // The door's app, or the key's name, in `device`'s place, as the iPad's reasons; Remove door as its button says.
         case .reopenAPIDoor: return words("door.api.open_reason", ["app": device])
         case .revokeAPIDoorKey: return words("door.api.revoke_reason", ["key": device])
