@@ -137,6 +137,8 @@ struct ReceiptSteps: Equatable {
         let amount: Record.Amount?
         /// A hold_settled step's answer, as KIFF records it ("reject" for a refusal).
         let answer: String?
+        /// What the step acted on, as KIFF signed it (`data.on_hash`): "sha256:<hex>" of the value.
+        var onHash: String? = nil
     }
 
     let steps: [Step]
@@ -168,7 +170,8 @@ struct ReceiptSteps: Equatable {
             return Step(words: sequence.flatMap { stepWords[$0] } ?? message, message: message,
                         at: (s["occurred_at"] as? String).flatMap(Self.date),
                         hash: hash.count > 8 ? "\(hash.prefix(4))…\(hash.suffix(4))" : hash,
-                        kind: kind, amount: amount, answer: data?["answer"] as? String)
+                        kind: kind, amount: amount, answer: data?["answer"] as? String,
+                        onHash: data?["on_hash"] as? String)
         }
     }
 
@@ -183,6 +186,24 @@ struct ReceiptSteps: Equatable {
     func answerMismatch(_ decision: String?) -> Bool {
         guard let decision, let signed = steps.first(where: { $0.kind == "hold_settled" })?.answer else { return false }
         return (decision == "refused") != (signed == "reject")
+    }
+
+    /// The signed chain names what the call acted on (its first step with an `on_hash`), and the
+    /// line's value isn't it, as the iPad's `ReceiptView.onMismatch`. A line not named (no value) or a
+    /// chain with no `on_hash` compares nothing: no mismatch, and nothing said about the payment.
+    func onMismatch(_ onValue: String?, sha256: (Data) -> Data) -> Bool {
+        guard let onValue, let signed = steps.compactMap(\.onHash).first else { return false }
+        return !Record.isOn(onValue, hash: signed, sha256: sha256)
+    }
+
+    /// The first way the line isn't what KIFF signed, in the iPad's order (RecordView.swift:491-496):
+    /// its payment, then its amount, then its answer, as the shared key the sheet says it in; nil
+    /// when it matches. Drawn only on a receipt this Mac verified.
+    func mismatchKey(onValue: String?, amount: Record.Amount?, answer: String?, sha256: (Data) -> Data) -> String? {
+        if onMismatch(onValue, sha256: sha256) { return "receipt.check.payment_mismatch" }
+        if amountMismatch(amount) { return "receipt.check.amount_mismatch" }
+        if answerMismatch(answer) { return "receipt.check.answer_mismatch" }
+        return nil
     }
 
     /// RFC 3339, with or without fractional seconds, as Go writes times.
