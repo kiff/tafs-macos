@@ -29,7 +29,7 @@ final class PINSheetModel: ObservableObject, Identifiable {
     let reader = PINReader()
     /// Approving a request, or adding the key while this Mac pairs: only the sheet's words differ.
     let purpose: SecurityKeySheetPurpose
-    /// The act the key approves, named in the sheet (the owner's ask, kiff/work#20, 17:31): "Sign MacBook out of
+    /// The act the key approves, named in the sheet: "Sign MacBook out of
     /// your account". Nil for adding the key while pairing.
     let act: String?
     private let words: Words
@@ -86,7 +86,7 @@ final class PINSheetModel: ObservableObject, Identifiable {
     }
 
     /// "Approve on your phone instead": nothing is approved here or sent; the act says to approve on another device
-    /// (`ApproveOnPhone`), as the PM decided for the desktops (kiff/work#20, 20:12). Nothing is handed to the phone.
+    /// (`ApproveOnPhone`), as on the other desktops. Nothing is handed to the phone.
     func onPhone() {
         reader.clear()
         finish(ApproveOnPhone())
@@ -170,7 +170,7 @@ struct PINSheet: View {
             Text(words(model.purpose.titleKey)).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 .frame(maxWidth: .infinity).accessibilityAddTraits(.isHeader)
             if let act = model.act {
-                // What is being approved, before the PIN, in the shared line (tafs#1718; the owner's ask, kiff/work#20).
+                // What is being approved, before the PIN, in the shared line (tafs#1718).
                 Text(words("approval.security_key.before", ["act": act])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -251,7 +251,7 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
 - **Pausing is never signed:** `PATCH` with `{"open":false}` on the session, as every door's switch.
 - **A closed sheet** sends nothing and says nothing; without a key on this Mac, each says to approve on another
   device.
-- **Not here:** **New key**, which stays the phone's (the PM's 00:19): a key is shown once, and this Mac can't keep it
+- **Not here:** **New key**, which stays the phone's: a key is shown once, and this Mac can't keep it
   out of screen recording or the clipboard's history. Also not here: the API instructions and Coach's drafted door
   (`DoorDraftCard`).
 

@@ -74,7 +74,7 @@ struct PairingPayload: Codable, Equatable {
 
     /// The payload for a Mac's keys. A device key outside hardware is said so, and such a Mac has no
     /// approval key in the code, whatever was passed. With its security key's credential it pairs as
-    /// `passkey` and that key approves for it (kiff/cloud#96, the PM's decision (i)); without one it
+    /// `passkey` and that key approves for it (kiff/cloud#96); without one it
     /// pairs as view, as before. A credential goes only with `passkey`: never beside an approval key,
     /// as Windows' `PairingOffer.Create` and §5.1.
     init(deviceKey: Data, keyStore: String, approvalKey: Data?, name: String, nonce: String, exp: String,

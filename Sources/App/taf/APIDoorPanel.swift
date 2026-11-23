@@ -3,7 +3,7 @@ import SwiftUI
 /// A door "From another application" (`api`, docs/doors.md), as the iPad's `APIDoorPanel`: a company's own software
 /// hands the taf work with a key. Today's count against its cap, its last request in tafs cloud's words, its keys (at most
 /// two, each by its last four) with Revoke, and Remove door. Pausing is never signed; opening it again, Revoke and Remove
-/// are approved on this Mac's security key, as a removal is. A new key stays the phone's (the PM's 00:19): this Mac can't
+/// are approved on this Mac's security key, as a removal is. A new key stays the phone's: this Mac can't
 /// keep a key shown once out of screen recording or the clipboard's history.
 struct APIDoorPanel: View {
     @Environment(\.words) private var words

@@ -24,7 +24,7 @@ and never approves an action.
 ## Signing in inside the app (`AppSignIn`, `KIFFClient.appToken`; the new onboarding)
 
 The iPad's onboarding (kiff/tafs `docs/onboarding.md`), on in every build as the iPad's since
-tafs#1708 (`Onboarding.on`; PM, kiff/work#20). The download isn't published yet, and a live Mac
+tafs#1708 (`Onboarding.on`). The download isn't published yet, and a live Mac
 sign-in pass on the test account comes before any release. The contract is kiff/cloud's
 `api/internal/appsignin/README.md`.
 

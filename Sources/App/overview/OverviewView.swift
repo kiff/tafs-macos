@@ -380,8 +380,7 @@ struct OverviewView: View {
 
     /// One taf: its name, and who uses it; tafs cloud's line for now; its Card's line; and its
     /// last result, by the list's `last_run` until it is read. Every cell is centred on the row's
-    /// height, which the avatar sets, so the lines sit level with the taf's name (the owner's ask,
-    /// from macOS 12).
+    /// height, which the avatar sets, so the lines sit level with the taf's name.
     private func row(_ taf: Home.Taf) -> some View {
         HStack(alignment: .center, spacing: 16) {
             nameCell(taf).frame(maxWidth: .infinity, alignment: .leading)
