@@ -120,6 +120,11 @@ enum Thread {
         /// KIFF's draft of the taf's Cards an approval signs (`draft`), as the iPad's
         /// `SetupComponent.draft`: read from KIFF by this id (`AccountClient.draft(id:)`).
         var draft: String? = nil
+        /// A door card's taf and its draft (Coach's `taf_door_api`: `taf_id`, `draft_id`), as the iPad's
+        /// `SetupComponent.tafID` and `draftID`: the draft is read from tafs cloud by them, since the card carries no
+        /// words of Coach's.
+        var doorTaf: String? = nil
+        var doorDraftID: String? = nil
         /// tafs cloud's mark of what an approval's fingerprint covers (`signs`), as the iPad's
         /// `SetupComponent.Signs`; nil from a tafs cloud that doesn't say.
         var signs: Signs? = nil
@@ -222,6 +227,11 @@ enum Thread {
         /// (TafsCloud.swift:1178-1195): the person's request in the taf's words, which Ask Coach
         /// writes into Coach's box on that taf. Nil for any other card, or one with no words.
         var askCoach: String? { type == "ask_coach" ? text : nil }
+        /// A door Coach drafted (`taf_door_api`) with its taf and draft, as the iPad's `case .door`: nil otherwise.
+        var door: (taf: String, draft: String)? {
+            guard type == "taf_door_api", let doorTaf, let doorDraftID else { return nil }
+            return (doorTaf, doorDraftID)
+        }
         var planDone: Int { plan.filter { $0.status == "done" }.count }
 
         var waitsForPerson: Bool { waits == "owner" && answerState == nil }
@@ -277,7 +287,7 @@ enum Thread {
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider, grant, draft, signs }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider, grant, draft, signs, tafID = "taf_id", draftID = "draft_id" }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent, improves, note }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
@@ -427,6 +437,8 @@ enum Thread {
                     }
                     made.grant = text(.grant)
                     made.draft = text(.draft)
+                    made.doorTaf = text(.tafID)
+                    made.doorDraftID = text(.draftID)
                     // As the iPad's `SetupComponent.Signs`: lenient, a field of another shape is none.
                     if let signs = try? shown.nestedContainer(keyedBy: SignsKeys.self, forKey: .signs) {
                         made.signs = Card.Signs(card: (try? signs.decodeIfPresent(Bool.self, forKey: .card)) ?? nil,

@@ -520,6 +520,28 @@ chat and a taf's alike:
   The open panel's files are read inside their security scope, as on the iPad, though the app
   isn't sandboxed.
 
+### A drafted door (`DoorDraft`, `DoorDraftCard`)
+
+As the iPad's `DoorDraftCard` (`APIDoorViews.swift:324-418`): a card Coach drafts for a door from
+another application (`taf_door_api`, with `taf_id` and `draft_id`) carries no words of Coach's. Its
+draft is read from tafs cloud when the card shows (`GET /v1/tafs/{taf}/doors/drafts/{id}`, read
+only). It shows:
+- "New door · from another application", then the app's name.
+- What it can hand the taf (`door.api.draft_scope`) and what the taf does (`door.api.draft_will`).
+- The fields it sends, each as its name and its values or type, in a fixed-width face.
+- What it gets back (`door.api.draft_back`, the outcomes as a list in the person's language).
+- With `text`, the own-words line and its risk, in amber.
+- The door's boundary: its key can only hand the taf work, never pay or buy.
+
+A draft tafs cloud says is used (410 `draft_used`) says so in its words, in the ok colour. Any
+other failed read says why, in red. Only an API door's draft with a name and a job is drawn; a
+field that doesn't read is left out.
+
+**Approve stays the phone's.** Approving opens the door and shows its first key once, which this
+Mac doesn't show, as a door's New key. So for whoever manages the taf (`managesTaf`), Approve is a
+`GatedAction`: its click says to approve on another device, and nothing is signed or sent. Anyone
+else reads the draft alone, as on the iPad.
+
 ## Dictating (`Dictation`, `MicButton`, `DictationBar`)
 
 As the iPad's `MicButton.swift` and `Services/Dictation.swift`: the mic in the message bar,
