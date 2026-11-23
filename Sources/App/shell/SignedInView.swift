@@ -15,6 +15,8 @@ struct SignedInView: View {
     @StateObject private var people: PeopleModel
     @StateObject private var accountHalt: HaltModel
     @StateObject private var exportChats: ExportChatsModel
+    /// Files, the account's: Account's row opens them.
+    @StateObject private var files: FilesModel
     /// Account › Chrome, on planque's safe routes.
     @StateObject private var chromes: ChromesModel
     @StateObject private var accountModel: AccountModel
@@ -95,6 +97,7 @@ struct SignedInView: View {
         _people = StateObject(wrappedValue: PeopleModel(account: account))
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
+        _files = StateObject(wrappedValue: FilesModel(cloud: cloud))
         // Account › Chrome: planque's safe routes, each signed by the device key for that one request; the enrolment's
         // armed signer is never used for them (`PlanqueClient.Safe`).
         let safePlanque = { [account, planque] () -> PlanqueClient in
@@ -499,7 +502,7 @@ struct SignedInView: View {
                                myEmail: accountModel.me?.email,
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
-                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, tab: tafTab).id(taf.id))
+                               openConnect: { self.openTaf = nil; self.selection = .connectApps }, files: files, tab: tafTab).id(taf.id))
     }
 
     /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for
@@ -524,7 +527,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, chrome: chromes,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
             // A list read still on its way keeps nothing from here.
