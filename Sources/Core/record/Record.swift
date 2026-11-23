@@ -28,7 +28,8 @@ enum Record {
         let time: String
         /// The money it moved, as sent ("€150.00"); nil when it moved none.
         let amountText: String?
-        let taf: Taf
+        /// Its taf: the Record names it; a taf's own Activity doesn't, so it's that taf (`activity(_:taf:)`).
+        private(set) var taf: Taf
         /// What the call is about, the taf's business reference ("Order 1042"): it opens the case.
         let about: String?
         /// KIFF's receipt for the call, from its `call`: signed, or pending until KIFF's next sweep.
@@ -153,7 +154,21 @@ enum Record {
             }
         }
 
-        init(from decoder: Decoder) throws {
+        init(from decoder: Decoder) throws { try self.init(decoder, taf: nil) }
+
+        /// A line read from a taf's own Activity (`GET /v1/tafs/{id}/activity`), whose entries are the
+        /// Record's without `taf`: the same fields and KIFF's `call`, as the iPad's `ActivityEntry`.
+        /// Its taf is the one whose Activity it is.
+        static func activity(_ decoder: Decoder, taf: Taf) throws -> Entry { try Entry(decoder, taf: taf) }
+
+        /// The line's taf, once known: a taf's Activity reads its lines before it's told whose they are.
+        func on(_ taf: Taf) -> Entry {
+            var line = self
+            line.taf = taf
+            return line
+        }
+
+        private init(_ decoder: Decoder, taf given: Taf?) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
             at = try c.decode(Date.self, forKey: .at)
@@ -161,7 +176,7 @@ enum Record {
             title = try c.decode(String.self, forKey: .title)
             detail = try c.decode(String.self, forKey: .detail)
             time = try c.decode(String.self, forKey: .time)
-            taf = try c.decode(Taf.self, forKey: .taf)
+            taf = try given ?? c.decode(Taf.self, forKey: .taf)
             func text(_ key: CodingKeys) -> String? {
                 guard let value = (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil else { return nil }
                 return value.trimmingCharacters(in: .whitespaces).isEmpty ? nil : value
