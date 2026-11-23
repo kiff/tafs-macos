@@ -23,7 +23,7 @@ let tafTabsTests: [Test] = [
     },
     Test("Connect again is drawn only with its connection, title and words, each trimmed, as the iPad's usable") {
         func again(_ json: String) throws -> TafSetup.ConnectAgain? {
-            try JSONDecoder().decode(TafSetup.self, from: Data(#"{"connect_again":\#(json)}"#.utf8)).connectAgain
+            try JSONDecoder().decode(TafSetup.self, from: Data(#"{"workflow":{"title":"Workflow","summary":"Ask Coach","steps":[]},"connect_again":\#(json)}"#.utf8)).connectAgain
         }
         let full = try again(#"{"grant":" grt_gmail ","app":"Gmail","title":"Connect again\n","words":"Gmail was signed out.","done_words":"x"}"#)
         try expectEqual(full, TafSetup.ConnectAgain(grant: "grt_gmail", title: "Connect again", words: "Gmail was signed out."))
