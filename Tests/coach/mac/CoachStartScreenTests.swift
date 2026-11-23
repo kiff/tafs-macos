@@ -55,7 +55,9 @@ let coachStartMacTests: [Test] = [
         await model.followStart()
         guard case .loaded(let coach, _) = model.state else { throw Failure(description: "not followed") }
         try expectEqual(coach.id, "taf-coach")
-        try expectEqual(waits, [10, 10])
+        // Two waits, as `Backoff.start`'s: 10 seconds then 20, each with its jitter.
+        try expectEqual(waits.count, 2)
+        try expect((8...12).contains(waits[0]) && (16...24).contains(waits[1]), "the start backs off from 10 s: \(waits)")
         // Only reads: nothing is started from this Mac.
         try expectEqual(Set(transport.sent.map(\.method)), ["GET"])
     }),
