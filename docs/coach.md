@@ -360,13 +360,23 @@ shows as Coach writes it. tafs cloud trims the stream to what an app shows.
 | Event | What the app does |
 |---|---|
 | `session` | Notes the person's message's id, to match it in the thread, and the chat it went to (a new one, or one tafs cloud started after a hand-over). |
-| `text` | Adds to the answer, drawn under the person's message. |
+| `text` | Adds to the answer, drawn under the person's message as the iPad's `SteadyMarkdown` (below). |
 | `state`, `activity` | The one line of where the run is, in tafs cloud's words; "Thinking…" before either. |
 | `step` | If it failed, tafs cloud's one line of why, under the answer. |
 | `held`, `taken`, `component`, `part` | The thread now has something the stream doesn't carry: it is read again. |
 | `end` | The answer is over: the thread is read, which has it whole. If the run stopped with a reason, tafs cloud's words for it are shown. |
 | `thinking` | Nothing. The model's thinking is never drawn. |
 
+- **The answer streaming in is drawn as the iPad's `SteadyMarkdown`** (`SteadyText`, in Coach's
+  chat and a taf's):
+  - **No mark shows on the way:** what it's in the middle of is closed first (`Rich.healed`, the
+    iPad's `MarkdownBlock.healed`, kiff/tafs#285). Bold or inline code left open is closed, a
+    link whose address isn't in yet shows its text, and a mark just opened with nothing after it
+    waits for its words.
+  - **It comes at an even pace,** not in the bursts it arrives in. Every 16 ms at least two
+    more characters show, else a sixth of what's left (`Rich.paced`). The first words show at
+    once, and each new piece goes on from where the last stopped.
+  - **With Reduce Motion,** all of it shows at once.
 - An event that isn't what the page says (not JSON, a number where words should be, a name
   this app doesn't know) is dropped. It is never drawn.
 - **A message is never sent twice.** If the stream can't open, the app reads the thread

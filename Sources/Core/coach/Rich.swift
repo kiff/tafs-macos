@@ -28,6 +28,38 @@ enum Rich {
     /// The longest text read for marks; a longer one is drawn plain.
     static let longest = 20_000
 
+    /// An answer still being written, with what it's in the middle of closed, so no Markdown
+    /// symbol shows while it streams, as the iPad's `MarkdownBlock.healed` (kiff/tafs#285): bold
+    /// or inline code left open, a link whose address isn't in yet (its text shows), a mark just
+    /// opened with nothing after it. An open code block needs nothing: `blocks` draws it as code
+    /// until it closes.
+    static func healed(_ text: String) -> String {
+        var lines = text.components(separatedBy: "\n")
+        let fences = lines.filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }.count
+        guard fences % 2 == 0, var last = lines.popLast() else { return text }
+        last = last.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*$"#, with: "$1", options: .regularExpression)
+        last = last.replacingOccurrences(of: #"\[([^\]]*)$"#, with: "$1", options: .regularExpression)
+        // A mark just opened, with nothing after it yet ("Refunded **"), goes until its words
+        // come. One right after a word closes what it opened, and stays.
+        while let end = last.last, end == "*" || end == "_" || end == "`" {
+            let before = last.dropLast(last.reversed().prefix { $0 == end }.count)
+            guard before.last.map({ $0.isWhitespace }) ?? true else { break }
+            last = String(before)
+        }
+        if last.components(separatedBy: "**").count % 2 == 0 { last += "**" }
+        if last.filter({ $0 == "`" }).count % 2 == 1 { last += "`" }
+        return (lines + [last]).joined(separator: "\n")
+    }
+
+    /// How much of an answer streaming in shows after one more frame (16 ms), as the iPad's
+    /// `SteadyMarkdown` paces it: at least two characters, else a sixth of what's left, so it
+    /// reads at an even pace rather than in the bursts it arrives in, and catches up in a few
+    /// frames.
+    static func paced(_ shown: Int, toward target: Int) -> Int {
+        guard shown < target else { return target }
+        return min(target, shown + max(2, (target - shown + 5) / 6))
+    }
+
     static func blocks(_ text: String) -> [Block] {
         guard text.count <= longest else { return [.paragraph([Span(text: text)])] }
         var out: [Block] = []
