@@ -1,27 +1,31 @@
 import AppKit
 import SwiftUI
 
-/// One Record line's KIFF receipt, checked on this Mac, as the iPad's `ReceiptView`: the line, what
-/// happened (only once the receipt checks out as KIFF's and matches the line), and the check itself.
-/// Nothing opens outside the app.
+/// One Record line's sheet, as the iPad's `ReceiptView`: the line's facts and Open in the taf's chat;
+/// then, for a line with a KIFF receipt, what happened (only once the receipt checks out as KIFF's and
+/// matches the line) and the check itself. A line without one shows its facts only. Nothing opens
+/// outside the app.
 struct ReceiptSheet: View {
     @Environment(\.words) private var words
+    @Environment(\.openTaf) private var openTaf
     @ObservedObject var model: RecordModel
     let entry: Record.Entry
+    /// The person's tafs: the line's own, when listed, opens on its chat.
+    var tafs: [Home.Taf] = []
+    /// The account's time zone, for When.
+    var timeZone: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(verbatim: [entry.title, entry.amountText].compactMap { $0 }.joined(separator: " · "))
-                    .font(Theme.display(24)).foregroundColor(Theme.ink)
-                Spacer()
-                Button(words("common.done")) { model.closeReceipt() }.keyboardShortcut(.cancelAction)
-            }
+            header
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     facts
-                    whatHappened
-                    checkPanel
+                    // As the iPad's: no receipt, no check and nothing KIFF signed to show.
+                    if entry.receipt != nil {
+                        whatHappened
+                        checkPanel
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -31,25 +35,76 @@ struct ReceiptSheet: View {
         .background(Theme.background)
     }
 
+    /// How it went, by its kind's colour, then the line, as the iPad's (RecordView.swift:385-391); Done.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle().fill(kindColor).frame(width: 10, height: 10).accessibilityHidden(true)
+                Text(verbatim: entry.receiptLabel(words)).font(.system(size: 14, weight: .semibold)).foregroundColor(kindColor)
+                Spacer()
+                Button(words("common.done")) { model.closeReceipt() }.keyboardShortcut(.cancelAction)
+            }
+            Text(verbatim: [entry.title, entry.amountText].compactMap { $0 }.joined(separator: " · "))
+                .font(Theme.display(24)).foregroundColor(Theme.ink)
+        }
+    }
+
+    /// The iPad's `RecordEntry.Kind.color`, not a taf's Activity's: started is good, in tafs dim.
+    private var kindColor: Color { Theme.recordColor(entry.kind) }
+
     private var steps: ReceiptSteps { ReceiptSteps(model.receiptRaw ?? Data()) }
 
-    /// The line's amount or answer isn't the one KIFF signed.
-    private var amountMismatch: Bool { steps.amountMismatch(entry.amount) }
-    private var answerMismatch: Bool { steps.answerMismatch(entry.answer) }
+    /// The first way the line isn't what KIFF signed (its payment, amount or answer), as a shared key;
+    /// nil when it matches. The payment is compared only on a named line (`entry.onValue`).
+    private var mismatch: String? {
+        steps.mismatchKey(onValue: entry.onValue, amount: entry.amount, answer: entry.answer, sha256: PasskeyCrypto.sha256)
+    }
 
-    /// The line as tafs cloud words it: its taf, when, and how it went.
-    private var facts: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(verbatim: "\(entry.taf.name) · \(entry.time)").font(.system(size: 13, design: .monospaced)).foregroundColor(Theme.dim)
-            Text(verbatim: [entry.about, entry.detail].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+    /// The listed taf the line is from, to open on its chat.
+    private var taf: Home.Taf? { tafs.first { $0.tafID == entry.taf.id } }
+
+    /// The line's facts, as the iPad's (RecordView.swift:392-402): its taf, when, what it acted on,
+    /// the outcome, KIFF's why and who decided; then Open in the taf's chat.
+    @ViewBuilder private var facts: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // The listed taf's name, as the iPad's `model.taf(entry.tafID)?.name`; "–" for one not listed.
+            fact(words("receipt.fact.taf"), taf?.name ?? "–")
+            fact(words("receipt.fact.at"), AccountTime(timeZone).zonedShown(entry.at, date: .abbreviated, time: .standard, words: words))
+            if let on = entry.receiptOn { fact(words("receipt.fact.on"), on) }
+            fact(words("receipt.fact.outcome"), entry.receiptOutcome(words), bold: true)
+            if let reason = entry.reason { fact(words("receipt.fact.why"), reason) }
+            fact(words("receipt.fact.decided_by"), entry.receiptDecidedBy(words))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.line))
+        // The iPad's last button; here under the facts, as this sheet's foot holds the receipt's own.
+        if let open = openTaf, let taf {
+            Button {
+                model.closeReceipt()
+                model.closeCase()
+                open(taf)
+            } label: {
+                Text(words("record.open_taf_chat")).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private func fact(_ name: String, _ value: String, bold: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(name).font(.system(size: 13)).foregroundColor(Theme.dim).frame(width: 90, alignment: .leading)
+            Text(verbatim: value).font(.system(size: 14, weight: bold ? .semibold : .regular)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
     }
 
     /// What KIFF signed for this line: drawn only once this Mac checked the receipt as KIFF's and it
     /// matches the line.
     @ViewBuilder private var whatHappened: some View {
-        if !steps.steps.isEmpty, ReceiptCheck.showsWhatHappened(model.receiptCheck, mismatch: amountMismatch || answerMismatch) {
+        if !steps.steps.isEmpty, ReceiptCheck.showsWhatHappened(model.receiptCheck, mismatch: mismatch != nil) {
             Eyebrow(text: words("receipt.what_happened"))
             ForEach(Array(steps.steps.enumerated()), id: \.offset) { _, step in
                 VStack(alignment: .leading, spacing: 2) {
@@ -62,10 +117,9 @@ struct ReceiptSheet: View {
 
     @ViewBuilder private var checkPanel: some View {
         switch model.receiptCheck {
-        case .verified? where amountMismatch:
-            failed(words("receipt.check.amount_mismatch"))
-        case .verified? where answerMismatch:
-            failed(words("receipt.check.answer_mismatch"))
+        case .verified? where mismatch != nil:
+            // The payment first, then the amount, then the answer, as the iPad's order.
+            failed(words(mismatch ?? ""))
         case .verified(let signer)?:
             verified(signer)
         case .notSignedYet?:
@@ -82,7 +136,7 @@ struct ReceiptSheet: View {
             Label(words("receipt.checked_on_device", ["device": words("device.mac")]), systemImage: "checkmark.seal.fill")
                 .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
             Text(words("receipt.checked_why")).font(.system(size: 13)).foregroundColor(Theme.soft)
-            issued
+            receiptFacts
             fullReceipt(signer: signer)
             copyButton
         }
@@ -105,6 +159,7 @@ struct ReceiptSheet: View {
                 .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.no)
             Text(what).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             if let why { Text(why).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            receiptFacts
             fullReceipt(signer: nil)
             copyButton
         }
@@ -124,11 +179,12 @@ struct ReceiptSheet: View {
         }
     }
 
-    /// When KIFF issued it; the receipt's id and signer are under "Show the full receipt".
-    @ViewBuilder private var issued: some View {
-        if let at = steps.issuedAt {
-            Text(words("receipt.issued", ["at": dateTime(at)])).font(.system(size: 11.5, design: .monospaced)).foregroundColor(Theme.dim)
-        }
+    /// The decision and when KIFF issued it, as the iPad's `receiptFacts` (`RecordView.swift:569-576`),
+    /// in the checked and the failed panel; the receipt's id and signer are under "Show the full receipt".
+    private var receiptFacts: some View {
+        let lines = [entry.decisionWords(words)] + (steps.issuedAt.map { [words("receipt.issued", ["at": dateTime($0)])] } ?? [])
+        return Text(verbatim: lines.joined(separator: " · ")).font(.system(size: 11.5, design: .monospaced)).foregroundColor(Theme.dim)
+            .textSelection(.enabled)
     }
 
     /// Every step KIFF signed, with its hash, and the signature, as the iPad's.
