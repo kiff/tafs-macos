@@ -18,6 +18,10 @@ struct ShellView: View {
     /// Whether a taf was shared with this person to use, not theirs to manage
     /// (`Access.sharedWithMe`): it's listed under Shared with you.
     var sharedWithMe: (Home.Taf) -> Bool = { _ in false }
+    /// The tafs being set up, among the person's tafs as the iPad's sidebar lists them (HomeSplitView.swift:343-357):
+    /// by name, with tafs cloud's Finish setting up line, and Discard for the person who started it (`discard`).
+    var settingUp: [SettingUp] = []
+    var discard: ((SettingUp) async -> String?)?
     /// The calls held for the person, listed under NEEDS YOU above the tafs.
     var held: [HeldRow] = []
     /// The open taf's page, drawn in place of the screen.
@@ -27,6 +31,12 @@ struct ShellView: View {
     var open: (Home.Taf) -> Void = { _ in }
     /// Who is signed in, under Account: their email, as KIFF says it.
     var accountLine: String?
+    /// What the last list read couldn't do (`Unreachable`), and whether the app still tries again: a quiet line at the
+    /// foot, with KIFF's status page. Nil when all is well.
+    var unreachable: String?
+    var retrying = false
+    /// The balance, for the plan's line at the foot: tafs cloud's `home_line`, only when the plan needs the person.
+    var balance: Usage.Balance?
     /// Every ready-made job, for "Explore jobs" and the strip under the tafs list; and what
     /// opens the gallery, and one job's sheet.
     var gallery: Gallery?
@@ -91,16 +101,18 @@ struct ShellView: View {
                     }
                     // Theirs, then the ones shared with them, as the iPad's sidebar (HomeSplitView.swift:338-368):
                     // someone with only shared tafs sees just those.
-                    if !ownTafs.isEmpty || sharedTafs.isEmpty {
+                    // A taf being set up is among their own, by name, as the iPad's (HomeSplitView.swift:343-357).
+                    if !ownTafs.isEmpty || !settingUp.isEmpty || sharedTafs.isEmpty {
                         eyebrow(words("home.your_tafs"), color: Theme.soft)
                         if tafs.isEmpty, let line = noTafsLine {
                             Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         ForEach(ownTafs) { tafButton($0) }
+                        ForEach(settingUp) { SettingUpRow(taf: $0, discard: discard, inSidebar: true) }
                     }
                     if !sharedTafs.isEmpty {
-                        if !ownTafs.isEmpty { Spacer().frame(height: 10) }
+                        if !ownTafs.isEmpty || !settingUp.isEmpty { Spacer().frame(height: 10) }
                         eyebrow(words("home.shared_you"), color: Theme.soft)
                         ForEach(sharedTafs) { tafButton($0) }
                     }
@@ -255,6 +267,9 @@ struct ShellView: View {
             // A new taf, as the iPad's + New (`HomeSplitView.startNewTaf`, HomeSplitView.swift:434-438):
             // the gallery where tafs cloud sends it, else a new conversation in Coach.
             footButton(words("home.start_new_taf"), symbol: "plus", fill: AnyShapeStyle(Theme.brand)) { if let newTaf { newTaf() } else { startNewTaf() } }
+            // As the iPad's footer (HomeSplitView.swift:551-555): KIFF out of reach, then the plan, each only when it says something.
+            if let unreachable { unreachableLine(unreachable) }
+            if let line = balance?.homeLine { planLine(line, tone: balance?.planTone ?? "ok") }
             // Coach opens over the screen, as the iPad's `openCoach`; it closes from its own Back.
             footButton(words(Screen.coach.titleKey), symbol: "sparkle", fill: AnyShapeStyle(Theme.ink), text: Theme.onFill, selected: coachOpen) { openCoach() }
             Button { selection = .account } label: {
@@ -277,6 +292,42 @@ struct ShellView: View {
             .accessibilityAddTraits(selection == .account && openTaf == nil ? .isSelected : [])
         }
         .padding(.horizontal, -12)
+    }
+
+    /// KIFF can't be reached just now, as the iPad's `UnreachableLine`: an amber dot, the words ("· trying again" while
+    /// the app still tries), and KIFF's status page.
+    private func unreachableLine(_ said: String) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(Theme.amber).frame(width: 7, height: 7).accessibilityHidden(true)
+            Text(verbatim: Unreachable.line(said, retrying: retrying, words)).font(.system(size: 12)).foregroundColor(Theme.dim)
+                .fixedSize(horizontal: false, vertical: true)
+            Link(words("home.status"), destination: Unreachable.statusPage).font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.amberText)
+        }
+        .padding(.horizontal, 12)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("unreachable")
+    }
+
+    /// The plan, only when it needs the person, as the iPad's `PlanLine`: tafs cloud's line in its tone's colour, and
+    /// Plan & usage beside it, which it opens.
+    private func planLine(_ line: String, tone: String) -> some View {
+        let color: Color = tone == "waiting" ? Theme.no : Theme.amberText
+        return Button { selection = .usage } label: {
+            HStack(spacing: 6) {
+                Circle().fill(color).frame(width: 7, height: 7).accessibilityHidden(true)
+                Text(verbatim: line).font(.system(size: 13)).foregroundColor(color).fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                Text(words(Screen.usage.titleKey)).font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.amberText)
+            }
+            .padding(.horizontal, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(words("home.opens_plan", ["title": words(Screen.usage.titleKey)]))
+        .accessibilityIdentifier("plan-line")
     }
 
     private func footButton(_ title: String, symbol: String, fill: AnyShapeStyle, text: Color = .white, selected: Bool = false, _ action: @escaping () -> Void) -> some View {

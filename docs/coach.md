@@ -431,8 +431,10 @@ As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)`, `cardRef` an
   waiting under that id, else the latest), in that card's chat. It grants nothing, so it isn't
   signed. Only the card's own questions, each answered, are ever sent.
 - **tafs cloud's answer is `CardAnswered`** (`session`, `run`, `status`, all text). Its chat is
-  the one shown from then on, for a new conversation (`settleSetupChat`). Then the thread is
-  followed. A card that no longer waits is read again; one refused for want of the AI-data
+  the one shown from then on, for a new conversation (`settleSetupChat`). Then **the answered
+  run is followed as it's written**, as the iPad's `followAnswered`: `GET /v1/tafs/{id}/runs/{run}/stream?after=0`
+  (`CloudClient.resumeRequest`, the iPad's `resumeRun`), drawn as an answer being written; a stream that
+  can't open leaves the thread to be read until the run is done. A message being sent meanwhile is left as it is. A card that no longer waits is read again; one refused for want of the AI-data
   consent stays as it was, with nothing said; anything else, a refusal or an answer that
   doesn't read, says "Your answer didn't reach Setup" (`coach.answer_did_not_reach_setup`). An answer that comes back after sign-out is the
   session before's and is dropped (`gen == accountGeneration`).
@@ -440,15 +442,16 @@ As the iPad's `QuestionsCard`, `QuestionSelection`, `answer(_:_:)`, `cardRef` an
   isn't read at all (`LenientShown`). A recorded answer is the iPad's `CardAnswer`: a `state`,
   `words` or `by` that isn't text leaves it unread; a missing `state` is "answered". This holds
   for every card's answer.
+- **An answer sent the old way**, as a message ("[questions <id>] {…}", from before cards recorded
+  their answer), is read back as the iPad's `SetupThread.answer(to:)` and `QuestionAnswers.words`:
+  with no recorded answer, the person's latest such message after the card, not a failed one, on the
+  card's folded line in Coach's labels and their own words ("Test mode · Stripe, Qonto · In your
+  words: “…”"); its bubble isn't drawn again (`Thread.Page.oldAnswer`, `answersCard`).
 - **Mac differences:**
-  - The iPad reads an answer sent the old way, as a message, back into words
-    (`QuestionAnswers.words`); the Mac shows tafs cloud's words for the recorded answer only.
   - A refusal for want of the AI-data consent keeps the card quietly on both, but the iPad also
     opens its consent screen; the Mac's opens only for a message it sends.
   - The Mac shows each card's own recorded answer. The iPad reads every card under one id
     through `setupThread.answer(to:)`, the last card with that id (`SetupComponent.swift:307-316`).
-  - The iPad follows the answered run's stream (`followAnswered`); the Mac reads the thread
-    until the run is done, as it does after every card's answer.
   - A card's other fields stay as leniently read as every card's on the Mac: a title or text
     that isn't text is left out, not the card.
   - A questions card with an empty list is "0 of 0" and can be sent on the iPad; here it
@@ -503,12 +506,16 @@ chat and a taf's alike:
   AI-data consent goes back too: Allow then only allows, and they wait to send again.
 - **A sent message's files** show under it, and each opens: tafs cloud says where it is
   (`GET /v1/tafs/{id}/attachments/{file}`), it's copied under its own name to a temporary
-  folder, and opened in the app this Mac opens its kind with. Sign-out removes the copies and
-  the files picked; one read after sign-out is neither written nor opened.
-- **Mac differences:** no Take photo (the iPad's camera); photos come from files, so each keeps
-  its own name where the iPad's picker gives "Photo {n}"; a file opens in its app, not in
-  Quick Look in place, so a file read after sign-out is never opened (the iPad shows one in
-  its own window, which sign-out closes); nothing is dropped onto the box, as on the iPad; a
+  folder, and shown full size in place, in Quick Look (`quickLookPreview`), as the iPad's. Sign-out
+  removes the copies and the files picked; one read after sign-out is neither written nor opened.
+- **Take photo** (`CameraSheet`, the iPad's `CameraPicker`), first in the paperclip's menu on a Mac with a
+  camera tafs hasn't been refused: the system asks the first time, then the camera's picture, **Take photo**
+  and Cancel. The photo goes as a chosen one does (`FilePrep.photo`, a JPEG at most 2576 px), named "Photo".
+  Refused at the system's question, the sheet closes and nothing is taken. The camera runs only while the sheet
+  shows. It needs the camera entitlement and `NSCameraUsageDescription` (App/tafs.entitlements, App/Info.plist).
+- **Mac differences:** chosen photos come from files, so each keeps its own name where the iPad's
+  picker gives "Photo {n}"; a Mac whose camera tafs was refused offers no Take photo and says nothing
+  more (no shared line says where to allow it); nothing is dropped onto the box, as on the iPad; a
   file that can't be read says `chat.file.unreadable`, where the iPad shows the system's words.
   The open panel's files are read inside their security scope, as on the iPad, though the app
   isn't sandboxed.

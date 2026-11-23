@@ -364,6 +364,21 @@ struct UsageView: View {
             }
             // No plan line here: the iPad draws `plan_line` only on Account's Plan card, and under
             // the headline it said the headline again.
+            // Where to buy on a computer, for whoever manages billing (the iPad's buying is the App Store's): Solo and
+            // credits in the tafs app on the phone, Team on kiff.dev (`Usage.teamCheckout`), as every desktop says it.
+            // Only what tafs cloud's `buy` offers (`Usage.whereToBuy`): nothing under a company's agreement.
+            let buying = Usage.whereToBuy(balance, plan: model.usage?.plan)
+            if managesBilling, buying.phone {
+                Divider().padding(.vertical, 2)
+                Text(words("billing.buy_on_phone")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("usage.buy_on_phone")
+                if buying.team {
+                    Link(words("billing.team_on_web"), destination: Usage.teamCheckout)
+                        .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                        .accessibilityIdentifier("usage.team_on_web")
+                }
+            }
         }
     }
 
