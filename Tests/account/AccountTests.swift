@@ -33,6 +33,12 @@ let accountClientTests: [Test] = [
         do { try await unsigned.change(.delete(group: "g1")); throw Failure(description: "sent") } catch KIFFError.refused(status: 0, code: let code) { try expectEqual(code, "no_device_key") }
         try expectEqual(nothing.sent.count, 0)
     }),
+    Test("a share stopped part-way reads KIFF's shares again, so Share never re-sends a change made; its why is the app's plain one (sources)") {
+        let sheet = try String(contentsOf: URL(fileURLWithPath: "Sources/App/taf/TafShareLine.swift"), encoding: .utf8)
+        try expect(sheet.contains("if let now = try? await account.shares(agent: agent) { had = Set(now) }"), "read again after a stop")
+        try expect(sheet.components(separatedBy: "await stopped()").count - 1 == 3, "every stop reads again")
+        try expect(sheet.contains(#""why": NeedsYouModel.why(error)"#) && !sheet.contains("localizedDescription"), "the plain why")
+    },
     Test("the people screen asks Touch ID before any group change, and a Mac that can't says to approve on the phone (sources)") {
         let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/PeopleView.swift"), encoding: .utf8)
         guard let confirm = model.range(of: "try await touchID.confirm(what, PeopleChange.confirmation("),

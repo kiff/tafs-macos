@@ -203,6 +203,13 @@ struct ShareTafSheet: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
+    /// Stopped part-way: what KIFF has now is read again, so the sheet shows how far it got (what's shared, and what
+    /// Share would still change) and Share sends only what's left, never a change already made.
+    private func stopped() async {
+        if let now = try? await account.shares(agent: agent) { had = Set(now) }
+        saving = false
+    }
+
     /// Each change on the key, in `Shares.changes`' order. A key closed, or "Approve on your phone instead", stops the rest
     /// with nothing more sent; KIFF's refusal says why.
     private func save() {
@@ -216,15 +223,15 @@ struct ShareTafSheet: View {
                 do {
                     _ = try await approveWithKey(act, title)
                 } catch is CancellationError {
-                    saving = false
+                    await stopped()
                     return
                 } catch is ApproveOnPhone {
                     problem = words("approval.device_can_not_approve_approve")
-                    saving = false
+                    await stopped()
                     return
                 } catch {
-                    problem = words("common.didnt_go_through", ["what": title, "why": error.localizedDescription])
-                    saving = false
+                    problem = words("common.didnt_go_through", ["what": title, "why": NeedsYouModel.why(error)])
+                    await stopped()
                     return
                 }
             }
