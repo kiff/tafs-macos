@@ -1,3 +1,4 @@
+import CryptoKit
 import SwiftUI
 
 /// The window of a signed-in Mac: the sidebar, with each built screen in its place.
@@ -176,6 +177,15 @@ struct SignedInView: View {
             accountHalt.approveWithKey = approveWithKey
             // A reported payment halts its taf: the list is read again.
             record.halted = { await readTafs() }
+            // The pictures a paired Chrome kept before a step: planque's safe reads, signed by the device key.
+            record.chromeShots = { [account, safePlanque] operation in
+                guard let sign = account.signMessage else { return [] }
+                return try await safePlanque.chromeShots(operation: operation, signedBy: sign)
+            }
+            record.chromeShot = { [account, safePlanque] step in
+                guard let sign = account.signMessage else { return .failed }
+                return await safePlanque.chromeShot(step: step, signedBy: sign, sha256: { Data(SHA256.hash(data: $0)) })
+            }
             // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
             doorModels.signWithKey = signWithKey
             needsYou.answerWithKey = answerWithKey
@@ -376,6 +386,13 @@ struct SignedInView: View {
 
     /// One act approved by this Mac's security key (`KeyAct`, `PasskeySession.approved`), named in the PIN sheet; nil
     /// when this Mac has no key on the security key's route, so the act says to approve elsewhere, as before.
+    /// planque for its safe routes, each signed by the device key for that one request, as Account › Chrome's.
+    private var safePlanque: PlanqueClient {
+        planque.tenant = account.session.tenant
+        if planque.transport == nil { planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!) }
+        return planque
+    }
+
     private var approveWithKey: ((KeyAct, String) async throws -> Data)? {
         guard let passkey = passkeySession else { return nil }
         return { act, title in

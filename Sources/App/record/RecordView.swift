@@ -294,6 +294,11 @@ final class RecordModel: ObservableObject {
     @Published private(set) var reportPhase: [String: ReportPhase] = [:]
     /// Reads the tafs again once a report halted one, set by the window.
     var halted: () async -> Void = {}
+    /// The pictures a paired Chrome kept before an operation's steps (`ChromeShots`), set by the window: planque's safe read,
+    /// signed by this Mac's device key. Nil signed out, or with no device key to sign it.
+    var chromeShots: ((String) async throws -> [ChromeShots.Ref])?
+    /// One step's picture, read and checked (`ChromeShots.read`), set by the window.
+    var chromeShot: ((String) async -> ChromeShots.Read)?
 
     /// Reports the payment, as the iPad's `reportPayment`: KIFF marks its receipt and tafs cloud halts its taf. One click,
     /// no note, nothing signed: it only takes authority away. Once tafs cloud answers, the button is gone and the tafs are
