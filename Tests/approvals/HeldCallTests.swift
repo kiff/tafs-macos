@@ -266,4 +266,25 @@ let approvalsHeldTests: [Test] = [
         try expectEqual(AlertPrefs(on: false, sound: true).plays, false)
         try expectEqual(AlertPrefs(on: true, sound: true).plays, true)
     },
+    Test("a held step that fills a field in Chrome reads as one, whatever the browser block holds (docs/chrome.md)", awaiting: {
+        func fills(_ browser: String) async throws -> Bool {
+            let json = #"{"exceptions":[{"id":"e","subject":"a","action":"browser.act","created_at":"2026-11-14T18:00:00Z""# + browser + "}]}"
+            guard let call = try await client([(200, json)]).0.heldCalls().first else { throw Failure(description: "no call") }
+            return call.fillsInChrome
+        }
+        // Each browser block, and whether it reads as a fill.
+        let cases: [(String, Bool)] = [
+            ("", false),
+            (#","browser":null"#, false),
+            (#","browser":{"site":"shop.example","action_words":"Click Place order"}"#, false),
+            (#","browser":{"site":"shop.example","fill":null}"#, false),
+            (#","browser":{"site":"shop.example","fill":{"field_ref":"f1"}}"#, true),
+            (#","browser":{"site":"shop.example","sealed_fill":{"sealed":"h"}}"#, true),
+            (#","browser":{"fill":"anything"}"#, true),
+            (#","browser":"fill""#, true),
+        ]
+        var read: [Bool] = []
+        for (browser, _) in cases { read.append(try await fills(browser)) }
+        try expectEqual(read, cases.map(\.1))
+    }),
 ]

@@ -324,6 +324,11 @@ final class NeedsYouModel: ObservableObject {
 
     private func answerOnKey(_ call: HeldCall, _ answer: Answer) async {
         guard let answerWithKey, answer.grants, answering == nil else { return }
+        // A fill in Chrome is allowed only with the phone's release: nothing is asked or sent here.
+        guard !call.fillsInChrome else {
+            notTaken[call.id] = Self.why(ApproveOnPhone())
+            return
+        }
         answering = call.id
         defer { answering = nil }
         do {
@@ -340,12 +345,15 @@ final class NeedsYouModel: ObservableObject {
     }
 
     /// Whether this card offers Approve once: KIFF allows it for the call, and this Mac approves with its key.
-    func offersApproveOnce(_ call: HeldCall) -> Bool { call.canApproveOnce && call.accountingVersion != nil && answerWithKey != nil }
+    /// Never for a step that fills a field in Chrome: that needs the phone's release, which this Mac can't make.
+    func offersApproveOnce(_ call: HeldCall) -> Bool {
+        call.canApproveOnce && call.accountingVersion != nil && answerWithKey != nil && !call.fillsInChrome
+    }
 
     /// Whether this card offers Extra room, as the iPad's: over a total approving once can't pass, for someone who
     /// manages the Cards (KIFF's `cards.manage`), on a Mac that approves with its key.
     func offersExtraRoom(_ call: HeldCall, managesCards: Bool) -> Bool {
-        !call.canApproveOnce && managesCards && call.accountingVersion != nil && answerWithKey != nil
+        !call.canApproveOnce && managesCards && call.accountingVersion != nil && answerWithKey != nil && !call.fillsInChrome
     }
 
     static func why(_ error: Error) -> String {
@@ -632,6 +640,11 @@ struct NeedsYouView: View {
         if model.route == .phoneOrPasskey {
             Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
+        } else if call.fillsInChrome {
+            // A fill in Chrome opens only with the phone's release: Refuse stays here, and allowing is the phone's.
+            Text(words("approval.security_key.on_phone")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("needs_you.fill_on_phone")
         }
         if model.offersApproveOnce(call) { approveOnceButton(call) }
         if !call.canApproveOnce { overTotal }
