@@ -296,10 +296,34 @@ struct TafSetup: Decodable, Equatable {
         }
     }
 
-    /// Connect again: tafs cloud's title and words for it.
+    /// Connect again, as the iPad's `TafsCloud.ConnectAgain`: the connection to sign in again (`grant`), tafs cloud's
+    /// words for it and its button's title, each trimmed.
     struct ConnectAgain: Decodable, Equatable {
+        let grant: String
         let title: String
         let words: String?
+
+        init(grant: String, title: String, words: String?) {
+            self.grant = grant
+            self.title = title
+            self.words = words
+        }
+
+        /// Drawn only with a connection, a title and words, as the iPad's `usable`.
+        var usable: Bool { !grant.isEmpty && !title.isEmpty && !(words ?? "").isEmpty }
+
+        enum Keys: String, CodingKey { case grant, title, words }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            func text(_ key: Keys) -> String {
+                (((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            grant = text(.grant)
+            title = text(.title)
+            let said = text(.words)
+            words = said.isEmpty ? nil : said
+        }
     }
 
     enum Keys: String, CodingKey {

@@ -21,6 +21,20 @@ let tafTabsTests: [Test] = [
         let none = try JSONDecoder().decode(TafSetup.self, from: Data(#"{"workflow":{"title":"Workflow","summary":"Ask Coach","steps":[]}}"#.utf8))
         try expectEqual(none.workflowSteps, [])
     },
+    Test("Connect again is drawn only with its connection, title and words, each trimmed, as the iPad's usable") {
+        func again(_ json: String) throws -> TafSetup.ConnectAgain? {
+            try JSONDecoder().decode(TafSetup.self, from: Data(#"{"workflow":{"title":"Workflow","summary":"Ask Coach","steps":[]},"connect_again":\#(json)}"#.utf8)).connectAgain
+        }
+        let full = try again(#"{"grant":" grt_gmail ","app":"Gmail","title":"Connect again\n","words":"Gmail was signed out.","done_words":"x"}"#)
+        try expectEqual(full, TafSetup.ConnectAgain(grant: "grt_gmail", title: "Connect again", words: "Gmail was signed out."))
+        try expect(full?.usable == true, "with all three")
+        for missing in [#"{"title":"Connect again","words":"Gmail was signed out."}"#,
+                        #"{"grant":"g","words":"Gmail was signed out."}"#,
+                        #"{"grant":"g","title":"Connect again","words":"  "}"#,
+                        #"{"grant":"g","title":"Connect again"}"#] {
+            try expect(try again(missing)?.usable == false, missing)
+        }
+    },
     Test("a taf's id reaches tafs cloud as written in the path, as the iPad's escaped; only / and what a path can't carry are escaped", awaiting: {
         let id = "taf_9f2c-41e8.a@acme~1"
         try expectEqual(CloudClient.escaped(id), id)
