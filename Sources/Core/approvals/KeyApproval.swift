@@ -34,6 +34,13 @@ enum KeyAct: Equatable {
     /// Discarding a taf being set up (the iPad's `discardSettingUp`): tafs cloud's
     /// `POST /v1/home/setting-up/{agent}/discard`, empty body, signed before its Cards are revoked and sent after.
     case discardSettingUp(String)
+    /// An API door's acts (the iPad's `DoorsModel.reopen`, `revoke`, `removeAPI`), each tafs cloud's own request, signed
+    /// as a removal is: opening a paused door again (`PATCH …/doors/{door}` with `{"open":true}`), revoking one of its keys
+    /// (`DELETE …/keys/{key}`), and removing the door (`DELETE …/doors/{door}`). Pausing is never signed. A new key stays
+    /// the phone's (the PM's 00:19): this Mac can't keep a key shown once from screen recording or the clipboard.
+    case reopenAPIDoor(taf: String, door: String)
+    case revokeAPIDoorKey(taf: String, door: String, key: String)
+    case removeAPIDoor(taf: String, door: String)
 
     var method: String {
         switch self {
@@ -42,6 +49,8 @@ enum KeyAct: Equatable {
         case .resume: return "POST"
         case .removeTaf: return "DELETE"
         case .discardSettingUp: return "POST"
+        case .reopenAPIDoor: return "PATCH"
+        case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         }
     }
 
@@ -52,6 +61,10 @@ enum KeyAct: Equatable {
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
         case .discardSettingUp(let agent): return "/v1/home/setting-up/\(CloudClient.escaped(agent))/discard"
+        case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
+            return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
+        case .revokeAPIDoorKey(let taf, let door, let key):
+            return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys/\(CloudClient.escaped(key))"
         }
     }
 
@@ -66,6 +79,9 @@ enum KeyAct: Equatable {
         case .resume: return Data("{}".utf8)
         case .removeTaf: return Data()
         case .discardSettingUp: return Data()
+        // The iPad's `reopenBody`, these exact bytes.
+        case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
+        case .revokeAPIDoorKey, .removeAPIDoor: return Data()
         }
     }
 
@@ -79,6 +95,10 @@ enum KeyAct: Equatable {
         case .removeTaf: return words("taf.remove.prompt", ["taf": device])
         // tafs cloud's own words for it, given in `device`'s place: its title, else its button.
         case .discardSettingUp: return device
+        // The door's app, or the key's name, in `device`'s place, as the iPad's reasons; Remove door as its button says.
+        case .reopenAPIDoor: return words("door.api.open_reason", ["app": device])
+        case .revokeAPIDoorKey: return words("door.api.revoke_reason", ["key": device])
+        case .removeAPIDoor: return words("door.remove_door")
         }
     }
 }
