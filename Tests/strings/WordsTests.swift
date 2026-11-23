@@ -138,6 +138,7 @@ let wordsTests: [Test] = [
             ("mk", [1: "one", 21: "one", 11: "other", 2: "other"]),
             ("ca", [1: "one", 2: "other", 1_000_000: "other"]),
             ("km", [1: "other"]), ("lo", [1: "other"]),
+            ("tk", [0: "other", 1: "one", 2: "other"]), ("hi", [0: "one", 1: "one", 2: "other"]),
             ("ru", [1: "one", 21: "one", 11: "many", 2: "few", 12: "many", 5: "many"]),
         ]
         for (language, forms) in cases {
