@@ -30,6 +30,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 
 | iPad file | Lines | What | Mac has | Missing |
 | :- | -: | :- | :- | :- |
+| APIDoorViews.swift | 410 | A door "From another application": its count and cap, last request, keys, New key, Revoke (each signed but pausing) | Its panel: today's count against its cap, the last request in tafs cloud's words, its keys by name or last four; Open again, Revoke and Remove door on the security key; pausing unsigned (`taf/APIDoorPanel.swift`, `taf/TafDoorsModel.swift`, `Core/taf/TafDoors.swift`, `Core/approvals/KeyApproval.swift`) | New key (the phone's, by the PM's rule); the API instructions; Coach's drafted door (`DoorDraftCard`) |
 | ApprovalSetupView.swift | 102 | This device's approval readiness: `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`, `ApprovalNotReady` | `ApprovalNotReady`'s line where an approval can't be made here (`approvals/NeedsYou.swift`, `taf/HaltView.swift`) | `ReadinessReader`, `ApprovalGate`, `ApprovalNotice`: no Mac approves yet |
 | AttachViews.swift | 267 | Attaching photos and files in a chat | `AttachButton` (Choose photos, Choose file, as many as the message has room for), `FileTray`, `FileChip`, `FileIcon`, `MessageFiles`; each file declared to tafs cloud and its bytes put to storage, sent with the message by id (`coach/ChatFilesViews.swift`, `FilePrepMac.swift`, `CoachView.swift`, `Core/coach/ChatFiles.swift`) | Take photo (this Mac's camera); Quick Look in place (a file opens in the app this Mac opens its kind with) |
 | BriefView.swift | 448 | Your brief: decisions first with Coach's recommendation, the next move, what got done; a mission's log | The brief in Needs you's place once tafs cloud serves it, `DecisionCard`, `CaseRow`, Later, the mission's log (`brief/BriefView.swift`, `DecisionCard.swift`, `MissionLogView.swift`, `BriefModel.swift`, `Core/brief/Brief.swift`; docs/brief.md) | A held call's own page (Approve isn't on macOS 12 yet); the mission log's Ask Coach; alert routing by `brief_kind`; the sample brief |
@@ -64,7 +65,6 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 | iPad file | Lines | What | Models |
 | :- | -: | :- | :- |
 | AllowSheetView.swift | 96 | "Allow this from now on" | HoldAllow |
-| APIDoorViews.swift | 410 | A door "From another application": its count and cap, last request, keys, New key, Revoke (each signed but pausing) | DoorsModel |
 | AppEventApprovalSheet.swift | 54 | An app event's filters before signing a subscription | |
 | ChromeViews.swift | 178 | Account › Chrome: the paired Chromes, Pair a Chrome, Unpair (shown once planque offers Chromes; pairing is signed) | AppModel.chromes |
 | CoachToolsStep.swift | 255 | Coach's tools still to give | |
