@@ -43,7 +43,9 @@ let coachSendMacTests: [Test] = [
         try expectEqual(model.draft, "")
         try expectEqual(model.pending, nil)
         try expectEqual(transport.sent.map(\.method), ["GET", "GET", "GET", "POST", "GET", "GET"])
-        try expectEqual(slept(), [4])
+        // One wait, as `Backoff.answer`'s first: 2 seconds with its jitter.
+        try expectEqual(slept().count, 1)
+        try expect(slept().allSatisfy { (1.6...2.4).contains($0) }, "the first wait backs off from 2 s: \(slept())")
         guard case .loaded(_, let page) = model.state else { throw Failure(description: "not loaded") }
         try expectEqual(page.items.count, 3)
         try expectEqual(page.working, false)
