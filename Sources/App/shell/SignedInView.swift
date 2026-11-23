@@ -535,11 +535,12 @@ struct SignedInView: View {
         }
     }
 
-    /// A recipe handed to Coach from the Overview, as the iPad's `handRecipeToCoach`
-    /// (AppModel.swift:7274-7280): its words in Coach's box, to edit and send. Nothing is sent.
+    /// A recipe handed to Coach from the Overview or the gallery, as the iPad's `handRecipeToCoach`
+    /// (AppModel.swift:8536-8542): a new conversation with its words in Coach's box, to edit and
+    /// send. Nothing is sent.
     private func handToCoach(_ recipe: Recipes.Recipe) {
         guard mayUseCoach else { return }
-        panel.hand(recipe.say, to: coach)
+        panel.handRecipe(recipe.say, to: coach)
     }
 
     /// Plan & usage in place of the taf's page, as the iPad's `usageRequested` from a health fix.

@@ -100,8 +100,11 @@ Ported from the iPad's `HomeRecipes.swift` (`HomeRecipes`, `OwnWordsRow`, `Recip
   (`HomeRecipes.swift:134-165`): the logo only from tafs cloud's own `/v1/logos/` path
   (`Recipes.App.logo`, `Apps.logoPath`), read as Connect apps reads its logos (`AppLogos`,
   docs/connections.md › Logos). With none, or one refused or that doesn't decode, the name alone. Its sheet: what it ends, what that costs today, its Card in zones,
-  where its proof run passed and what it reported, and **Hand it to Coach**, which puts `say`
-  in Coach's box. Nothing is sent until the person sends it.
+  where its proof run passed and what it reported, and **Hand it to Coach**, which opens a new
+  conversation in Coach with `say` in its box, as the iPad's `handRecipeToCoach`
+  (`CoachModel.handRecipe`), whatever Coach was showing. The gallery's jobs do the same. Nothing
+  is sent until the person sends it. (The brief's next move, by contrast, goes in the box of the
+  chat shown, as the iPad's `startNextMove`.)
 - **Not listed:** tafs cloud's `home.words`, else the app's own line ("No tafs yet." and, by
   who may use Coach, `home.empty.coach` or `home.empty.shared`), then Own words.
 - **Who may use Coach** (`mayUseCoach`): KIFF's `use` for the Setup agent, else
