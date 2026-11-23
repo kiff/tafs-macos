@@ -141,7 +141,7 @@ struct SignedInView: View {
         // Set aside sends the same read of this device's connections, as the iPad's `setAsideCoach`.
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route, cloud: cloud, proof: coachProof))
         // Alerts are kept per account, as the iPad keys them by tenant.
-        _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant))
+        _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant, inSample: inSample))
     }
 
     var body: some View {
@@ -306,6 +306,8 @@ struct SignedInView: View {
     }
 
     private func announceHeld() {
+        // The sample's held calls are no one's: macOS is never asked to alert for them.
+        guard !inSample else { return }
         if case .loaded(let calls) = needsYou.state {
             notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
         }

@@ -46,11 +46,15 @@ final class AlertsModel: ObservableObject {
     private let account: String
     private let permission: AlertPermission
 
-    init(account: String, defaults: UserDefaults = .standard, permission: AlertPermission = SystemAlertPermission()) {
+    /// The sample is open: alerts stay off, macOS isn't asked, and nothing is kept (`Sample`).
+    private let inSample: Bool
+
+    init(account: String, defaults: UserDefaults = .standard, permission: AlertPermission = SystemAlertPermission(), inSample: Bool = false) {
         self.account = account
         self.defaults = defaults
         self.permission = permission
-        prefs = AlertPrefs(defaults: defaults, account: account)
+        self.inSample = inSample
+        prefs = inSample ? AlertPrefs() : AlertPrefs(defaults: defaults, account: account)
     }
 
     /// "Alerts on this Mac": the person's choice, and macOS letting tafs alert.
@@ -62,6 +66,11 @@ final class AlertsModel: ObservableObject {
     /// Asks macOS first, as the iPad asks iOS; refused, it says to allow notifications and
     /// stays off (`AppModel.swift:1648-1651`).
     func turnOn(words: Words) async {
+        // In the sample nothing alerts and nothing is kept: macOS isn't asked, and the line says it takes KIFF.
+        guard !inSample else {
+            why = Sample.notInSample(words)
+            return
+        }
         guard !turningOn else { return }
         turningOn = true
         defer { turningOn = false }
@@ -73,17 +82,17 @@ final class AlertsModel: ObservableObject {
         allowed = true
         why = nil
         prefs.on = true
-        prefs.save(to: defaults, account: account)
+        if !inSample { prefs.save(to: defaults, account: account) }
     }
 
     func turnOff() {
         prefs.on = false
-        prefs.save(to: defaults, account: account)
+        if !inSample { prefs.save(to: defaults, account: account) }
     }
 
     func setSound(_ sound: Bool) {
         prefs.sound = sound
-        prefs.save(to: defaults, account: account)
+        if !inSample { prefs.save(to: defaults, account: account) }
     }
 }
 

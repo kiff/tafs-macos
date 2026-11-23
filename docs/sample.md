@@ -43,11 +43,13 @@ iPad's own, from the shared strings (`sample.*`).
   No sample answer names a logo, so the app's one logo reader (`AppLogoImages.app`, tafs cloud's
   `/v1/logos/`) is never asked; a test pins it.
 - **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
+- **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
+  Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
 - **It writes and approves nothing.** Every write is refused with the line that it takes KIFF
   (`sign_in.with_kiff`), and nothing is done. A shared line of its own is asked of tafs's strings.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.
 
 ## Not yet
 
-The sample chat's live replies (`sampleReply`), the sample's alerts, and keeping it between
-launches (the iPad's `SampleStore`).
+The sample chat's live replies (`sampleReply`), the iPad's two sample alerts in Account › Alerts,
+and keeping it between launches (the iPad's `SampleStore`).
