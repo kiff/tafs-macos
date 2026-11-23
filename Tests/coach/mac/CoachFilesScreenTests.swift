@@ -147,17 +147,21 @@ let coachFilesMacTests: [Test] = [
         let read = CGImageSourceCreateWithData(huge.data as CFData, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) }
         try expectEqual(read.map { max($0.width, $0.height) }, FilePrep.longEdge)
     },
-    Test("files ready never go into an improvement's first message: Send does nothing and they wait in the tray", awaiting: { @MainActor in
-        let (chat, transport, _) = await coach([(201, declared)])
+    Test("files never go into an improvement's first message: its words go alone, the files wait in the tray, and the box says so", awaiting: { @MainActor in
+        // tafs cloud's improve route answers no message id: the sent message is found by its words.
+        let improved = #"{"setup":"taf-coach","session":"s1","new_session":true}"#
+        let arrived = #"{"working":false,"items":[{"type":"message","message":{"id":"s1.in","at":"2026-11-14T18:00:02Z","from":"owner","text":"Make it faster"}}]}"#
+        let (chat, transport, _) = await coach([(201, declared), (200, improved), (200, arrived)])
         await chat.attach(pdf)
         chat.improve(CoachModel.Improving(id: "taf-9", name: "Refunds"))
         chat.draft = "Make it faster"
-        try expectEqual(chat.canSend, false)
-        let sent = transport.sent.count
+        try expectEqual(chat.improvementHoldsFiles, true)
+        try expectEqual(chat.canSend, true)
         await chat.send()
-        try expectEqual(transport.sent.count, sent)
+        let sent = transport.sent.first { $0.path == "/v1/tafs/taf-9/improve" }
+        try expectEqual(sent.flatMap { try? JSONDecoder().decode([String: String].self, from: $0.body) }, ["text": "Make it faster"])
         try expectEqual(chat.files.files.map(\.ref?.id), ["att_1"])
-        try expectEqual(chat.draft, "Make it faster")
+        try expectEqual(chat.improvementHoldsFiles, false)
     }),
     Test("Allow after a refusal for the consent, with files: it allows, closes, and the words and files wait to send again", awaiting: { @MainActor in
         let (chat, transport, _) = await coach([(201, declared), (403, consentRefusal), (204, "")])
