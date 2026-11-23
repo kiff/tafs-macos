@@ -12,6 +12,10 @@ enum TafRuns {
         var state = ""
         var line = ""
         var deliveries: [Delivery] = []
+        /// A step the taf handed its owner, which this request waits on (`your_step`, the iPad's
+        /// `TafWork.Request.yourStep`): its card stands in place of the line. One that doesn't read
+        /// is none, never the request.
+        var yourStep: YourStep? = nil
         /// What the run used, from KIFF's usage record, in tafs cloud's words. Nil until KIFF
         /// has counted the run. The app counts nothing.
         var credits: Credits? = nil
@@ -29,7 +33,7 @@ enum TafRuns {
             return words
         }
 
-        enum CodingKeys: String, CodingKey { case id, at, state, line, deliveries, credits }
+        enum CodingKeys: String, CodingKey { case id, at, state, line, deliveries, credits, yourStep = "your_step" }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(String.self, forKey: .id)
@@ -39,6 +43,7 @@ enum TafRuns {
             deliveries = (try? c.decode([Delivery].self, forKey: .deliveries)) ?? []
             // A figure KIFF hasn't counted, or one the app can't read, is no line: never a guess.
             credits = try? c.decodeIfPresent(Credits.self, forKey: .credits)
+            yourStep = (try? c.decodeIfPresent(YourStep.self, forKey: .yourStep)) ?? nil
         }
     }
 

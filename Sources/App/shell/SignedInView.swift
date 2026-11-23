@@ -559,7 +559,9 @@ struct SignedInView: View {
                                shareLine: ShareLine(agent: taf.kiffAgent, account: account, people: people, email: accountModel.me?.email),
                                dictation: dictation, improveInCoach: improving(taf), askCoach: askingCoach(taf),
                                openConnect: { self.openTaf = nil; self.selection = .connectApps }, files: files,
-                               record: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone, tab: tafTab).id(taf.id))
+                               record: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone,
+                               needsYou: needsYou, answersHolds: accountModel.me?.answersHolds ?? true,
+                               answered: { await needsYou.load(); await readTafs() }, tab: tafTab).id(taf.id))
     }
 
     /// Coach on a taf, a new conversation, as the iPad's `improveTaf` with `coachOpen`: for

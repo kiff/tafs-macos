@@ -136,6 +136,11 @@ struct TafView: View {
     /// The person's tafs and the account's time zone, for that sheet, as the Record passes them.
     var tafs: [Home.Taf] = []
     var timeZone: String? = nil
+    /// Needs you's model, for a step a request waits on in the taf's work; nil draws its line. Whether this person
+    /// answers held calls, and the lists read again after a step is answered.
+    var needsYou: NeedsYouModel? = nil
+    var answersHolds = true
+    var answered: () async -> Void = {}
     /// The taf's files, opened over its page.
     @State private var filesOpen = false
     /// The Card in front of the stack; nil for the first, the live one.
@@ -291,7 +296,8 @@ struct TafView: View {
                 TafActivityTab(model: pages, taf: taf, openUsage: openUsage,
                                doors: manages ? doors : nil, doorsOffered: doorsOffered, manages: manages,
                                askCoach: askCoach, openConnect: openConnect,
-                               openSheet: record.map { record in { line in Task { await record.openReceipt(line) } } })
+                               openSheet: record.map { record in { line in Task { await record.openReceipt(line) } } },
+                               needsYou: needsYou, answersHolds: answersHolds, answered: answered)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(record.map { ActivityReceiptHost(model: $0, tafs: tafs, timeZone: timeZone) })
                 cardColumn
