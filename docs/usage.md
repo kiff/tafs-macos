@@ -27,7 +27,7 @@ its routes (`:768-799`), and `askAdmin`, `withdrawRequest` and `declineRequest`
 
 | Call | Route | What |
 |---|---|---|
-| `usage()` | `GET /v1/me/usage` | KIFF's plan (`team` is Company), the packs it sells, and the requests: every open one for someone who manages billing, the person's own otherwise. |
+| `usage()` | `GET /v1/me/usage` | KIFF's plan (`team` is Company), who bills it (`billing`), the packs it sells, and the requests: every open one for someone who manages billing, the person's own otherwise. |
 | `askAdmin(raise:pack:reason:)` | `POST /v1/me/pack-requests` | `{"kind": "raise", "reason"}`, no pack, or `{"pack", "reason"}`, where no `kind` means a pack. |
 | `withdrawRequest(_:)` | `POST /v1/me/pack-requests/{id}/withdraw` | `{}`. |
 | `declineRequest(_:note:)` | `POST /v1/me/pack-requests/{id}/decline` | `{"note"}`, **signed** by the device key (`KIFF-Device-Signature`). |
@@ -59,6 +59,30 @@ its routes (`:768-799`), and `askAdmin`, `withdrawRequest` and `declineRequest`
   usage read that fails says the same.
 - **KIFF's read failing** keeps what was read and says so once, under the credits.
 
+### Who bills the plan (`billingPanel`)
+
+As the iPad's `billingPanel` (`UsageView.swift:121-182`), the first of KIFF's panels, before
+asking and requests, for anyone who reads Plan & usage:
+
+- **One line, by `billing.source`:**
+  - `apple`: "Billed by Apple" (`billing.by_apple`).
+  - `google`: "Billed by Google Play".
+  - `stripe`: "Billed by KIFF".
+  - `contract`: "Managed by your company's agreement".
+
+  With no billing, or a source this app doesn't know, there's no panel. A billing with no
+  source, or with a date that doesn't read, is none, as the iPad reads it, and never the rest
+  of the usage.
+- **Manage**, beside Apple's line, opens the Apple account's subscriptions in the App Store
+  (`https://apps.apple.com/account/subscriptions`), where the iPad opens the same page from
+  StoreKit (`manageSubscriptions`).
+- **After a move from Solo to Company**, which KIFF bills (`stripe`), while Solo bought in the
+  App Store still renews, the panel adds a line: "Company is billed by KIFF now. The Solo bought
+  in the App Store renews on {date} unless it's cancelled…"
+  (`usage.company_billed_kiff_solo_bought`, `apple_solo_until` as a long date). Beside it,
+  **Cancel Solo** opens the same Apple page.
+- **Nothing to buy:** the app never points anywhere else to buy.
+
 ## The screen (`UsageView`, `UsageModel`)
 
 Laid out as the iPad's: the screen's name small and centred at the top, then panels (radius
@@ -86,8 +110,7 @@ amber with a warning, and the warning takes the same colour.
 Buying credits or a plan, restoring purchases and raising the spend limit. The phones do
 these through their stores; the Mac has no store. So an admin answers a request here only by
 declining it: the iPad's Raise the limit (signed with the approval key) and Approve (buying the
-pack) aren't on the Mac. Who bills the plan (`billingPanel`), Manage, and a taf's runs behind its
-line are not built.
+pack) aren't on the Mac. A taf's runs behind its line are not built.
 
 ## Tests
 
@@ -95,6 +118,8 @@ line are not built.
 range, unreadable answers, a 503's code, each half failing alone, the period asked for, and
 that tafs cloud is only ever read (`GET`). For the requests: KIFF's usage as sent, the packs
 offered, each route's path, body and signature (only a decline is signed), a decline without
-a key, the prompt closed, KIFF's refusals, the reads after, and the lines both apps share. It
+a key, the prompt closed, KIFF's refusals, the reads after, and the lines both apps share. For
+who bills: each source's line, Manage only for Apple, Solo still renewing only after a move to
+Company, and a billing that doesn't read as none (`usageBillingTests`). It
 writes `build/screenshots/usage-*.png`, a member's and an admin's requests and both sheets
 among them, and `usage-light.png` and `usage-dark.png` with a plan line the screen leaves out.

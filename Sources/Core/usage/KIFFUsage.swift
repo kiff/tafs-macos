@@ -1,9 +1,25 @@
 import Foundation
 
 /// KIFF's side of Plan & usage (`GET /v1/me/usage`), as the iPad's `KIFFClient.Usage`
-/// (KIFFClient.swift:629-719): the plan, the packs KIFF sells, and members' requests to the
-/// account's admins. Who bills the plan isn't read here yet.
+/// (KIFFClient.swift:629-719): the plan, who bills it, the packs KIFF sells, and members'
+/// requests to the account's admins.
 struct KIFFUsage: Decodable, Equatable {
+    /// Who bills the plan, as the iPad's `KIFFClient.Usage.Billing`: `apple`, `google`, `stripe`
+    /// (KIFF) or `contract` (an agreement). Read as the iPad reads it: a billing with no source,
+    /// or with a date that doesn't read, is none.
+    struct Billing: Decodable, Equatable {
+        var source: String
+        /// The account moved from Solo in the App Store to Company, which KIFF bills now, and
+        /// Solo still renews with Apple on this date unless it's cancelled there.
+        var appleSoloUntil: Date? = nil
+        enum CodingKeys: String, CodingKey { case source, appleSoloUntil = "apple_solo_until" }
+    }
+
+    /// Apple's page for the Apple account's subscriptions, which the App Store opens on a Mac:
+    /// where Solo bought in the App Store is managed or cancelled, as the iPad's
+    /// `manageSubscriptions`. The app never points anywhere else to buy.
+    static let appleSubscriptions = URL(string: "https://apps.apple.com/account/subscriptions")!
+
     /// What KIFF sells: the packs of credits. On the Mac nothing is bought; a pack is only what
     /// a member asks an admin for.
     struct Store: Decodable, Equatable {
@@ -52,18 +68,42 @@ struct KIFFUsage: Decodable, Equatable {
 
     /// KIFF's plan: "solo", "team" (Company), "company" (an agreement), "internal", or none.
     var plan: String? = nil
+    var billing: Billing? = nil
     var store: Store? = nil
     /// Members' requests for a raise or a pack: every open one for someone who manages
     /// billing, this person's own otherwise.
     var requests: [PackRequest]? = nil
 
-    enum CodingKeys: String, CodingKey { case plan, store, requests }
+    enum CodingKeys: String, CodingKey { case plan, billing, store, requests }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         plan = (try? c.decodeIfPresent(String.self, forKey: .plan)) ?? nil
+        billing = (try? c.decodeIfPresent(Billing.self, forKey: .billing)) ?? nil
         store = (try? c.decodeIfPresent(Store.self, forKey: .store)) ?? nil
         requests = ((try? c.decodeIfPresent([Lenient<PackRequest>].self, forKey: .requests)) ?? nil)?.compactMap(\.value)
+    }
+
+    /// The words key of the one line on who bills the plan, as the iPad's `billingLine`; nil
+    /// when no plan is billed, or by a source this app doesn't know.
+    var billingLine: String? {
+        switch billing?.source {
+        case "apple": return "billing.by_apple"
+        case "google": return "billing.by_google_play"
+        case "stripe": return "billing.by_kiff"
+        case "contract": return "billing.by_agreement"
+        default: return nil
+        }
+    }
+
+    /// Apple bills the plan, so it's managed in the Apple account's subscriptions (Manage).
+    var managedByApple: Bool { billing?.source == "apple" }
+
+    /// After a move from Solo to Company, which KIFF bills now, the date Solo still renews with
+    /// Apple unless it's cancelled there, as the iPad's `soloStillRenews`; nil otherwise.
+    var soloStillRenews: Date? {
+        guard billing?.source == "stripe" else { return nil }
+        return billing?.appleSoloUntil
     }
 
     /// One item of a list that reads, or nil, as the iPad's `LenientItem`: one that doesn't
