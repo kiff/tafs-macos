@@ -76,7 +76,7 @@ struct SignInView: View {
     /// This Mac's region, for the age line: the country whose law sets the age.
     private var region: String? { Locale.current.regionCode }
 
-    /// legal-i18n's ages (`strings/ages.json` in the app); the standard alone when it can't be read.
+    /// The minimum ages by country (`strings/ages.json` in the app); the standard alone when it can't be read.
     private var ages: MinimumAge {
         (Words.bundleFolder.flatMap { try? MinimumAge(folder: $0) })
             ?? (try? MinimumAge(json: Data(#"{"default":16}"#.utf8)))!

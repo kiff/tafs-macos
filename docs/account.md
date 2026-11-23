@@ -71,8 +71,24 @@ KIFF account page's id and Delete account. No test reaches the network.
   read-only: each passkey by its name ("Unnamed" without one), and a computer's own security
   key saying it goes with its computer (`settings.devices.passkey_with_computer`). Read with
   the list when Devices opens; a read that fails says why (`settings.devices.passkeys_not_loaded`)
-  and keeps what was read. Drawn only with something in it. Remove and Add are the iPad's, for
-  a session that approves: no Mac does yet.
+  and keeps what was read. Drawn only with something in it.
+- **Remove a passkey** (the iPad's `removePasskey`, `AppModel.swift:1720-1748`): a red Remove at
+  the end of one of the account's own passkeys (never a computer's, which goes with its
+  computer, so this Mac's own pairing can't be removed here), for an owner or admin (KIFF's
+  `member_role`, `Me.managesPasskeys`, as the iPad's `canAddPasskey`), on a Mac that approves
+  with its security key. Elsewhere there's no Remove, and nothing is sent.
+  - Confirmed first: "Remove {name}?", with the iPad's warning when it's the last passkey
+    (`settings.devices.passkey_remove_last`, `Passkey.removesLast`).
+  - Then `KeyAct.removePasskey`: KIFF's `DELETE /v1/me/passkeys/{id}`, empty body, approved by
+    the security key once and named in its sheet as the iPad's prompt ("Remove the passkey
+    {name} from your account"). KIFF takes it as an approval (`PhoneApprovalRules`; its handler
+    wants a critical signature, which a security key's assertion is).
+  - It then leaves the list and the list is read again; a read that started before it is
+    dropped (`passkeysRead`), so the removed passkey never comes back.
+  - A closed sheet sends nothing and says nothing. Anything else says "{what} didn't go
+    through. {why}" (`common.didnt_go_through`), the why in the app's words, never KIFF's code.
+- **Add a passkey is the phone's.** macOS 12 makes no platform passkey, and a second security
+  key is paired from the phone.
 
 **Signing another device out is an approval**, since it can take away the account's power
 to approve. So:
@@ -163,7 +179,7 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
   **Delete** (asked first, in the iPad's words); each person's menu with **Make the manager** or **Make a member**, and
   **Remove from {group}**. KIFF decides who may make each; a refusal says why.
 - **Each change is confirmed with Touch ID, then signed by the device key** (`PeopleModel.change`, `PeopleChange`), as
-  the owner's rule for ending access (docs/approvals.md › Ending access with Touch ID; the PM's (a), 23 Nov): the
+  the owner's rule for ending access (docs/approvals.md › Ending access with Touch ID): the
   ending key made at sign-in signs the iPad's `tafs.people.v1|{tenant}|{the change in words}`, asked with those words,
   never the password. Then KIFF's request (`POST /v1/groups` with `{"name"}`, `PATCH` and `DELETE /v1/groups/{id}`,
   `PUT /v1/groups/{id}/members/{subject}` with `{"role"}`, `DELETE` that), signed by the device key, which KIFF takes

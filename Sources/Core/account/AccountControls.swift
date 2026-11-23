@@ -37,6 +37,18 @@ struct Passkey: Decodable, Equatable {
     /// Only a passkey of its own can be removed: a computer's goes with the computer.
     var removable: Bool { passkeyID != nil && deviceID == nil }
 
+    /// The same passkey, as the iPad's `isSamePasskey(as:)`: by its id, else a computer's by its device.
+    func isSamePasskey(as other: Passkey) -> Bool {
+        if let passkeyID { return passkeyID == other.passkeyID }
+        if let deviceID { return other.passkeyID == nil && deviceID == other.deviceID }
+        return self == other
+    }
+
+    /// Removing this one leaves no other passkey, as the iPad's `removesLastPasskey`: its confirm says so first.
+    static func removesLast(_ passkey: Passkey, among passkeys: [Passkey]) -> Bool {
+        !passkeys.contains { !$0.isSamePasskey(as: passkey) }
+    }
+
     enum CodingKeys: String, CodingKey {
         case passkeyID = "id", name, synced, createdAt = "created_at", deviceID = "device_id"
     }

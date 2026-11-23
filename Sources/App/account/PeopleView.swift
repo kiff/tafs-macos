@@ -18,7 +18,7 @@ final class PeopleModel: ObservableObject {
     /// A change is on its way.
     @Published private(set) var changing = false
     /// Where a change is made: here with Touch ID, on a Mac whose device key is in the Secure Enclave and that has this
-    /// sign-in's ending key; else on the phone, as Disconnect (the owner's 00:44 rule, the PM's (a), 23 Nov).
+    /// sign-in's ending key; else on the phone, as Disconnect (the owner's rule for ending access: Touch ID, else the phone).
     @Published private(set) var route: ConnectionEnding.Route = .phone
     private let account: AccountClient
     private let touchID: TouchIDOnly

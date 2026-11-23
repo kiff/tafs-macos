@@ -41,7 +41,7 @@ enum Onboarding {
     }
 }
 
-/// The minimum age to use the app, by country (ISO 3166-1): legal-i18n's table, `app/strings/ages.json` at the pin,
+/// The minimum age to use the app, by country (ISO 3166-1): the shared table, `app/strings/ages.json` at the pin,
 /// which the iPad's `MinimumAge.swift` is generated from. Any other country, or none known, is `standard`.
 struct MinimumAge: Equatable {
     let standard: Int

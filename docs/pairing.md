@@ -31,7 +31,7 @@ sign-in pass on the test account comes before any release. The contract is kiff/
 1. **The welcome, with one tick** (`OnboardingConsent`, `ConsentTick`): "I agree to KIFF's Terms of
    Service and the tafs Terms", each name a link to its page; privacy as two links below, never
    ticked; and the age line for this Mac's region (`Onboarding.ageLine`, from `strings/ages.json`,
-   legal-i18n's table at the pin). The box is its own control: a link opens its page and never
+   the shared table at the pin). The box is its own control: a link opens its page and never
    ticks it. The Terms version in force is read as the welcome shows (`GET /v1/auth/app/terms`), so
    the one sent is the one the person saw.
 2. **Continue waits on the tick**, then opens KIFF's `/oauth/authorize` in the system's own sign-in
