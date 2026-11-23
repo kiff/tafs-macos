@@ -130,6 +130,12 @@ struct TafView: View {
     var openConnect: (() -> Void)? = nil
     /// The account's files, for the taf's own Files entry on its header line; nil draws none.
     var files: FilesModel? = nil
+    /// The Record's model, which opens a call's sheet from its Activity row (its receipt, checked on this Mac), as
+    /// the iPad's `SourceActivityRow`; nil leaves the rows as they are.
+    var record: RecordModel? = nil
+    /// The person's tafs and the account's time zone, for that sheet, as the Record passes them.
+    var tafs: [Home.Taf] = []
+    var timeZone: String? = nil
     /// The taf's files, opened over its page.
     @State private var filesOpen = false
     /// The Card in front of the stack; nil for the first, the live one.
@@ -284,8 +290,10 @@ struct TafView: View {
             HStack(alignment: .top, spacing: 20) {
                 TafActivityTab(model: pages, taf: taf, openUsage: openUsage,
                                doors: manages ? doors : nil, doorsOffered: doorsOffered, manages: manages,
-                               askCoach: askCoach, openConnect: openConnect)
+                               askCoach: askCoach, openConnect: openConnect,
+                               openSheet: record.map { record in { line in Task { await record.openReceipt(line) } } })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(record.map { ActivityReceiptHost(model: $0, tafs: tafs, timeZone: timeZone) })
                 cardColumn
             }
         }

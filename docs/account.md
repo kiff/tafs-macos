@@ -158,9 +158,18 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
   iPad's `loaded && groups.isEmpty && peopleError == nil` (`PeopleViews.swift:42`).
 - Decoded as the iPad's: a group's members and agents, and a person's role and status, must
   be there; one that doesn't read fails the read, which says why.
-- **It only reads.** Making, renaming or deleting a group and changing its people are each
-  the person's act behind their device's key on the iPad, so on the Mac they come with
-  approvals (#16).
+- **Changing the groups** (the iPad's `PeopleGroupsView` and `changePeople`): **New group** at the top; each group's
+  menu with **Add someone to {group}** (the people not in it yet), and, but for KIFF's default group, **Rename** and
+  **Delete** (asked first, in the iPad's words); each person's menu with **Make the manager** or **Make a member**, and
+  **Remove from {group}**. KIFF decides who may make each; a refusal says why.
+- **Each change is confirmed with Touch ID, then signed by the device key** (`PeopleModel.change`, `PeopleChange`), as
+  the owner's rule for ending access (docs/approvals.md › Ending access with Touch ID; the PM's (a), 23 Nov): the
+  ending key made at sign-in signs the iPad's `tafs.people.v1|{tenant}|{the change in words}`, asked with those words,
+  never the password. Then KIFF's request (`POST /v1/groups` with `{"name"}`, `PATCH` and `DELETE /v1/groups/{id}`,
+  `PUT /v1/groups/{id}/members/{subject}` with `{"role"}`, `DELETE` that), signed by the device key, which KIFF takes
+  for these signed routes (they aren't approval routes), and the lists are read again. A closed or failed Touch ID sends
+  nothing and says nothing; a Mac without Touch ID or a Secure Enclave key, or whose ending key the system invalidated,
+  says to approve on the phone (`approval.device_can_not_approve_approve`).
 
 ## Alerts (`AlertPrefs`, `AlertsView`)
 
