@@ -127,11 +127,20 @@ and its model (`AppModel.swift:7025-7083`). It only reads.
   what stops (the iPad's `DisconnectWords`: `AppConnections.disconnectTitle`, `disconnectMessage`,
   the key's own line for a key); Cancel asks "Cancel the request for …?" or "Cancel the sign-in to
   …?" with Keep waiting (`ConnectionFixWords`: `cancelTitle`, `cancelWordKey`); Clear asks "Clear
-  {count} connections from removed tafs?" with its body. This Mac can't sign them: on its yes (or
-  the click, for Sign in again and Replace the key, which the iPad doesn't ask) it shows "This
-  device can't approve. Approve on another device signed in to your account."
-  (`approval.device_can_not_approve_approve`) under it, and sends nothing. The questions name no
-  other taf whose Card also stops: this Mac doesn't read which Cards use a connection's tools.
+  {count} connections from removed tafs?" with its body. **Ending one is done here on a Touch ID
+  Mac** (docs/approvals.md › Ending access with Touch ID). These are Remove access, Cancel the
+  request, Cancel the sign-in, Clear, and Remove on a connection's page. On a Mac whose device key
+  is in the Secure Enclave and that can check Touch ID now, a yes asks Touch ID alone (never the
+  Mac's password), with the question as its reason. Then the device key signs planque's
+  `DELETE /v1/accounts/{tenant}/grants/{id}` (no body) for each connection, and the connections
+  are read again. "Approve on your phone instead" shows beside it. A closed prompt sends nothing:
+  Disconnect says nothing, and Clear says "Not done: it wasn't confirmed." A refusal says "Access
+  not removed. {why}", and Clear says how many it cleared, kept and couldn't clear. **On any
+  other Mac**, and always for Sign in again and Replace the key (which grant access; the iPad
+  doesn't ask first for those), it shows "This device can't approve. Approve on another device
+  signed in to your account." (`approval.device_can_not_approve_approve`) under it, and sends
+  nothing. The questions name no other taf whose Card also stops: this Mac doesn't read which
+  Cards use a connection's tools.
 - The footer, "Removing access takes its tools from that taf only, …", shows for whoever
   manages Cards when a connection here is a taf's.
 - **Back** ("Connect apps") returns to the list.
@@ -177,7 +186,8 @@ Once an app is connected, a receipt confirms it, as the iPad's `ConnectApprovalS
   nothing is said twice.
 - **Disconnect** is the iPad's (`:965-978`), drawn in the shared "Remove access"
   (`connect.disconnect_button`) for whoever manages the account's Cards (KIFF's `cards.manage`),
-  as the iPad's `canManageCards`. This Mac can't sign the disconnection, so a tap asks nothing
+  as the iPad's `canManageCards`. The receipt doesn't end the connection here (Connect apps
+  does, on a Touch ID Mac: docs/approvals.md › Ending access with Touch ID), so a tap asks nothing
   and sends nothing: it shows "This device can't approve. Approve on another device signed in
   to your account." (`approval.device_can_not_approve_approve`), as every approval this Mac
   can't make shows in place of the iPad's `ApprovalGate` (docs/approvals.md).
@@ -238,11 +248,13 @@ KIFF. It gets this device's key, and a KIFF key that connects tools and does not
 
 ## Not on this Mac
 
-Connecting and signing in again from this screen, giving or replacing a key, removing access, and
-clearing the removed tafs' connections. Each is approved at planque, signed by a device key that
-grants (the iPad's Face ID key, Windows' TPM key behind Windows Hello); this Mac's device key
-grants nothing, and planque takes no security key, so "Nothing is approved at planque from this
-Mac" (docs/approvals.md). Each is drawn up to its approval, which is made on the phone. So are
+Connecting and signing in again from this screen, and giving or replacing a key. Each is approved
+at planque, signed by a device key that grants (the iPad's Face ID key, Windows' TPM key behind
+Windows Hello). This Mac's device key grants nothing, and planque takes no security key, so
+"Nothing is approved at planque from this Mac" (docs/approvals.md). Each is drawn up to its
+approval, which is made on the phone. Removing access and clearing the removed tafs' connections
+take access away. They are done here on a Touch ID Mac whose key is in the Secure Enclave, and on
+the phone from any other Mac (above). Coach's receipt's Disconnect still goes to the phone. So are
 the approval sheet's own parts (the approval, the key's sheet, the receipt's logo, host and last
 4 characters): the receipt over Coach has no grant to read them from, and this Mac never holds a
 key.
