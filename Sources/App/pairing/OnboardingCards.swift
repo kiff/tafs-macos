@@ -198,10 +198,13 @@ struct OnboardingPicture: View {
 }
 
 /// How tafs works, any time (the first Home; Account), as the iPad's `HowTafsWorksView`: the three cards again, each
-/// opening where it's clicked, and the privacy and terms pages, KIFF's and tafs's.
+/// opening where it's clicked, the help sections this Mac can use (`HelpSections`), and the privacy and terms pages,
+/// KIFF's and tafs's.
 struct HowTafsWorksView: View {
     @Environment(\.words) private var words
     @State private var opened: OnboardingPage?
+    /// Whether planque offers this person Chromes (Account › Chrome shows): then its help section shows, as the iPad's.
+    var chromeOffered = false
     let close: () -> Void
 
     /// The four legal pages as rows, each titled as its page is: standalone titles (`onboarding.row_*`), never the
@@ -240,6 +243,9 @@ struct HowTafsWorksView: View {
                     }
                 }
                 .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+                ForEach(HelpSections.shown(chromeOffered: chromeOffered), id: \.self) { section in
+                    helpSection(section)
+                }
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(Self.legalRows(words), id: \.url) { row in
                         if let url = URL(string: row.url) {
@@ -255,5 +261,18 @@ struct HowTafsWorksView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Theme.background)
         }
+    }
+
+    /// A help section: its title, its lead, and its second line, smaller (the iPad's `Section`).
+    private func helpSection(_ section: HelpSections.Section) -> some View {
+        let lines = section.lines(words)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(lines.title).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.dim).accessibilityAddTraits(.isHeader)
+            Text(lines.lead).font(.system(size: 15)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            Text(lines.more).font(.system(size: 14)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("howItWorks.\(section.rawValue)")
     }
 }
