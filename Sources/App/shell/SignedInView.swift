@@ -17,6 +17,8 @@ struct SignedInView: View {
     @StateObject private var exportChats: ExportChatsModel
     /// Files, the account's: Account's row opens them.
     @StateObject private var files: FilesModel
+    /// Account › Chrome, on planque's safe routes.
+    @StateObject private var chromes: ChromesModel
     @StateObject private var accountModel: AccountModel
     @StateObject private var record: RecordModel
     @StateObject private var overview: OverviewModel
@@ -96,6 +98,20 @@ struct SignedInView: View {
         _accountHalt = StateObject(wrappedValue: HaltModel(cloud: cloud, taf: nil))
         _exportChats = StateObject(wrappedValue: ExportChatsModel(cloud: cloud))
         _files = StateObject(wrappedValue: FilesModel(cloud: cloud))
+        // Account › Chrome: planque's safe routes, each signed by the device key for that one request; the enrolment's
+        // armed signer is never used for them (`PlanqueClient.Safe`).
+        let safePlanque = { [account, planque] () -> PlanqueClient in
+            planque.tenant = account.session.tenant
+            if planque.transport == nil { planque.transport = NetworkTransport(base: URL(string: PlanqueClient.baseURL)!) }
+            return planque
+        }
+        _chromes = StateObject(wrappedValue: ChromesModel(read: { [account] in
+            guard let sign = account.signMessage else { return nil }
+            return try await safePlanque().chromes(signedBy: sign)
+        }, unpair: { [account] id in
+            guard let sign = account.signMessage else { throw PlanqueClient.PlanqueError.notSigning }
+            _ = try await safePlanque().safe(.unpairChrome(id), signedBy: sign)
+        }))
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
@@ -149,11 +165,15 @@ struct SignedInView: View {
         .onChange(of: selection) { _ in openTaf = nil }
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
+        // Account's Chrome row shows once planque lists Chromes: read once with the window.
+        .task { await chromes.load() }
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
         .onAppear {
             devices.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
+            // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
+            doorModels.signWithKey = signWithKey
             needsYou.approveOnceWithKey = approveOnceWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
@@ -501,7 +521,7 @@ struct SignedInView: View {
     }
 
     private var accountScreen: some View {
-        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files,
+        AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
             // A list read still on its way keeps nothing from here.

@@ -10,11 +10,22 @@ answer as sent.
 |---|---|---|
 | `record(_:cursor:)` | `GET /v1/record?q=&cursor=` | One page of a search: entries, tafs cloud's groups, and its own words for the search box, "nothing matched" and the end. |
 | `recordCase(_:)` | `GET /v1/record/cases/{about}` | Every call about one thing, oldest first, with the step that failed in tafs cloud's words. |
+| `calls(_:)` | `GET /v1/tafs/{id}/calls` | One taf's calls, `{calls:[{invocation, value}]}`: what names a line's payment (below). Read whole or not at all, as the iPad's `TafsCloud.calls`. |
 | `exportReceipts(from:to:)` | `GET /v1/record/receipts?from=&to=` | The receipts of some days (YYYY-MM-DD, at most 92), for an accountant: tafs cloud's answer byte for byte, its CSV, and how many calls have no receipt yet. |
 
 - tafs cloud is at `https://cloud.tafs.kiff.dev` and takes the person's KIFF session.
 - What is typed is escaped and cut at 100 characters, tafs cloud's limit.
 - An entry's title, detail, time and amount are tafs cloud's text, drawn as sent.
+- An entry's `call` is KIFF's: besides its receipt, amount, answer and read, the Record reads its
+  `proposal_id`, `entity_id`, `on_hash`, `on_arg`, `reason` and the answer's `signed` and `device`;
+  KIFF's key and reason are drawn without direction or control characters (`Record.visible`, the
+  iPad's `KIFFMapping.visible`). Its `next` (`{kind, words, tool?, taf?, message?}`) is tafs cloud's
+  next step; one without its kind or words isn't one. A case's `failed` carries its own `next`,
+  decoded as the iPad's and, as there, not drawn.
+- KIFF's held list (`GET /v1/me/card-exceptions?status=held`, the request Needs you sends) is read
+  by the Record itself, for "no longer waiting" (below), after each page of lines it reads, the
+  first page read again after a refused cursor included: so it is never older than the lines it is
+  held against.
 - A page whose entries don't read is unreadable. It is never shown as an empty Record.
 
 ## The screen (`RecordView`, `RecordModel`)
@@ -37,12 +48,28 @@ answer as sent.
   every call about the same thing, oldest first (`GET /v1/record/cases/{about}`), the step
   that didn't go through named first in red, in tafs cloud's words. The Record never sends
   anything again itself.
+- **A call found, and a case's step, is drawn as its taf's Activity draws it** (`RecordStepRow`,
+  the iPad's `RecordHitRow` and `SourceActivityRow`): its taf's name (11 medium monospaced
+  capitals, `dim`), then, for a taf the person lists, a plain row, not boxed: title (15 semibold)
+  over detail (13 `soft`), its time (12 `dim`) over its amount (13 semibold) at the right, padded 5;
+  a call whose KIFF call names its taf (`call.actor_id`, the iPad's `evidence`) opens its sheet,
+  receipt or not ("Shows the receipt"). Under it, **its own next step**, in tafs
+  cloud's words (13 `soft`), as the iPad shows it to anyone it gives no button (below, Not yet).
+  A taf the person only oversees shows the call boxed (title, detail, amount in 14 medium, time),
+  with no next step, as the iPad's. A case's sheet keeps its spinner until a step or an error comes,
+  as the iPad's.
+- **A case's step opens its receipt over the case's sheet** (a sheet on the sheet); from the list
+  or a search, over the screen. The receipt from a case or a search is the step's own line, never
+  named (below), as the iPad's evidence: so no payment is compared there.
 - **Filters** (`Record.Filter`), the iPad's: All, Money moved (done or approved, with an
   amount), Stopped (refused, not done, revoked) and Waiting (held, sending, unknown). They
   choose among the calls already read; a group left with none is left out.
 - The list is by day (below); each row has a dot for how it went, in the iPad's kind
-  colours (done and approved green; refused, not done and revoked red; any other kind amber), the call, its taf, its amount and its time,
-  then the iPad's second line (below).
+  colours (`Record.tone`, the iPad's `RecordEntry.Kind.color`: done, approved and started green;
+  refused, not done and revoked red; in tafs dim; any other kind amber), the call, its taf, its
+  amount and its time, then the iPad's second line (below). **Every row but one done in tafs opens
+  its sheet** (`Record.opensSheet`), receipt or not, as the iPad's `RecordRow`; "KIFF receipt" shows
+  under it only once KIFF says the receipt is signed.
 - **A day's reads fold into one line**, as the iPad's list (`RecordView.swift:44-63`): a call KIFF
   marks a read (`call.read_only`, as the iPad's `ActivityCall.readOnly`) goes under its day's
   calls as "· 3 reads of data, within its Card · Show" (`record.reads`, `record.show`), in 13 `ok`
@@ -50,14 +77,28 @@ answer as sent.
   under All, as on the iPad: a filter shows reads as calls. A day of reads alone is its title and
   the fold.
 - **A row's second line is the iPad's** (`RecordRow.detail`, `decidedLine`, `resultLine`,
-  RecordView.swift:216-259, 314-329): for a call with a KIFF receipt or an owner's answer, who
+  RecordView.swift:206-212, 216-259, 314-329), joined with " · ". **First, what the call acted
+  on**, "payment …QbstR" (`onText`): the argument's name with spaces (`on_arg`, else `record.on.it`),
+  and the value's last 5 when it's longer than 6, else the whole. The value is never in the Record:
+  after each page is read, each of the person's listed tafs (never one they only oversee, as the
+  iPad's `cloudTaf(for:)`) with a line whose call has an `on_hash` and no value yet has its
+  calls read from tafs cloud (`GET /v1/tafs/{id}/calls`, by the taf's id there), and a line takes the
+  value its `entity_id` names **only when "sha256:" and the lowercase hex SHA-256 of its UTF-8 bytes
+  is the line's `on_hash` exactly** (untrimmed, in its own case: `Record.isOn`, `Record.naming`, the
+  iPad's `nameRecordLines`, `KIFFMapping.naming` and `isOn`). Best effort: a taf whose calls can't
+  be read keeps its lines unnamed, and a newer read of the list drops the answer. Search hits and
+  a case's steps aren't named, as on the iPad. **Then, for a held call KIFF no longer holds,
+  "no longer waiting · nothing sent"** (`record.no_longer_waiting`, `record.nothing_sent`): the
+  Record reads KIFF's held list itself, and a held line is no longer waiting once that list is read
+  and none of its calls (by `proposal_id`, else the hold's own id; a `card_unit` request isn't one)
+  is the line's `proposal_id` (`Record.isWaiting`, `HeldCall.heldProposals`, the iPad's
+  `isWaiting`). **Until the list is read, or when it can't be, every held line still waits**, as the
+  iPad's, and a line without a `proposal_id` always does. Otherwise, for a call with a KIFF receipt or an owner's answer, who
   decided, then what became of it at the tool, "within its Card · done", "refused by its Card ·
   nothing sent", "approved by you · done", "refused by an admin · nothing sent" (`record.decided.*`,
   `record.result.*`, `record.nothing_sent`, `card.card_revoked`, the answerer as `record.answerer.*`
-  or `people.role_phrase.*`). Any other call reads as tafs cloud words it. **Held** keeps tafs
-  cloud's line: the iPad says "no longer waiting" once KIFF holds it no more, which the Record
-  doesn't tell this Mac. What the call acted on (the iPad's `onText`, "payment …QbstR") isn't drawn:
-  it needs the taf's reference, which the Record doesn't carry.
+  or `people.role_phrase.*`), a held one still waiting "waiting for you · nothing sent yet". Any
+  other call reads as tafs cloud words it.
 - **Export receipts** (`ExportReceiptsRow`, the iPad's, RecordSearchViews.swift:128-191 and
   RecordView.swift:19-23): under the search box, in 15 semibold `amberText`, for whoever oversees or
   manages every taf on tafs cloud (`Record.seesEveryTaf`, the iPad's `seesEveryTaf`, from KIFF's
@@ -102,21 +143,49 @@ this Mac. Nothing opens outside the app.
 - **Not signed yet** (no attestation) isn't a failure: KIFF signs within a minute. After ten minutes the
   sheet adds the receipt's id to quote.
 - **Each failure** says why in the shared words (`receipt.check.*`), under "This receipt was changed…".
+- **Held to the line**, only on a receipt this Mac verified, in the iPad's order
+  (`ReceiptSteps.mismatchKey`, RecordView.swift:489-553): **its payment first**: a named line's value
+  (above) against the `on_hash` of the first signed step that has one, by the same SHA-256 rule
+  ("The payment on this line doesn't match KIFF's receipt.", `receipt.check.payment_mismatch`); then
+  its amount, as a number in the same unit; then the owner's answer ("reject" is a refusal). Each
+  draws "KIFF's receipt doesn't check out" with why, never the check. A line not named, or a chain
+  that signed no `on_hash`, compares no payment, and nothing says the payment was checked (the iPad
+  has no such words): the check is KIFF's signature.
 - **What happened**, the receipt's steps, is drawn **only** once this Mac checked the receipt as KIFF's
-  and it matches the line: the line's amount, as a number in the same unit, and the owner's answer
-  ("reject" is a refusal). Unsigned, failed, still checking, or another line's, it isn't.
+  and it matches the line (payment, amount and answer). Unsigned, failed, still checking, or another
+  line's, it isn't.
+- **The facts are the iPad's** (RecordView.swift:385-402, 689-731): above the title, how it went in
+  its kind's colour (`Record.tone`; `receipt.label.*`, or who answered, `receipt.approved_once_by`,
+  `receipt.refused_by`); then a panel of lines, name (13 `dim`, 90 wide) and value (14 `ink`): Taf
+  (the listed taf's name, "–" for one the person doesn't list),
+  When (abbreviated date and time, in the account's zone, with its short name when it isn't this
+  Mac's), On (`receipt.fact.on`, the argument and the whole value, only on a named line), Outcome in
+  semibold (`receipt.outcome.*`), Why (KIFF's `reason`, only when it gave one) and Decided by
+  (`receipt.decided_by.*`, KIFF's mode, with "signed on {device}" for an answer KIFF says was signed).
+- **Open in the taf's chat** (`record.open_taf_chat`), full width, for a line whose taf the person
+  lists: it closes the sheet (and a case's) and opens the taf's page on its chat, through the shell's
+  own `open` (`EnvironmentValues.openTaf`, set by `ShellView` on the screen it draws).
+- **The receipt's facts line**, in the checked and the failed panel, as the iPad's `receiptFacts`
+  (RecordView.swift:569-576): its decision (`receipt.decision.*`, `Record.Entry.decisionWords`: who
+  answered a held call, else what its Card did) and when KIFF issued it (`receipt.issued`), 11.5
+  monospaced `dim`, selectable.
 - **The full receipt** (each step's hash, the signature's ends) and **Copy receipt**.
-- **Mac differences:** the line's facts are tafs cloud's words (taf, time, detail), where the iPad
-  builds its own from KIFF's activity; the line's payment (`on_hash` against the taf's reference) isn't
-  checked, since tafs cloud's Record doesn't carry the reference; no Share; and a receipt opens from the
-  Record's list and search, not from inside a case's sheet (a window shows one sheet at a time).
+- **A line without a KIFF receipt opens its facts only**, with Open in the taf's chat: no check, and
+  nothing KIFF signed, as the iPad's.
+- **Mac differences:** Open in the taf's chat sits under the facts, where the iPad has it last; no
+  Share. A receipt opened from inside a case's sheet is a sheet on that sheet.
 
 ## Not yet
 
-A case's steps drawn as their taf's Activity draws them, with each step's own next step (the
-iPad's `SourceActivityRow`), the only retry: the Mac draws the Record's row, with no next step
-yet. A case read with no steps shows an empty sheet, where the iPad keeps its spinner. A taf's
-detail. A receipt's payment check against the taf's reference.
+A next step's buttons (Connect again, signing in again where the vendor signed tafs out; Ask
+Coach; Connect apps) for someone who manages the taf: they are the iPad's `NextStepRow`, under
+TafPresentationViews.swift, and need the shell's Coach and Connect apps. Until then the Record
+draws the step's words, as the iPad does for anyone it gives no button.
+
+A receipt's Chrome shots: the iPad reads the pictures a paired Chrome kept before the call's steps
+(`chromeShots(op:)`) and offers each with "See the page before this step" (`chrome.shot_open`), opening
+`ChromeShotView`; they come with ChromeViews.swift. **Report this payment**, at the foot of the
+sheet, is the desktop-macos lane's (`RecordModel.report`), not on this branch.
 
 ## Tests
 
@@ -131,6 +200,21 @@ python-ecdsa's signatures. On a Mac, libsecp256k1 and the oracle agree on the fi
 v as 0–1 or 27–28) and on 1,600 random inputs, and both refuse r or s at n, zero or all ones; the
 fixture checks out through libsecp256k1 and each failure fails; and the read, a refusal, and when
 what happened shows.
+Naming and waiting (`RecordNamingTests`): `isOn` against the iPad's fixture (another case, a trailing
+space, no prefix and uppercase hex all fail), a line named only by the value KIFF hashed and only by
+its key, `onText`'s noun and its 6-character rule, the tafs read (only listed ones), the kinds'
+colours, which lines open a sheet, `calls` (its escaped path, a GET
+with no body, read whole or not at all), `visible`; `HeldCall`'s `proposal_id` and `kind`, a held
+line waiting until the list is read, no longer waiting without its proposal, a `card_unit` ignored,
+a hold matched by its own id; the payment check on a receipt signed by a test key the way KIFF signs
+(verified over this payment, a mismatch over another, nothing compared unnamed), the mismatches'
+order and "What happened" hidden; the receipt's state, Outcome and Decided by, in every language;
+`next` decoded, a blank one none, a case's steps' and its failed step's. On a Mac: the list named
+from its listed tafs' calls, best effort, never an overseen taf's, and a taf listed later named then;
+the held list read after the lines, after a refused cursor too, and a failed read waiting again; a
+line without a receipt opening its facts and reading nothing; and the
+screenshots `record-row-on-en`, `receipt-facts-en`, `receipt-payment-mismatch-en` and
+`record-case-steps-en`.
 Reads: `call.read_only` decoded (absent or not a bool is a call), the pinned Activity contract's
 entry read as a Record line, a day's reads folded apart under All and not under a filter, and
 Show and Hide; a day's spend summed per currency at the larger decimals; each row's second line
