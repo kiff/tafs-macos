@@ -129,6 +129,9 @@ let planqueRoutesTests: [Test] = [
         ])
         try expectEqual(code("/grants"), [
             #"AppConnections.swift: var path: String { "/v1/accounts/\(CloudClient.escaped(tenant))/grants" }"#,
+            // KIFF's sharing of a taf's agent, not planque's: an approval KIFF takes from the security key (`KeyAct.share`).
+            #"KeyApproval.swift: case .share(let agent, _): return "/v1/agents/\(CloudClient.escaped(agent))/grants""#,
+            #"KeyApproval.swift: return "/v1/agents/\(CloudClient.escaped(agent))/grants?\(query)""#,
             #"PlanqueClient.swift: "/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#,
             #"PlanqueClient.swift: let path = "/v1/accounts/\(CloudClient.escaped(tenant))/grants""#,
             #"Shares.swift: let list: List = try read(try await send("GET", "/v1/agents/\(agent.addingPercentEncoding(withAllowedCharacters: allowed) ?? agent)/grants"))"#,

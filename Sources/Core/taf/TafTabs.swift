@@ -16,12 +16,24 @@ struct TafActivity: Decodable, Equatable {
         let amountText: String?
         /// A not-done call's next step, in tafs cloud's words (kiff/tafs#476, gap 10); nil for none, or one that doesn't read.
         var next: NextStep?
+        /// The call as the Record reads it, with KIFF's `call`, for its sheet (the iPad's `SourceActivityRow.evidence`): its
+        /// receipt, who answered and what became of it. Read with no taf (`Record.Entry.on` names it); nil when it doesn't
+        /// read as a Record line, which leaves the row as it is.
+        var record: Record.Entry?
 
         enum CodingKeys: String, CodingKey { case id, kind, title, detail, time, next, amountText = "amount_text" }
 
-        init(id: String, kind: String, title: String, detail: String?, time: String?, amountText: String?, next: NextStep? = nil) {
+        init(id: String, kind: String, title: String, detail: String?, time: String?, amountText: String?, next: NextStep? = nil,
+             record: Record.Entry? = nil) {
             self.id = id; self.kind = kind; self.title = title; self.detail = detail; self.time = time
-            self.amountText = amountText; self.next = next
+            self.amountText = amountText; self.next = next; self.record = record
+        }
+
+        /// The call's sheet opens from its row whenever KIFF's call names its taf (the iPad's `evidence`, which needs the
+        /// call's `actor_id`), receipt or not, as the Record's own Activity rows (`RecordStepRow`).
+        func sheet(on taf: Record.Entry.Taf) -> Record.Entry? {
+            guard let record, record.hasActor else { return nil }
+            return record.on(taf)
         }
 
         init(from decoder: Decoder) throws {
@@ -34,6 +46,8 @@ struct TafActivity: Decodable, Equatable {
             amountText = try c.decodeIfPresent(String.self, forKey: .amountText)
             // A next step that doesn't read is none, never the row with it.
             next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
+            // The same entry, as the Record reads a line: one that doesn't read is no sheet, never the row.
+            record = try? Record.Entry.activity(decoder, taf: Record.Entry.Taf(id: "", name: ""))
         }
 
         /// What a not-done call's next step is, as tafs cloud says it: its kind, its words, and for Ask Coach its message.

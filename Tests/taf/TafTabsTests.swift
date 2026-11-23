@@ -179,4 +179,37 @@ let tafTabsTests: [Test] = [
         try expectEqual(broken.next, nil)
         try expectEqual(broken.title, "Refund")
     },
+    Test("a call on a taf's Activity opens the Record's sheet for it, as the iPad's SourceActivityRow: only when KIFF's call names its taf") {
+        // tafs cloud's Activity entry: the Record's fields and KIFF's call, but no taf (it's this taf's page).
+        func entry(_ call: String) throws -> TafActivity.Entry {
+            let json = #"{"entries":[{"id":"e1","at":"2026-11-14T17:30:00Z","kind":"done","title":"Refund","detail":"Within its Card","time":"18:30","amount_text":"€150.00","call":"# + call + #"}]}"#
+            guard let e = try AccountClient.decoder.decode(TafActivity.self, from: Data(json.utf8)).groups.first?.entries.first else { throw Failure(description: "no row") }
+            return e
+        }
+        let refunds = Record.Entry.Taf(id: "taf_1", name: "Refunds")
+        let signed = try entry(#"{"actor_id":"agt_refunds","proposal_id":"p","receipt":{"trace_id":"01KTRACE","status":"signed"},"amount":{"value":"150.00","unit":"EUR"},"answer":{"decision":"approved_once","by":"admin"}}"#)
+        guard let line = signed.sheet(on: refunds) else { throw Failure(description: "no sheet") }
+        try expectEqual(line.taf, refunds)
+        try expectEqual(line.id, "e1")
+        try expectEqual(line.title, "Refund")
+        try expectEqual(line.amountText, "€150.00")
+        try expectEqual(line.receipt, Record.Receipt(traceID: "01KTRACE", status: "signed"))
+        try expectEqual(line.amount, Record.Amount(value: "150.00", unit: "EUR"))
+        try expectEqual(line.answer, "approved_once")
+        try expectEqual(line.answerBy, "admin")
+        // No receipt yet: the sheet still opens (receipt or not), as the iPad's.
+        try expect(try entry(#"{"actor_id":"agt_refunds"}"#).sheet(on: refunds) != nil, "a call that names its taf opens its sheet")
+        // KIFF's call doesn't name its taf: the row is drawn, and opens nothing.
+        let unnamed = try entry(#"{"proposal_id":"p","receipt":{"trace_id":"01KTRACE","status":"signed"}}"#)
+        try expectEqual(unnamed.sheet(on: refunds), nil)
+        try expectEqual(unnamed.title, "Refund")
+        // A row that doesn't read as a Record line (no time) is still the Activity's row, with no sheet.
+        let json = #"{"entries":[{"id":"e2","at":"2026-11-14T17:30:00Z","kind":"done","title":"Refund","detail":"Within its Card","call":{"actor_id":"agt_refunds"}}]}"#
+        let bare = try AccountClient.decoder.decode(TafActivity.self, from: Data(json.utf8)).groups.first?.entries.first
+        try expectEqual(bare?.title, "Refund")
+        try expectEqual(bare?.record, nil)
+        // The Record itself still needs its taf: a line without one isn't a Record line.
+        let noTaf = #"{"id":"e1","at":"2026-11-14T17:30:00Z","kind":"done","title":"Refund","detail":"x","time":"18:30","call":{}}"#
+        try expect((try? AccountClient.decoder.decode(Record.Entry.self, from: Data(noTaf.utf8))) == nil, "the Record's lines name their taf")
+    },
 ]
