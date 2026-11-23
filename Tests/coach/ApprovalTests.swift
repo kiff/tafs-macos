@@ -217,4 +217,9 @@ let coachApprovalTests: [Test] = [
         let confirm = try card(#"{"key":"s1#c","component":{"id":"c","type":"confirm","title":"Go on?","waits":"owner"}}"#)
         try expectEqual(confirm.drawsAsChoice, true)
     }),
+    Test("KIFF's own Card lines and the Card's label are drawn through visible: a direction override can't reorder a cap", awaiting: {
+        let d = try draft(#"{"id":"d","agent_id":"a","status":"draft","version":"1","label":"Refunds\u202e","cards":[{"lines":["Refund up to \u202e05€ each"],"grants":[{"action":"x"}]}]}"#)
+        try expectEqual(d.lines(words), ["Refund up to 05€ each"])
+        try expect(!d.cardTitle(words).unicodeScalars.contains { $0.value == 0x202E }, "the label's override is gone")
+    }),
 ]
