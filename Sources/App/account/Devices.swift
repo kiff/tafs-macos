@@ -15,10 +15,20 @@ final class DevicesModel: ObservableObject {
     /// The last removal needs a device that can approve: signing out a device that approves
     /// is itself an approval, which this Mac can't give.
     @Published private(set) var needsApprover = false
-    /// The account's passkeys, as KIFF lists them, as the iPad's `passkeys`; read-only here.
+    /// The account's passkeys, as KIFF lists them, as the iPad's `passkeys`.
     @Published private(set) var passkeys: [Passkey] = []
     /// Why they couldn't be read; nil once they were.
     @Published private(set) var passkeysUnread: String?
+    /// Why the last Remove of a passkey didn't go through, as the iPad's `passkeysError`; nil once one did.
+    @Published private(set) var passkeyNotRemoved: String?
+    /// The passkey being removed now: its Remove waits.
+    @Published private(set) var removingPasskey: String?
+    /// Each read of the passkeys takes the next number, and so does a removal, as the iPad's `passkeysRead`: only the
+    /// newest read's list is kept, so a read that started before a Remove never brings the removed passkey back.
+    private var passkeysRead = 0
+    /// Whether this person removes the account's passkeys (an owner or an admin, `Me.managesPasskeys`). Set by the
+    /// window once KIFF says who is signed in.
+    var managesPasskeys = false
 
     /// KIFF's refusals that mean "this needs an approval".
     static let approvalCodes: Set<String> = ["approval_key_required", "critical_key_required"]
@@ -48,12 +58,61 @@ final class DevicesModel: ObservableObject {
     /// are. A read that fails keeps what was read, and says why.
     func loadPasskeys() async {
         let account = self.account
+        passkeysRead += 1
+        let read = passkeysRead
         do {
-            passkeys = try await account.passkeys()
+            let listed = try await account.passkeys()
+            guard read == passkeysRead else { return }
+            passkeys = listed
             passkeysUnread = nil
         } catch {
+            guard read == passkeysRead else { return }
             passkeysUnread = NeedsYouModel.why(error)
         }
+    }
+
+    /// Why it didn't go through, in the app's words, as the iPad's `error.localizedDescription`: KIFF's refusal reads
+    /// through `PlainError.words(status:)` (`StepRefusal.plainKey`), never KIFF's code; a 401 is signed out; the
+    /// security key's own failures and "Approve on your phone instead" say theirs (`NeedsYouModel.why`).
+    static func plainWhy(_ error: Error) -> String {
+        if case KIFFError.refused(let status, _) = error, status != 0 {
+            return Words.app(status == 401 ? "error.signed_out" : StepRefusal.plainKey(status: status))
+        }
+        return NeedsYouModel.why(error)
+    }
+
+    /// Whether a passkey's row offers Remove, as the iPad's (`passkey.removable, model.canAddPasskey`): one of the
+    /// account's own (never a computer's, which goes with its computer), for an owner or admin, on a Mac that approves
+    /// with its security key. Elsewhere there's no Remove, and nothing is ever sent.
+    func offersRemove(_ passkey: Passkey) -> Bool {
+        passkey.removable && managesPasskeys && approveWithKey != nil
+    }
+
+    /// Removes one of the account's own passkeys, as the iPad's `removePasskey`: KIFF's `DELETE /v1/me/passkeys/{id}`,
+    /// approved by this Mac's security key once (`KeyAct.removePasskey`), named in its sheet as the iPad's prompt
+    /// ("Remove the passkey {name} from your account"). Then it leaves the list and the list is read again; a read that
+    /// started before it is dropped. A closed sheet sends nothing and says nothing; anything else says it didn't go
+    /// through, with why, as the iPad's `didntGoThrough`.
+    func removePasskey(_ passkey: Passkey) async {
+        guard offersRemove(passkey), let id = passkey.passkeyID, let approveWithKey, removingPasskey == nil else { return }
+        removingPasskey = id
+        let act = KeyAct.removePasskey(id: id)
+        let what = act.title(Words.app, device: passkey.name ?? Words.app("settings.devices.unnamed"))
+        do {
+            _ = try await approveWithKey(act, what)
+        } catch is CancellationError {
+            removingPasskey = nil
+            return
+        } catch {
+            passkeyNotRemoved = Words.app("common.didnt_go_through", ["what": what, "why": Self.plainWhy(error)])
+            removingPasskey = nil
+            return
+        }
+        passkeyNotRemoved = nil
+        passkeysRead += 1
+        passkeys.removeAll { $0.passkeyID == id }
+        removingPasskey = nil
+        await loadPasskeys()
     }
 
     /// A device's red Sign out, clicked: true to ask to confirm it. A Mac that can't approve
@@ -106,6 +165,8 @@ struct DevicesView: View {
     /// This Mac's own pairing, in the place of the iPad's Add a device: adding this view-only
     /// Mac with the phone (Account's Add this Mac). Nil leaves it out.
     var addThisMac: (() -> Void)? = nil
+    /// Whether this person removes the account's passkeys (`Me.managesPasskeys`), as KIFF last said.
+    var managesPasskeys = false
     @State private var removing: Device?
     /// Another device whose row's Sign out was clicked, to confirm.
     @State private var signingOut: Device?
@@ -138,9 +199,11 @@ struct DevicesView: View {
         }
         .background(Theme.background)
         .task {
+            model.managesPasskeys = managesPasskeys
             await model.load()
             await model.loadPasskeys()
         }
+        .onChange(of: managesPasskeys) { model.managesPasskeys = $0 }
         .sheet(item: $chosen) { device in deviceSheet(device) }
         .alert(signingOut.map { words("settings.devices.sign_out_named", ["device": $0.name ?? words("settings.devices.unnamed")]) } ?? "",
                isPresented: Binding(get: { signingOut != nil }, set: { if !$0 { signingOut = nil } })) {
@@ -266,12 +329,15 @@ struct DevicesView: View {
     }
 }
 
-/// Devices' Passkeys, as the iPad's `passkeys` section (DevicesView.swift:86-128), read-only on
-/// this Mac: each passkey by its name, a computer's own saying it goes with its computer. Remove
-/// and Add are the iPad's for a session that approves, which this Mac isn't.
+/// Devices' Passkeys, as the iPad's `passkeys` section (DevicesView.swift:86-128): each passkey by its name, a
+/// computer's own saying it goes with its computer, and Remove for one of the account's own where this Mac's security
+/// key approves (`DevicesModel.offersRemove`), confirmed first, with the iPad's warning when it's the last one. Add is
+/// the phone's: macOS 12 makes no platform passkey, and a second security key is paired from the phone.
 struct DevicesPasskeys: View {
     @Environment(\.words) private var words
     @ObservedObject var model: DevicesModel
+    /// The passkey whose Remove was clicked, to confirm.
+    @State private var confirming: Passkey?
 
     /// Drawn only with something in it: an empty heading reads as broken.
     var body: some View {
@@ -284,6 +350,10 @@ struct DevicesPasskeys: View {
                 .padding(.top, 10)
             if let why = model.passkeysUnread {
                 Text(words("settings.devices.passkeys_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let line = model.passkeyNotRemoved {
+                Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.no)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !model.passkeys.isEmpty {
@@ -299,16 +369,37 @@ struct DevicesPasskeys: View {
         }
     }
 
-    /// A passkey: its name, else Unnamed; a computer's own says it goes with its computer.
+    /// A passkey: its name, else Unnamed; a computer's own says it goes with its computer. One of the account's own
+    /// has a red Remove at its end where this Mac may remove it.
     private func row(_ passkey: Passkey) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(passkey.name ?? words("settings.devices.unnamed")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
-            if !passkey.removable {
-                Text(words("settings.devices.passkey_with_computer")).font(.system(size: 13)).foregroundColor(Theme.dim)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(passkey.name ?? words("settings.devices.unnamed")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                if !passkey.removable {
+                    Text(words("settings.devices.passkey_with_computer")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if model.offersRemove(passkey) {
+                if model.removingPasskey == passkey.passkeyID { ProgressView().controlSize(.small) }
+                Button(words("settings.devices.passkey_remove")) { confirming = passkey }
+                    .buttonStyle(.plain).font(.system(size: 15)).foregroundColor(Theme.no)
+                    .disabled(model.removingPasskey != nil)
+                    .accessibilityIdentifier("devices.passkey.remove")
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
+        .alert(confirming.map { words("settings.devices.passkey_remove_named", ["name": $0.name ?? words("settings.devices.unnamed")]) } ?? "",
+               isPresented: Binding(get: { confirming?.isSamePasskey(as: passkey) == true }, set: { if !$0 { confirming = nil } })) {
+            Button(words("settings.devices.passkey_remove"), role: .destructive) {
+                Task { await model.removePasskey(passkey) }
+                confirming = nil
+            }
+            Button(words("common.cancel"), role: .cancel) { confirming = nil }
+        } message: {
+            // The last passkey says so before it goes, as the iPad's.
+            if Passkey.removesLast(passkey, among: model.passkeys) { Text(words("settings.devices.passkey_remove_last")) }
+        }
     }
 }

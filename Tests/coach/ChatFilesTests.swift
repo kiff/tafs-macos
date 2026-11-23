@@ -15,6 +15,25 @@ let attachedRef = AttachmentRef(id: "att_1", kind: "pdf", mediaType: "applicatio
 private func json(_ data: Data) -> [String: Any] { (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:] }
 
 let coachFileTests: [Test] = [
+    Test("a file someone sent is only ever previewed, never opened by the system: nothing in a chat's files or Files hands one to NSWorkspace (sources)") {
+        // A `.command` or an app sent in a chat must never run from a click: Quick Look draws it, nothing opens it.
+        // The one NSWorkspace call under coach/ and files/ is the microphone's way to System Settings.
+        let manager = FileManager.default
+        var scanned = 0
+        for folder in ["Sources/App/coach", "Sources/App/files"] {
+            for name in try manager.contentsOfDirectory(atPath: folder) where name.hasSuffix(".swift") {
+                let source = try String(contentsOf: URL(fileURLWithPath: "\(folder)/\(name)"), encoding: .utf8)
+                scanned += 1
+                guard source.contains("NSWorkspace") else { continue }
+                try expectEqual(name, "MicButton.swift")
+                let uses = source.components(separatedBy: "NSWorkspace").count - 1
+                try expectEqual(uses, 1)
+                try expect(source.contains("NSWorkspace.shared.open(url)") && source.contains("x-apple.systempreferences:"),
+                           "only System Settings' privacy pane")
+            }
+        }
+        try expect(scanned > 5, "the folders were read")
+    },
     Test("a file over its kind's limit is refused, saying which, and a kind tafs doesn't take can't be attached, as the iPad's FilePrep") {
         try FilePrep.check(name: "a.pdf", size: 25 << 20, mediaType: "application/pdf", say: words)
         do {

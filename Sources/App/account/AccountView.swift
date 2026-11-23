@@ -159,7 +159,8 @@ struct AccountView: View {
         case .language: LanguagePickerView()
         case .alerts: if let alerts { AlertsView(model: alerts) }
         case .people: if let people { PeopleView(model: people, me: model.me, tafName: tafName) }
-        case .devices: DevicesView(model: devices, signOutThisMac: signOut, addThisMac: addsThisMac ? addThisMac : nil)
+        case .devices: DevicesView(model: devices, signOutThisMac: signOut, addThisMac: addsThisMac ? addThisMac : nil,
+                                   managesPasskeys: model.me?.managesPasskeys ?? false)
         case .kiffAccount: KiffAccountPage(model: model, exportChats: exportChats, openZone: { pages.append(.timeZone) })
         case .timeZone: TimeZonePicker(model: model)
         case .files: if let files { FilesView(model: files, zone: model.me?.timeZone.flatMap(TimeZone.init(identifier:)) ?? .current) }
