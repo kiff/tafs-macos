@@ -108,8 +108,9 @@ final class ConnectAppsModel: ObservableObject {
 
 /// Connect apps: the account's own connections, then the catalog. This screen lists; an
 /// app is connected through Coach, where its Card is approved with it, so Connect, Ask Coach,
-/// Sign in again and "Not listed? Ask Coach" open Coach. A connected app's chevron opens its
-/// connections (`AppConnectionsView`), which only read.
+/// Sign in again and "Not listed? Ask Coach" open Coach. Where no taf can have an app, its
+/// Connect is off and "Make one first" says why, over Discover. A connected app's chevron opens
+/// its connections (`AppConnectionsView`), which only read.
 struct ConnectAppsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: ConnectAppsModel
@@ -179,6 +180,11 @@ struct ConnectAppsView: View {
                     if !model.discover.isEmpty {
                         heading(words("connect.apps.discover"))
                         panel {
+                            // Connecting needs a taf: said over the apps to connect, never over Yours.
+                            if Apps.saysMakeATaf(discover: model.discover, forTaf: false, connectable: connectable) {
+                                Text(words("connect.apps_connect_taf_make_one")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                                    .fixedSize(horizontal: false, vertical: true).padding(.top, 12)
+                            }
                             // The headings sit over Discover when there is no Yours above it.
                             if model.yours.isEmpty { columns }
                             ForEach(model.discover) { app in
@@ -297,6 +303,8 @@ struct ConnectAppsView: View {
             }
             .buttonStyle(OutlineButtonStyle())
             .fixedSize()
+            // No taf can have it: Connect is off, and "Make one first" over Discover says why.
+            .disabled(Apps.route(app, connectable: connectable) == .noTaf)
         }
     }
 
