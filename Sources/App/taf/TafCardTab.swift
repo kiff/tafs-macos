@@ -35,7 +35,7 @@ struct TafCardTab: View {
             if let pages { VersionsView(model: pages) { versionsOpen = false }.environment(\.words, words) }
         }
         .sheet(isPresented: $usageOpen) {
-            if let pages { TafCreditsView(model: pages.credits, name: taf.name) { usageOpen = false }.environment(\.words, words) }
+            if let pages { TafCreditsView(model: pages.credits, name: taf.name, manages: manages) { usageOpen = false }.environment(\.words, words) }
         }
     }
 

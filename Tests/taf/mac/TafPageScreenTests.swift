@@ -166,6 +166,28 @@ let tafPageMacTests: [Test] = [
             try expect(!tafColour(bitmap, x: 30...690, y: 140...520), "no Card bar beside the calls")
         }
     }),
+    Test("a run's request opens from its row: Send again goes once, then it's read again; a failure says why and keeps it", awaiting: { @MainActor in
+        let request = #"{"id":"r1","from":"From Shop email","line":"Refunded order 4471","steps":[{"label":"Reply","state":"failed"}],"deliveries":[{"place":"door_reply","state":"given_up","line":"Not delivered","send_again":true}]}"#
+        let sent = #"{"id":"r1","from":"From Shop email","line":"Refunded order 4471","steps":[{"label":"Reply","state":"done"}],"deliveries":[{"place":"door_reply","state":"sent","line":"Delivered"}]}"#
+        let transport = CannedTransport([(200, request), (200, #"{"state":"sent"}"#), (200, sent), (503, #"{"error":"down","words":"tafs cloud is busy."}"#)])
+        let credits = TafCreditsModel(cloud: CloudClient(transport: transport, session: pageSession), taf: "taf-1")
+        let model = credits.request("r1")
+        await model.load()
+        try expectEqual(model.detail?.deliveries.first?.sendAgain, true)
+        await model.sendAgain(model.detail!.deliveries[0])
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, [
+            "GET /v1/tafs/taf-1/requests/r1",
+            "POST /v1/tafs/taf-1/requests/r1/deliveries/door_reply/send",
+            "GET /v1/tafs/taf-1/requests/r1",
+        ])
+        try expectEqual(model.detail?.steps.first?.state, "done")
+        // Read again and refused: what was read stays, and tafs cloud's words say why.
+        await model.load()
+        try expectEqual(model.detail?.steps.first?.state, "done")
+        try expectEqual(model.error, "tafs cloud is busy.")
+        // Drawn: a manager gets Send again; anyone else reads the words.
+        _ = try shoot(RequestDetailView(model: model, manages: true, close: {}).environment(\.words, pageWords()), "taf-request", size: CGSize(width: 520, height: 520))
+    }),
     Test("Usage reads the taf's credits; More runs adds the next page after them; a failed read keeps them and says why", awaiting: { @MainActor in
         let first = #"{"credits":120,"runs":2,"words":"120 credits this period","items":[{"run":"r1","at":"2026-11-16T09:00:00Z","credits":40,"counted":true,"words":"40 credits · 3 emails listed"},{"run":"r2","at":"2026-11-15T09:00:00Z","credits":0,"counted":false,"why":"trial","words":"Trial · not counted"}],"next":"c2"}"#
         let second = #"{"credits":120,"words":"120 credits this period","items":[{"run":"r3","at":"2026-11-14T09:00:00Z","credits":80,"counted":true,"words":"80 credits · 9 emails listed"}]}"#

@@ -60,4 +60,19 @@ let tafWorkTests: [Test] = [
         try await cloud.sendAgain(of: "taf-1", run: "r1", place: "slack-post")
         try expectEqual(transport.sent[3].method + " " + transport.sent[3].path, "POST /v1/tafs/taf-1/requests/r1/deliveries/slack-post/send")
     }),
+    Test("a run's request is read by the taf's id and the run's, as the iPad's RequestDetail; one that doesn't read is no page", awaiting: {
+        let answer = #"{"id":"r1","from":"From Shop email","line":"Refunded order 4471","steps":[{"label":"Read the email","state":"done"},{"label":"Refund","line":"34 credits","at":"2026-11-15T07:00:00Z","state":"done"},{"label":"Reply","state":"failed"}],"deliveries":[{"place":"door_reply","state":"given_up","line":"The reply wasn't delivered","send_again":true}]}"#
+        let transport = CannedTransport([(200, answer), (200, #"{"id":"r2","from":"x","line":"y","steps":[{"state":"done"}],"deliveries":[]}"#)])
+        let cloud = CloudClient(transport: transport, session: session)
+        let read = try await cloud.request(of: "taf/1", run: "r 1")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf%2F1/requests/r%201")
+        try expectEqual(read.from, "From Shop email")
+        try expectEqual(read.steps.map(\.state), ["done", "done", "failed"])
+        try expectEqual(read.steps[1].line, "34 credits")
+        try expectEqual(read.deliveries.map(\.sendPlace), ["door_reply"])
+        try expectEqual(read.deliveries.first?.sendAgain, true)
+        // A step with no label is no page: the sheet says why, never half a request.
+        let broken = try? await cloud.request(of: "taf-1", run: "r2")
+        try expectEqual(broken, nil)
+    }),
 ]

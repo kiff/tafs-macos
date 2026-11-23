@@ -44,6 +44,9 @@ final class TafCreditsModel: ObservableObject {
         read = true
     }
 
+    /// A run's request, for its row's sheet, as the iPad's `KnobRequestDetail(tafID:run:)`.
+    func request(_ run: String) -> RequestDetailModel { RequestDetailModel(cloud: cloud, taf: taf, run: run) }
+
     /// tafs cloud's words for a refusal, else "{what} couldn't be read: {why}", as the iPad's
     /// `creditsWords`.
     static func words(_ error: Error, what: String) -> String {
@@ -53,13 +56,17 @@ final class TafCreditsModel: ObservableObject {
 }
 
 /// One taf's credits in the period, with its runs, newest first, as the iPad's `TafCreditsView`
-/// (CreditsViews.swift:103-147): tafs cloud's words for each. A run's request isn't on this Mac
-/// yet, so a run's row doesn't open.
+/// (CreditsViews.swift:103-147): tafs cloud's words for each. A run's row opens its request while tafs cloud says it can
+/// (`opens`), as the iPad's `CreditsRunRow`.
 struct TafCreditsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafCreditsModel
     let name: String
+    /// Whether this person manages the taf: a request's Send again is theirs.
+    var manages = false
     let close: () -> Void
+    /// A run's request, opened from its row.
+    @State private var opened: RequestDetailModel?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -77,6 +84,9 @@ struct TafCreditsView: View {
         .frame(width: 520, height: 520)
         .background(Theme.background)
         .task { await model.load() }
+        .sheet(item: $opened) { request in
+            RequestDetailView(model: request, manages: manages) { opened = nil }.environment(\.words, words)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -109,8 +119,26 @@ struct TafCreditsView: View {
         }
     }
 
-    /// One run, as the iPad's `CreditsRunRow`: tafs cloud's words, and when it ended.
-    private func run(_ run: TafCredits.Run) -> some View {
+    /// One run, as the iPad's `CreditsRunRow`: tafs cloud's words, and when it ended. It opens the run's request while tafs
+    /// cloud says it can (`opens`).
+    @ViewBuilder private func run(_ run: TafCredits.Run) -> some View {
+        if run.opens {
+            Button { opened = model.request(run.run) } label: {
+                HStack(alignment: .firstTextBaseline) {
+                    runLines(run)
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("usage.run.\(run.run)")
+        } else {
+            runLines(run)
+        }
+    }
+
+    private func runLines(_ run: TafCredits.Run) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: run.words).font(.system(size: 14, weight: run.counted ? .semibold : .regular))
                 .foregroundColor(run.counted ? Theme.ink : Theme.soft)
