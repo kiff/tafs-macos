@@ -341,7 +341,7 @@ struct AccountView: View {
             action(legal(words("settings.privacy_policy")), color: Theme.amberText) { Self.openPage(LegalPages.privacy(words.language)) }
         }
         Color.clear.frame(height: 0).sheet(isPresented: $showingHowItWorks) {
-            HowTafsWorksView { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
+            HowTafsWorksView(chromeOffered: chrome?.chromes != nil) { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
         }
         group(words("settings.about")) {
             row(words("settings.version"), value: AppInfo.version(Bundle.main.infoDictionary ?? [:]))

@@ -8,7 +8,7 @@ enum LegalPages {
     /// `/sr/` (`site`). Brazilian Portuguese has its own pages, under `/pt-br/`; any other Portuguese reads `/pt/`.
     static let languages: Set<String> = ["de", "es", "fr", "it", "nl", "pl", "pt", "pt-br", "ko", "ja", "et", "lt", "lv", "cs", "sk", "sl",
                                          "hu", "ro", "bg", "hr", "tr", "id", "vi", "th", "zh", "ar", "sr", "sq", "ka", "hy", "az", "bn", "he",
-                                         "ca", "mk", "mn", "ne", "km", "lo", "tk", "hi"]
+                                         "ca", "mk", "mn", "ne", "km", "lo", "tk", "hi", "ur"]
 
     /// The Terms, in `language` where kiff.dev has them, else in English (no `/en/`).
     static func terms(_ language: String) -> String { page("terms", language) }

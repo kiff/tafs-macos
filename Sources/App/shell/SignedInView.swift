@@ -239,7 +239,7 @@ struct SignedInView: View {
                                                         needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
                                                         people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach,
-                                                        discard: { await discardSettingUp($0) }))
+                                                        chromeOffered: chromes.chromes != nil, discard: { await discardSettingUp($0) }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar, tafs: overview.tafs, open: { open($0) }))
             case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
