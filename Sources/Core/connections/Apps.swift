@@ -211,13 +211,26 @@ enum Apps {
         return needed.compactMap { n in tafs.first { $0.tafID == n.taf } }
     }
 
+    /// Whom a row's Connect is for, as the iPad's `route(_:)` (`ConnectAppsView.swift:281-285`), from
+    /// Connect apps itself (not opened from a taf). `.noTaf` turns the button off, and "Make one
+    /// first" says why.
+    static func route(_ app: App, connectable: [Home.Taf]) -> ConnectFor {
+        connectFor(openedFrom: nil, connectable: Self.connectable(connectable, needed: app.neededBy).compactMap(\.tafID),
+                   needed: app.neededBy != nil)
+    }
+
+    /// "Make one first" shows over Discover only, where connecting needs a taf, as the iPad's
+    /// `ConnectRow.saysMakeATaf` (`ConnectAppsView.swift:410-412`): there are apps to connect, the
+    /// list wasn't opened from a taf, and no taf can have them. Never over Yours.
+    static func saysMakeATaf(discover: [App], forTaf: Bool, connectable: [Home.Taf]) -> Bool {
+        !discover.isEmpty && !forTaf && connectable.isEmpty
+    }
+
     /// The words of a row's button, as the iPad's `trailing` (`ConnectAppsView.swift:195-220`):
     /// "Ask Coach" where no taf needs the app, else Sign in again or Connect. Here every one of
     /// them opens Coach, where an app is connected on this Mac.
     static func buttonKey(_ app: App, connectable: [Home.Taf]) -> String {
-        let route = connectFor(openedFrom: nil, connectable: Self.connectable(connectable, needed: app.neededBy).compactMap(\.tafID),
-                               needed: app.neededBy != nil)
-        if route == .askCoach { return "coach.ask" }
+        if route(app, connectable: connectable) == .askCoach { return "coach.ask" }
         return app.needsReconnect ? "connect.sign_in_again" : "connect.apps.connect"
     }
 }
