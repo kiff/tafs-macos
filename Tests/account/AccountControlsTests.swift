@@ -126,6 +126,33 @@ let accountControlsTests: [Test] = [
         let none = try await account.passkeys()
         try expectEqual(none, [])
     }),
+    Test("removing a passkey is the iPad's request, the security key's act: DELETE its own path, empty body, the iPad's prompt") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        let act = KeyAct.removePasskey(id: "pk/1")
+        try expectEqual(act.method + " " + act.path, "DELETE /v1/me/passkeys/pk%2F1")
+        try expectEqual(act.body, Data())
+        try expectEqual(act.title(words, device: "iPhone"), "Remove the passkey iPhone from your account")
+    },
+    Test("a passkey is the same by its id, else a computer's by its device; the last one is the only one left, as the iPad's") {
+        let read = { (json: String) in try AccountClient.decoder.decode(Passkey.self, from: Data(json.utf8)) }
+        let phone = try read(#"{"id":"pk_1","name":"iPhone"}"#), key = try read(#"{"id":"pk_2","name":"YubiKey"}"#)
+        let mac = try read(#"{"name":"Mac","device_id":"dev_1"}"#)
+        try expect(phone.isSamePasskey(as: try read(#"{"id":"pk_1","name":"renamed"}"#)), "the same id")
+        try expect(!phone.isSamePasskey(as: key), "another id")
+        try expect(mac.isSamePasskey(as: try read(#"{"device_id":"dev_1"}"#)), "a computer's by its device")
+        try expect(!mac.isSamePasskey(as: phone), "a computer's isn't an id's")
+        try expect(Passkey.removesLast(phone, among: [phone]), "the only one")
+        try expect(!Passkey.removesLast(phone, among: [phone, key]), "another left")
+        try expect(!Passkey.removesLast(phone, among: [phone, mac]), "a computer's counts too, as the iPad's")
+    },
+    Test("who removes passkeys is KIFF's member_role, an owner or an admin; a KIFF that doesn't say offers no Remove") {
+        let me = { (json: String) in try AccountClient.decoder.decode(Me.self, from: Data(json.utf8)) }
+        try expectEqual(try me(#"{"member_role":"owner"}"#).managesPasskeys, true)
+        try expectEqual(try me(#"{"member_role":"admin"}"#).managesPasskeys, true)
+        try expectEqual(try me(#"{"member_role":"editor"}"#).managesPasskeys, false)
+        try expectEqual(try me(#"{"member_role":" "}"#).role, nil)
+        try expectEqual(try me("{}").managesPasskeys, false)
+    },
     Test("the AI-data consent is read, given for the version read, and withdrawn, as tafs cloud's contract answers", awaiting: {
         let (_, _, cloud, sent) = clients([], [(200, try consentCase("not given yet")), (200, try consentCase("given")), (200, try consentCase("withdrawn"))])
         let read = try await cloud.aiConsent()
