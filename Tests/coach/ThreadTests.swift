@@ -95,4 +95,39 @@ let coachThreadTests: [Test] = [
         try expectEqual(empty.items.count, 0)
         try expectEqual(empty.waitsForPerson, false)
     }),
+    Test("a taf's chat places the Record's outcomes and the door's knocks among its items by time, as the iPad's chatItems") {
+        let at = { (s: Int) in Date(timeIntervalSince1970: 1_800_000_000 + TimeInterval(s)) }
+        // Items at 10 and 30, one with no time after the first; extras at 5, 20, 20 and 40.
+        let placed = TafChatTimeline.placed(items: [at(10), nil, at(30)], extras: [at(40), at(20), at(5), at(20)])
+        try expectEqual(placed, [.extra(2), .item(0), .item(1), .extra(1), .extra(3), .item(2), .extra(0)])
+        // A tie goes to the thread's own first.
+        try expectEqual(TafChatTimeline.placed(items: [at(10)], extras: [at(10)]), [.item(0), .extra(0)])
+        // No extras: the thread as it came.
+        try expectEqual(TafChatTimeline.placed(items: [at(1), nil], extras: []), [.item(0), .item(1)])
+    },
+    Test("a taf's chat shows the calls the owner answered, from the Record, since its first message, in the iPad's words") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        func entry(_ kind: String, _ at: String, call: String = "{}") throws -> Record.Entry {
+            let json = #"{"id":"e-\#(kind)-\#(at)","at":"\#(at)","kind":"\#(kind)","title":"Refund","detail":"Stripe refused","time":"18:30","taf":{"id":"taf_1","name":"Refunds"},"call":\#(call)}"#
+            return try AccountClient.decoder.decode(Record.Entry.self, from: Data(json.utf8))
+        }
+        let first = ISO8601DateFormatter().date(from: "2026-11-14T17:00:00Z")
+        let approved = try entry("approved", "2026-11-14T17:30:00Z")
+        let refused = try entry("refused", "2026-11-14T17:31:00Z")
+        let done = try entry("done", "2026-11-14T17:32:00Z")
+        let notDoneAfterYes = try entry("not_done", "2026-11-14T17:33:00Z", call: #"{"outcome":"allowed","held":true}"#)
+        let notDoneAlone = try entry("not_done", "2026-11-14T17:34:00Z")
+        let before = try entry("approved", "2026-11-14T16:59:00Z")
+        let shown = TafChatTimeline.outcomes([approved, refused, done, notDoneAfterYes, notDoneAlone, before], since: first)
+        try expectEqual(shown.map(\.id), [approved.id, refused.id, notDoneAfterYes.id])
+        // A chat with no message yet shows none.
+        try expectEqual(TafChatTimeline.outcomes([approved], since: nil), [])
+        try expectEqual(TafChatTimeline.text(refused, words), words("chat.outcome.refused", ["title": "Refund"]))
+        try expectEqual(TafChatTimeline.text(notDoneAfterYes, words), words("chat.outcome.not_done", ["title": "Refund", "detail": "Stripe refused"]))
+        try expectEqual(TafChatTimeline.text(approved, words), words("chat.outcome.approved_done", ["title": "Refund"]))
+        let mine = try entry("approved", "2026-11-14T17:35:00Z", call: #"{"answer":{"decision":"approved_once","you":true}}"#)
+        try expectEqual(TafChatTimeline.text(mine, words), words("chat.outcome.approved", ["title": "Refund"]))
+        try expectEqual([approved, refused, notDoneAfterYes].map { TafChatTimeline.tone($0.kind) }, [.ok, .dim, .no])
+        try expectEqual(TafChatTimeline.mark("sending"), "clock.fill")
+    },
 ]

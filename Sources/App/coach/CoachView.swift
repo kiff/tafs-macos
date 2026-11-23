@@ -1170,6 +1170,9 @@ struct CoachView: View {
     /// In a taf's page, its chat scrolled a step down (true) or up (false): the page folds its header line,
     /// as the iPad's `TafChatView(onScroll:)`. Nil reads nothing.
     var onScroll: ((Bool) -> Void)? = nil
+    /// In a taf's chat, what it draws besides tafs cloud's thread, as the iPad's `chatItems`: its Record outcomes and
+    /// its door's knocks by time, and KIFF's held calls where the taf made them. Nil in Coach's own chat.
+    var extras: TafChatExtras? = nil
     @State private var scrollFold = ScrollFold()
     @State private var planOpen = false
     /// Coach's width, for "Taking shape" beside its conversation at 780 or wider.
@@ -1332,13 +1335,21 @@ struct CoachView: View {
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
-                    ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
-                        // A time on the first item, and after an hour's gap, as on the iPad.
-                        if page.showsTime(at: index), let at = item.at {
-                            Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                    // A taf's chat places its Record outcomes and its door's knocks among the thread's items by time,
+                    // as the iPad's `chatItems`; Coach's own chat has none.
+                    let extras = self.extras?.extras ?? []
+                    ForEach(Array(TafChatTimeline.placed(items: page.items.map(\.at), extras: extras.map(\.at)).enumerated()), id: \.offset) { _, slot in
+                        switch slot {
+                        case .item(let index):
+                            // A time on the first item, and after an hour's gap, as on the iPad.
+                            if page.showsTime(at: index), let at = page.items[index].at {
+                                Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                            }
+                            // An answer to a card shown here reads once, on the card's folded line.
+                            if !Self.hidden(page.items[index], in: page) { self.item(page.items[index]) }
+                        case .extra(let index):
+                            extras[index].view
                         }
-                        // An answer to a card shown here reads once, on the card's folded line.
-                        if !Self.hidden(item, in: page) { self.item(item) }
                     }
                     if let pending = model.pending { unsent(pending) }
                     if let live = model.live { writing(live) }
@@ -1750,8 +1761,14 @@ struct CoachView: View {
             }
         case .card(let card, _):
             self.card(card)
-        case .held:
-            waiting(words("coach.needs_you_approve"))
+        case .held(let exception, _):
+            // In a taf's chat, KIFF's held call where the taf made it, as the iPad's `HeldCallCard`, while Needs you
+            // lists it; once answered it's gone, and its outcome is the Record's line. Elsewhere, Needs you's line.
+            if let extras, let held = extras.held(exception) {
+                held
+            } else {
+                waiting(words("coach.needs_you_approve"))
+            }
         case .other:
             EmptyView()
         }
