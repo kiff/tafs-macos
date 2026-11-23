@@ -71,10 +71,9 @@ final class CoachModel: ObservableObject {
     /// The answer streaming now, as the iPad's `setupStream`: a new conversation cancels it.
     private var streaming: Task<Void, Never>?
 
-    /// As the phones do on the plain route: the thread is read again every 4 seconds, at
-    /// most 30 times, while an answer is owed.
-    static let followEvery: TimeInterval = 4
-    static let followAtMost = 30
+    /// While an answer is owed, the thread is read again soon at first, then less and less often, with jitter, and
+    /// stops after `followAtMost` reads (`Backoff.answer`, tafs docs/scale.md): a slow fallback, never a fixed loop.
+    static let followAtMost = Backoff.answer.reads
 
     /// The taf whose chat this is, when it isn't Coach's: then nothing is read to find it.
     private let fixed: Coach?
@@ -774,10 +773,9 @@ final class CoachModel: ObservableObject {
     /// Done on the receipt, as the iPad's `finish`: it closes, and the chat stays as read.
     func closeReceipt() { receipt = nil }
 
-    /// While Coach's chat waits on a connection (`ConnectReceipt.watches`), it is read again at
-    /// the phones' pace (`followEvery`), at most `watchAtMost` times, so the sign-in made on the
-    /// phone shows its receipt here. Only while Coach is on screen (`CoachView`'s task).
-    static let watchAtMost = 75
+    /// While Coach's chat waits on a connection (`ConnectReceipt.watches`), it is read again, backing off with jitter
+    /// (`Backoff.connection`), at most `watchAtMost` times, so the sign-in made on the phone shows its receipt here. Only while Coach is on screen (`CoachView`'s task).
+    static let watchAtMost = Backoff.connection.reads
 
     /// Whether Coach's own chat waits on a connection.
     var watchesConnection: Bool {
@@ -788,8 +786,8 @@ final class CoachModel: ObservableObject {
     /// Reads the chat again while it waits on a connection. A message on its way, or an answer
     /// being written, has its own reads: none is added then.
     func watchConnection() async {
-        for _ in 0..<Self.watchAtMost {
-            guard watchesConnection, !Task.isCancelled, (try? await sleep(Self.followEvery)) != nil, !Task.isCancelled else { return }
+        for n in 0..<Self.watchAtMost {
+            guard watchesConnection, !Task.isCancelled, (try? await sleep(Backoff.connection.wait(n))) != nil, !Task.isCancelled else { return }
             guard watchesConnection, !sending, live == nil, case .loaded(let coach, _) = state else { continue }
             await reload(coach)
         }
@@ -799,12 +797,12 @@ final class CoachModel: ObservableObject {
     private func follow(_ coach: Coach) async {
         following += 1
         let mine = following
-        for _ in 0..<Self.followAtMost {
+        for n in 0..<Self.followAtMost {
             guard mine == following, let page = try? await read(coach), mine == following else { return }
             show(coach, page)
             take(page)
             if pending == nil, !page.working { return }
-            guard (try? await sleep(Self.followEvery)) != nil else { return }
+            guard (try? await sleep(Backoff.answer.wait(n))) != nil else { return }
         }
     }
 
@@ -868,10 +866,13 @@ final class CoachModel: ObservableObject {
 
     /// While Coach isn't there and this Mac can't start it, Coach is started on a device that can
     /// (the phone): Setup is read again until it's there, then its thread shows here. Only reads.
-    func followStart(every seconds: TimeInterval = 10) async {
+    /// It backs off with jitter and stops after `Backoff.start.reads` (about an hour), so a Mac left open doesn't read
+    /// forever (tafs docs/scale.md); the screen's next open reads it again.
+    func followStart() async {
         let gen = accountGeneration
-        while state == .notStarted, gen == accountGeneration, !Task.isCancelled {
-            do { try await sleep(seconds) } catch { return }
+        for n in 0..<Backoff.start.reads {
+            guard state == .notStarted, gen == accountGeneration, !Task.isCancelled else { return }
+            do { try await sleep(Backoff.start.wait(n)) } catch { return }
             guard gen == accountGeneration, !Task.isCancelled else { return }
             await load()
         }
