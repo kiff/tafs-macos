@@ -3,7 +3,8 @@ import Foundation
 /// People and groups, as KIFF keeps them (`GET /v1/groups`, `GET /v1/tenant/members`): the
 /// account's groups, each with its people and the tafs it uses. Ported from the iPad's
 /// `KIFFClient.Group`, `GroupMember`, `Person` and `PeopleGroupsView`'s rules. The Mac reads
-/// them; each change is the person's act behind their device's key, so it waits for #16.
+/// them, and changes them as the iPad's `changePeople`: Touch ID first, then each request signed
+/// by this Mac's device key, which KIFF takes for these routes (`PeopleChange`).
 enum People {
     struct Group: Decodable, Identifiable, Equatable {
         let id: String
@@ -113,5 +114,59 @@ extension AccountClient {
         struct Answer: Decodable { let members: [People.Person] }
         let answer: Answer = try read(try await send("GET", "/v1/tenant/members"))
         return answer.members
+    }
+}
+
+/// A change to the account's groups, as the iPad's `KIFFClient` writes it (KIFFClient.swift:1636-1656): KIFF takes each
+/// signed by the device key (signed routes, not approvals), after the person's own confirmation on this Mac.
+enum PeopleChange: Equatable {
+    case create(name: String)
+    case rename(group: String, name: String)
+    case delete(group: String)
+    /// Adds someone, or changes their role: `manager` or `member`.
+    case setMember(group: String, subject: String, role: String)
+    case removeMember(group: String, subject: String)
+
+    var method: String {
+        switch self {
+        case .create: return "POST"
+        case .rename: return "PATCH"
+        case .delete, .removeMember: return "DELETE"
+        case .setMember: return "PUT"
+        }
+    }
+
+    var path: String {
+        switch self {
+        case .create: return "/v1/groups"
+        case .rename(let group, _), .delete(let group): return "/v1/groups/\(CloudClient.escaped(group))"
+        case .setMember(let group, let subject, _), .removeMember(let group, let subject):
+            return "/v1/groups/\(CloudClient.escaped(group))/members/\(CloudClient.escaped(subject))"
+        }
+    }
+
+    /// The iPad's bodies: the name, the role, or an empty object.
+    var body: Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        func json(_ fields: [String: String]) -> Data { (try? encoder.encode(fields)) ?? Data("{}".utf8) }
+        switch self {
+        case .create(let name), .rename(_, let name): return json(["name": name])
+        case .setMember(_, _, let role): return json(["role": role])
+        case .delete, .removeMember: return Data("{}".utf8)
+        }
+    }
+
+    /// What the person confirms, the iPad's `tafs.people.v1|{tenant}|{what}` (AppModel `changePeople`), where `what` is the
+    /// change in their words, the same line Touch ID asks with.
+    static func confirmation(tenant: String, what: String) -> Data {
+        Data("tafs.people.v1|\(tenant)|\(what)".utf8)
+    }
+}
+
+extension AccountClient {
+    /// One group change, signed by the device key. A refusal is KIFF's (`KIFFError`).
+    func change(_ change: PeopleChange) async throws {
+        _ = try await send(change.method, change.path, body: change.body, signed: true)
     }
 }

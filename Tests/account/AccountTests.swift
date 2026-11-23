@@ -8,6 +8,40 @@ private func client(_ answers: [(Int, String)], sign: ((HTTPRequest) throws -> S
 }
 
 let accountClientTests: [Test] = [
+    Test("a group change is the iPad's request, signed by the device key, after the person's own confirmation over tafs.people.v1", awaiting: {
+        let changes: [(PeopleChange, String, String)] = [
+            (.create(name: "Support"), "POST /v1/groups", #"{"name":"Support"}"#),
+            (.rename(group: "g/1", name: "Help"), "PATCH /v1/groups/g%2F1", #"{"name":"Help"}"#),
+            (.delete(group: "g1"), "DELETE /v1/groups/g1", "{}"),
+            (.setMember(group: "g1", subject: "u|2", role: "manager"), "PUT /v1/groups/g1/members/u%7C2", #"{"role":"manager"}"#),
+            (.removeMember(group: "g1", subject: "u2"), "DELETE /v1/groups/g1/members/u2", "{}"),
+        ]
+        for (change, route, body) in changes {
+            try expectEqual(change.method + " " + change.path, route)
+            try expectEqual(String(decoding: change.body, as: UTF8.self), body)
+        }
+        try expectEqual(String(decoding: PeopleChange.confirmation(tenant: "t1", what: "Create the group Support"), as: UTF8.self),
+                        "tafs.people.v1|t1|Create the group Support")
+        var signedRequest: HTTPRequest?
+        let (account, transport) = client([(200, "{}")], sign: { signedRequest = $0; return "t=T,v1=SIG" })
+        try await account.change(.create(name: "Support"))
+        try expectEqual(transport.sent[0].headers["KIFF-Device-Signature"], "t=T,v1=SIG")
+        try expectEqual(transport.sent[0].headers[Passkeys.headerName], nil)
+        try expectEqual(signedRequest?.body, Data(#"{"name":"Support"}"#.utf8))
+        // No device key: nothing is sent.
+        let (unsigned, nothing) = client([])
+        do { try await unsigned.change(.delete(group: "g1")); throw Failure(description: "sent") } catch KIFFError.refused(status: 0, code: let code) { try expectEqual(code, "no_device_key") }
+        try expectEqual(nothing.sent.count, 0)
+    }),
+    Test("the people screen asks Touch ID before any group change, and a Mac that can't says to approve on the phone (sources)") {
+        let model = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/PeopleView.swift"), encoding: .utf8)
+        guard let confirm = model.range(of: "try await touchID.confirm(what, PeopleChange.confirmation("),
+              let send = model.range(of: "try await account.change(change)") else { throw Failure(description: "no confirm or send") }
+        try expect(confirm.lowerBound < send.lowerBound, "Touch ID before the request")
+        try expect(model.contains("guard route == .touchID else {"), "only on the Touch ID route")
+        try expect(model.contains("problem = Words.app(ConnectionEnding.phoneLine)"), "else the phone")
+        try expect(!model.contains("deviceOwnerAuthentication") && !model.contains("confirmOwner"), "never the password")
+    },
     Test("every request carries the session and the app's language, and no signature unless asked", awaiting: {
         let (account, transport) = client([(200, #"{"devices":[]}"#)])
         let none = try await account.devices()
