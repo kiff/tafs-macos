@@ -78,4 +78,15 @@ let accountFilesMacTests: [Test] = [
         try expectEqual(shared, nil)
         try expectEqual(model.notes["f1"], Words.app("error.offline"))
     }),
+    Test("every copy goes at launch and sign-out, open or not (FilesModel.clearCopies)", awaiting: { @MainActor in
+        let model = FilesModel(readAll: { [] }, readPreview: { _ in nil }, readDownload: { _ in URL(string: "https://storage.test/x")! },
+                               delete: { _ in }, fetch: { _ in Data("%PDF".utf8) })
+        let pdf = DeliveredFile(id: "f9", name: "a.pdf", type: "PDF", bytes: 4, tafID: "t1", tafName: "Refunds", runID: "r1",
+                                runAt: Date(timeIntervalSince1970: 1_794_679_800), goesAt: Date(timeIntervalSince1970: 1_797_271_800))
+        await model.preview(pdf)
+        guard case .copy(let copy)? = model.previews["f9"] else { throw Failure(description: "no copy") }
+        FilesModel.clearCopies()
+        try expect(!FileManager.default.fileExists(atPath: copy.path), "cleared while open")
+        try expect(!FileManager.default.fileExists(atPath: FilesModel.copiesFolder.path), "the folder is gone")
+    }),
 ]

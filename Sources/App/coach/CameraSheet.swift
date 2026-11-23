@@ -16,6 +16,14 @@ final class CameraSession: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     /// A photo is being taken.
     @Published private(set) var taking = false
     private var took: ((Data?) -> Void)?
+    /// The sheet closed: a camera allowed after that never starts, and one starting stops at once. Read on the camera's
+    /// queue too, so it's guarded.
+    private let stoppedLock = NSLock()
+    private var stoppedFlag = false
+    private var stopped: Bool {
+        stoppedLock.lock(); defer { stoppedLock.unlock() }
+        return stoppedFlag
+    }
 
     /// Take photo is offered only on a Mac with a camera that tafs hasn't been refused, as the
     /// iPad offers it only where there's a camera. A Mac where it was refused says nothing more.
@@ -30,12 +38,17 @@ final class CameraSession: NSObject, ObservableObject, AVCapturePhotoCaptureDele
     /// Asks for the camera the first time (the system's own question), then starts it. False
     /// when it can't run: refused, or no camera.
     func start() async -> Bool {
-        guard await Self.allowed(), let camera = AVCaptureDevice.default(for: .video),
+        guard await Self.allowed(), !stopped, let camera = AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: camera) else { return false }
         let session = self.session
         let output = self.output
         let started: Bool = await withCheckedContinuation { done in
-            queue.async {
+            queue.async { [self] in
+                // Closed while the system asked, or while this waited its turn: nothing starts.
+                guard !self.stopped else {
+                    done.resume(returning: false)
+                    return
+                }
                 session.beginConfiguration()
                 session.sessionPreset = .photo
                 guard session.canAddInput(input), session.canAddOutput(output) else {
@@ -47,6 +60,8 @@ final class CameraSession: NSObject, ObservableObject, AVCapturePhotoCaptureDele
                 session.addOutput(output)
                 session.commitConfiguration()
                 session.startRunning()
+                // Closed while it started: it stops at once.
+                if self.stopped { session.stopRunning() }
                 done.resume(returning: session.isRunning)
             }
         }
@@ -56,6 +71,9 @@ final class CameraSession: NSObject, ObservableObject, AVCapturePhotoCaptureDele
 
     /// Stops the camera, as the sheet closes.
     func stop() {
+        stoppedLock.lock()
+        stoppedFlag = true
+        stoppedLock.unlock()
         let session = self.session
         queue.async { if session.isRunning { session.stopRunning() } }
         running = false

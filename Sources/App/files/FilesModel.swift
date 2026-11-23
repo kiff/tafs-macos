@@ -36,7 +36,7 @@ final class FilesModel: ObservableObject {
     /// The open files' private copies, by file: for the system's preview and for Share. Each goes when its file closes.
     private var copies: [String: URL] = [:]
     /// Where the copies are, one folder a file, under this app's own caches: never kept past the file's screen.
-    static let copiesFolder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    nonisolated static let copiesFolder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("tafs-file-copies", isDirectory: true)
 
     private let readAll: () async throws -> [DeliveredFile]
@@ -135,6 +135,11 @@ final class FilesModel: ObservableObject {
             notes[file.id] = Words.app("error.offline")
             return nil
         }
+    }
+
+    /// Every private copy, open or not: at launch (what a quit or a crash left) and at sign-out.
+    nonisolated static func clearCopies() {
+        try? FileManager.default.removeItem(at: copiesFolder)
     }
 
     private func removeCopy(_ id: String) {

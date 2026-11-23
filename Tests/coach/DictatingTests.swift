@@ -80,4 +80,17 @@ let coachDictatingTests: [Test] = [
         guard let rights = try PropertyListSerialization.propertyList(from: ent, format: nil) as? [String: Any] else { throw Failure(description: "no entitlements") }
         try expectEqual(Set(rights.keys), ["com.apple.security.device.audio-input", "com.apple.security.device.camera"])
     },
+    Test("the camera never runs past its sheet, and Files' copies go at launch and sign-out (sources)") {
+        func read(_ path: String) throws -> String { try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) }
+        let camera = try read("Sources/App/coach/CameraSheet.swift")
+        // Closed while the system asked: checked after the question, before starting, and once it started.
+        try expect(camera.contains("guard await Self.allowed(), !stopped"), "checked after the question")
+        try expect(camera.contains("guard !self.stopped else"), "checked before starting")
+        try expect(camera.contains("if self.stopped { session.stopRunning() }"), "stopped once started")
+        try expect(camera.contains(".onDisappear { camera.stop() }"), "the sheet stops it")
+        try expect(try read("Sources/App/entry/TafsApp.swift").contains("FilesModel.clearCopies()"), "launch clears the copies")
+        let signIn = try read("Sources/App/pairing/SignInModel.swift")
+        guard let out = signIn.range(of: "func signedOut()") else { throw Failure(description: "no signedOut") }
+        try expect(signIn[out.upperBound...].prefix(300).contains("FilesModel.clearCopies()"), "sign-out clears the copies")
+    },
 ]
