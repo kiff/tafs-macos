@@ -242,7 +242,8 @@ struct SignedInView: View {
                                                         discard: { await discardSettingUp($0) }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar, tafs: overview.tafs, open: { open($0) }))
-            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true,
+                                                  tafName: { id in overview.tafs.first { $0.tafID == id }?.name }))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, tafs: overview.tafs, connectable: overview.tafs.filter { $0.tafID != nil && Access.manages(access[$0.id]) }, managesCards: managesCards, openCoach: openCoach))
             // Coach is never a screen of its own: it opens over the one chosen (`coachPanel`).
             case .coach: return nil

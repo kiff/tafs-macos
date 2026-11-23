@@ -71,7 +71,9 @@ amber with a warning, and the warning takes the same colour.
   headline it said the headline again ("No limit · 9,872 credits used" twice).
 - **Credits**, a panel: its heading, Last period and This period as the iPad's two-part
   switch, and the total.
-- **Each taf's line** is its own panel, with its pace under it.
+- **Each taf's line** is its own panel, with its pace under it. A listed taf's line opens its runs in
+  the period shown (`GET /v1/usage/credits/tafs/{taf}`, with `?period=previous` on the last period), as
+  the iPad's `TafCreditsView(taf:previous:)`; the line for tafs removed since doesn't open.
 - **Coach's use past what's included** (`coach`) is a panel of its own after the tafs' rows,
   as on the iPad. It is counted, so it is never under what wasn't.
 - **What wasn't counted**, a panel: tafs cloud's total line, then **why each wasn't**, a line
