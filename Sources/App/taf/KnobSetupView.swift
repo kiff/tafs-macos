@@ -429,6 +429,8 @@ struct ResultsGoToView: View {
     var refreshed: () async -> Void = {}
     /// Coach on this taf, a new conversation; nil draws no Add a place from a connected app.
     var improveInCoach: (() -> Void)? = nil
+    /// The taf's work, for its replies not sent (`NotSentPanel`); nil draws none.
+    var pages: TafPagesModel? = nil
     let close: () -> Void
     @State private var busy = false
 
@@ -502,6 +504,8 @@ struct ResultsGoToView: View {
                     }
                     addPlace
                 }
+                // Replies given up on after their tries, as the iPad's `notSent` (TafSetupViews.swift:438-475).
+                if let pages { NotSentPanel(model: pages, manages: manages) }
             } else {
                 Text(words("setup.reading_results")).font(.system(size: 15)).foregroundColor(Theme.dim)
             }
@@ -648,5 +652,49 @@ struct LockedOnSwitchStyle: ToggleStyle {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isSelected)
+    }
+}
+
+/// Results go to's replies not sent, as the iPad's `notSent` (TafSetupViews.swift:438-475): the
+/// taf's requests whose reply was given up on after its tries (a delivery tafs cloud marks
+/// `send_again`), each in tafs cloud's words, with Send again for whoever manages the taf, once
+/// more through the same place as the work's own (`TafPagesModel.sendAgain`). A failed read of the
+/// work, or a Send again that failed, is said here too. Nothing given up on, nothing drawn.
+struct NotSentPanel: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: TafPagesModel
+    let manages: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let failure = model.workFailure {
+                Text(verbatim: failure.line(words)).font(.system(size: 13)).foregroundColor(Theme.no)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("results.workError")
+            }
+            let unsent = model.work?.unsent ?? []
+            if !unsent.isEmpty {
+                KnobPanel(stroke: Theme.amber.opacity(0.45)) {
+                    Eyebrow(text: words("setup.not_sent"), color: Theme.amber)
+                    ForEach(unsent) { request in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(verbatim: request.line).font(.system(size: 14)).foregroundColor(Theme.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if manages, let delivery = request.deliveries.first(where: \.sendAgain) {
+                                let sending = model.sendingAgain.contains(request.id)
+                                Button(words(sending ? "work.sending_again" : "setup.send_again")) {
+                                    Task { await model.sendAgain(run: request.id, place: delivery.sendPlace) }
+                                }
+                                .buttonStyle(OutlineButtonStyle())
+                                .fixedSize()
+                                .disabled(sending)
+                            }
+                        }
+                    }
+                }
+                .accessibilityIdentifier("results.notSent")
+            }
+        }
+        .task { await model.loadWork() }
     }
 }
