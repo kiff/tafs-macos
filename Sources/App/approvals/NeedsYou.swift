@@ -284,7 +284,14 @@ final class NeedsYouModel: ObservableObject {
             if refusal.status == 401 { return Words.app("needs_you.refused.other", ["why": Words.app("error.signed_out")]) }
             return Words.app("needs_you.refused.other", ["why": Words.app(StepRefusal.plainKey(status: refusal.status))])
         }
-        if case KIFFError.refused(_, let code) = error, let key = refusalKeys[code] { return Words.app(key) }
+        if case KIFFError.refused(let status, let code) = error {
+            if let key = refusalKeys[code] { return Words.app(key) }
+            // KIFF's own refusal reads as the iPad's `KIFFError.server`'s `PlainError.words(status:)`: the app's line
+            // for its status, never KIFF's code, which is for the log. A 401 is the iPad's `.unauthorized`. A status of 0
+            // is this app's own refusal before anything was sent, whose words are `why`'s.
+            if status == 401 { return Words.app("needs_you.refused.other", ["why": Words.app("error.signed_out")]) }
+            if status != 0 { return Words.app("needs_you.refused.other", ["why": Words.app(StepRefusal.plainKey(status: status))]) }
+        }
         return Words.app("needs_you.refused.other", ["why": why(error)])
     }
 
@@ -306,8 +313,9 @@ final class NeedsYouModel: ObservableObject {
     /// The answer to "Did this happen?", on the security key, as the iPad's `answerHappened`: KIFF's approval route, so
     /// the key approves this one answer (`KeyAct.happened`), named in its sheet as the iPad's prompt ("Say it happened:
     /// {title}"). Then the call leaves the list and the list is read again: KIFF's list is the truth. A closed sheet
-    /// sends nothing and says nothing; "Approve on your phone instead" says to approve on another device; anything else
-    /// says KIFF didn't take it, with why. One answer at a time, as the held calls'.
+    /// sends nothing and says nothing; "Approve on your phone instead" says to approve on another device; KIFF's refusal
+    /// reads the list again too, and says why in the app's words while the call is still listed. One answer at a time,
+    /// as the held calls'.
     func answerHappened(_ call: Unproven, happened: Bool) async {
         guard let approveWithKey, answering == nil else { return }
         let key = Self.happenedKey(call)
@@ -324,7 +332,11 @@ final class NeedsYouModel: ObservableObject {
         } catch is ApproveOnPhone {
             notTaken[key] = Self.why(ApproveOnPhone())
         } catch {
-            notTaken[key] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
+            // KIFF's refusal: the list is read again, so a call answered elsewhere ("already answered") leaves at once;
+            // its line is said after the read, which keeps it while the call is still listed.
+            let line = Self.answerRefusedWords(error)
+            if case KIFFError.refused(let status, _) = error, status != 0 { await loadUnproven(answersHolds: true) }
+            notTaken[key] = unproven.contains { $0.proposal == call.proposal } ? line : nil
         }
     }
 
@@ -354,7 +366,7 @@ final class NeedsYouModel: ObservableObject {
         } catch {
             // Only KIFF's refusal reads "KIFF didn't take the answer", as the iPad's
             // `answerRefusedWords` (AppModel.swift:2994); a prompt's words are its own (:2972-2979).
-            notTaken[call.id] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
+            notTaken[call.id] = Self.answerRefusedWords(error)
         }
     }
 
@@ -385,7 +397,7 @@ final class NeedsYouModel: ObservableObject {
         } catch is ApproveOnPhone {
             notTaken[call.id] = Self.why(ApproveOnPhone())
         } catch {
-            notTaken[call.id] = Words.app("needs_you.refused.other", ["why": Self.why(error)])
+            notTaken[call.id] = Self.answerRefusedWords(error)
         }
     }
 
