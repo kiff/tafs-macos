@@ -22,13 +22,18 @@ As the iPad's full width: the list and the open file side by side, the first fil
   that made it and its size, and when it goes (today, tomorrow, in so many days), in amber.
 - **The open file:** tafs cloud's cleaned start (`GET /v1/files/{id}`), drawn as plain monospaced text, never Markdown,
   HTML or a viewer of the bytes, with "Only the start is shown" when there's more. For a text type (CSV, MD, TXT,
-  JSON) tafs cloud couldn't reach, the couldn't-read line; for any other type, or one it answered without a start, no
-  preview. Then Made by, In the run, Type, Size, Who sees it (everyone on this account) and Goes away.
+  JSON) tafs cloud couldn't reach, the couldn't-read line; for a text type it answered without a start, no preview and
+  no bytes read. **A type with no text start** (a PDF, an image) is drawn by the system, Quick Look (`FileQuickLook`), from
+  a private copy of its bytes, as the iPad's `FileCopy` and `readPreview`: read with Download's rules, in a folder of its
+  own under the app's caches, and **removed when the file closes** (or is deleted, or its screen goes). Then Made by, In the run, Type, Size, Who sees it (everyone on this account) and Goes away.
 - **Download:** where to, as the person picks (a save panel, named as the file is); then `GET /v1/files/{id}/download`
   for a URL that lasts a minute, and its bytes, written straight there and nowhere else. "Saved to this device", or why
   not. **The URL is checked** as Linux checks it: https only, with no user or password in it. Its bytes are read with no
   token, no cookie, no cache and **no redirect** (a 3xx fails), so the session never goes beyond KIFF's and tafs cloud's
   hosts.
+- **Share:** the file itself, never a link, through macOS's share menu at Share's place (`NSSharingServicePicker`), as
+  the iPad's `ShareLink`: its bytes are read only when Share is clicked, into the same private copy, which goes when the
+  file closes. One that can't be read says it didn't reach the server.
 - **Delete now**, at the end, behind a confirm ("Delete “{name}” now?", it goes for everyone right away and can't be
   undone): `DELETE /v1/files/{id}`; the file leaves the list only once tafs cloud has deleted it.
 
@@ -39,9 +44,7 @@ As the iPad's (qa-kiff's musts): a name is what follows the last `/` or `\`, wit
 keeps its lines and tabs and drops every other control or direction character, even if tafs cloud's own cleaning
 let one through.
 
-## Not here yet
+## Not drawn, as on the iPad
 
-- **Share** (the iPad's share sheet with the file itself).
-- **A system preview of a file with no text start** (the iPad's Quick Look of the bytes on the device): this Mac reads
-  a file's bytes only for Download, as Windows keeps copies temporary and never launches them.
-- **The chat's file chips** (`ChatFileChips`), drawn once tafs cloud says which run a message is.
+- **The chat's file chips** (`ChatFileChips`): the iPad doesn't draw them at the pin either (tafs docs/files.md, "Still
+  to come"), until tafs cloud says which run a message is.

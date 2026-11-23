@@ -433,6 +433,8 @@ final class SignInModel: ObservableObject {
     /// is the caller's, with the session.
     func signedOut() {
         ChatsExport.removeFiles(in: exportFolder)
+        // Files' private copies go with the session, open or not.
+        FilesModel.clearCopies()
         RememberedHome.forget(in: rememberedList)
         SecurityKeyStore(store: sessions.store).forget()
         endingKey.forgotten()

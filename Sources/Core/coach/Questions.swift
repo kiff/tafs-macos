@@ -40,6 +40,40 @@ enum QuestionAnswers {
         var own: String?
     }
 
+    /// The answers in an answer message's text, as the iPad's `QuestionAnswers.decode`
+    /// (`Model/QuestionAnswers.swift:28-37`): `{"<question>": {"value"} | {"values"} | {"own"}}`.
+    /// Nil when the text isn't that shape.
+    static func decode(_ text: String) -> [String: Answer]? {
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: [String: Any]] else { return nil }
+        var out: [String: Answer] = [:]
+        for (id, a) in obj {
+            if let v = a["value"] as? String { out[id] = .choice(v) }
+            else if let vs = a["values"] as? [String] { out[id] = .choices(vs) }
+            else if let own = a["own"] as? String { out[id] = .own(own) }
+        }
+        return out
+    }
+
+    /// The answers in the person's words, in the card's order, as the iPad's
+    /// `QuestionAnswers.words` (`:39-56`): "Test mode · Just one · In your words: “300 € on
+    /// weekdays”". A choice reads as Coach's label for it, else its value. Nil when the text
+    /// isn't answers.
+    static func words(_ text: String, questions: [Thread.Card.Question], _ say: Words) -> String? {
+        guard let answers = decode(text) else { return nil }
+        let order = questions.map(\.id) + answers.keys.filter { id in !questions.contains { $0.id == id } }.sorted()
+        let parts: [String] = order.compactMap { id in
+            guard let a = answers[id] else { return nil }
+            let labels = questions.first { $0.id == id }?.options ?? []
+            let label = { (v: String) in labels.first { $0.value == v }?.label ?? v }
+            switch a {
+            case .choice(let v): return label(v)
+            case .choices(let vs): return vs.map(label).joined(separator: ", ")
+            case .own(let t): return say("coach.answer.in_your_words", ["text": t])
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     static func sent(_ answer: Answer) -> Sent {
         switch answer {
         case .choice(let v): return Sent(value: v)

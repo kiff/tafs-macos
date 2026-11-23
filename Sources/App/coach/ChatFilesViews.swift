@@ -1,4 +1,5 @@
 import AppKit
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -11,10 +12,16 @@ import UniformTypeIdentifiers
 struct AttachButton: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
+    /// The camera's sheet is open, for Take photo.
+    @State private var takingPhoto = false
 
     var body: some View {
         let room = max(0, FilePrep.perMessage - model.files.count)
         Menu {
+            // This Mac's camera, where it has one tafs may use, as the iPad offers its camera.
+            if CameraSession.offered {
+                Button { takingPhoto = true } label: { Label(words("chat.file.take_photo"), systemImage: "camera") }
+            }
             Button { choose(photos: true, room: room) } label: { Label(words("chat.file.choose_photos"), systemImage: "photo.on.rectangle") }
             Button { choose(photos: false, room: room) } label: { Label(words("chat.file.choose_file"), systemImage: "doc") }
         } label: {
@@ -30,6 +37,25 @@ struct AttachButton: View {
         .fixedSize()
         .disabled(room == 0)
         .accessibilityLabel(room == 0 ? words.count("chat.file.attach_full", FilePrep.perMessage) : words("chat.file.attach"))
+        .sheet(isPresented: $takingPhoto) {
+            CameraSheet(took: { data in Task { @MainActor in await addPhoto(data) } }, close: { takingPhoto = false })
+                .environment(\.words, words)
+        }
+    }
+
+    /// A photo taken here, made ready as a chosen one is and named "Photo", as the iPad's camera.
+    @MainActor
+    private func addPhoto(_ data: Data?) async {
+        let say = Words.app
+        guard let data else {
+            model.refuseFile(FileProblem(message: say("attachment.photo_could_not_read")))
+            return
+        }
+        do {
+            await model.attach(try FilePrep.photo(data, name: say("attachment.photo"), say: say))
+        } catch {
+            model.refuseFile(error)
+        }
     }
 
     /// The open panel: photos, or the kinds of file tafs takes, as many as the message has room
@@ -162,12 +188,14 @@ struct FileIcon: View {
 }
 
 /// The files sent with a message, in the thread, as the iPad's `MessageFiles`
-/// (AttachViews.swift:229-266): each opens full size, in the app this Mac opens its kind with.
+/// (AttachViews.swift:229-266): each opens full size in place, in Quick Look, as the iPad's.
 struct MessageFiles: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
     let files: [AttachmentRef]
     @State private var opening: String?
+    /// The file shown in Quick Look, over the app.
+    @State private var previewing: URL?
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
@@ -176,7 +204,7 @@ struct MessageFiles: View {
                     guard opening == nil else { return }
                     opening = file.id
                     Task {
-                        if let url = await model.openFile(file) { NSWorkspace.shared.open(url) }
+                        if let url = await model.openFile(file) { previewing = url }
                         opening = nil
                     }
                 } label: {
@@ -193,5 +221,6 @@ struct MessageFiles: View {
                 .accessibilityLabel(words("chat.file.open", ["name": file.name]))
             }
         }
+        .quickLookPreview($previewing)
     }
 }
