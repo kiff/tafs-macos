@@ -52,7 +52,9 @@ let connectAppsMacTests: [Test] = [
         for language in ["en", "fr", "pt"] {
             let (model, _) = make([(200, appsPage)])
             await model.load()
-            let view = ConnectAppsView(model: model).environment(\.words, Words.load(folder: strings, preferred: [language]))
+            // A taf this person manages, so Connect is on: "Make one first" has its own shot.
+            let refunds = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_refunds","id":"t1","name":"Refunds","state":"idle"}"#.utf8))
+            let view = ConnectAppsView(model: model, connectable: [refunds]).environment(\.words, Words.load(folder: strings, preferred: [language]))
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("connect-apps-\(language).png"))
         }

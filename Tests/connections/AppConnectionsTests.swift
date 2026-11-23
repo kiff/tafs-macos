@@ -216,18 +216,88 @@ let appConnectionsTests: [Test] = [
         try expectEqual(Apps.connectable([refunds, notOnCloud], needed: nil).map(\.name), ["Refunds", "Old agent"])
         try expectEqual(Apps.connectable([refunds], needed: [Apps.Named(taf: "t1", name: "R"), Apps.Named(taf: "t9", name: "X")]).map(\.name), ["Refunds"])
     },
+    Test("planque's actions are read as the iPad's: only a known one with its words is drawn, and Remove is the one that ends it") {
+        let json = #"""
+        {"id":"g9","status":"connected","request":{"server":"q","agent":"a"},"health":{"ok":false,"words":"Signed out · sign in again"},"actions":[
+          {"id":"sign_in_again","words":"Sign in again","how":"approve"},
+          {"id":"sign_in_again","words":"Replace the key","how":"key"},
+          {"id":"sign_in_again","words":"Odd","how":"delete"},
+          {"id":"remove","words":"  Remove access  ","how":"delete","stops":" Refunds stops using Qonto. "},
+          {"id":"remove_unfinished","words":"Cancel","how":"delete","stops":"  "},
+          {"id":"remove","words":"","how":"delete"},
+          {"id":"rename","words":"Rename","how":"approve"},
+          7
+        ]}
+        """#
+        let g = try JSONDecoder().decode(AppConnections.Grant.self, from: Data(json.utf8))
+        try expect(g.rowFromPlanque, "health and actions: planque's row")
+        try expectEqual(g.knownActions.map(\.words), ["Sign in again", "Replace the key", "Remove access", "Cancel"])
+        try expectEqual(g.knownActions.map(\.removes), [false, false, true, true])
+        try expectEqual(g.knownActions[2].stops, "Refunds stops using Qonto.")
+        try expectEqual(g.knownActions[3].stops, nil)
+        // No actions sent, or none that read as a list: not planque's row, and none drawn.
+        for actions in ["", #","actions":null"#, #","actions":"x""#] {
+            let other = try JSONDecoder().decode(AppConnections.Grant.self, from: Data(#"{"id":"g","status":"connected","health":{"ok":true,"words":"Working"}\#(actions)}"#.utf8))
+            try expect(!other.rowFromPlanque, "actions \(actions)")
+            try expectEqual(other.knownActions, [])
+        }
+        // An empty list is still planque's row, with nothing to take.
+        let none = try JSONDecoder().decode(AppConnections.Grant.self, from: Data(#"{"id":"g","status":"connected","health":{"ok":true,"words":"Working"},"actions":[]}"#.utf8))
+        try expect(none.rowFromPlanque, "an empty list is planque's row")
+    },
+    Test("ending a connection asks the iPad's question first: Remove access names the taf, Cancel names what waits") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(AppConnections.disconnectTitle("Qonto", taf: "Refunds", words), "Remove access to Qonto for Refunds?")
+        try expectEqual(AppConnections.disconnectTitle("Qonto", taf: nil, words), "Remove access to Qonto?")
+        try expectEqual(AppConnections.disconnectTitle("Qonto", taf: "Refunds", alsoStops: ["Invoices"], words), "Remove access to Qonto for Refunds? Invoices stops too.")
+        try expectEqual(AppConnections.disconnectMessage("Qonto", taf: "Refunds", words),
+                        "Refunds' Qonto tools stop working." + words("connect.other_connections_stay_connected_no", ["vendor": "Qonto", "vendor_2": "Qonto"])
+                        + words("connect.connecting_again_asks_you_approve"))
+        try expectEqual(AppConnections.disconnectMessage("Qonto", taf: nil, key: true, words),
+                        "No taf uses Qonto now. " + words("connect.disconnect.rest_key", ["vendor": "Qonto"]))
+        try expectEqual(AppConnections.disconnectMessage("Qonto", taf: "Refunds", alsoStops: ["Invoices"], key: true, words),
+                        "Refunds' Qonto tools stop working. Invoices' Card also uses these tools, so it stops too. " + words("connect.disconnect.rest_key", ["vendor": "Qonto"]))
+        try expect(AppConnections.disconnectMessage("Qonto", taf: nil, alsoStops: ["A", "B"], words).contains("The Cards of"), "two others")
+        let grants = try AccountClient.decoder.decode([String: [AppConnections.Grant]].self, from: Data(#"""
+        {"grants":[
+          {"id":"w","status":"approved","request":{"server":"mcp.qonto.com","agent":"a"},"vendor":"Qonto"},
+          {"id":"p","status":"pending","request":{"server":"mcp.qonto.com","agent":"a"},"vendor":"Qonto"}
+        ]}
+        """#.utf8))["grants"]!
+        try expectEqual(AppConnections.cancelTitle(grants[0], words), "Cancel the sign-in to Qonto?")
+        try expectEqual(AppConnections.cancelWordKey(grants[0]), "connect.cancel_sign_in.button")
+        try expectEqual(AppConnections.cancelTitle(grants[1], words), "Cancel the request for Qonto?")
+        try expectEqual(AppConnections.cancelWordKey(grants[1]), "connect.cancel_request.button")
+    },
+    Test("Make one first shows over Discover only while no taf can have an app, and turns that app's Connect off") {
+        let refunds = try taf("a_refunds", "t1", "Refunds")
+        let open = try app(#""state":"available""#)
+        try expect(Apps.saysMakeATaf(discover: [open], forTaf: false, connectable: []), "no taf: said")
+        try expect(!Apps.saysMakeATaf(discover: [open], forTaf: false, connectable: [refunds]), "a taf can have it")
+        try expect(!Apps.saysMakeATaf(discover: [open], forTaf: true, connectable: []), "opened from a taf")
+        try expect(!Apps.saysMakeATaf(discover: [], forTaf: false, connectable: []), "nothing to connect")
+        try expectEqual(Apps.route(open, connectable: []), .noTaf)
+        try expectEqual(Apps.route(open, connectable: [refunds]), .ask)
+        // With needed_by, no taf is Ask Coach, which stays on.
+        try expectEqual(Apps.route(try app(#""state":"available","needed_by":[]"#), connectable: []), .askCoach)
+    },
     Test("the page's and the button's words are shared lines in every shipped language") {
         let folder = URL(fileURLWithPath: ".shared/app/strings")
         let keys = ["coach.ask", "connect.apps.connect", "connect.sign_in_again", "connect.apps.your_connections", "connect.start_connected_tools_first",
                     "connect.other_connections", "connect.from_removed", "connect.clear_removed.button", "connect.apps.disconnect_why",
                     "connect.apps.used_by", "connect.misplaced", "connect.through_provider", "connect.replace_key", "connect.status.waiting_sign_in",
                     "connect.cancel_request.button", "common.cancel", "connect.disconnect_button", "connect.used_by.one", "connect.used_by.many",
-                    "approval.device_can_not_approve_approve", "connect.apps.title"]
+                    "approval.device_can_not_approve_approve", "connect.apps.title", "connect.apps_connect_taf_make_one",
+                    "connect.disconnect.title", "connect.disconnect.title_from", "connect.disconnect.tools_stop", "connect.disconnect.no_taf_uses",
+                    "connect.disconnect.rest_key", "connect.other_connections_stay_connected_no", "connect.connecting_again_asks_you_approve",
+                    "connect.cancel_request.title", "connect.cancel_sign_in.title", "connect.cancel_sign_in.button", "connect.cancel_sign_in.body",
+                    "connect.cancel_sign_in.keep_waiting", "connect.clear_removed.body", "connect.clear_removed.clear"]
         let shipped = try Words.shipped(folder: folder)
         try expect(shipped.count >= 40, "every shipped language, got \(shipped.count)")
         for language in shipped {
             let words = try Words(language: language, folder: folder)
             for key in keys { try expect(words(key) != key, "\(key) in \(language)") }
+            try expect(words.count("connect.clear_removed.title", 2) != "connect.clear_removed.title", "clear's title in \(language)")
         }
     },
 ]

@@ -23,6 +23,38 @@ enum AppConnections {
             }
         }
 
+        /// One of planque's actions that work for a connection now, as the iPad's
+        /// `PlanqueClient.Grant.Action` (`PlanqueClient.swift:250-276`): its id, planque's words
+        /// for it, how it's taken and what stops. Read leniently: what doesn't read is empty.
+        struct Action: Decodable, Equatable, Identifiable {
+            static let signInAgain = "sign_in_again", remove = "remove", removeUnfinished = "remove_unfinished"
+            var id = ""
+            var words = ""
+            var how = ""
+            var stops: String?
+            enum CodingKeys: String, CodingKey { case id, words, how, stops }
+            init(id: String = "", words: String = "", how: String = "", stops: String? = nil) {
+                self.id = id; self.words = words; self.how = how; self.stops = stops
+            }
+            init(from decoder: Decoder) throws {
+                guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+                func text(_ k: CodingKeys) -> String { (((try? c.decodeIfPresent(String.self, forKey: k)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+                id = text(.id); words = text(.words); how = text(.how)
+                let s = text(.stops); stops = s.isEmpty ? nil : s
+            }
+            /// One this app knows how to take, with its words: anything else isn't drawn.
+            var known: Bool {
+                guard !words.isEmpty else { return false }
+                switch id {
+                case Self.signInAgain: return how == "approve" || how == "key"
+                case Self.remove, Self.removeUnfinished: return how == "delete"
+                default: return false
+                }
+            }
+            /// It ends the connection: asked first, in planque's words.
+            var removes: Bool { id == Self.remove || id == Self.removeUnfinished }
+        }
+
         let id: String
         /// pending, approved, signed_in, listed, connected, failed, disconnected or needs_reconnect.
         let status: String
@@ -47,8 +79,12 @@ enum AppConnections {
         /// The tafs that use it, by name, as planque sends them.
         let usedBy: [String]?
         let health: Health?
+        /// The actions that work for it now, as planque sends them; nil when it sends none.
+        let actions: [Action]?
         /// Whether planque sent the actions that work for it now: with its health, planque draws the row.
-        let hasActions: Bool
+        var hasActions: Bool { actions != nil }
+        /// The actions this app draws, in planque's order (the iPad's `actions.filter(\.known)`).
+        var knownActions: [Action] { (actions ?? []).filter(\.known) }
         let signedIn: Bool?
         /// The tools it was asked for (`request.tools`), as the iPad's `Grant.Request.Tool`: each
         /// with its name in KIFF and the title Setup asked for it by. One that doesn't read is
@@ -95,7 +131,7 @@ enum AppConnections {
             agentName = text(.agentName)
             usedBy = (try? c.decodeIfPresent([String].self, forKey: .usedBy)) ?? nil
             health = (try? c.decodeIfPresent(Health.self, forKey: .health)) ?? nil
-            hasActions = c.contains(.actions) && ((try? c.decodeNil(forKey: .actions)) ?? true) == false
+            actions = (try? c.decodeIfPresent([Action].self, forKey: .actions)) ?? nil
             signedIn = (try? c.decodeIfPresent(Bool.self, forKey: .signedIn)) ?? nil
             let request = try? c.nestedContainer(keyedBy: RequestKeys.self, forKey: .request)
             let server = ((try? request?.decodeIfPresent(String.self, forKey: .server)) ?? nil) ?? ""
@@ -221,6 +257,42 @@ enum AppConnections {
         let n = names.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && seen.insert($0).inserted }
         guard !n.isEmpty else { return nil }
         return n.count == 1 ? say("connect.used_by.one", ["name": n[0]]) : say("connect.used_by.many", ["names": say.list(n)])
+    }
+
+    /// Disconnect's question, as the iPad's `DisconnectWords.title` (`ConnectAppsView.swift:481-486`):
+    /// it names the one taf it ends, else the vendor alone, then `alsoStops`, the other tafs whose
+    /// Card draws on its tools.
+    static func disconnectTitle(_ vendor: String, taf: String?, alsoStops: [String] = [], _ say: Words) -> String {
+        let asked = taf.map { say("connect.disconnect.title_from", ["vendor": vendor, "taf": $0]) } ?? say("connect.disconnect.title", ["vendor": vendor])
+        guard !alsoStops.isEmpty else { return asked }
+        return asked + " " + say.count("connect.disconnect.also_stops", alsoStops.count, ["names": say.list(alsoStops)])
+    }
+
+    /// What removing access ends, as the iPad's `DisconnectWords.message` (`:490-501`): the taf's
+    /// tools, the other Cards that stop, then what happens to the sign-in, or for a key (`key`),
+    /// that it's deleted from tafs once no taf uses it.
+    static func disconnectMessage(_ vendor: String, taf: String?, alsoStops: [String] = [], key: Bool = false, _ say: Words) -> String {
+        let others: String
+        switch alsoStops.count {
+        case 0: others = ""
+        case 1: others = " " + say("connect.disconnect.also_card", ["owner": alsoStops[0]])
+        default: others = " " + say("connect.disconnect.also_cards", ["names": say.list(alsoStops)])
+        }
+        let start = taf.map { say("connect.disconnect.tools_stop", ["owner": $0, "vendor": vendor]) } ?? say("connect.disconnect.no_taf_uses", ["vendor": vendor])
+        let rest = key ? " " + say("connect.disconnect.rest_key", ["vendor": vendor])
+            : say("connect.other_connections_stay_connected_no", ["vendor": vendor, "vendor_2": vendor]) + say("connect.connecting_again_asks_you_approve")
+        return start + others + rest
+    }
+
+    /// What's cancelled, asked first, as the iPad's `ConnectionFixWords.cancelTitle`: the request
+    /// nobody answered, or the sign-in that never came back.
+    static func cancelTitle(_ g: Grant, _ say: Words) -> String {
+        say(g.pendingRequest ? "connect.cancel_request.title" : "connect.cancel_sign_in.title", ["vendor": g.vendor])
+    }
+
+    /// The cancel question's own button, as the iPad's `ConnectionFixWords.cancelWord`.
+    static func cancelWordKey(_ g: Grant) -> String {
+        g.pendingRequest ? "connect.cancel_request.button" : "connect.cancel_sign_in.button"
     }
 
     /// The word for ending a connection, as the iPad's `ConnectionFixWords.endWord`: "Cancel the
