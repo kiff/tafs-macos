@@ -55,4 +55,12 @@ let usageReadTests: [Test] = [
         _ = try await client.credits(previous: true)
         try expectEqual(transport.sent[1].path, "/v1/usage/credits?period=previous")
     }),
+    Test("the plan's line at the foot is tafs cloud's home_line, only when it sends one") {
+        let none = try AccountClient.decoder.decode(Usage.Balance.self, from: Data(balanceAnswer.utf8))
+        try expectEqual(none.homeLine, nil)
+        let said = balanceAnswer.replacingOccurrences(of: #""home_line":null"#, with: #""home_line":"Your trial ends in 2 days""#)
+        try expectEqual(try AccountClient.decoder.decode(Usage.Balance.self, from: Data(said.utf8)).homeLine, "Your trial ends in 2 days")
+        let blank = balanceAnswer.replacingOccurrences(of: #""home_line":null"#, with: #""home_line":"  ""#)
+        try expectEqual(try AccountClient.decoder.decode(Usage.Balance.self, from: Data(blank.utf8)).homeLine, nil)
+    },
 ]

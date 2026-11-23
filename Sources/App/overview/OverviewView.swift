@@ -31,6 +31,12 @@ final class OverviewModel: ObservableObject {
     private let remembered: UserDefaults?
     /// Set at sign-out before its first wait: a read still on its way then keeps nothing.
     private var ended = false
+    /// What the last read couldn't do, for the sidebar's foot (`Unreachable`); nil once a read goes through. Whether
+    /// the app still tries again by itself, and its tries so far.
+    @Published private(set) var unreachable: String?
+    @Published private(set) var retrying = false
+    private var retries = 0
+    private var retry: Task<Void, Never>?
 
     /// With `remembered`, the list last read for this account shows at once, as the iPad's
     /// `showRememberedList`, and is read again with the first read.
@@ -66,7 +72,11 @@ final class OverviewModel: ObservableObject {
     }
 
     /// The session is ending: nothing read from now on is kept for the next launch.
-    func endSession() { ended = true }
+    func endSession() {
+        ended = true
+        retry?.cancel()
+        retry = nil
+    }
 
     /// The account's labels as Home last sent them; none with no labelled taf.
     var labels: [HomeLabel] {
@@ -86,11 +96,20 @@ final class OverviewModel: ObservableObject {
     /// The tafs the list shows under its chip, in Home's order (`HomeLabels.filtered`).
     func filtered(_ tafs: [Home.Taf]) -> [Home.Taf] { HomeLabels.filtered(tafs, by: listLabel, in: labels) }
 
-    func load() async {
+    /// `retry`: the app's own try again, as the iPad's `refresh(retry:)`. Any other read (the window's, a person's)
+    /// starts the tries over.
+    func load(retry again: Bool = false) async {
+        if !again { retries = 0 }
         // Whether this read worked: a list kept on screen after a failed read doesn't count.
         var readNow = false
         do {
             let read = try await cloud.homeRead()
+            // Read: nothing to say, and no try waiting.
+            unreachable = nil
+            retrying = false
+            retries = 0
+            retry?.cancel()
+            retry = nil
             state = .loaded(read.page)
             listOrder.show(read.page.tafs)
             doorsOffered = read.page.doorsOffered ?? []
@@ -105,6 +124,7 @@ final class OverviewModel: ObservableObject {
             // A list on screen stays when a read fails, as the iPad's (AppModel.swift:1909-1916);
             // only an empty screen says why.
             if case .loaded = state {} else { state = .unread(why: NeedsYouModel.why(error)) }
+            readFailed(error)
         }
         // As the iPad's `refresh` and `loadRecipes` (AppModel.swift:1852-1857, 7210-7215): read
         // with each list read that has no taf, and a read that fails keeps what was read.
@@ -115,6 +135,22 @@ final class OverviewModel: ObservableObject {
         // and keeps the gallery read before, even with a list kept on screen.
         guard readNow else { return }
         await loadGallery()
+    }
+
+    /// A read failed: said quietly at the sidebar's foot, and read again a moment later, then less often, then not
+    /// until the next read, as the iPad's `refreshFailed`. Never after sign-out.
+    private func readFailed(_ error: Error) {
+        guard !ended, !(error is CancellationError) else { return }
+        unreachable = Words.app(Unreachable.wordsKey(error))
+        retry?.cancel()
+        guard let seconds = Unreachable.wait(after: retries) else { retrying = false; return }
+        retries += 1
+        retrying = true
+        retry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            guard let self, !Task.isCancelled, !self.ended, self.unreachable != nil else { return }
+            await self.load(retry: true)
+        }
     }
 
     /// Reads the gallery of ready-made jobs, as the iPad's `loadGallery` (AppModel.swift:7217-7228):

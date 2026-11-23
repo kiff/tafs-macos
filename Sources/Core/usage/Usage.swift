@@ -15,11 +15,14 @@ enum Usage {
         /// The plan's line, and whether it needs the person: `ok`, `warning` or `waiting`.
         let planLine: String?
         let planTone: String
+        /// Home's one line about the plan (`home_line`), at the sidebar's foot; nil when the plan doesn't need the
+        /// person, as the iPad's `homeLine` (a trial ended or ending, tasks nearly gone).
+        let homeLine: String?
         /// The First month pack can be bought now (`buy.first_month.ready`), as the iPad's
         /// `firstMonthReady`: the packs a member may ask for list it first only then.
         let firstMonthReady: Bool
 
-        enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone" }
+        enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone", homeLine = "home_line" }
         enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy }
         enum BuyKeys: String, CodingKey { case firstMonth = "first_month" }
         enum FirstMonthKeys: String, CodingKey { case ready }
@@ -36,6 +39,7 @@ enum Usage {
             warning = Usage.text((try? c.decodeIfPresent(String.self, forKey: .warning)) ?? nil)
             planLine = Usage.text((try? root.decodeIfPresent(String.self, forKey: .planLine)) ?? nil)
             planTone = ((try? root.decodeIfPresent(String.self, forKey: .planTone)) ?? nil) ?? "ok"
+            homeLine = Usage.text((try? root.decodeIfPresent(String.self, forKey: .homeLine)) ?? nil)
             let buy = try? c.nestedContainer(keyedBy: BuyKeys.self, forKey: .buy)
             let first = buy.flatMap { try? $0.nestedContainer(keyedBy: FirstMonthKeys.self, forKey: .firstMonth) }
             firstMonthReady = first.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .ready)) ?? nil } == true
