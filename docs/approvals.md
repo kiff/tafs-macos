@@ -93,16 +93,79 @@ Allow from now on comes in its own pull request.
 
 ## Nothing is approved at planque from this Mac
 
-This Mac signs one request at planque: its own enrolment (`PlanqueClient.routes`), armed only
-inside Coach's Start after its approval and cleared when it ends. It never calls a grant's
-`approve` or `confirm`. `send` refuses any other path before anything is signed or sent, and
-`PlanqueRoutesTests` pins it four ways:
-- the list of routes is only the enrolment;
-- the enrolment is one POST, signed once;
-- no file under `Sources` names a grant's route, `/approve` or `/confirm`;
-- the client is made in one place and armed only around the enrolment.
+This Mac signs two kinds of request at planque. The first is its own enrolment
+(`PlanqueClient.routes`), armed only inside Coach's Start after its approval and cleared when it
+ends. The second is ending a connection (`PlanqueClient.disconnect`), and only on a Touch ID Mac
+(below). It never calls a grant's `approve`, `confirm`, `connect-fresh` or key route.
+`send` refuses any path but the enrolment before anything is signed or sent, and
+`PlanqueRoutesTests` pins it:
+- `send`'s list of routes is only the enrolment, and it is one POST, signed once;
+- the one grant route is `DELETE /v1/accounts/{tenant}/grants/{id}`: one request, no body and no
+  `Content-Type`, signed v1 once (`t=…,v1=…,d=dev_…`) over the empty body's hash, by a signer
+  passed with the call;
+- no file under `Sources` names `/approve`, `/confirm`, `/connect-fresh`, a path under a grant or a
+  POST to the grants; `grants/` is named once, in the DELETE's path;
+- no file names any grant's sub-route (`/key`, `/approve`, `/confirm`, `/connect-fresh`,
+  `/sign-in`, `/tools` and the rest of planque's), however a path is put together, and every line
+  of code that names `/v1/accounts/` or `/grants` is one of a fixed few: the enrolment's root, the
+  grants read, the DELETE's path, and KIFF's read of a taf's shares;
+- the client is made in one place and its own signer is armed only around the enrolment: the
+  DELETE never arms it;
+- the DELETE is called from one place (`ConnectionsSource`), and only after Touch ID
+  (`ConnectionEnding.end`).
 
 The grants proof (`grantsReadProof`) is a read: it signs `GET …/grants` and nothing else.
+
+### Ending access with Touch ID
+
+The owner's decision (22 Nov): ending access is signed here on a Mac with Touch ID, and only
+ending access. This covers **Remove access**, **Cancel the request**, **Cancel the sign-in** and
+**Clear** (the removed tafs' connections), on a connection's row and on its page. It works as the
+iPad's `disconnect(grantID:)` and `clearRemovedConnections`, and as Windows' `EndAsync`
+(`ConnectionEnding`, `ConnectAppsModel.disconnect`, `clear`):
+
+1. **The route** (`ConnectionEnding.route`). It is Touch ID only when the session's device key is
+   in the Secure Enclave (`AccountClient.keyStore == "enclave"`, from `SigningKey.keyStore`) **and**
+   `LAContext.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics)` is true now. Anything
+   else goes to the phone: a software key, a Mac without Touch ID, Touch ID not set up or locked
+   out, or Touch ID's fingers changed since the session began (below). That Mac asks nothing, sends nothing and shows "This device can't approve. Approve on
+   another device signed in to your account." (`approval.device_can_not_approve_approve`), as
+   before. planque and KIFF would take a software key's DELETE too (a safe route takes any device
+   key), so this rule is the app's own.
+2. **The question first**, the iPad's (`GateQuestion`). Then **Touch ID alone** (`TouchIDOnly`):
+   `.deviceOwnerAuthenticationWithBiometrics` with `localizedFallbackTitle = ""`, so there's no
+   password button. Its reason is the question's title ("Remove access to Stripe for Rae?",
+   "Clear 2 connections from removed tafs?"). It is never `.deviceOwnerAuthentication` and never
+   `NeedsYouModel.confirmOwner`, which let the Mac's password in. A closed prompt, or its fallback,
+   counts as closed. **A finger added since doesn't count** (`ConnectionEnding.Fingers`): on a Mac,
+   anyone who knows its password can add a finger in System Settings, which asks only that
+   password. So the enrolled set (`LAContext.evaluatedPolicyDomainState`) is kept the first time
+   the session's window checks Touch ID, in the Keychain for this Mac only
+   (`tafs.touch-id.fingers`, with the session's tenant, subject and device id). Each check reads it
+   again, before the prompt and from the prompt that passed; a set that isn't the kept one sends
+   nothing, and that Mac goes to the phone until the next sign-in, as the iPad renews its approval
+   key when its biometrics change. "Approve on your phone instead" (`approval.security_key.on_phone`) shows beside
+   the action.
+3. **Then planque's DELETE**, one per connection, signed by the device key with no prompt. The key
+   has no access control (`DeviceKey`): the Touch ID check is the confirmation, as Windows Hello is
+   before the TPM key. Clear asks Touch ID once for all of them. A refusal is counted and the next
+   connection is still tried. Once the session changes, nothing more is sent: the window ends the
+   model's session on sign-out and when it goes (`ConnectAppsModel.endSession`, as the iPad's
+   `accountGeneration`), and an ending checks it after Touch ID and after each DELETE, even one
+   whose prompt was still open.
+4. **Then the connections and the removed tafs are read again.** What's said:
+   - Disconnect says nothing when the prompt was closed (the iPad's choice; Windows says "not done").
+     A refusal says `connect.not_disconnected` ("Access not removed. {why}").
+   - Clear says "Not done: it wasn't confirmed." (`common.not_done_unconfirmed`) when the prompt was
+     closed. Otherwise it says how it went (`connect.clear_removed.cleared`, `connect.kept.for_card(s)`,
+     `connect.could_not_cleared_try_again`).
+
+The iPad also signs `tafs.disconnect.v1|{tenant}|{ids}` as its Face ID step and then throws the
+signature away. This Mac doesn't: its device key never prompts, so that signature would prove
+nothing. Windows doesn't sign it either.
+
+Nothing that grants access changes. Connecting, **Sign in again**, **Replace the key**, a key, and
+every approval and confirmation stay the phone's or the security key's, on every Mac.
 
 **Account › How tafs works** says where approvals are signed (`ApprovalRoute.howItWorksKey`).
 Only the security key's route keeps "Your answers are signed on this Mac."
@@ -160,8 +223,9 @@ first on Needs you, oldest first.
 
 ## Passkeys on macOS 12
 
-This app is for Macs without Touch ID, so it never holds an approval key. An approval on such a
-Mac can be the person's passkey: a USB security key signing the exact request, sent as
+This app never holds an approval key, Touch ID or not. A Mac with Touch ID uses it only to end
+access (above, "Ending access with Touch ID"). An approval on this Mac can be the person's
+passkey: a USB security key signing the exact request, sent as
 `KIFF-Passkey-Assertion`. The route is the public spec's "A Mac without Touch ID, and Linux", in
 [How a computer approves with a passkey](https://github.com/kiff/tafs/blob/main/docs/computer-passkeys.md);
 KIFF's checks are as `docs/secure-connection.md` describes them. Anything else is
@@ -201,7 +265,9 @@ this Mac has no key, the approve-elsewhere line first says what a security key i
 (`none_paired`). A closed sheet sends nothing and says nothing. **Revoke** needs no key: it's the iPad's plain
 session call (`POST /v1/me/mandates/{id}/revoke`), and a view-only Mac gets the shared line instead.
 Sharing and groups come with their own screens ("People and sharing"). A held call's **Approve once** is the
-key's too (above, "Answers"); its other answers that grant authority, and planque's acts, stay the phone's.
+key's too (above, "Answers"); its other answers that grant authority, and planque's acts, stay the phone's. The
+one exception is planque's disconnect, which takes access away: on a Touch ID Mac it is signed here
+(above, "Ending access with Touch ID").
 
 **In Core now** (`PasskeyApproval.swift`), as Windows' `PasskeyApprover`, `RequestsTogether` and
 `PasskeyRegistration`:
