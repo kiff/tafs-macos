@@ -42,8 +42,8 @@ let pairingOnboardingScreenTests: [Test] = [
                     _ = try shoot(OnboardingCards(start: page) {}.inLanguage(words), "onboarding-card-\(page.rawValue + 1)-\(language)",
                                   size: CGSize(width: 900, height: 820), dark: dark)
                 }
-                _ = try shoot(HowTafsWorksView {}.inLanguage(words), "onboarding-how-it-works-\(language)",
-                              size: CGSize(width: 640, height: 620), dark: dark)
+                _ = try shoot(HowTafsWorksView(chromeOffered: true) {}.inLanguage(words), "onboarding-how-it-works-\(language)",
+                              size: CGSize(width: 640, height: 860), dark: dark)
             }
         }
     }),

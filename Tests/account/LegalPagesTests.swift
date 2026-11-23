@@ -2,7 +2,7 @@ import Foundation
 
 let legalPagesTests: [Test] = [
     Test("each of kiff.dev's 41 languages gets its own Terms and Privacy policy, as the iPad's Legal") {
-        try expectEqual(LegalPages.languages.count, 41)
+        try expectEqual(LegalPages.languages.count, 42)
         for language in LegalPages.languages {
             try expectEqual(LegalPages.terms(language), "https://kiff.dev/\(language)/tafs/terms")
             try expectEqual(LegalPages.privacy(language), "https://kiff.dev/\(language)/tafs/privacy")
