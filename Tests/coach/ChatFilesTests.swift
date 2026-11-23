@@ -148,4 +148,13 @@ let coachFileTests: [Test] = [
         try expectEqual(files.sendKey(working: false, improving: true), "common.send")
         try expectEqual(files.sendKey(working: true, improving: true), "coach.send_when_answer_done")
     },
+    Test("a sent file is shown in Quick Look in place, as the iPad's, and never handed to another app to open") {
+        // A file someone sent (a `.command`, an app) is only ever previewed: `MessageFiles` hands nothing to NSWorkspace.
+        let view = try String(contentsOf: URL(fileURLWithPath: "Sources/App/coach/ChatFilesViews.swift"), encoding: .utf8)
+        guard let start = view.range(of: "struct MessageFiles: View {") else { throw Failure(description: "no MessageFiles") }
+        let body = view[start.upperBound...]
+        try expect(body.contains(".quickLookPreview($shown)"), "Quick Look in place")
+        try expect(body.contains("shown = await model.openFile(file)"), "the copy goes to the preview")
+        try expect(!body.contains("NSWorkspace"), "never opened in another app")
+    },
 ]

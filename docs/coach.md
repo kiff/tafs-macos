@@ -503,12 +503,12 @@ chat and a taf's alike:
   AI-data consent goes back too: Allow then only allows, and they wait to send again.
 - **A sent message's files** show under it, and each opens: tafs cloud says where it is
   (`GET /v1/tafs/{id}/attachments/{file}`), it's copied under its own name to a temporary
-  folder, and opened in the app this Mac opens its kind with. Sign-out removes the copies and
-  the files picked; one read after sign-out is neither written nor opened.
+  folder, and **shown in Quick Look, in place**, as the iPad's `quickLookPreview`. It's never handed
+  to another app, so a file someone sent (a `.command`, an app) is only ever previewed, never run.
+  Sign-out removes the copies and the files picked, and closes the preview with the chat; one read
+  after sign-out is neither written nor shown.
 - **Mac differences:** no Take photo (the iPad's camera); photos come from files, so each keeps
-  its own name where the iPad's picker gives "Photo {n}"; a file opens in its app, not in
-  Quick Look in place, so a file read after sign-out is never opened (the iPad shows one in
-  its own window, which sign-out closes); nothing is dropped onto the box, as on the iPad; a
+  its own name where the iPad's picker gives "Photo {n}"; nothing is dropped onto the box, as on the iPad; a
   file that can't be read says `chat.file.unreadable`, where the iPad shows the system's words.
   The open panel's files are read inside their security scope, as on the iPad, though the app
   isn't sandboxed.

@@ -1,4 +1,5 @@
 import AppKit
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -162,12 +163,14 @@ struct FileIcon: View {
 }
 
 /// The files sent with a message, in the thread, as the iPad's `MessageFiles`
-/// (AttachViews.swift:229-266): each opens full size, in the app this Mac opens its kind with.
+/// (AttachViews.swift:229-266): each opens full size in Quick Look, in place, as the iPad's `quickLookPreview`.
 struct MessageFiles: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
     let files: [AttachmentRef]
     @State private var opening: String?
+    /// The file shown in Quick Look, in place, as the iPad's `quickLookPreview`: never handed to another app.
+    @State private var shown: URL?
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 6) {
@@ -176,7 +179,7 @@ struct MessageFiles: View {
                     guard opening == nil else { return }
                     opening = file.id
                     Task {
-                        if let url = await model.openFile(file) { NSWorkspace.shared.open(url) }
+                        shown = await model.openFile(file)
                         opening = nil
                     }
                 } label: {
@@ -193,5 +196,6 @@ struct MessageFiles: View {
                 .accessibilityLabel(words("chat.file.open", ["name": file.name]))
             }
         }
+        .quickLookPreview($shown)
     }
 }
