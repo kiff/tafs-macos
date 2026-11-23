@@ -158,4 +158,25 @@ let tafTabsTests: [Test] = [
             try expectEqual(refusal.words, "Nothing to cancel.")
         }
     }),
+    Test("a not-done call's next step reads as tafs cloud says it, and does Connect apps, Ask Coach or nothing, as the iPad's") {
+        func entry(_ next: String) throws -> TafActivity.Entry {
+            let json = #"{"entries":[{"id":"e1","kind":"not_done","title":"Refund","detail":"Stripe refused","next":"# + next + "}]}"
+            guard let e = try JSONDecoder().decode(TafActivity.self, from: Data(json.utf8)).groups.first?.entries.first else { throw Failure(description: "no row") }
+            return e
+        }
+        let reconnect = try entry(#"{"kind":"reconnect","words":"Connect Stripe again","tool":"stripe__refund"}"#)
+        try expectEqual(reconnect.next?.action(fallback: "x"), .connectApps)
+        try expectEqual(reconnect.next?.words, "Connect Stripe again")
+        let ask = try entry(#"{"kind":"ask_coach","words":"Ask Coach","message":"Why was the refund refused?"}"#)
+        try expectEqual(ask.next?.action(fallback: "Refund: Stripe refused"), .askCoach("Why was the refund refused?"))
+        // No message: the row's own title and detail are Coach's first words.
+        let bare = try entry(#"{"kind":"ask_coach","words":"Ask Coach","message":"  "}"#)
+        try expectEqual(bare.next?.action(fallback: "Refund: Stripe refused"), .askCoach("Refund: Stripe refused"))
+        // A kind this app doesn't know, or "try later": its words alone.
+        try expectEqual(try entry(#"{"kind":"later","words":"Try again in an hour"}"#).next?.action(fallback: "x"), .line)
+        // A next step that doesn't read is none, never the row with it.
+        let broken = try entry(#"{"kind":7}"#)
+        try expectEqual(broken.next, nil)
+        try expectEqual(broken.title, "Refund")
+    },
 ]

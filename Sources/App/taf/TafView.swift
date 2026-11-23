@@ -283,7 +283,8 @@ struct TafView: View {
         if let pages {
             HStack(alignment: .top, spacing: 20) {
                 TafActivityTab(model: pages, taf: taf, openUsage: openUsage,
-                               doors: manages ? doors : nil, doorsOffered: doorsOffered, manages: manages)
+                               doors: manages ? doors : nil, doorsOffered: doorsOffered, manages: manages,
+                               askCoach: askCoach, openConnect: openConnect)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 cardColumn
             }
