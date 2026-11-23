@@ -255,7 +255,7 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
   send work (`APIInstructions.endpoint`), an example request that reads the key from the caller's own secret
   (`$TAFS_API_KEY`), single-quoted, that the key isn't here, and the boundary. **The endpoint is always rebuilt on
   tafs cloud's own address, over HTTPS**, keeping the door's path only when it's plain (`^/[A-Za-z0-9/_.~-]*$`), never
-  a query or a fragment; anything else is tafs cloud's address alone. That's qa-kiff's shared rule
+  a query or a fragment; anything else is tafs cloud's address alone. That's every app's shared rule
   (`vectors/api-door-endpoint.json`), hardening the iPad's host pin: the example is a shell line pasted with the
   developer's key, so it never names another host, and a path can't carry `$ ( ) ; & '` into the shell.
 - **Not here:** **New key**, which stays the phone's: a key is shown once, and this Mac can't keep it

@@ -10,10 +10,10 @@ enum APIInstructions {
 
     /// A door's address on tafs cloud: **always rebuilt on tafs cloud's own address**, keeping only the address's path,
     /// and only when that path is plain (`^/[A-Za-z0-9/_.~-]*$`, unreserved characters); never a query or a fragment.
-    /// Anything else is tafs cloud's address alone, with its slash. It's qa-kiff's shared rule (kiff/work#24, 23 Nov,
-    /// `vectors/api-door-endpoint.json`), which hardens the iPad's `APIDoorText.endpoint`. The example is a shell
+    /// Anything else is tafs cloud's address alone, with its slash. It's every app's shared rule
+    /// (`vectors/api-door-endpoint.json` in kiff/tafs), which hardens the iPad's `APIDoorText.endpoint`. The example is a shell
     /// line a developer pastes, with their key, so it never names another host, and a path can't carry `$ ( ) ; & '`.
-    /// tafs cloud's own door paths (`/v1/doors/api/door_…/requests`) are always plain.
+    /// tafs cloud's own door paths (`/v1/doors/api/api-…/requests`) are always plain.
     static func endpoint(_ address: String, base: URL = cloud) -> String {
         let root = base.absoluteString.hasSuffix("/") ? base.absoluteString : base.absoluteString + "/"
         guard let parts = URLComponents(string: address.trimmingCharacters(in: .whitespacesAndNewlines)) else { return root }
@@ -30,7 +30,7 @@ enum APIInstructions {
     }
 
     /// An example request, as the iPad's. It reads the key from the caller's own secret: the key is never written in it.
-    /// The endpoint is single-quoted (qa-kiff's hardening), so whatever slipped past the plain path stays inert in a shell.
+    /// The endpoint is single-quoted, so whatever slipped past the plain path stays inert in a shell.
     static func example(endpoint: String) -> String {
         // A quote in it would close the quoting: it's dropped (a plain endpoint never has one).
         let quoted = endpoint.replacingOccurrences(of: "'", with: "")

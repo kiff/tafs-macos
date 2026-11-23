@@ -56,8 +56,8 @@ let tafAPIInstructionsTests: [Test] = [
         try expect(example.contains("https://cloud.tafs.kiff.dev/v1/doors/api/door_ord7/requests"), "the endpoint")
         try expect(!example.contains("tafs_api_"), "never a key")
     },
-    Test("qa-kiff's exact cases: the path is kept only when plain, on tafs cloud's own address, never a query or fragment") {
-        // kiff/work#24, 23 Nov: the shared rule every app matches (`vectors/api-door-endpoint.json`'s `exact`).
+    Test("the shared rule's exact cases: the path is kept only when plain, on tafs cloud's own address, never a query or fragment") {
+        // The rule every app matches (`vectors/api-door-endpoint.json`'s `exact`, in kiff/tafs).
         let base = URL(string: "https://cloud.test")!
         for (address, shown) in [
             ("/v1/doors/api/door_ord7/requests", "https://cloud.test/v1/doors/api/door_ord7/requests"),
