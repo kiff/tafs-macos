@@ -32,6 +32,9 @@ iPad's own, from the shared strings (`sample.*`).
 
 - **It reaches no network.** The session has no device key and no security key, so planque's
   reads (which need this Mac's signed proof) and Coach's start never begin, and nothing streams.
+  No sample answer names a logo, so the app's one logo reader (`AppLogoImages.app`, tafs cloud's
+  `/v1/logos/`) is never asked; a test pins it.
+- **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
 - **It writes and approves nothing.** Every write is refused with the line that it takes KIFF
   (`sign_in.with_kiff`), and nothing is done. A shared line of its own is asked of tafs's strings.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.

@@ -77,4 +77,16 @@ let shellSampleTests: [Test] = [
         let work = try await cloud.work(of: "sample-parcels")
         try expectEqual(work.requests, [])
     }),
+    Test("no sample answer names a logo, so the app's one logo reader (tafs cloud's /v1/logos/) is never asked in the sample", awaiting: {
+        let (_, _, transport) = clients()
+        let paths = ["/v1/home", "/v1/me", "/v1/me/card-exceptions?status=held", "/v1/record", "/v1/usage/balance", "/v1/usage/credits",
+                     "/v1/tafs/sample-support/conversation", "/v1/tafs/sample-support/setup", "/v1/tafs/sample-support/activity"]
+        for path in paths {
+            let (_, body) = try await transport.send(HTTPRequest(method: "GET", path: path, headers: [:], body: Data()))
+            let text = String(decoding: body, as: UTF8.self)
+            try expect(!text.contains("logo") && !text.contains("/v1/logos/"), "\(path) names no logo")
+        }
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        try expect(window.contains("OverviewModel(cloud: cloud, remembered: inSample ? nil : .standard)"), "the sample's list is never kept")
+    }),
 ]

@@ -121,7 +121,8 @@ struct SignedInView: View {
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
-        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
+        // The list last read is kept for the next launch, but never the sample's: nothing of it is kept.
+        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: inSample ? nil : .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud, connections: ConnectionsSource(account: account, planque: planque, transport: NetworkTransport(base: URL(string: PlanqueClient.baseURL)!))))
