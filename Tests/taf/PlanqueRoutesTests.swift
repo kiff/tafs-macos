@@ -19,6 +19,20 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
     return planque
 }
 
+/// What no source may name: planque's approve and confirm, and any grant's route but the grants read. One exception, in the
+/// open (the PM's 03:48, kiff/work#20): KIFF's draft confirm, exactly this line, in `KeyAct` alone, signed by the security
+/// key as Approve once is.
+enum PlanqueBan {
+    static let kiffDraftConfirm = #"case .confirmTrial(let id, _), .confirmDraft(let id, _): return "/v1/me/agent-drafts/\(CloudClient.escaped(id))/confirm""#
+
+    /// The banned text this source names, else nil.
+    static func names(path: String, text: String) -> String? {
+        var text = text
+        if path.hasSuffix("Sources/Core/approvals/KeyApproval.swift") { text = text.replacingOccurrences(of: kiffDraftConfirm, with: "") }
+        return ["grants/", "/approve", "/confirm"].first { text.contains($0) }
+    }
+}
+
 let planqueRoutesTests: [Test] = [
     Test("this Mac signs one route at planque, its enrolment: never a grant's approve or confirm") {
         try expectEqual(PlanqueClient.routes, ["enrolment"])
@@ -41,10 +55,12 @@ let planqueRoutesTests: [Test] = [
         let all = try sources()
         try expect(all.count > 50, "the app's sources: \(all.count)")
         for (path, text) in all {
-            for banned in ["grants/", "/approve", "/confirm"] {
-                try expect(!text.contains(banned), "\(path) names \(banned)")
-            }
+            if let named = PlanqueBan.names(path: path, text: text) { throw Failure(description: "\(path) names \(named)") }
         }
+        // KIFF's draft confirm, the one such path a source names: once, in `KeyAct`, where the security key signs it (the
+        // PM's 03:48, kiff/work#20). planque's approve and confirm stay banned.
+        let allowedIn = all.filter { $0.text.contains(PlanqueBan.kiffDraftConfirm) }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
+        try expectEqual(allowedIn, ["KeyApproval.swift"])
         // The grants proof stays a read: GET, over the grants list, and nothing else.
         let client = try String(contentsOf: URL(fileURLWithPath: "Sources/Core/taf/PlanqueClient.swift"), encoding: .utf8)
         try expect(client.contains(#"method: "GET", uri: path"#), "the grants proof signs a GET")
@@ -92,5 +108,21 @@ let howItWorksTests: [Test] = [
         }
         try expectEqual(try Words(language: "en", folder: folder)("sign_in.every_action_taf_takes_goes_view"),
                         "Every action a taf takes goes through KIFF, which checks its Card before anything reaches an app. Your approvals are signed on your phone.")
+    },
+    Test("any other approve or confirm route still fails the ban: planque's, KIFF's elsewhere, or KIFF's spelt another way") {
+        let fakes = [
+            ("Sources/X.swift", #"let p = "/v1/accounts/t/grants/g1/confirm""#),
+            ("Sources/X.swift", #"let p = "/v1/accounts/t/grants/g1/approve""#),
+            ("Sources/X.swift", #"let p = "/v1/me/agent-drafts/\(id)/confirm""#),
+            // KIFF's line itself, outside `KeyAct`: still banned.
+            ("Sources/Other.swift", PlanqueBan.kiffDraftConfirm),
+            ("Sources/Core/approvals/KeyApproval.swift", #"return "/v1/me/agent-drafts/" + "x/confirm""#),
+            ("Sources/X.swift", "grants/g1"),
+        ]
+        for (path, text) in fakes {
+            try expect(PlanqueBan.names(path: path, text: text) != nil, "\(text) in \(path) slips through")
+        }
+        // The one allowed line, in `KeyAct`, passes.
+        try expectEqual(PlanqueBan.names(path: "Sources/Core/approvals/KeyApproval.swift", text: PlanqueBan.kiffDraftConfirm), nil)
     },
 ]

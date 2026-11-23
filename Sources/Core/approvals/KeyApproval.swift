@@ -31,7 +31,8 @@ enum KeyAct: Equatable {
     /// Removing a taf for good (the iPad's `removeTaf`): tafs cloud's `DELETE /v1/tafs/{id}`, empty body, signed before
     /// its Cards are revoked and sent after (`PasskeySession.assertion`).
     case removeTaf(String)
-    /// A version's trial Card (the iPad's `confirmDraftAsTrial`): KIFF's `POST /v1/me/agent-drafts/{id}/confirm` with
+    /// A version's trial Card (the iPad's `confirmDraftAsTrial`): KIFF's `POST` to the draft's confirm step (the one
+    /// such path a source may name, pinned in `PlanqueRoutesTests`) with
     /// `{"as":"trial","version":…}`; and installing it (`confirmDraft`), the same without `as`. Each grants authority, so
     /// each is the security key's, once, for that draft at the version the person read.
     case confirmTrial(id: String, version: String)
