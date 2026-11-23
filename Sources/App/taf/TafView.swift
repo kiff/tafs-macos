@@ -261,10 +261,20 @@ struct TafView: View {
     /// The chat, with the Card beside it as on the iPad.
     private var chatTab: some View {
         HStack(alignment: .top, spacing: 20) {
-            CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold)
+            // An open trial puts its bar over its own chat, as the iPad's `TrialScreen`; the live chat comes back after.
+            if let pages, let trial = pages.trial, let trialChat = pages.trialChat {
+                VStack(alignment: .leading, spacing: 10) {
+                    TrialBar(model: pages, trial: trial, name: taf.name)
+                    CoachView(model: trialChat, embedded: true)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
             cardColumn
         }
+        .task { await pages?.loadTrial() }
     }
 
     /// The Activity, with the Card beside it in the same column as the chat's, as the iPad's
@@ -421,6 +431,8 @@ struct VersionsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     let close: () -> Void
+    /// The version whose trial is being started.
+    @State private var trying: TafVersions.Version?
 
     /// A version's time and a trial's day, as the app shows them, in its language.
     private var when: DateFormatter { AppDates.formatter(words, date: .medium, time: .short) }
@@ -454,6 +466,9 @@ struct VersionsView: View {
             }
         }
         .task { await model.loadVersions() }
+        .sheet(item: $trying) { v in
+            TrialStartSheet(model: model, version: v, close: { trying = nil }).environment(\.words, words)
+        }
         .padding(20)
         .frame(width: 520, height: 520)
         .background(Theme.background)
@@ -490,6 +505,10 @@ struct VersionsView: View {
             Text(verbatim: TafVersions.byline(v, words, when: { when.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.dim)
             ForEach(Array(v.trials.enumerated()), id: \.offset) { _, trial in
                 Text(verbatim: TafVersions.tried(trial, words, day: { day.string(from: $0) })).font(.system(size: 12)).foregroundColor(Theme.soft)
+            }
+            // Trying a version that isn't live, under a Card of its own, on the security key (`Trials`); one trial a taf.
+            if !v.live, model.startsTrials, model.trial == nil {
+                Button(words("version.try_it")) { trying = v }.buttonStyle(OutlineButtonStyle()).fixedSize()
             }
         }
         .padding(14)

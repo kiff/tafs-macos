@@ -41,4 +41,26 @@ enum CallNames {
         let words = name.split(whereSeparator: { $0 == "_" || $0 == "-" }).joined(separator: " ")
         return words.isEmpty ? tool : words
     }
+
+    /// A vendor as people say it, as the iPad's `KIFFMapping.vendorWords`: "stripe-mcp" or
+    /// "mcp.stripe.com" is "Stripe".
+    static func vendorWords(_ vendor: String) -> String {
+        var v = vendor.lowercased()
+        if v.hasPrefix("mcp.") { v.removeFirst(4) }
+        for suffix in ["-mcp", "_mcp", ".mcp"] where v.hasSuffix(suffix) { v.removeLast(suffix.count) }
+        if let dot = v.firstIndex(of: ".") { v = String(v[..<dot]) }
+        guard let first = v.first else { return visible(vendor) }
+        return visible(first.uppercased() + v.dropFirst().replacingOccurrences(of: "-", with: " "))
+    }
+
+    /// A vendor's line as the approval draws it, as the iPad's `KIFFMapping.visible`: no direction
+    /// character (`Words.withoutDirection`), so a name can't reorder what stands beside it; any
+    /// other control character becomes a space.
+    static func visible(_ text: String) -> String {
+        var kept = String.UnicodeScalarView()
+        for scalar in Words.withoutDirection(text).unicodeScalars {
+            kept.append(scalar.properties.generalCategory == .control ? " " : scalar)
+        }
+        return String(kept)
+    }
 }

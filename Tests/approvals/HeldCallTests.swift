@@ -47,6 +47,13 @@ let approvalsHeldTests: [Test] = [
         try expectEqual(CallNames.toolWords("stripe.create_refund"), "create refund")
         try expectEqual(CallNames.toolWords("kiff__issue-credit"), "issue credit")
     },
+    Test("a vendor as people say it carries no direction character, and a control character is a space, as the iPad's vendorWords") {
+        try expectEqual(CallNames.vendorWords("mcp.stripe.com"), "Stripe")
+        try expectEqual(CallNames.vendorWords("google-calendar-mcp"), "Google calendar")
+        try expectEqual(CallNames.vendorWords("ev\u{202E}il\u{2066}co"), "Evilco")
+        try expectEqual(CallNames.vendorWords("acme\u{0007}pay"), "Acme pay")
+        try expectEqual(CallNames.vendorWords("\u{200F}"), "")
+    },
     Test("a call without arguments is named with what it's on, a gateway call without it, as the iPad's held mapping", awaiting: {
         struct Held: Decodable { let exceptions: [HeldCall] }
         let json = #"{"exceptions":[{"id":"e1","subject":"a","action":"stripe.create_refund","title":"Refund a payment","entity_id":"ch_42","created_at":"2026-11-15T00:17:00Z"},{"id":"e2","subject":"a","action":"stripe.create_refund","title":"Refund a payment","entity_id":"call_9","arguments":{"amount":"40"},"created_at":"2026-11-15T00:17:00Z"},{"id":"e3","subject":"a","action":"stripe.create_refund","entity_id":"ch_7","arguments":null,"created_at":"2026-11-15T00:17:00Z"},{"id":"e4","subject":"a","action":"pay.send","created_at":"2026-11-15T00:17:00Z"}]}"#

@@ -65,6 +65,8 @@ final class CoachModel: ObservableObject {
     private let cloud: CloudClient
     /// Opens the answer's stream; nil sends plainly and reads the thread again instead.
     private let streamer: LineStream?
+    /// A version's trial chat (`Trials`): its thread and messages are the trial's own routes, text only, never streamed.
+    var trial = false
     private let sleep: (TimeInterval) async throws -> Void
     private let now: () -> Date
     private var following = 0
@@ -82,8 +84,14 @@ final class CoachModel: ObservableObject {
     /// (`wider`). Nil, or nil from it, reads the thread unmarked; a taf's chat never sends it.
     private let proof: (() async -> String?)?
 
+    /// `grants` reads planque's grants and `drafts` one of KIFF's drafts, for what Coach's cards
+    /// name. Left out, Coach's own chat in the signed-in window (the one given a `proof`) reads them
+    /// as the iPad does: planque's grants with this device's proof (`ConnectionsSource`, the read
+    /// Connect apps sends), and a draft with the session (`AccountClient.draft(id:)`). Nothing else
+    /// reads them.
     init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
-         now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore(), proof: (() async -> String?)? = nil) {
+         now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore(), proof: (() async -> String?)? = nil,
+         grants: (() async throws -> [AppConnections.Grant])? = nil, drafts: ((String) async throws -> AccountClient.Draft)? = nil) {
         self.cloud = cloud
         self.fixed = taf
         self.proof = proof
@@ -91,6 +99,118 @@ final class CoachModel: ObservableObject {
         self.sleep = sleep
         self.now = now
         self.store = store
+        if taf == nil, let proof {
+            let planque: () async throws -> [AppConnections.Grant] = {
+                try await ConnectionsSource(transport: NetworkTransport(base: URL(string: PlanqueClient.baseURL)!), tenant: cloud.session.tenant,
+                                            language: cloud.language, proof: proof).grants()
+            }
+            let kiff: (String) async throws -> AccountClient.Draft = { id in
+                try await AccountClient(transport: NetworkTransport(), session: cloud.session, language: cloud.language).draft(id: id)
+            }
+            self.readGrants = grants ?? planque
+            self.readDraft = drafts ?? kiff
+        } else {
+            self.readGrants = taf == nil ? grants : nil
+            self.readDraft = taf == nil ? drafts : nil
+        }
+    }
+
+    // MARK: What Coach's cards name: planque's grants, KIFF's drafts, Coach's tools
+
+    /// planque's grants, as the iPad's `grants`: a hand-over's tools by their approval's title
+    /// (`AppConnections.toolTitle`), an approval's connection line, and the tools "Taking shape"
+    /// lists. Kept in memory only, and gone at sign-out.
+    @Published private(set) var grants: [AppConnections.Grant] = []
+    /// KIFF's drafts the approvals name, by id, as the iPad's `setupDrafts` and `setupDraftErrors`:
+    /// read, or why not. Kept in memory only, and gone at sign-out.
+    @Published private(set) var drafts: [String: DraftRead] = [:]
+    enum DraftRead: Equatable {
+        case read(AccountClient.Draft)
+        case failed(String)
+        var draft: AccountClient.Draft? { if case .read(let draft) = self { return draft } else { return nil } }
+    }
+    /// Coach's tools as `GET /v1/setup` says them (`tools`), as the iPad's `coachTools`; nil from a
+    /// tafs cloud that sends none.
+    @Published private(set) var coachTools: CoachTools?
+    private let readGrants: (() async throws -> [AppConnections.Grant])?
+    private let readDraft: ((String) async throws -> AccountClient.Draft)?
+
+    /// planque is read for Coach's cards with this Mac's proof, as Windows gates "Taking shape" on
+    /// planque being there to read tools. It stands for the iPad's `planqueReady`, which this Mac is
+    /// only after a Start made on it.
+    var readsPlanque: Bool { readGrants != nil }
+
+    /// The drafts read, by id.
+    var readDrafts: [String: AccountClient.Draft] { drafts.compactMapValues(\.draft) }
+
+    /// What the chat's cards name that's read from elsewhere, and where each stands: when it
+    /// changes, `readNamed` reads again. Empty when nothing is named.
+    var named: String {
+        guard isCoach, case .loaded(_, let page) = state else { return "" }
+        var parts: [String] = []
+        for card in page.cards {
+            if let grant = card.grant { parts.append("g:\(grant):\(card.answerState ?? "-")") }
+            if card.type == "approval", let draft = card.draft { parts.append("d:\(draft):\(card.answerState ?? "-")") }
+            if card.isHandOver, !card.tools.isEmpty { parts.append("t:\(card.key)") }
+        }
+        return parts.joined(separator: "|")
+    }
+
+    /// Reads what the chat's cards name, as the iPad's `refreshConnections` and `readCardDraft`:
+    /// planque's grants when a card names one or a hand-over lists tools; each draft an approval
+    /// names. Reads only. A read that fails keeps what was read; one after sign-out is dropped.
+    func readNamed() async {
+        guard isCoach, case .loaded(_, let page) = state else { return }
+        let gen = accountGeneration
+        if let readGrants, page.cards.contains(where: { $0.grant != nil || ($0.isHandOver && !$0.tools.isEmpty) }),
+           let read = try? await readGrants(), gen == accountGeneration {
+            grants = read
+        }
+        var ids: [String] = []
+        for card in page.cards where card.type == "approval" {
+            if let id = card.draft, !ids.contains(id) { ids.append(id) }
+        }
+        for id in ids { await read(draft: id) }
+    }
+
+    /// Reads one of KIFF's drafts again, as the iPad's `readCardDraft`: Try again on a card whose
+    /// Card couldn't be read.
+    func read(draft id: String) async {
+        guard let readDraft else { return }
+        let gen = accountGeneration
+        do {
+            let draft = try await readDraft(id)
+            guard gen == accountGeneration else { return }
+            drafts[id] = .read(draft)
+        } catch {
+            guard gen == accountGeneration else { return }
+            // A draft read once stays drawn: only one never read says why.
+            if drafts[id]?.draft == nil { drafts[id] = .failed(Self.why(error)) }
+        }
+    }
+
+    /// planque's grant a card asks about, once read.
+    func grant(for card: Thread.Card) -> AppConnections.Grant? {
+        guard let id = card.grant else { return nil }
+        return grants.first { $0.id == id }
+    }
+
+    /// Whether a newer approval in the chat asks about the same connection (`Thread.Page.replaced`).
+    func replaced(_ card: Thread.Card) -> Bool {
+        guard case .loaded(_, let page) = state else { return false }
+        return page.replaced(card)
+    }
+
+    /// What "Taking shape" shows, from what Coach holds (`SetupShape`).
+    func shape(_ words: Words) -> SetupShape? {
+        guard isCoach, case .loaded(_, let page) = state else { return nil }
+        return SetupShape(page: page, grants: grants, drafts: readDrafts, words)
+    }
+
+    /// A tool of a hand-over, by its approval's title, else in words, as the iPad's
+    /// `toolTitle($0) ?? KIFFMapping.toolWords($0)` (SetupChatView.swift:1446).
+    func toolWords(_ card: Thread.Card) -> [String] {
+        card.tools.map { AppConnections.toolTitle($0, in: grants) ?? CallNames.toolWords($0) }
     }
 
     /// Coach's own chat, not a taf's: only it has conversations, and only its cards are answered.
@@ -111,6 +231,7 @@ final class CoachModel: ObservableObject {
         if fresh { return nil }
         // Only Coach's own thread carries the proof, as on the iPad.
         var signed: String?
+        if trial { return try await cloud.trialThread(of: coach.id) }
         if isCoach, let make = proof { signed = await make() }
         return try await cloud.thread(of: coach.id, session: isCoach ? chat : nil, proof: signed)
     }
@@ -363,15 +484,20 @@ final class CoachModel: ObservableObject {
         }
     }
 
+    /// Coach improving a taf holds the files in its tray back, as the iPad's `improvementHoldsFiles`
+    /// (AppModel.swift:5555): an improvement's first message carries none, since tafs cloud adds the
+    /// taf to it. The words go alone, the files wait for the next message, and the box says so
+    /// (`coach.improve_no_files`).
+    var improvementHoldsFiles: Bool { files.heldBy(improving: improving != nil) }
+
     /// Whether Send goes: words, or files ready, and nothing that holds it (a file still going
-    /// up, or files while the chat is at work, as the iPad's `holdsSend`).
+    /// up, or files while the chat is at work, as the iPad's `holdsSend`). Files an improvement
+    /// holds back hold nothing: the words go alone.
     var canSend: Bool {
+        if improvementHoldsFiles { return canSend(draft) }
         guard !files.holdsSend(working: working) else { return false }
         let ready = files.files.compactMap(\.ref)
         guard !ready.isEmpty else { return canSend(draft) }
-        // An improvement's first message carries no files, as the iPad's `deliverSetupOnce`
-        // (AppModel.swift:7710-7711): the files wait in the tray.
-        guard improving == nil else { return false }
         guard case .loaded = state else { return false }
         return Outgoing.text(draft, files: ready) != nil && (pending == nil || pending?.failed != nil)
     }
@@ -391,8 +517,14 @@ final class CoachModel: ObservableObject {
     /// if it doesn't go, it stays with why, to send again.
     func send() async {
         guard case .loaded(let coach, _) = state, canSend else { return }
-        // Files never go into an improvement's first message: they stay in the tray.
-        if improving != nil, files.hasReady { return }
+        // An improvement's first message goes without them: they stay in the tray for the next
+        // one, as the iPad's `send` (SetupChatView.swift:825-826).
+        if improvementHoldsFiles {
+            guard let text = Outgoing.text(draft) else { return }
+            draft = ""
+            await deliver(text, to: coach)
+            return
+        }
         // A message with files goes as a message of its own, with the ready ones, as the iPad's
         // `submitSetup` (AppModel.swift:7825-7826); ones that failed stay in the tray.
         let taken = files.take()
@@ -573,7 +705,13 @@ final class CoachModel: ObservableObject {
 
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
     func decline(_ card: Thread.Card) async {
-        guard case .loaded(let coach, _) = state, answering == nil, card.waitsForPerson, card.grants else { return }
+        guard case .loaded(let coach, _) = state, answering == nil, card.grants else { return }
+        // A sign-in while it waits; an approval as the iPad offers Decline, failed ones answered too.
+        if card.type == "approval" {
+            guard ApprovalLines.declinable(card, ApprovalLines.state(card, grant: grant(for: card)), replaced: replaced(card), grant: grant(for: card)) else { return }
+        } else {
+            guard card.waitsForPerson else { return }
+        }
         answering = card.key
         defer { answering = nil }
         do {
@@ -641,6 +779,13 @@ final class CoachModel: ObservableObject {
         do {
             // An improvement's first message goes through tafs cloud, which adds the taf's
             // context; the conversation goes on as any other (the iPad's `deliverSetup`).
+            // A trial's turn goes to the trial's own chat, then it's followed as any other.
+            if trial {
+                try await cloud.trialMessage(to: coach.id, text: text)
+                guard mine == conversation else { return true }
+                await follow(coach)
+                return true
+            }
             if isCoach, let taf = improving {
                 let sent = try await cloud.improve(taf.id, text: text)
                 guard mine == conversation else { return true }
@@ -815,6 +960,9 @@ final class CoachModel: ObservableObject {
     /// with it go, as the iPad's sign-out (`chatFiles = [:]`, `removeOpenedFiles`).
     func signedOut() {
         accountGeneration += 1
+        grants = []
+        drafts = [:]
+        coachTools = nil
         files = ChatFiles()
         fileNotice = nil
         Self.removeOpenedFiles()
@@ -904,7 +1052,15 @@ final class CoachModel: ObservableObject {
 
     func load() async {
         do {
-            let found = try await (fixed == nil ? cloud.coach() : fixed)
+            let found: Coach?
+            if let fixed {
+                found = fixed
+            } else {
+                // Coach's tools come with the same read, as the iPad's `setupRead`'s `tools`.
+                let (setup, tools) = try await cloud.coachAndTools()
+                found = setup
+                coachTools = tools
+            }
             guard let coach = found else { state = .notStarted; return }
             // Coach opens on its newest chat, as the iPad's `loadSetupThread`; without the list,
             // or with none yet, the thread reads as before.
@@ -992,8 +1148,33 @@ struct CoachView: View {
     var onScroll: ((Bool) -> Void)? = nil
     @State private var scrollFold = ScrollFold()
     @State private var planOpen = false
+    /// Coach's width, for "Taking shape" beside its conversation at 780 or wider.
+    @State private var width: CGFloat = 0
+
+    /// "Taking shape" shows beside the conversation, as the iPad's `shaping`: Coach's own screen,
+    /// read, at least 780 across (dragged wide, or ⤢), while planque can be read for its tools
+    /// (`readsPlanque`). The plan then shows there, not in the chat.
+    private var shaping: Bool {
+        guard !embedded, model.readsPlanque, case .loaded = model.state else { return false }
+        return SetupShape.shows(width: Double(width), coach: model.isCoach)
+    }
 
     var body: some View {
+        HStack(spacing: 0) {
+            chat
+            if shaping, let shape = model.shape(words) {
+                Rectangle().fill(Theme.line).frame(width: 1)
+                SetupShapePanel(shape: shape).frame(width: CGFloat(SetupShape.width))
+            }
+        }
+        .background(GeometryReader { space in Color.clear.preference(key: CoachWidth.self, value: space.size.width) })
+        .onPreferenceChange(CoachWidth.self) { width = $0 }
+        // What Coach's cards name, read as they change: planque's grants and KIFF's drafts.
+        .task(id: model.named) { await model.readNamed() }
+    }
+
+    /// The conversation, with its title row above and its message box below.
+    private var chat: some View {
         Group {
             // A taf's chat with nothing in it yet is its empty thread, never Coach mode's start.
             if model.isEmpty, !embedded {
@@ -1013,8 +1194,12 @@ struct CoachView: View {
         // The screen's name sits small and centred on the background's own colour, as on the iPad.
         .safeAreaInset(edge: .top, spacing: 0) {
             if !embedded {
-                header
-                    .background(Theme.background)
+                VStack(spacing: 0) {
+                    header
+                        .background(Theme.background)
+                    // Coach's tools still to give, one line above the conversation, as the iPad's `CoachToolsRow`.
+                    if model.isCoach, let tools = model.coachTools, tools.showsRow { CoachToolsRow(tools: tools) }
+                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
@@ -1182,6 +1367,14 @@ struct CoachView: View {
             VStack(alignment: .leading, spacing: 0) {
             // The files for the next message, above the box, as the iPad's `FileTray`.
             FileTray(model: model)
+            // While Coach improves a taf, files in the tray wait for the next message: the words go alone.
+            if model.improvementHoldsFiles {
+                Text(words("coach.improve_no_files")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 26).padding(.top, 8)
+                    .accessibilityIdentifier("coach.improve-no-files")
+            }
             VStack(alignment: .leading, spacing: 4) {
                 // While Coach or the taf works, the box asks for the next message, as on the iPad.
                 TextField(placeholder, text: $model.draft)
@@ -1203,7 +1396,7 @@ struct CoachView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(!model.canSend)
-                    .accessibilityLabel(words("common.send"))
+                    .accessibilityLabel(words(model.files.sendKey(working: model.working, improving: model.improving != nil)))
                 }
                 .padding(.horizontal, 8).padding(.bottom, 8)
             }
@@ -1538,7 +1731,8 @@ struct CoachView: View {
         if let text = card.askCoach {
             AskCoachCard(text: text, ask: askingCoach(text))
         } else if card.isPlan {
-            plan(card)
+            // Beside the conversation while "Taking shape" shows, as the iPad's (SetupChatView.swift:86).
+            if !shaping { plan(card) }
         } else if card.isImprovement {
             improvement(card)
         } else if card.isHandOver {
@@ -1551,7 +1745,8 @@ struct CoachView: View {
             notice(card)
         } else if card.type == "questions" {
             questions(card)
-        } else if card.title != nil || card.text != nil || card.waitsForPerson || card.answered != nil {
+        } else if card.drawsAsChoice {
+            // Never a drive's card: Coach driving the phone's screen is the phone's (docs/drive.md).
             choice(card)
         }
     }
@@ -1640,7 +1835,8 @@ struct CoachView: View {
             if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true) }
             if !card.tools.isEmpty {
                 // In words, as the iPad's (`KIFFMapping.toolWords`), never a tool's own name.
-                Text(verbatim: card.toolWords.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                // Each by its approval's title, else in words, as the iPad's `toolTitle` (SetupChatView.swift:1446).
+                Text(verbatim: model.toolWords(card).joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
             if let failed = card.outcome?.failed {
                 Text(words("coach.not_set_up", ["name": name, "why": failed])).font(.system(size: 14)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
@@ -1713,85 +1909,41 @@ struct CoachView: View {
         }
     }
 
-    /// An approval or a sign-in. Answered: one folded line of what it was, with a ⌄, which a click
-    /// opens again, as the iPad's `SetupApproval` (SetupChatView.swift:1513-1530). Waiting: what it
-    /// asks, Decline, and Approve only on a Mac that can sign one; otherwise where to approve.
-    @ViewBuilder private func approval(_ card: Thread.Card) -> some View {
-        if card.fold == .opens, let answered = card.answered {
-            if opened.contains(card.key) {
-                answeredApproval(card, declined: declined(answered))
-            } else {
-                Button { opened.insert(card.key) } label: { approvalLine(card, answered).contentShape(Rectangle()) }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(words("coach.shows_approval"))
-            }
-        } else if card.waitsForPerson {
-            VStack(alignment: .leading, spacing: 12) {
-                Eyebrow(text: words("coach.needs_you_approve"), color: Theme.amberText)
-                if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
-                if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
-                if let connection = card.connectionWords { Text(verbatim: connection).font(.system(size: 13)).foregroundColor(Theme.soft) }
-                // A sign-in that asks for more than the job, said above the buttons, in tafs cloud's words.
-                if let wider = card.widerWords { WiderLine(words: wider) }
-                if model.answering == card.key {
-                    Text(words("coach.answering")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                } else {
-                    outline(words("coach.answer.decline"), color: Theme.ink) { Task { await model.decline(card) } }
-                        .disabled(model.answering != nil)
-                }
-                if !canApprove {
-                    // No Approve here: this Mac can't sign one. The phone has the same card.
-                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 12)).foregroundColor(Theme.soft)
-                        .frame(maxWidth: .infinity)
-                }
-                if let why = model.notAnswered[card.key] {
-                    Text(words("coach.answer.failed_why", ["value": why])).font(.system(size: 12)).foregroundColor(Theme.no)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber))
-        }
-    }
-
-    /// tafs cloud's words for the answer are the only sign of a decline in the thread: the shared
-    /// "Declined" in the app's language, which tafs cloud writes in too.
-    private func declined(_ answered: String) -> Bool { answered == words("coach.answer.declined_short") }
-
-    /// An answered approval, folded: what was answered, then what it was, and a ⌄.
-    private func approvalLine(_ card: Thread.Card, _ answered: String) -> some View {
-        Group {
-            if declined(answered) {
-                outcomeLine("minus.circle.fill", Theme.dim, card.title.map { words("coach.answer.declined_title", ["title": $0]) } ?? answered, more: true)
-            } else {
-                outcomeLine("checkmark.circle.fill", Theme.ok, [answered, card.title].compactMap { $0 }.joined(separator: " · "), detail: card.connectionWords, more: true)
-            }
-        }
-    }
-
-    /// An answered approval opened again, as the iPad's card in its answered state: Approved or
-    /// Declined, with Fold, then what it asked. Nothing on it answers again.
-    private func answeredApproval(_ card: Thread.Card, declined: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Eyebrow(text: words(declined ? "coach.answer.declined_short" : "coach.answer.approved_short"), color: declined ? Theme.dim : Theme.ok)
-                Spacer()
-                Button { opened.remove(card.key) } label: {
-                    Text(words("coach.plan.fold_short")).font(.system(size: 13)).foregroundColor(Theme.dim)
+    /// An approval, as the iPad's `SetupApproval` (SetupChatView.swift:1523-1546): one a newer request
+    /// for the same connection replaced folds to a line of history; an answered one to a line of what
+    /// was approved or declined; each opens again with a click, as `SetupApprovalCard`. Waiting or
+    /// failed, the card. One the person wrote past draws nothing.
+    private func approval(_ card: Thread.Card) -> some View {
+        let replaced = model.replaced(card)
+        let grant = model.grant(for: card)
+        let draft = card.draft.flatMap { model.drafts[$0]?.draft }
+        let state = ApprovalLines.state(card, grant: grant)
+        let open = opened.contains(card.key)
+        let done = state == .done
+        let lines = ApprovalLines.signedLines(state, draft: draft, words)
+        return Group {
+            if replaced && !open {
+                // A newer request for this connection is below: this one is history, and never shows
+                // that connection's live state or its error.
+                Button { opened.insert(card.key) } label: {
+                    outcomeLine("arrow.down.circle.fill", Theme.dim, ApprovalLines.replacedLine(card, words), more: true).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            }
-            if let title = card.title { Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink) }
-            if let text = card.text { Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).lineSpacing(2).fixedSize(horizontal: false, vertical: true) }
-            if let connection = card.connectionWords {
-                Label(connection, systemImage: "checkmark.circle.fill").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+                .accessibilityHint(words("coach.shows_earlier_request"))
+            } else if (done || state == .declined) && !open {
+                Button { opened.insert(card.key) } label: {
+                    outcomeLine(done ? "checkmark.circle.fill" : "minus.circle.fill", done ? Theme.ok : Theme.dim,
+                                ApprovalLines.outcome(card, state, grant: grant, draft: draft, words),
+                                detail: lines.isEmpty ? nil : lines.joined(separator: "\n"), more: true)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(words("coach.shows_approval"))
+            } else if replaced || open || card.waitsForPerson || state.isFailure {
+                SetupApprovalCard(model: model, card: card, replaced: replaced, state: state, grant: grant, canApprove: canApprove,
+                                  open: open, fold: { opened.remove(card.key) })
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(declined ? Theme.amber : Theme.ok))
     }
 
     /// Several questions at once, as the iPad's `QuestionsCard` (QuestionsCard.swift:17-24):
@@ -1921,6 +2073,12 @@ struct WrapRow<Cell: View>: View {
         .background(GeometryReader { drawn in Color.clear.preference(key: WrapHeight.self, value: drawn.size.height) })
         .onPreferenceChange(WrapHeight.self) { height = $0 }
     }
+}
+
+/// Coach's width, as drawn.
+private struct CoachWidth: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// Where the chat's thread starts in its scroll view: lower as it scrolls down.

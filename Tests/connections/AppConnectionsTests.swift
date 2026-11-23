@@ -33,6 +33,28 @@ private func source(_ transport: CannedTransport, proof: String? = "t=1700000000
 }
 
 let appConnectionsTests: [Test] = [
+    Test("a grant's tools read with their titles, leniently, and a hand-over's tool takes its approval's title, as the iPad's toolTitle", awaiting: {
+        let answer = #"""
+        {"grants":[
+          {"id":"g1","status":"connected","vendor":"Stripe","request":{"server":"mcp.stripe.com","agent":"a","tools":[
+            {"tool":"create_refund","name":"stripe__create_refund_repg","title":"Refund a payment","read_only":false},
+            {"tool":"list_charges","title":"  "},
+            {"name":"no tool"},
+            7
+          ]}},
+          {"id":"g2","status":"listed","request":{"server":"s","agent":"a","tools":"not a list"}}
+        ]}
+        """#
+        let grants = try await source(CannedTransport([(200, answer)])).grants()
+        try expectEqual(grants.map(\.id), ["g1", "g2"])
+        try expectEqual(grants[0].tools.map(\.action), ["stripe__create_refund_repg", "list_charges"])
+        try expectEqual(grants[1].tools, [])
+        try expectEqual(grants[1].listed, true)
+        try expectEqual(AppConnections.toolTitle("stripe__create_refund_repg", in: grants), "Refund a payment")
+        // A blank title is none: the tool is then said in words.
+        try expectEqual(AppConnections.toolTitle("list_charges", in: grants), nil)
+        try expectEqual(AppConnections.toolTitle("create_refund", in: grants), nil)
+    }),
     Test("the connections are read from planque with this Mac's signed read, the tenant escaped, and nothing else sent", awaiting: {
         let transport = CannedTransport([(200, grantsAnswer)])
         let grants = try await source(transport).grants()

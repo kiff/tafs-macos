@@ -31,6 +31,12 @@ enum KeyAct: Equatable {
     /// Removing a taf for good (the iPad's `removeTaf`): tafs cloud's `DELETE /v1/tafs/{id}`, empty body, signed before
     /// its Cards are revoked and sent after (`PasskeySession.assertion`).
     case removeTaf(String)
+    /// A version's trial Card (the iPad's `confirmDraftAsTrial`): KIFF's `POST` to the draft's confirm step (the one
+    /// such path a source may name, pinned in `PlanqueRoutesTests`) with
+    /// `{"as":"trial","version":…}`; and installing it (`confirmDraft`), the same without `as`. Each grants authority, so
+    /// each is the security key's, once, for that draft at the version the person read.
+    case confirmTrial(id: String, version: String)
+    case confirmDraft(id: String, version: String)
     /// Discarding a taf being set up (the iPad's `discardSettingUp`): tafs cloud's
     /// `POST /v1/home/setting-up/{agent}/discard`, empty body, signed before its Cards are revoked and sent after.
     case discardSettingUp(String)
@@ -48,6 +54,7 @@ enum KeyAct: Equatable {
         case .timeZone: return "PUT"
         case .resume: return "POST"
         case .removeTaf: return "DELETE"
+        case .confirmTrial, .confirmDraft: return "POST"
         case .discardSettingUp: return "POST"
         case .reopenAPIDoor: return "PATCH"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
@@ -60,6 +67,7 @@ enum KeyAct: Equatable {
         case .timeZone: return "/v1/me/time-zone"
         case .resume(let agent): return agent.map { "/v1/agents/\(CloudClient.escaped($0))/resume" } ?? "/v1/resume"
         case .removeTaf(let id): return "/v1/tafs/\(CloudClient.escaped(id))"
+        case .confirmTrial(let id, _), .confirmDraft(let id, _): return "/v1/me/agent-drafts/\(CloudClient.escaped(id))/confirm"
         case .discardSettingUp(let agent): return "/v1/home/setting-up/\(CloudClient.escaped(agent))/discard"
         case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
@@ -78,6 +86,8 @@ enum KeyAct: Equatable {
             return (try? encoder.encode(["time_zone": zone])) ?? Data()
         case .resume: return Data("{}".utf8)
         case .removeTaf: return Data()
+        case .confirmTrial(_, let version): return KeyAct.confirmBody(version: version, asTrial: true)
+        case .confirmDraft(_, let version): return KeyAct.confirmBody(version: version, asTrial: false)
         case .discardSettingUp: return Data()
         // The iPad's `reopenBody`, these exact bytes.
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
@@ -93,6 +103,8 @@ enum KeyAct: Equatable {
         // The taf's name goes in `device`'s place: the iPad's reason, "Resume {taf}", or "Resume all your tafs".
         case .resume(let agent): return agent == nil ? words("taf.halt.resume_all_prompt") : words("taf.halt.resume_prompt", ["taf": device])
         case .removeTaf: return words("taf.remove.prompt", ["taf": device])
+        // The iPad's prompt, filled with the version and the taf by the caller, in `device`'s place.
+        case .confirmTrial, .confirmDraft: return device
         // tafs cloud's own words for it, given in `device`'s place: its title, else its button.
         case .discardSettingUp: return device
         // The door's app, or the key's name, in `device`'s place, as the iPad's reasons; Remove door as its button says.

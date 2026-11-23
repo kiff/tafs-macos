@@ -4,6 +4,17 @@ import SwiftUI
 /// A taf's Activity and Setup, read from tafs cloud when their tab opens. Both only read.
 @MainActor
 final class TafPagesModel: ObservableObject {
+    /// A version's trial (`Trials`): KIFF's client, for reading the draft and ending a trial (the device key's call), and
+    /// the security key's approval of a draft confirm, set by the window. Nil leaves trials to the phone.
+    var account: AccountClient?
+    var confirmWithKey: ((KeyAct, String) async throws -> Data)?
+    /// The taf's name, for the trial's prompts.
+    var tafName = ""
+    @Published private(set) var trial: Trials.Open?
+    @Published private(set) var trialError: String?
+    @Published private(set) var trialBusy = false
+    /// The trial's own chat, made when a trial is open.
+    @Published private(set) var trialChat: CoachModel?
     /// Revokes the taf's Cards in KIFF, as the iPad's `revoke`: set by the window; nil draws no Revoke.
     var revokeCards: (([String]) async throws -> Void)?
     /// Whether this Mac's session is view-only (KIFF's `view`): Revoke isn't offered, as on the iPad.
@@ -76,6 +87,104 @@ final class TafPagesModel: ObservableObject {
         self.runs = runs ?? RunNowModel(cloud: cloud)
         // The page draws Run now from the app's model: it changes when that does.
         following = self.runs.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+    }
+
+    /// Whether this Mac starts and installs trials: with KIFF's client and the security key.
+    var startsTrials: Bool { account != nil && confirmWithKey != nil }
+
+    /// The taf's open trial, as tafs cloud keeps it; its chat is made once one is open.
+    func loadTrial() async {
+        do {
+            setTrial(try await cloud.openTrial(of: taf))
+        } catch is CancellationError {
+        } catch {
+            trialError = Words.app("version.trial.not_read", ["why": NeedsYouModel.why(error)])
+        }
+    }
+
+    private func setTrial(_ open: Trials.Open?) {
+        trial = open
+        if let open {
+            if trialChat == nil {
+                let chat = CoachModel(cloud: cloud, taf: Coach(id: taf, name: Words.app("version.trial.chat_name", ["taf": tafName, "n": String(open.n)])))
+                chat.trial = true
+                trialChat = chat
+            }
+        } else {
+            trialChat = nil
+        }
+    }
+
+    /// The draft a trial of version `n` would confirm, read by this Mac itself, before anything is signed.
+    func trialDraft(version n: Int) async throws -> AccountClient.Draft {
+        guard let account else { throw KIFFError.unreadable }
+        return try await account.draft(id: try await cloud.trialDraft(of: taf, version: n))
+    }
+
+    /// Starts trying version `n`, as the iPad's `startTrying`; true once it's open. `shownDraft` is the draft version the
+    /// person read: changed since, nothing is signed.
+    func startTrial(version n: Int, shownDraft: String) async -> Bool {
+        guard let account, let confirm = confirmWithKey, !trialBusy else { return false }
+        trialBusy = true
+        defer { trialBusy = false }
+        trialError = nil
+        let cloud = cloud, taf = taf, prompt = Words.app("version.trial.prompt", ["n": String(n), "taf": tafName])
+        let done = await Trials.start(n: n, shownDraft: shownDraft, words: Words.app, makeDraft: { try await cloud.trialDraft(of: taf, version: n) },
+                                      readDraft: { try await account.draft(id: $0) }, confirm: { try await confirm($0, prompt) },
+                                      open: { try await cloud.openTrial(of: taf, version: n, draft: $0) })
+        switch done {
+        case .started(let open):
+            setTrial(open)
+            await loadVersions()
+            return true
+        case .changed: trialError = Words.app("version.trial.changed")
+        case .notATrial(let status): trialError = Trials.notATrialLine(status, words: Words.app)
+        case .closed: break
+        case .failed(let why): trialError = why
+        }
+        return false
+    }
+
+    /// Install: the trial's draft confirmed in KIFF on the key (if it isn't yet), then tafs cloud makes it live.
+    func installTrial() async -> Bool {
+        guard let account, let confirm = confirmWithKey, let open = trial, !trialBusy else { return false }
+        trialBusy = true
+        defer { trialBusy = false }
+        trialError = nil
+        do {
+            let draft = try await account.draft(id: open.draft)
+            if !draft.confirmed {
+                _ = try await confirm(.confirmDraft(id: draft.id, version: draft.version),
+                                      Words.app("version.prompt.install", ["n": String(open.n), "taf": tafName]))
+            }
+            _ = try await cloud.installTrial(of: taf)
+        } catch is CancellationError {
+            return false
+        } catch {
+            trialError = Words.app("version.trial.install_unfinished", ["n": String(open.n), "why": NeedsYouModel.why(error)])
+            return false
+        }
+        setTrial(nil)
+        await loadVersions()
+        return true
+    }
+
+    /// Go back: KIFF ends the trial Card (the device key's call: it takes authority away), then tafs cloud ends the trial.
+    func goBackFromTrial() async -> Bool {
+        guard let account, let open = trial, !trialBusy else { return false }
+        trialBusy = true
+        defer { trialBusy = false }
+        trialError = nil
+        do {
+            try await account.endTrial(draft: open.draft)
+            _ = try await cloud.endTrial(of: taf)
+        } catch {
+            trialError = Words.app("version.trial.not_ended", ["why": NeedsYouModel.why(error)])
+            return false
+        }
+        setTrial(nil)
+        await loadVersions()
+        return true
     }
 
     /// Reads the Activity, for a filter tafs cloud offered. A slower answer to an older filter is dropped.
