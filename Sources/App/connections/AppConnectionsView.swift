@@ -3,11 +3,15 @@ import SwiftUI
 /// "Your {app} connections", as the iPad's `AppConnectionsView` (kiff/tafs
 /// `ios/Tafs/Views/ConnectAppsView.swift:488-722`): a section per taf the app's connections were
 /// made for, those needing attention first, then the removed tafs', then "Other connections".
-/// This page only reads. What would change a connection (Sign in again, Replace the key, Remove
-/// access, Cancel, Clear these connections) is drawn as on the iPad for whoever manages the Cards;
-/// a click asks the iPad's question first where the iPad asks one, then says to approve on another
-/// device (`approval.device_can_not_approve_approve`), sending nothing: this Mac can't sign it
-/// (docs/connections.md). planque's own row opens the connection's page (`ConnectionDetailView`).
+/// What would change a connection (Sign in again, Replace the key, Remove access, Cancel, Clear
+/// these connections) is drawn as on the iPad for whoever manages the Cards; a click asks the
+/// iPad's question first where the iPad asks one. Ending one (Remove access, Cancel the request,
+/// Cancel the sign-in, Clear) is done here on a Mac whose device key is in the Secure Enclave and
+/// that can check Touch ID: Touch ID only, then the device key signs planque's `DELETE`
+/// (`ConnectionEnding`), with "Approve on your phone instead" beside it. On any other Mac, and for
+/// anything that grants access (Sign in again, Replace the key), it says to approve on another
+/// device (`approval.device_can_not_approve_approve`) and sends nothing (docs/connections.md).
+/// planque's own row opens the connection's page (`ConnectionDetailView`).
 struct AppConnectionsView: View {
     @Environment(\.words) private var words
     let app: Apps.App
@@ -32,7 +36,10 @@ struct AppConnectionsView: View {
 
     var body: some View {
         if let id = detail, let grant = model.grants.first(where: { $0.id == id }) {
-            ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards) { detail = nil }
+            let end = grant.id + "|end"
+            ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards,
+                                 ending: ConnectionEnd(route: model.endRoute, busy: model.ending.contains(end), note: model.notes[end],
+                                                perform: { [model] prompt in await model.disconnect(grant.id, prompt: prompt, id: end) })) { detail = nil }
         } else {
             page
         }
@@ -88,12 +95,13 @@ struct AppConnectionsView: View {
     private func rows(_ grants: [AppConnections.Grant], taf: String?) -> some View {
         ForEach(grants) { g in
             if g.id != grants.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
-            ConnectionRow(grant: g, app: app, taf: taf, managesCards: managesCards, gated: $gated) { detail = g.id }
+            ConnectionRow(grant: g, app: app, taf: taf, managesCards: managesCards, model: model, gated: $gated) { detail = g.id }
         }
     }
 
     /// The removed tafs' connections, as tafs cloud names them: no action each, and one Clear
-    /// for those no live taf's Card uses (`AppConnections.clearable`).
+    /// for those no live taf's Card uses (`AppConnections.clearable`): with Touch ID here, else on
+    /// the phone.
     private func removedSection(_ removed: [AppConnections.Grant]) -> some View {
         let listed = AppConnections.removedListed(model.removedTafs)
         let clearable = AppConnections.clearable(removed, listed: listed)
@@ -108,7 +116,9 @@ struct AppConnectionsView: View {
                 GatedAction(title: words("connect.clear_removed.button"), id: "clear", gated: $gated,
                             ask: GateQuestion(title: words.count("connect.clear_removed.title", clearable.count),
                                               message: words("connect.clear_removed.body"), confirm: words("connect.clear_removed.clear"),
-                                              cancel: words("common.cancel")))
+                                              cancel: words("common.cancel")),
+                            route: model.endRoute, busy: model.ending.contains("clear"), note: model.notes["clear"],
+                            perform: { [model] in await model.clear(removed.map(\.id)) })
                     .padding(.vertical, 12)
             }
         }
@@ -141,8 +151,10 @@ struct GateQuestion: Equatable {
     let cancel: String
 }
 
-/// An action this Mac can't sign, drawn as the iPad's: a click asks the iPad's question first when
-/// it asks one (`ask`), then shows why, under it, and sends nothing.
+/// An action drawn as the iPad's: a click asks the iPad's question first when it asks one (`ask`).
+/// One that ends a connection (`perform`) on a Touch ID Mac (`route`) then runs it: Touch ID, then
+/// planque's `DELETE`, with "Approve on your phone instead" under it and how it went (`note`).
+/// Anything else shows why this Mac can't, under it, and sends nothing.
 struct GatedAction: View {
     @Environment(\.words) private var words
     let title: String
@@ -150,24 +162,56 @@ struct GatedAction: View {
     var color: Color = Theme.no
     @Binding var gated: String?
     var ask: GateQuestion?
+    /// Where it's done: only `.touchID` with `perform` runs anything.
+    var route: ConnectionEnding.Route = .phone
+    /// It's running: the button waits.
+    var busy = false
+    /// How it went, under it.
+    var note: String?
+    /// Ends the connection: Touch ID, then planque's `DELETE` (`ConnectAppsModel`). Nil for
+    /// anything that grants access, which is never done here.
+    var perform: (() async -> Void)?
     @State private var asking = false
+
+    /// Done here: only an ending, on a Touch ID Mac.
+    private var here: Bool { route == .touchID && perform != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button { if ask == nil { gated = id } else { asking = true } } label: {
+            Button { if ask == nil { act() } else { asking = true } } label: {
                 Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(color)
             }
             .buttonStyle(.plain)
-            if gated == id {
-                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
+            .disabled(busy)
+            if busy { ProgressView().controlSize(.small) }
+            if let note, !busy {
+                Text(verbatim: note).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if here {
+                // The phone stays offered beside Touch ID, as the owner asked.
+                Text(words("approval.security_key.on_phone")).font(.system(size: 13)).foregroundColor(Theme.dim)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if gated == id {
+                Text(words(ConnectionEnding.phoneLine)).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .confirmationDialog(ask?.title ?? "", isPresented: $asking, titleVisibility: .visible) {
-            Button(ask?.confirm ?? title, role: .destructive) { gated = id }
+            Button(ask?.confirm ?? title, role: .destructive) { act() }
             Button(ask?.cancel ?? words("common.cancel"), role: .cancel) {}
         } message: {
             if let message = ask?.message { Text(verbatim: message) }
+        }
+    }
+
+    /// Ends it here with Touch ID, or says to approve on another device.
+    private func act() {
+        if here, let perform {
+            gated = nil
+            Task { await perform() }
+        } else {
+            gated = id
         }
     }
 }
@@ -182,6 +226,7 @@ private struct ConnectionRow: View {
     /// The taf it was made for, by name, when this app can name it.
     let taf: String?
     let managesCards: Bool
+    @ObservedObject var model: ConnectAppsModel
     @Binding var gated: String?
     /// Opens planque's row's page.
     let open: () -> Void
@@ -200,7 +245,12 @@ private struct ConnectionRow: View {
                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
                     .frame(height: 24)
             } else if managesCards {
-                GatedAction(title: words(AppConnections.endKey(grant)), id: grant.id + "|end", gated: $gated, ask: endQuestion)
+                let id = grant.id + "|end"
+                let asked = endQuestion
+                // Remove access, Cancel the request, Cancel the sign-in: ended here with Touch ID.
+                GatedAction(title: words(AppConnections.endKey(grant)), id: id, gated: $gated, ask: asked,
+                            route: model.endRoute, busy: model.ending.contains(id), note: model.notes[id],
+                            perform: { [model, grant] in await model.disconnect(grant.id, prompt: asked.title, id: id) })
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 260, alignment: .trailing)
             }
@@ -259,6 +309,7 @@ private struct ConnectionRow: View {
             Text(words("connect.through_provider", ["vendor": grant.vendor])).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
         } else if !grant.cancellable {
+            // It grants access: never done here, on any Mac.
             GatedAction(title: words(grant.takesKey ? "connect.replace_key" : "connect.sign_in_again"), id: grant.id + "|fix", color: Theme.amberText, gated: $gated)
                 .padding(.top, 4)
         }
@@ -291,25 +342,38 @@ private struct RemovedConnectionRow: View {
     }
 }
 
+/// How a connection's page ends it: where (`route`), whether it's running, how it went, and the
+/// ending itself with Touch ID's reason (`ConnectAppsModel.disconnect`).
+struct ConnectionEnd {
+    let route: ConnectionEnding.Route
+    let busy: Bool
+    let note: String?
+    let perform: (String) async -> Void
+}
+
 /// A connection's page, as the iPad's `ConnectionDetailView` (`ConnectAppsView.swift:1181-1262`),
 /// opened from planque's row: its health, the tafs that use it, and, for whoever manages the
 /// Cards, the actions planque says work for it now, in planque's words and order. Remove asks
-/// first in planque's words, naming what stops; every action then says to approve on another
-/// device and sends nothing, as the rest of this page (docs/connections.md).
+/// first in planque's words, naming what stops, then ends it here with Touch ID on a Touch ID
+/// Mac; every other action, and Remove on any other Mac, says to approve on another device and
+/// sends nothing, as the rest of this page (docs/connections.md).
 struct ConnectionDetailView: View {
     @Environment(\.words) private var words
     let grant: AppConnections.Grant
     let appTitle: String
     let managesCards: Bool
+    /// How Remove is done here (`ConnectionEnding`); nil, on the phone.
+    let ending: ConnectionEnd?
     let back: () -> Void
     /// The action clicked last, by its place in planque's list: the gate's words show under it.
     @State private var gated: String?
 
     /// `gated` starts the page as after a click on that action (its screenshot).
-    init(grant: AppConnections.Grant, appTitle: String, managesCards: Bool, gated: String? = nil, back: @escaping () -> Void) {
+    init(grant: AppConnections.Grant, appTitle: String, managesCards: Bool, ending: ConnectionEnd? = nil, gated: String? = nil, back: @escaping () -> Void) {
         self.grant = grant
         self.appTitle = appTitle
         self.managesCards = managesCards
+        self.ending = ending
         self.back = back
         _gated = State(initialValue: gated)
     }
@@ -326,8 +390,7 @@ struct ConnectionDetailView: View {
                         // By place: planque may send two actions with one id (Sign in again by approve, and by key).
                         ForEach(actions, id: \.offset) { item in
                             if item.offset > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
-                            GatedAction(title: item.element.words, id: "\(item.offset)", color: item.element.removes ? Theme.no : Theme.amberText,
-                                        gated: $gated, ask: question(item.element))
+                            action(item.offset, item.element)
                                 .padding(.vertical, 12)
                         }
                     }
@@ -338,6 +401,19 @@ struct ConnectionDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Theme.background)
+    }
+
+    /// One of planque's actions. Remove (`removes`) is ended here with Touch ID on a Touch ID Mac;
+    /// Sign in again grants access and never is.
+    private func action(_ offset: Int, _ a: AppConnections.Grant.Action) -> GatedAction {
+        let id = "\(offset)"
+        guard a.removes, let ending else {
+            return GatedAction(title: a.words, id: id, color: a.removes ? Theme.no : Theme.amberText, gated: $gated, ask: question(a))
+        }
+        // Asked in planque's words: Touch ID asks the same.
+        return GatedAction(title: a.words, id: id, color: Theme.no, gated: $gated, ask: question(a),
+                           route: ending.route, busy: ending.busy, note: ending.note,
+                           perform: { [words = a.words, perform = ending.perform] in await perform(words) })
     }
 
     /// planque's known actions with their places, in its order.
