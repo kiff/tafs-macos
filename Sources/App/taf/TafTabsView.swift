@@ -533,7 +533,7 @@ struct TafSetupTab: View {
         .sheet(isPresented: $resultsOpen) {
             if let taf {
                 ResultsGoToView(model: model.knob, taf: taf, manages: manages, email: me?.email, refreshed: halted,
-                                improveInCoach: improveInCoach) { resultsOpen = false }
+                                improveInCoach: improveInCoach, pages: model) { resultsOpen = false }
                     .environment(\.words, words)
             }
         }
