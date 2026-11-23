@@ -107,4 +107,29 @@ let recordListTests: [Test] = [
         try expectEqual(Record.only(taf: "t1", in: page.groups).map { $0.entries.map(\.id) }, [["a"]])
         try expectEqual(Record.only(taf: nil, in: page.groups).count, 2)
     },
+    Test("Report this payment: offered where tafs cloud sends its receipt's id, not once it was reported; its date is tafs cloud's") {
+        func entry(_ extra: String) throws -> Record.Entry {
+            let json = #"{"id":"e1","at":"2026-11-14T17:30:00Z","kind":"done","title":"T","detail":"D","time":"18:30","taf":{"id":"taf_1","name":"Refunds"}"# + extra + "}"
+            return try AccountClient.decoder.decode(Record.Entry.self, from: Data(json.utf8))
+        }
+        let offered = try entry(#","report":{"trace_id":"tr_1","at":"2026-11-14T09:00:00.250Z"}"#)
+        try expectEqual(offered.report?.traceID, "tr_1")
+        try expectEqual(offered.report?.at, ISO8601DateFormatter().date(from: "2026-11-14T09:00:00Z")!.addingTimeInterval(0.25))
+        try expect(offered.offersReport(), "offered")
+        try expect(!offered.offersReport(reportedNow: true), "gone once reported here")
+        let reported = try entry(#","report":{"trace_id":"tr_1"},"reported_at":"2026-11-15T10:00:00Z""#)
+        try expect(!reported.offersReport(), "reported before")
+        try expect(reported.reportedAt != nil, "its time")
+        try expect(!(try entry("")).offersReport(), "no offer, no button")
+        // An offer that doesn't read is none, and the line still reads.
+        let odd = try entry(#","report":{"trace_id":7}"#)
+        try expectEqual(odd.report, nil)
+    },
+    Test("a report is one POST to the receipt's route, nothing signed; tafs cloud's refusal comes back as its own", awaiting: {
+        let (cloud, transport) = cloud([(200, #"{"reported_at":"2026-11-15T10:00:00Z","halt":{"state":"halted"}}"#), (403, #"{"error":"forbidden","words":"Only an admin can report a payment."}"#)])
+        try await cloud.reportPayment(traceID: "tr/1")
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/record/tr%2F1/report")
+        try expectEqual(transport.sent[0].headers[Passkeys.headerName], nil)
+        do { try await cloud.reportPayment(traceID: "tr_1"); throw Failure(description: "taken") } catch is CloudRefusal {}
+    }),
 ]
