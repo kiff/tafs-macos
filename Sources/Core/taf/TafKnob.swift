@@ -435,3 +435,15 @@ enum JSONValue: Codable, Equatable, Sendable {
         }
     }
 }
+
+extension Knob {
+    /// An app event's filters as the iPad's `AppEventApprovalSheet` shows them before signing: the server's whole
+    /// `config`, pretty-printed with sorted keys and slashes as written; nil without one.
+    static func filtersText(_ approval: Item.Approval?) -> String? {
+        guard let config = approval?.config, !config.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard let bytes = try? encoder.encode(config) else { return nil }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+}

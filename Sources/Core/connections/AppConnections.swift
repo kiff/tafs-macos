@@ -3,8 +3,9 @@ import Foundation
 /// "Your {app} connections": a connected app's connections, as the iPad's `AppConnectionsView`
 /// (kiff/tafs `ios/Tafs/Views/ConnectAppsView.swift:488-722`) and the model it reads
 /// (`AppModel.swift:7025-7083`). This Mac reads them from planque with its own signed read, as
-/// the iPad's `PlanqueClient.grants(signedBy:)`, and only reads: anything that changes a
-/// connection is approved on another device (docs/connections.md).
+/// the iPad's `PlanqueClient.grants(signedBy:)`. Ending one is signed here only on a Touch ID Mac
+/// (`ConnectionEnding`); anything that grants access is approved on another device
+/// (docs/connections.md).
 enum AppConnections {
     /// One of the account's connections at planque, read as the iPad's `PlanqueClient.Grant`
     /// (`PlanqueClient.swift:115-330`), with only what this page draws. Read leniently: a field
@@ -263,8 +264,10 @@ enum AppConnections {
 }
 
 /// Where this Mac reads its connections: planque, with a read signed by this Mac's device key,
-/// as the iPad's `grants(signedBy:)`. It signs a read only, asking no one, as Coach's read of
-/// the same proof does; nothing here approves or changes a connection.
+/// as the iPad's `grants(signedBy:)`. It signs a read, asking no one, as Coach's read of the same
+/// proof does. On a Mac whose device key is in the Secure Enclave it can also end one connection
+/// (`end`), only once the person passed Touch ID (`ConnectionEnding`); it never approves,
+/// connects or signs in again.
 struct ConnectionsSource {
     /// What carries the read to planque.
     let transport: Transport
@@ -273,12 +276,21 @@ struct ConnectionsSource {
     /// This Mac's signed read of its grants (`PlanqueClient.grantsReadProof`), fresh each time:
     /// planque takes each once. Nil: this Mac can't sign one.
     let proof: () async -> String?
+    /// The session's device key is in the Secure Enclave: with Touch ID, this Mac ends a
+    /// connection itself (`ConnectionEnding.route`). A software key never does.
+    let enclaveKey: Bool
+    /// Ends one connection at planque (`PlanqueClient.disconnect`), signed by the device key; nil
+    /// ends none here. Called only after Touch ID (`ConnectionEnding.end`).
+    let end: ((String) async throws -> Void)?
 
-    init(transport: Transport, tenant: String, language: String = "en", proof: @escaping () async -> String?) {
+    init(transport: Transport, tenant: String, language: String = "en", proof: @escaping () async -> String?,
+         enclaveKey: Bool = false, end: ((String) async throws -> Void)? = nil) {
         self.transport = transport
         self.tenant = tenant
         self.language = language
         self.proof = proof
+        self.enclaveKey = enclaveKey
+        self.end = end
     }
 
     /// The Mac's own: signed with the session's device key, with this device's id.
@@ -288,6 +300,10 @@ struct ConnectionsSource {
             guard let sign = account.signMessage else { return nil }
             planque.tenant = tenant
             return try? await planque.grantsReadProof(signedBy: sign)
+        }, enclaveKey: account.keyStore == "enclave", end: { [account, planque, transport] id in
+            guard let sign = account.signMessage else { throw PlanqueClient.PlanqueError.notSigning }
+            planque.tenant = tenant
+            try await planque.disconnect(grantID: id, signedBy: sign, over: transport)
         })
     }
 
