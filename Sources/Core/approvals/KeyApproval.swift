@@ -47,6 +47,11 @@ enum KeyAct: Equatable {
     case reopenAPIDoor(taf: String, door: String)
     case revokeAPIDoorKey(taf: String, door: String, key: String)
     case removeAPIDoor(taf: String, door: String)
+    /// The owner's answer to "Did this happen?" (the iPad's `KIFFClient.answerHappened`): KIFF's
+    /// `POST /v1/me/did-this-happen/{proposal}` with `{"happened":true}` or `false`. It's an approval route (kiff/cloud's
+    /// `PhoneApprovalRules`: No gives a Card its room back), so it's the security key's, once, for this one call. The
+    /// first answer stands.
+    case happened(proposal: String, Bool)
 
     var method: String {
         switch self {
@@ -58,6 +63,7 @@ enum KeyAct: Equatable {
         case .discardSettingUp: return "POST"
         case .reopenAPIDoor: return "PATCH"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
+        case .happened: return "POST"
         }
     }
 
@@ -73,6 +79,7 @@ enum KeyAct: Equatable {
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
         case .revokeAPIDoorKey(let taf, let door, let key):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys/\(CloudClient.escaped(key))"
+        case .happened(let proposal, _): return "/v1/me/did-this-happen/\(CloudClient.escaped(proposal))"
         }
     }
 
@@ -92,6 +99,8 @@ enum KeyAct: Equatable {
         // The iPad's `reopenBody`, these exact bytes.
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
         case .revokeAPIDoorKey, .removeAPIDoor: return Data()
+        // The iPad's body, `["happened": happened]`, these exact bytes.
+        case .happened(_, let happened): return Data(happened ? #"{"happened":true}"#.utf8 : #"{"happened":false}"#.utf8)
         }
     }
 
@@ -111,6 +120,10 @@ enum KeyAct: Equatable {
         case .reopenAPIDoor: return words("door.api.open_reason", ["app": device])
         case .revokeAPIDoorKey: return words("door.api.revoke_reason", ["key": device])
         case .removeAPIDoor: return words("door.remove_door")
+        // The iPad's prompts, "Say it happened: {title}" and "Say it didn't happen: {title}", the call's title in
+        // `device`'s place.
+        case .happened(_, let happened):
+            return words(happened ? "needs_you.prompt.happened" : "needs_you.prompt.did_not_happen", ["title": device])
         }
     }
 }

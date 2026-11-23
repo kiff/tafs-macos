@@ -234,12 +234,24 @@ read that fails keeps the list.
 
 - Each is drawn above the held calls, edged in amber: "Did this happen?", KIFF's sentence for
   the call (else its title, and its amount), and KIFF's words for why it asks.
-- **The answer is signed like an approval**, which this Mac can't do yet. So for someone who
-  answers held calls, the card says to approve on another device
-  (`approval.device_can_not_approve_approve`, the iPad's `Biometry.short` where an approval
-  can't be made), as the held calls do, and has no Yes or No. The line shows only on a Mac
-  that approves elsewhere (`.phoneOrPasskey`), where the iPad's `ApprovalGate` would show
-  `ApprovalNotReady`; a Mac with its own approval key shows neither until its Yes or No is ported.
+- **The answer is an approval** (kiff/cloud's `PhoneApprovalRules`: No gives a Card its room
+  back), so on a Mac with its security key the card has the iPad's No and Yes, with "No gives
+  the Card its room back. Yes keeps it counted." under them. Each is `KeyAct.happened`: KIFF's
+  `POST /v1/me/did-this-happen/{proposal}` with `{"happened":true}` or `false`, the iPad's
+  request, approved by the key once for this one answer through its PIN sheet, which names it
+  as the iPad's prompt ("Say it happened: {title}", "Say it didn't happen: {title}"). Then the
+  call leaves the list and the list is read again; the first answer stands. A closed sheet
+  sends nothing and says nothing, "Approve on your phone instead" says to approve on another
+  device, and KIFF's refusal says "KIFF didn't take the answer" with why. One answer at a
+  time, as the held calls'. Offered only for someone who answers held calls
+  (`NeedsYouModel.offersHappened`).
+- On a Mac without the key, for someone who answers held calls, the card says to approve on
+  another device (`approval.device_can_not_approve_approve`, the iPad's `Biometry.short`
+  where an approval can't be made), as the held calls do, and has no Yes or No. The line
+  shows only on a Mac that approves elsewhere (`.phoneOrPasskey`), where the iPad's
+  `ApprovalGate` would show `ApprovalNotReady`.
+- KIFF's "Not sure" (`…/check`, the device key alone) isn't on the iPad's card at the pin, so
+  it isn't here.
 - An amount with no unit is drawn whole, "725 (no currency)", as the iPad's `Money` keeps it.
 - "Nothing waiting" shows only when there's nothing to say about either.
 
