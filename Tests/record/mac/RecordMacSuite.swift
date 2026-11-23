@@ -1,1 +1,1 @@
-let recordMacTests: [Test] = recordScreenTests + receiptSheetTests + receiptRecoveryMacTests + recordReadsScreenTests
+let recordMacTests: [Test] = recordScreenTests + receiptSheetTests + receiptRecoveryMacTests + recordReadsScreenTests + recordStepsScreenTests
