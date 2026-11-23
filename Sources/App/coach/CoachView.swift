@@ -1432,7 +1432,7 @@ struct CoachView: View {
                 Text(verbatim: live.line ?? words("chat.thinking")).font(.system(size: 13)).foregroundColor(Theme.dim)
             }
             if !live.rows.isEmpty { steps(live.rows) }
-            if !live.text.isEmpty { rich(live.text) }
+            if !live.text.isEmpty { SteadyText(text: live.text) { rich($0) } }
         }
     }
 
