@@ -339,6 +339,10 @@ struct TafActivityTab: View {
     var doorsOffered = false
     /// Whoever manages the taf sets Answer within and sends a reply again.
     var manages = false
+    /// Coach on this taf with these words in its box, nothing sent; nil for someone who may not use Coach on it.
+    var askCoach: ((String) -> Void)? = nil
+    /// Connect apps, where an app is connected again.
+    var openConnect: (() -> Void)? = nil
 
     var body: some View {
         ScrollView {
@@ -410,6 +414,7 @@ struct TafActivityTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: entry.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 if let detail = entry.detail { Text(verbatim: detail).font(.system(size: 13)).foregroundColor(Theme.soft) }
+                if let next = entry.next, !next.words.trimmingCharacters(in: .whitespaces).isEmpty { nextStep(next, of: entry) }
             }
             Spacer()
             VStack(alignment: .trailing) {
@@ -419,7 +424,24 @@ struct TafActivityTab: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 5)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A not-done call's next step, as the iPad's `NextStepRow`: Connect apps, or Ask Coach (Coach on this taf, its first
+    /// message written in, nothing sent), as tafs cloud says. Only someone who manages the taf gets a button, and Ask Coach
+    /// only someone who may use Coach on it; anyone else, and a kind this app doesn't know, reads the words alone.
+    @ViewBuilder private func nextStep(_ next: TafActivity.Entry.NextStep, of entry: TafActivity.Entry) -> some View {
+        let fallback = [entry.title, entry.detail].compactMap { $0 }.joined(separator: ": ")
+        switch (manages, next.action(fallback: fallback)) {
+        case (true, .askCoach(let message)) where askCoach != nil:
+            Button(next.words) { askCoach?(message) }.buttonStyle(OutlineButtonStyle()).fixedSize()
+                .accessibilityIdentifier("activity.next-step")
+        case (true, .connectApps) where openConnect != nil:
+            Button(next.words) { openConnect?() }.buttonStyle(OutlineButtonStyle()).fixedSize()
+                .accessibilityIdentifier("activity.next-step")
+        default:
+            Text(verbatim: next.words).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

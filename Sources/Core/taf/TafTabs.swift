@@ -14,8 +14,54 @@ struct TafActivity: Decodable, Equatable {
         let time: String?
         /// The call's amount in tafs cloud's own words, drawn under the time; never built here.
         let amountText: String?
+        /// A not-done call's next step, in tafs cloud's words (kiff/tafs#476, gap 10); nil for none, or one that doesn't read.
+        var next: NextStep?
 
-        enum CodingKeys: String, CodingKey { case id, kind, title, detail, time, amountText = "amount_text" }
+        enum CodingKeys: String, CodingKey { case id, kind, title, detail, time, next, amountText = "amount_text" }
+
+        init(id: String, kind: String, title: String, detail: String?, time: String?, amountText: String?, next: NextStep? = nil) {
+            self.id = id; self.kind = kind; self.title = title; self.detail = detail; self.time = time
+            self.amountText = amountText; self.next = next
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            kind = try c.decode(String.self, forKey: .kind)
+            title = try c.decode(String.self, forKey: .title)
+            detail = try c.decodeIfPresent(String.self, forKey: .detail)
+            time = try c.decodeIfPresent(String.self, forKey: .time)
+            amountText = try c.decodeIfPresent(String.self, forKey: .amountText)
+            // A next step that doesn't read is none, never the row with it.
+            next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
+        }
+
+        /// What a not-done call's next step is, as tafs cloud says it: its kind, its words, and for Ask Coach its message.
+        struct NextStep: Decodable, Equatable {
+            let kind: String
+            let words: String
+            var tool: String?
+            var message: String?
+
+            /// What it does on this Mac, as the iPad's `NextStepWords.action`. A `reconnect` is Connect apps: signing in
+            /// again is the phone's on macOS 12, and Connect apps says so where it would be. `ask_coach` is Coach on the taf
+            /// with tafs cloud's message, else `fallback`, in its box. Any other kind is its words alone.
+            enum Action: Equatable {
+                case connectApps
+                case askCoach(String)
+                case line
+            }
+
+            func action(fallback: String) -> Action {
+                switch kind {
+                case "reconnect": return .connectApps
+                case "ask_coach":
+                    let said = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    return .askCoach(said.isEmpty ? fallback : said)
+                default: return .line
+                }
+            }
+        }
 
         /// Its dot's colour, as the iPad's `RecordEntry.Kind.color`: done and approved green;
         /// refused, not done and revoked red; held, sending, and any other kind (read as
