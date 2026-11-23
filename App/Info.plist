@@ -55,6 +55,8 @@
 		<string>ne</string>
 		<string>km</string>
 		<string>lo</string>
+		<string>tk</string>
+		<string>hi</string>
 		<string>pt-BR</string>
 	</array>
 	<key>CFBundleDisplayName</key>
