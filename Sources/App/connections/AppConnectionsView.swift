@@ -4,9 +4,10 @@ import SwiftUI
 /// `ios/Tafs/Views/ConnectAppsView.swift:488-722`): a section per taf the app's connections were
 /// made for, those needing attention first, then the removed tafs', then "Other connections".
 /// This page only reads. What would change a connection (Sign in again, Replace the key, Remove
-/// access, Cancel, Clear these connections) is drawn as on the iPad for whoever manages the Cards,
-/// and a click says to approve on another device (`approval.device_can_not_approve_approve`),
-/// sending nothing: this Mac can't sign it (docs/connections.md).
+/// access, Cancel, Clear these connections) is drawn as on the iPad for whoever manages the Cards;
+/// a click asks the iPad's question first where the iPad asks one, then says to approve on another
+/// device (`approval.device_can_not_approve_approve`), sending nothing: this Mac can't sign it
+/// (docs/connections.md). planque's own row opens the connection's page (`ConnectionDetailView`).
 struct AppConnectionsView: View {
     @Environment(\.words) private var words
     let app: Apps.App
@@ -16,6 +17,8 @@ struct AppConnectionsView: View {
     let back: () -> Void
     /// The action clicked last, by its connection's id (or `clear`): the gate's words show under it.
     @State private var gated: String?
+    /// The connection whose page is open (planque's row), by id.
+    @State private var detail: String?
 
     /// `gated` starts the page as after a click on that action (its screenshot).
     init(app: Apps.App, model: ConnectAppsModel, tafs: [Home.Taf], managesCards: Bool, gated: String? = nil, back: @escaping () -> Void) {
@@ -28,6 +31,14 @@ struct AppConnectionsView: View {
     }
 
     var body: some View {
+        if let id = detail, let grant = model.grants.first(where: { $0.id == id }) {
+            ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards) { detail = nil }
+        } else {
+            page
+        }
+    }
+
+    @ViewBuilder private var page: some View {
         let tafs = self.tafs
         let parts = AppConnections.groups(AppConnections.connections(of: app, in: model.grants),
                                           taf: { AppConnections.taf(of: $0, in: tafs) }, removed: Set(model.removedTafs.map(\.agent)))
@@ -41,11 +52,11 @@ struct AppConnectionsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(parts.tafs) { group in
-                    ConnectionsSection(title: group.taf) { rows(group.grants) }
+                    ConnectionsSection(title: group.taf) { rows(group.grants, taf: group.taf) }
                 }
                 if !parts.removed.isEmpty { removedSection(parts.removed) }
                 if !parts.others.isEmpty {
-                    ConnectionsSection(title: words("connect.other_connections")) { rows(parts.others) }
+                    ConnectionsSection(title: words("connect.other_connections")) { rows(parts.others, taf: nil) }
                 }
                 // Said only to whoever manages Cards, and only when a connection here is a taf's.
                 if managesCards, !parts.tafs.isEmpty {
@@ -73,10 +84,11 @@ struct AppConnectionsView: View {
         .padding(.top, 18)
     }
 
-    private func rows(_ grants: [AppConnections.Grant]) -> some View {
+    /// `taf` is the taf the connections were made for, by name: Remove access's question names it.
+    private func rows(_ grants: [AppConnections.Grant], taf: String?) -> some View {
         ForEach(grants) { g in
             if g.id != grants.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
-            ConnectionRow(grant: g, app: app, managesCards: managesCards, gated: $gated)
+            ConnectionRow(grant: g, app: app, taf: taf, managesCards: managesCards, gated: $gated) { detail = g.id }
         }
     }
 
@@ -92,7 +104,11 @@ struct AppConnectionsView: View {
             }
             if managesCards, !clearable.isEmpty {
                 Rectangle().fill(Theme.line).frame(height: 1)
-                GatedAction(title: words("connect.clear_removed.button"), id: "clear", gated: $gated)
+                // Asked first, as the iPad's: how many it clears, and that one a Card uses is kept.
+                GatedAction(title: words("connect.clear_removed.button"), id: "clear", gated: $gated,
+                            ask: GateQuestion(title: words.count("connect.clear_removed.title", clearable.count),
+                                              message: words("connect.clear_removed.body"), confirm: words("connect.clear_removed.clear"),
+                                              cancel: words("common.cancel")))
                     .padding(.vertical, 12)
             }
         }
@@ -115,17 +131,30 @@ private struct ConnectionsSection<Content: View>: View {
     }
 }
 
-/// An action this Mac can't sign, drawn as the iPad's: a click shows why, under it, and sends nothing.
-private struct GatedAction: View {
+/// The question the iPad asks before an action that ends something, in its words.
+struct GateQuestion: Equatable {
+    let title: String
+    let message: String?
+    /// The question's own button, red.
+    let confirm: String
+    /// The button that leaves it as it is.
+    let cancel: String
+}
+
+/// An action this Mac can't sign, drawn as the iPad's: a click asks the iPad's question first when
+/// it asks one (`ask`), then shows why, under it, and sends nothing.
+struct GatedAction: View {
     @Environment(\.words) private var words
     let title: String
     let id: String
     var color: Color = Theme.no
     @Binding var gated: String?
+    var ask: GateQuestion?
+    @State private var asking = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Button { gated = id } label: {
+            Button { if ask == nil { gated = id } else { asking = true } } label: {
                 Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundColor(color)
             }
             .buttonStyle(.plain)
@@ -133,6 +162,12 @@ private struct GatedAction: View {
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .confirmationDialog(ask?.title ?? "", isPresented: $asking, titleVisibility: .visible) {
+            Button(ask?.confirm ?? title, role: .destructive) { gated = id }
+            Button(ask?.cancel ?? words("common.cancel"), role: .cancel) {}
+        } message: {
+            if let message = ask?.message { Text(verbatim: message) }
         }
     }
 }
@@ -144,8 +179,12 @@ private struct ConnectionRow: View {
     @Environment(\.words) private var words
     let grant: AppConnections.Grant
     let app: Apps.App
+    /// The taf it was made for, by name, when this app can name it.
+    let taf: String?
     let managesCards: Bool
     @Binding var gated: String?
+    /// Opens planque's row's page.
+    let open: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -156,13 +195,34 @@ private struct ConnectionRow: View {
                 if !grant.rowFromPlanque, managesCards { fix }
             }
             Spacer(minLength: 8)
-            if !grant.rowFromPlanque, managesCards {
-                GatedAction(title: words(AppConnections.endKey(grant)), id: grant.id + "|end", gated: $gated).fixedSize(horizontal: false, vertical: true)
+            if grant.rowFromPlanque {
+                // planque's row opens its page, as the iPad's link.
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+                    .frame(height: 24)
+            } else if managesCards {
+                GatedAction(title: words(AppConnections.endKey(grant)), id: grant.id + "|end", gated: $gated, ask: endQuestion)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 260, alignment: .trailing)
             }
         }
         .frame(minHeight: 44, alignment: .leading)
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onTapGesture { if grant.rowFromPlanque { open() } }
+        .accessibilityAddTraits(grant.rowFromPlanque ? .isButton : [])
+    }
+
+    /// The iPad's question before ending it: Cancel's for a request or a sign-in that waits
+    /// (`ConnectionFixWords`), else Remove access's (`DisconnectWords`), naming the taf it ends.
+    /// This Mac doesn't read which other tafs' Cards use its tools, so none is named.
+    private var endQuestion: GateQuestion {
+        if grant.cancellable {
+            return GateQuestion(title: AppConnections.cancelTitle(grant, words), message: words("connect.cancel_sign_in.body", ["vendor": grant.vendor]),
+                                confirm: words(AppConnections.cancelWordKey(grant)), cancel: words("connect.cancel_sign_in.keep_waiting"))
+        }
+        return GateQuestion(title: AppConnections.disconnectTitle(grant.vendor, taf: taf, words),
+                            message: AppConnections.disconnectMessage(grant.vendor, taf: taf, key: grant.takesKey, words),
+                            confirm: words("connect.disconnect_button"), cancel: words("common.cancel"))
     }
 
     /// planque's own row: the tafs that use it and its health, as sent.
@@ -228,5 +288,98 @@ private struct RemovedConnectionRow: View {
         }
         .frame(minHeight: 44, alignment: .leading)
         .padding(.vertical, 8)
+    }
+}
+
+/// A connection's page, as the iPad's `ConnectionDetailView` (`ConnectAppsView.swift:1181-1262`),
+/// opened from planque's row: its health, the tafs that use it, and, for whoever manages the
+/// Cards, the actions planque says work for it now, in planque's words and order. Remove asks
+/// first in planque's words, naming what stops; every action then says to approve on another
+/// device and sends nothing, as the rest of this page (docs/connections.md).
+struct ConnectionDetailView: View {
+    @Environment(\.words) private var words
+    let grant: AppConnections.Grant
+    let appTitle: String
+    let managesCards: Bool
+    let back: () -> Void
+    /// The action clicked last, by its place in planque's list: the gate's words show under it.
+    @State private var gated: String?
+
+    /// `gated` starts the page as after a click on that action (its screenshot).
+    init(grant: AppConnections.Grant, appTitle: String, managesCards: Bool, gated: String? = nil, back: @escaping () -> Void) {
+        self.grant = grant
+        self.appTitle = appTitle
+        self.managesCards = managesCards
+        self.back = back
+        _gated = State(initialValue: gated)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                backButton
+                ScreenTitle(title: grant.name ?? appTitle, size: 34, rounded: false)
+                // Two sections without headings, as the iPad's list.
+                panel { about }
+                if managesCards, !actions.isEmpty {
+                    panel {
+                        // By place: planque may send two actions with one id (Sign in again by approve, and by key).
+                        ForEach(actions, id: \.offset) { item in
+                            if item.offset > 0 { Rectangle().fill(Theme.line).frame(height: 1) }
+                            GatedAction(title: item.element.words, id: "\(item.offset)", color: item.element.removes ? Theme.no : Theme.amberText,
+                                        gated: $gated, ask: question(item.element))
+                                .padding(.vertical, 12)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Look.inset)
+            .padding(.bottom, Look.inset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Theme.background)
+    }
+
+    /// planque's known actions with their places, in its order.
+    private var actions: [(offset: Int, element: AppConnections.Grant.Action)] { Array(grant.knownActions.enumerated()) }
+
+    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0, content: content)
+            .padding(.horizontal, 18).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+    }
+
+    /// Its health, in planque's words (ink when well, else amber), and the tafs that use it.
+    @ViewBuilder private var about: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let health = grant.health {
+                Text(verbatim: health.words).font(.system(size: 15, weight: .semibold)).foregroundColor(health.ok ? Theme.ink : Theme.amberText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let used = grant.usedBy, !used.isEmpty {
+                Text(words("connect.apps.used_by", ["tafs": used.joined(separator: ", ")])).font(.system(size: 14)).foregroundColor(Theme.soft)
+            }
+        }
+        .padding(.vertical, 12)
+    }
+
+    /// Remove is asked first, in planque's own words, with what stops; the rest aren't.
+    private func question(_ action: AppConnections.Grant.Action) -> GateQuestion? {
+        guard action.removes else { return nil }
+        return GateQuestion(title: action.words, message: action.stops, confirm: action.words, cancel: words("common.cancel"))
+    }
+
+    /// Back to the app's connections.
+    private var backButton: some View {
+        Button(action: back) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left").font(.system(size: 13, weight: .semibold))
+                Text(words("connect.apps.your_connections", ["app": appTitle])).font(.system(size: 14))
+            }
+            .foregroundColor(Theme.amberText).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 18)
     }
 }

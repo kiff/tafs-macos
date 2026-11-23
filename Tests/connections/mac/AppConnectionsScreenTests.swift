@@ -166,4 +166,23 @@ let appConnectionsMacTests: [Test] = [
         model.opened = qonto
         try write(ConnectAppsView(model: model, tafs: tafs).environment(\.words, words), "connect-app-connections-opened-en", size: CGSize(width: 980, height: 760), dark: false)
     }),
+    Test("the screenshots: a connection's page from planque's row, light and dark, its Remove clicked, and Make one first with no taf", awaiting: { @MainActor in
+        let json = #"""
+        {"id":"g8","status":"connected","title":"Qonto rows","used_by":["Refunds"],"request":{"server":"q","agent":"a_refunds"},
+         "health":{"ok":false,"words":"Signed out by Qonto · sign in again"},
+         "actions":[{"id":"sign_in_again","words":"Sign in again","how":"approve"},{"id":"remove","words":"Remove access","how":"delete","stops":"Refunds stops reading Qonto."}]}
+        """#
+        let grant = try JSONDecoder().decode(AppConnections.Grant.self, from: Data(json.utf8))
+        try expectEqual(grant.knownActions.count, 2)
+        for dark in [false, true] {
+            let view = ConnectionDetailView(grant: grant, appTitle: "Qonto", managesCards: true, back: {}).environment(\.words, words)
+            try write(view, "connect-connection-page-en", size: CGSize(width: 980, height: 600), dark: dark)
+        }
+        let gated = ConnectionDetailView(grant: grant, appTitle: "Qonto", managesCards: true, gated: "1", back: {}).environment(\.words, words)
+        try write(gated, "connect-connection-page-gated-en", size: CGSize(width: 980, height: 600), dark: false)
+        let (model, _, _) = makeModel(grants: (200, grantsAnswer))
+        await model.load()
+        try write(ConnectAppsView(model: model, tafs: [], connectable: []).environment(\.words, words), "connect-apps-make-one-first-en",
+                  size: CGSize(width: 980, height: 760), dark: false)
+    }),
 ]
