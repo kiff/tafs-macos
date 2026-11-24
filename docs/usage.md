@@ -130,8 +130,8 @@ in place of buying, since one raise answers every open one.
 - **KIFF's refusals:** `limit_changed` (the limit moved meanwhile) reads the balance again and
   says so; `limit_ceiling` says to contact KIFF; anything else is "The limit wasn't raised", with
   why in the app's words.
-- The old limit's own line (`usage.raise_limit.from`) comes with tafs's strings once legal-i18n's
-  batch is in the pin.
+- The old limit's own line (`usage.raise_limit.from`) comes once tafs's strings that carry it are
+  in the pin.
 
 ## Not on the Mac
 
