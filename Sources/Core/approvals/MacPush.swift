@@ -103,11 +103,13 @@ enum MacPush {
         case unregister(token: String)
     }
 
-    /// Alerts on with a token: registered, again when the token or the sound changed. Off, or signed out: the token
-    /// tafs cloud holds is taken back. Nothing held and nothing wanted: nothing.
-    static func step(wanted: Bool, token: String?, sound: Bool, held: Registered?) -> Step {
+    /// Alerts on with a token: registered, again when the token or the sound changed, and always `again` (at launch,
+    /// or when tafs cloud says it doesn't alert this Mac): tafs cloud may have dropped the row, and registering is
+    /// idempotent there. Off, or signed out: the token tafs cloud holds is taken back. Nothing held and nothing wanted:
+    /// nothing.
+    static func step(wanted: Bool, token: String?, sound: Bool, held: Registered?, again: Bool = false) -> Step {
         if wanted, let token {
-            return held == Registered(token: token, sound: sound) ? .none : .register(token: token, sound: sound)
+            return !again && held == Registered(token: token, sound: sound) ? .none : .register(token: token, sound: sound)
         }
         if let held { return .unregister(token: held.token) }
         return .none

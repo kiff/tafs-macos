@@ -206,25 +206,58 @@ final class AlertsModel: ObservableObject {
     /// Gives tafs cloud this Mac's token while alerts are on, with their sound and kinds, and takes it back when they're
     /// off (`MacPush.step`). `signingOut`: taken back whatever the switch says. Only in a build made with `PUSH=1`; a
     /// send that fails is tried again at the next change or launch.
-    func syncPush(signingOut: Bool = false) async {
-        guard let push else { return }
+    ///
+    /// `again`: registered whatever's kept, at launch, as the iPhone does: tafs cloud may have dropped the row. And when
+    /// tafs cloud then says it doesn't alert this Mac while alerts are on, it's registered once more. Answers false only
+    /// when a token tafs cloud holds couldn't be taken back: at sign-out it's tried `tries` times first.
+    @discardableResult
+    func syncPush(signingOut: Bool = false, again: Bool = false, tries: Int = 1) async -> Bool {
+        guard let push else { return true }
         if !signingOut { allowed = await permission.allowed() }
         let held = MacPush.Registered.load(from: defaults, account: account)
         let wanted = on && !signingOut
         let token = wanted ? await push.token() : nil
-        switch MacPush.step(wanted: wanted, token: token, sound: prefs.sound, held: held) {
+        switch MacPush.step(wanted: wanted, token: token, sound: prefs.sound, held: held, again: again) {
         case .none:
             break
         case .register(let token, let sound):
-            guard let status = try? await push.register(token, sound, nil, savedKinds) else { return }
-            canAnswerHolds = status.answers
-            MacPush.Registered.save(MacPush.Registered(token: token, sound: sound), to: defaults, account: account)
+            guard await register(push, token: token, sound: sound) else { return true }
         case .unregister(let token):
-            guard (try? await push.unregister(token)) != nil else { return }
-            MacPush.Registered.save(nil, to: defaults, account: account)
+            guard await takeBack(push, token: token, tries: tries) else { return false }
         }
-        if !signingOut { await loadDeviceAlerts() }
+        guard !signingOut else { return true }
+        await loadDeviceAlerts()
+        if wanted, let token, deviceAlerts?.enabled == false, !again {
+            await register(push, token: token, sound: prefs.sound)
+            await loadDeviceAlerts()
+        }
+        return true
     }
+
+    @discardableResult
+    private func register(_ push: PushSync, token: String, sound: Bool) async -> Bool {
+        guard let status = try? await push.register(token, sound, nil, savedKinds) else { return false }
+        canAnswerHolds = status.answers
+        MacPush.Registered.save(MacPush.Registered(token: token, sound: sound), to: defaults, account: account)
+        return true
+    }
+
+    /// The token taken back, tried `tries` times, waiting longer each time (`waits`).
+    private func takeBack(_ push: PushSync, token: String, tries: Int) async -> Bool {
+        for attempt in 0..<max(1, tries) {
+            if attempt > 0 { await wait(Self.waits[min(attempt - 1, Self.waits.count - 1)]) }
+            if (try? await push.unregister(token)) != nil {
+                MacPush.Registered.save(nil, to: defaults, account: account)
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The waits between take-back tries at sign-out, in seconds.
+    static let waits: [TimeInterval] = [1, 3]
+    /// Waits between tries; tests answer at once.
+    var wait: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
 }
 
 /// Account › Alerts, ported from the iPad's `NotificationSettingsView`: what an alert looks

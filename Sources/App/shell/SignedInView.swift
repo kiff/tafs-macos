@@ -181,7 +181,7 @@ struct SignedInView: View {
         // Who is signed in is read once, whatever screen is open.
         .task { await accountModel.load() }
         // Alerts with tafs closed, in a build made with PUSH=1: this Mac's token given again at each launch while alerts are on.
-        .task { await alerts.syncPush() }
+        .task { await alerts.syncPush(again: true) }
         // Account's Chrome row shows once planque lists Chromes: read once with the window.
         .task { await chromes.load() }
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
@@ -637,8 +637,9 @@ struct SignedInView: View {
             needsYou.cancelAnswers()
             usage.cancelAnswers()
             Task {
-                // tafs cloud stops alerting this Mac first, while the session still reads (PUSH=1 builds only).
-                await alerts.syncPush(signingOut: true)
+                // tafs cloud stops alerting this Mac first, while the session still reads (PUSH=1 builds only): tried
+                // three times, a second and three seconds apart.
+                await alerts.syncPush(signingOut: true, tries: 3)
                 // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
                 // either way.
                 try? await account.signOut()

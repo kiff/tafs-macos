@@ -27,6 +27,9 @@ let approvalsMacPushTests: [Test] = [
         // Off, or signed out: tafs cloud's is taken back; with none held, nothing is sent.
         try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: held), .unregister(token: token))
         try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: nil), MacPush.Step.none)
+        // At launch, or when tafs cloud says it doesn't alert this Mac: registered again, even with the same token kept.
+        try expectEqual(MacPush.step(wanted: true, token: token, sound: true, held: held, again: true), .register(token: token, sound: true))
+        try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: held, again: true), .unregister(token: token))
         // On, but Apple's service gave no token: what's held is taken back, never left to alert a Mac that can't hear.
         try expectEqual(MacPush.step(wanted: true, token: nil, sound: true, held: held), .unregister(token: token))
     },
