@@ -490,8 +490,8 @@ struct VersionLine: View {
 
 /// The taf's versions, as the iPad's `VersionsPanel`: newest first, the live one marked, each
 /// with what changed, who made it and when, and what each ended trial came to; a switch under
-/// way, with Cancel. Installing one and trying one are signed by the phone, so this Mac lists
-/// them only.
+/// way, with Finish and Cancel. Install this version on the security key when it brings a Card,
+/// else the owner's Touch ID or password (`VersionSwitch`); Try it under a Card of its own (`Trials`).
 struct VersionsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
@@ -500,6 +500,8 @@ struct VersionsView: View {
     var resume: (() -> Void)? = nil
     /// The version whose trial is being started.
     @State private var trying: TafVersions.Version?
+    /// The version whose Card the owner reads before the security key.
+    @State private var reading: TafVersions.Version?
 
     /// A version's time and a trial's day, as the app shows them, in its language.
     private var when: DateFormatter { AppDates.formatter(words, date: .medium, time: .short) }
@@ -515,6 +517,9 @@ struct VersionsView: View {
             Text(words("taf.try_version_first_you_chat")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
             if let switching = model.switching { switchUnderWay(switching) }
+            if let n = model.staleCard, let v = version(n) {
+                Button(words("version.redraft")) { install(v, redraft: true) }.buttonStyle(OutlineButtonStyle()).fixedSize()
+            }
             if let list = model.versionList {
                 if list.isEmpty {
                     Text(words("version.first_only")).font(.system(size: 14)).foregroundColor(Theme.soft)
@@ -531,8 +536,18 @@ struct VersionsView: View {
                 Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let n = model.blockedInstall, let v = version(n) {
+                // One step: what's in the way stops (a held call withdrawn, nothing sent), then the install begins.
+                Button(words("version.stop_and_install")) { install(v, stopBlocking: true) }.buttonStyle(OutlineButtonStyle()).fixedSize()
+            }
+            if let stopped = model.stoppedWords {
+                Text(verbatim: stopped).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
         }
         .task { await model.loadVersions() }
+        .sheet(item: $reading) { v in
+            VersionCardSheet(model: model, version: v, close: { reading = nil }).environment(\.words, words)
+        }
         .sheet(item: $trying) { v in
             TrialStartSheet(model: model, version: v, close: { trying = nil }).environment(\.words, words)
         }
@@ -541,16 +556,31 @@ struct VersionsView: View {
         .background(Theme.background)
     }
 
+    private func version(_ n: Int) -> TafVersions.Version? { model.versionList?.first { $0.n == n } }
+
+    /// Install this version, as the iPad's `use`: the switch begins, and a version that brings a Card opens it to read first.
+    private func install(_ v: TafVersions.Version, redraft: Bool = false, stopBlocking: Bool = false) {
+        Task { if let read = await model.install(v, redraft: redraft, stopBlocking: stopBlocking) { reading = read } }
+    }
+
     /// A switch that didn't finish, as the iPad's `switchUnderWay`: the taf doesn't run until it's
-    /// finished or cancelled. Finishing it is signed by the phone; Cancel isn't.
+    /// finished or cancelled. Finish installs it as Install this version does; Cancel isn't signed.
     private func switchUnderWay(_ sw: TafVersions.Switching) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let working = model.installing != nil
+        return VStack(alignment: .leading, spacing: 6) {
             Text(words("version.installing_number", ["version": String(sw.n)])).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.amberText)
             Text(words("version.doesnt_run_until")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(words("common.cancel")) { Task { await model.cancelSwitch() } }
-                .buttonStyle(OutlineButtonStyle(color: Theme.no))
-                .fixedSize()
+            HStack(spacing: 8) {
+                if model.installsVersions, let v = version(sw.n) {
+                    Button(working ? words("version.installing") : words("version.finish")) { install(v) }
+                        .buttonStyle(OutlineButtonStyle()).fixedSize().disabled(working)
+                }
+                Button(words("common.cancel")) { Task { await model.cancelSwitch() } }
+                    .buttonStyle(OutlineButtonStyle(color: Theme.no))
+                    .fixedSize()
+                    .disabled(working)
+            }
         }
         .padding(.vertical, 4)
     }
@@ -581,6 +611,13 @@ struct VersionsView: View {
             if !v.live, model.trial?.n == v.n, let resume {
                 Button(words("version.resume_trial"), action: resume).buttonStyle(OutlineButtonStyle()).fixedSize()
                     .accessibilityIdentifier("version.resume-trial")
+            }
+            // Install this version, forward or back. One switch at a time, and none while a trial is open (Install ends it).
+            if !v.live, model.installsVersions {
+                Button(model.installing == v.n ? words("version.installing") : words("version.install_this")) { install(v) }
+                    .buttonStyle(OutlineButtonStyle()).fixedSize()
+                    .disabled(model.installing != nil || model.trial != nil || model.switching.map { $0.n != v.n } ?? false)
+                    .accessibilityIdentifier("version.install")
             }
         }
         .padding(14)
