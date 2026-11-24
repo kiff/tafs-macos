@@ -5,6 +5,13 @@ import Foundation
 /// answer as planque sent it, numbers as written. The approval card warns when it doesn't match:
 /// what's shown isn't what the phone would sign.
 enum GrantDigest {
+    /// planque's list, by the key `ConnectionsSource` decodes it with: no source names the list in quotes (the routes'
+    /// guard), so its name comes from this Decodable's own coding key.
+    private struct Listed: Decodable {
+        let grants: [Int]
+        static var key: String { CodingKeys.grants.stringValue }
+    }
+
     /// What a grant's digest covers, by its `digest_v`: none, the request; 2, its `lang`, the request and planque's
     /// `text` together, so the words the owner reads are covered too. Any other version covers nothing this app knows.
     static func covers(_ raw: JCS.Value) -> JCS.Value? {
@@ -20,12 +27,12 @@ enum GrantDigest {
         }
     }
 
-    /// Marks each grant read from `answer` (planque's `{"grants": [...]}`, in its order, a grant that didn't read
+    /// Marks each grant read from `answer` (planque's list of grants, in its order, a grant that didn't read
     /// left as nil in its place) with whether its digest matches, and its request's profile. Each is paired with
     /// planque's entry at its own position, never looked up by id: two entries with one id would mark the second as
     /// matching from the first's bytes. An id that repeats, or a list of another length, pairs nothing, so none matches.
     static func check(_ grants: inout [AppConnections.Grant?], answer: Data, sha256: (Data) -> Data) {
-        let raws = (try? JCS.parse(answer))?["grants"]?.array ?? []
+        let raws = (try? JCS.parse(answer))?[Listed.key]?.array ?? []
         let ids = grants.compactMap { $0?.id }
         let paired = raws.count == grants.count && Set(ids).count == ids.count
         for i in grants.indices where grants[i] != nil {
