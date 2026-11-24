@@ -38,7 +38,7 @@ let usageRequestTests: [Test] = [
         try expectEqual(Usage.Balance.Raise.decimals("JPY"), 0)
         try expectEqual(Usage.Balance.Raise.decimals("KWD"), 3)
         try expect(try raise(#","currency":"JPY""#)?.fromLine(words)?.contains("150,000") == true, "a currency with no decimals")
-        // tafs cloud today sends none: no line, never a guessed currency.
+        // A tafs cloud from before raise.currency sends none: no line, never a guessed currency.
         try expectEqual(try raise("")?.fromLine(words), nil)
         for bad in [#","currency":"eur""#, #","currency":"EURO""#, #","currency":null"#, #","currency":12"#] {
             let r = try raise(bad)

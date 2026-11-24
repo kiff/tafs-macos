@@ -6,8 +6,9 @@ struct TafsApp: App {
     /// The app's language, kept for this Mac and changed from Account › Language.
     @StateObject private var language = AppLanguage()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())
-    /// The sample, while it's open (`Sample`): one transport for the window, so the rounds it plays stay; this launch
-    /// only, and left with Account's Clear the sample.
+    /// The sample, while it's open (`Sample`): one transport for the window, so the rounds it plays stay. Kept between
+    /// launches (`SampleStore`, as the iPad's) and opened again at launch when no one is signed in; left with Account's
+    /// Clear the sample, and forgotten by a sign-in.
     @State private var sample: SampleTransport?
 
     init() {
@@ -44,11 +45,20 @@ struct TafsApp: App {
                     // memory (`SampleTransport`), with no key, no stream and no network. Signing out of it clears it.
                     SignedInView(account: AccountClient(transport: transport, session: Sample.session, language: words.language),
                                  cloud: CloudClient(transport: transport, session: Sample.session, language: words.language),
-                                 route: .phoneOrPasskey, signedOut: { sample = nil }, inSample: true,
+                                 route: .phoneOrPasskey, signedOut: { transport.forget(); sample = nil }, inSample: true,
                                  playNextSample: { transport.playNext() })
                         .id("sample|" + words.language)
                 } else {
-                    SignInView(model: signIn, trySample: { sample = SampleTransport(words: words, load: Self.sampleWords) })
+                    SignInView(model: signIn, trySample: { sample = Self.sample(words) })
+                }
+            }
+            // The sample kept from an earlier launch, as the iPad's `restore`: opened again when no one is signed in.
+            .onAppear { if signIn.session == nil, sample == nil, SampleStore.standard.load() != nil { sample = Self.sample(words) } }
+            // A sign-in ends the sample and forgets it, as the iPad's sign-out clears its `SampleStore`.
+            .onChange(of: signIn.session != nil) { signedIn in
+                if signedIn {
+                    SampleStore.standard.clear()
+                    sample = nil
                 }
             }
             // A session just gained, on either path: celebrated once, over home.
@@ -76,6 +86,11 @@ struct TafsApp: App {
 
     /// This Mac's keys and session, from the Keychain. A Mac with no Secure Enclave has a
     /// software device key and no approval key: it approves on the phone or with a passkey.
+    /// The sample, kept between launches in the app's own folder.
+    private static func sample(_ words: Words) -> SampleTransport {
+        SampleTransport(words: words, load: sampleWords, store: .standard)
+    }
+
     /// Another language's words for the sample, from the app's own strings: the language chosen in Account while in it.
     private static func sampleWords(_ language: String) -> Words? {
         let words = Words.load(preferred: [language], chosen: language)
