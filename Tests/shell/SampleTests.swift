@@ -196,6 +196,8 @@ let shellSampleTests: [Test] = [
         defer { try? FileManager.default.removeItem(at: folder) }
         try expectEqual(store.load(), nil)
         let first = SampleTransport(words: english(), now: { at }, store: store)
+        // Kept as soon as it's opened, as the iPad's loadSample: quit with no change, and it opens again.
+        try expectEqual(store.load()?.rounds, Sample.firstRounds)
         first.playNext()
         _ = try await CloudClient(transport: first, session: Sample.session).send("stop", to: "sample-access")
         // A later launch: a new transport reads where the person left off.

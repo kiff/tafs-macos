@@ -399,6 +399,10 @@ final class SampleTransport: Transport, @unchecked Sendable {
             played = min(max(saved.rounds, Sample.firstRounds), Sample.lastRound)
             talked.said = saved.said.mapValues { $0.map { Sample.Said(text: $0.text, reply: $0.reply, at: $0.at) } }
             talked.paused = Set(saved.paused).intersection(Sample.tafs.map(\.key))
+        } else if store != nil {
+            // Kept from the moment it's opened, as the iPad's `loadSample` saves at once: quit without a change, and the
+            // next launch still opens it.
+            keep()
         }
     }
 

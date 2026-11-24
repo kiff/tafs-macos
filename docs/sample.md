@@ -57,7 +57,8 @@ iPad's own, from the shared strings (`sample.*`).
   `/v1/logos/`) is never asked; a test pins it.
 - **It keeps only itself, as the iPad's `SampleStore`.** What changed in it (the rounds played,
   what was said in each taf's chat, the tafs paused) is one local file, `tafs/sample.json` in
-  Application Support (`SampleStore`). The next launch with no one signed in opens the sample
+  Application Support (`SampleStore`), from the moment it's opened, as the iPad's `loadSample`
+  saves at once. The next launch with no one signed in opens the sample
   where it was left; a file that doesn't read is as new, and one can't add rounds past the
   scripts or a taf that isn't the sample's. Clear the sample removes it, and so does a sign-in.
   The Overview's list last read (`RememberedHome`) isn't kept for the sample.
