@@ -174,9 +174,12 @@ struct ShellView: View {
     }
 
     /// A held call, as the iPad lists it: an amber dot, the taf and what it asks, then why and
-    /// the time to answer by. It opens Needs you.
+    /// the time to answer by. It opens its taf's page, where its chat shows the call in place, as the iPad's
+    /// `HomeSelection.held` opens `TafDetailView`; a call whose taf isn't listed opens Needs you.
     private func heldRow(_ row: HeldRow) -> some View {
-        Button { selection = .needsYou } label: {
+        Button {
+            if let taf = tafs.first(where: { $0.kiffAgent == row.agent }), taf.tafID != nil { open(taf) } else { selection = .needsYou }
+        } label: {
             HStack(alignment: .top, spacing: 10) {
                 Circle().fill(Theme.amber).frame(width: 8, height: 8).padding(.top, 5).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
