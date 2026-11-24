@@ -61,10 +61,17 @@ final class CoachPanelModel: ObservableObject {
         open = true
     }
 
-    /// Words handed to Coach (a job from the Overview, the brief's next move), in its box to edit
-    /// and send, as the iPad's `handRecipeToCoach` and `startNextMove`. Nothing is sent.
+    /// The brief's next move, in the box of the chat shown, to edit and send, as the iPad's
+    /// `startNextMove`. Nothing is sent.
     func hand(_ words: String, to coach: CoachModel) {
         coach.draft = words
+        open = true
+    }
+
+    /// A job from the Overview or the gallery, as the iPad's `handRecipeToCoach`: a new
+    /// conversation with its words in the box, to edit and send. Nothing is sent.
+    func handRecipe(_ words: String, to coach: CoachModel) {
+        coach.handRecipe(words)
         open = true
     }
 }
