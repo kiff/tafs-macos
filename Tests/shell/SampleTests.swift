@@ -124,4 +124,26 @@ let shellSampleTests: [Test] = [
         // The two counts are plural lines, read by their count.
         for key in ["home.working", "needs_you.count"] { try expect(words.count(key, 2) != key, "\(key) is in English") }
     },
+    Test("a language chosen in the sample answers in it, from each request's Accept-Language, with the rounds played kept", awaiting: {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        var asked: [String] = []
+        let transport = SampleTransport(words: english(), now: { at }, load: { language in
+            asked.append(language)
+            return try? Words(language: language, folder: folder)
+        })
+        transport.playNext()
+        let french = try Words(language: "fr", folder: folder)
+        let held = try await AccountClient(transport: transport, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(held.first?.title, french("sample.support.promise_7802"))
+        try expectEqual(transport.rounds, Sample.firstRounds + 1)
+        let again = try await AccountClient(transport: transport, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(again.first?.title, held.first?.title)
+        try expectEqual(asked, ["fr"])
+        let back = try await AccountClient(transport: transport, session: Sample.session, language: "en").heldCalls()
+        try expectEqual(back.first?.title, english()("sample.support.promise_7802"))
+        // With no loader, every request is answered in the sample's own words.
+        let plain = SampleTransport(words: english(), now: { at })
+        let same = try await AccountClient(transport: plain, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(same.first?.title, english()("sample.support.promise_7802"))
+    }),
 ]

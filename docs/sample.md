@@ -35,6 +35,10 @@ iPad's own, from the shared strings (`sample.*`).
   The scripts are the iPad's whole `TafTemplates`. A call its Card holds for you joins Needs you,
   and one its Card refuses outright (`never`) is in the Record as "refused by its Card", never
   sent: the third round has Deploys' `DROP TABLE sessions_old`.
+- **A language chosen in Account** while in the sample: its tafs, calls and devices read in it
+  from the next read on, with the rounds played kept. Each request is answered in its
+  `Accept-Language`, as tafs cloud and KIFF answer (`SampleTransport.words(for:)`), from the
+  app's own strings; one that can't be loaded is answered in the sample's first language.
 
 ## What it never does
 
