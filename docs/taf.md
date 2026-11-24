@@ -285,7 +285,11 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
   minute** unless something else was copied since (`SecretClipboard`, as Android's).
 - **A Slack door's removal** stops its planque subscription first (`PlanqueClient.Safe.deleteTrigger`, a safe
   route the device key signs), as the iPad's `removeSlackDoor`; if planque refuses, the door stays and says why.
-- **Not here:** a drafted door's Approve, which issues a key too (`DoorDraftCard`, the phone's for now).
+- **Coach's drafted door** (`DoorDraftCard`) is approved on this Mac's security key, as the iPad's `approveDoorDraft`:
+  tafs cloud's draft `body`, canonical (RFC 8785, the iPad's `JCS.swift` compiled from the pin), is signed and sent
+  as it is to `POST /v1/tafs/{taf}/doors` (`KeyAct.addDraftedAPIDoor`; tafs cloud's `doorSigned` hands KIFF the
+  key's assertion). The answer's first key is shown once in `IssuedKeySheet`. A used draft (`410 draft_used`) and a
+  lapsed one (`404 draft_lapsed`) are said in tafs cloud's words; `critical_key_required` says to approve on the phone.
 
 ## Tests
 

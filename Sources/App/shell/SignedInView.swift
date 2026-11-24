@@ -206,6 +206,8 @@ struct SignedInView: View {
             // An approval card's Card step: KIFF's draft confirm on the key, and the report signed by the device key.
             coach.approveWithKey = approveWithKey
             coach.signRequest = account.sign
+            // A drafted door's approval: tafs cloud's door route on the key, as the doors' own acts.
+            coach.signWithKey = signWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on

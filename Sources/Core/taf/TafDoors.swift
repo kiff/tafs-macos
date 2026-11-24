@@ -263,6 +263,23 @@ extension CloudClient {
         return key
     }
 
+    /// The door a drafted door's approval opened, and its first key, in this one answer only (the iPad's `AddedAPIDoor`).
+    struct AddedAPIDoor: Decodable, Equatable {
+        let door: TafDoors.Door
+        let key: IssuedKey
+    }
+
+    /// Approves Coach's drafted door on the security key (`KeyAct.addDraftedAPIDoor`), as `newDoorKey` sends its act.
+    /// tafs cloud refuses a used draft (410 `draft_used`) and a lapsed one (404 `draft_lapsed`) in its own words.
+    func addDraftedDoor(_ act: KeyAct, assertion: String) async throws -> AddedAPIDoor {
+        let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Accept-Language": language,
+                       "User-Agent": "tafs-macos", Passkeys.headerName: assertion, "Content-Type": "application/json"]
+        let (status, answer) = try await transport.send(HTTPRequest(method: act.method, path: act.path, headers: headers, body: act.body))
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: answer) }
+        guard let added = try? AccountClient.decoder.decode(AddedAPIDoor.self, from: answer), !added.key.key.isEmpty else { throw KIFFError.unreadable }
+        return added
+    }
+
     func removeDoor(_ taf: String, door id: String) async throws {
         struct Answer: Decodable { let removed: String }
         let data = try await doorChange("DELETE", doorsPath(taf) + "/\(Self.escaped(id))", body: Optional<[String: String]>.none)

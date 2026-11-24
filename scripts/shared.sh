@@ -4,7 +4,7 @@
 #   scripts/shared.sh fetch          puts the words, the contracts and the mascot at the pin in .shared/
 #   scripts/shared.sh drift          fails when the pin is too far behind kiff/tafs main
 #   scripts/shared.sh verdict C D    the drift rule alone: C commits behind, D days behind
-#   scripts/shared.sh sources        the iPad's Swift files Core compiles as they are (Keccak-256)
+#   scripts/shared.sh sources        the iPad's Swift files Core compiles as they are (Keccak-256, RFC 8785 JSON)
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -19,6 +19,8 @@ MAX_COMMITS=20
 # The iPad's Keccak-256 (kiff/tafs#167), checked against the standard vectors there: one Keccak for
 # the Apple apps' receipt checks, compiled into Core as it is at the pin (docs/record.md).
 KECCAK=.shared/ios/Tafs/KIFF/Keccak.swift
+# The iPad's RFC 8785 canonical JSON, for the exact bytes a drafted door's approval signs and sends (docs/shared.md).
+JCS=.shared/ios/Tafs/KIFF/JCS.swift
 MAX_DAYS=7
 
 verdict() {
@@ -32,7 +34,7 @@ verdict() {
 
 case "${1:-}" in
     fetch)
-        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && [ -d .shared/ios/Shared ] && [ -f "$KECCAK" ] && exit 0
+        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && [ -d .shared/ios/Shared ] && [ -f "$KECCAK" ] && [ -f "$JCS" ] && exit 0
         rm -rf .shared
         git init -q .shared
         git -C .shared remote add origin "https://github.com/$REPO.git"
@@ -52,8 +54,9 @@ case "${1:-}" in
         verdict "$2" "$3"
         ;;
     sources)
-        [ -f "$KECCAK" ] || { echo "No $KECCAK: run scripts/shared.sh fetch" >&2; exit 2; }
+        [ -f "$KECCAK" ] && [ -f "$JCS" ] || { echo "No $KECCAK or $JCS: run scripts/shared.sh fetch" >&2; exit 2; }
         echo "$KECCAK"
+        echo "$JCS"
         ;;
     *)
         echo "usage: scripts/shared.sh fetch | drift | verdict <commits> <days> | sources" >&2
