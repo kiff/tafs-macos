@@ -67,8 +67,10 @@ iPad's own, from the shared strings (`sample.*`).
   you", what it asks and why, opening Needs you when clicked (`Notifier.announceSample`). The calls
   held when it opens are only noted, as a signed-in Mac notes what's held at its first read
   (`Announced`). macOS is asked once, at the first alert, as the iPad asks at its first; its answer
-  decides. Account › Alerts isn't the way in: its Turn on takes KIFF, so in the sample it says so,
-  without asking macOS or saving a choice. Sound is as chosen there.
+  decides, and alerts from a play while it asks wait for it. Each plays, and shows its banner even
+  with tafs in front (`Notifier.sample`), as the iPad's sample's do: Play the next sample actions is a
+  click in tafs. Account › Alerts isn't the way in: its Turn on takes KIFF, so in the sample it says
+  so, without asking macOS or saving a choice.
 - **It writes and approves nothing.** Every write is refused with the shared line, "This isn't in
   the sample. Sign in with KIFF to do it." (`sample.not_in_sample`), and nothing is done.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.

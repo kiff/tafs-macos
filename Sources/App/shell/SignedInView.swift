@@ -170,6 +170,7 @@ struct SignedInView: View {
         .onAppear {
             notifier.opened = { selection = .needsYou }
             notifier.account = account.session.tenant
+            notifier.sample = inSample
             LaunchClock.mark("first window")
         }
         // A screen chosen from elsewhere (a notification) closes it too. Coach, over it, stays.

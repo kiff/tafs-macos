@@ -28,25 +28,38 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         for announcement in announcements { center.add(Self.request(announcement, plays: prefs.plays)) }
     }
 
-    /// Whether macOS was asked for the sample's alerts yet, this run.
-    private var askedForSample = false
+    /// Whether this window shows the sample: its alerts play and show their banner as the iPad's sample's do.
+    var sample = false
+
+    /// macOS's answer for the sample's alerts, this run: nil until it's asked, then the alerts that came while it asked wait
+    /// in `waiting` and go together with its yes.
+    private var sampleAllowed: Bool?
+    private var askingForSample = false
+    private var waiting: [UNNotificationRequest] = []
 
     /// The sample's held calls, as the iPad's sample alerts for them (`LockScreen.notifyNew`): not behind Account ›
     /// Alerts, whose Turn on takes KIFF, which the sample has none of. macOS is asked once, at the sample's first alert, as
-    /// the iPad asks at its first, and its answer decides. Sound as chosen in Account › Alerts.
+    /// the iPad asks at its first, and its answer decides. Each plays, as the iPad's sample's do (`content.sound = .default`):
+    /// Account › Alerts' Sound can't be set without alerts on, which the sample never is.
     func announceSample(_ announcements: [Announcement]) {
         guard !announcements.isEmpty, let center else { return }
         center.delegate = self
-        let plays = AlertPrefs(defaults: defaults, account: account).plays
-        let requests = announcements.map { Self.request($0, plays: plays) }
-        guard !askedForSample else {
-            requests.forEach { center.add($0) }
+        let requests = announcements.map { Self.request($0, plays: true) }
+        if let allowed = sampleAllowed {
+            if allowed { requests.forEach { center.add($0) } }
             return
         }
-        askedForSample = true
+        // While macOS asks, a second play's alerts wait for the same answer rather than being lost.
+        waiting += requests
+        guard !askingForSample else { return }
+        askingForSample = true
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-            requests.forEach { center.add($0) }
+            DispatchQueue.main.async {
+                self.sampleAllowed = granted
+                self.askingForSample = false
+                if granted { self.waiting.forEach { center.add($0) } }
+                self.waiting = []
+            }
         }
     }
 
@@ -78,6 +91,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// Shown even with the window in front: the call may be on another screen.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
-        done(Self.presentation(plays: AlertPrefs(defaults: defaults, account: account).plays))
+        done(presentationNow())
+    }
+
+    /// How an alert shows with the window in front now. The sample's always show their banner, with sound, as the iPad's
+    /// sample's do: Play the next sample actions is a click in tafs, so tafs is in front each time one comes.
+    func presentationNow() -> UNNotificationPresentationOptions {
+        Self.presentation(plays: sample || AlertPrefs(defaults: defaults, account: account).plays)
     }
 }

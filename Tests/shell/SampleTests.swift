@@ -99,7 +99,11 @@ let shellSampleTests: [Test] = [
         // Its newly held calls alert as the iPad's sample does, asking macOS at the first, never through Account › Alerts.
         try expect(window.contains("if inSample { notifier.announceSample(fresh) } else { notifier.announce(fresh) }"), "the sample's held calls alert")
         let notifier = try String(contentsOf: URL(fileURLWithPath: "Sources/App/approvals/Notifier.swift"), encoding: .utf8)
-        try expect(notifier.contains("guard !askedForSample else {") && notifier.contains("center.requestAuthorization(options: [.alert, .sound])"), "macOS is asked once, at the first")
+        try expect(notifier.contains("guard !askingForSample else { return }") && notifier.contains("center.requestAuthorization(options: [.alert, .sound])"), "macOS is asked once, at the first")
+        try expect(notifier.contains("waiting += requests") && notifier.contains("if granted { self.waiting.forEach { center.add($0) } }"), "a play while macOS asks waits for its answer")
+        // They play, and show their banner with tafs in front, as the iPad's sample's do (the Mac test pins the banner).
+        try expect(notifier.contains("announcements.map { Self.request($0, plays: true) }"), "a sample alert plays")
+        try expect(window.contains("notifier.sample = inSample"), "the window says it's the sample")
         let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
         try expect(alerts.contains("why = Sample.notInSample(words)") && !alerts.contains("\n        prefs.save(to: defaults, account: account)"), "Turn on refused, nothing saved")
     }),
