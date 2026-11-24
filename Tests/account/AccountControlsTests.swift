@@ -144,6 +144,9 @@ let accountControlsTests: [Test] = [
         try expect(Passkey.removesLast(phone, among: [phone]), "the only one")
         try expect(!Passkey.removesLast(phone, among: [phone, key]), "another left")
         try expect(!Passkey.removesLast(phone, among: [phone, mac]), "a computer's counts too, as the iPad's")
+        // A computer's own passkey that also has an id is still the computer's: never removable here (as Linux pins it).
+        let both = try read(#"{"id":"pk_9","name":"Mac","device_id":"dev_1"}"#)
+        try expect(!both.removable, "an id with a device_id is a computer's")
     },
     Test("who removes passkeys is KIFF's member_role, an owner or an admin; a KIFF that doesn't say offers no Remove") {
         let me = { (json: String) in try AccountClient.decoder.decode(Me.self, from: Data(json.utf8)) }
