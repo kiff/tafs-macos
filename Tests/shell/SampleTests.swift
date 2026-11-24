@@ -190,4 +190,44 @@ let shellSampleTests: [Test] = [
             try expectEqual(r.words, words("sample.not_in_sample"))
         }
     }),
+    Test("the sample is kept between launches, as the iPad's SampleStore: rounds, chats and pauses come back; Clear forgets it", awaiting: {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sample-kept-\(UUID().uuidString)", isDirectory: true)
+        let store = SampleStore(url: folder.appendingPathComponent("sample.json"))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try expectEqual(store.load(), nil)
+        let first = SampleTransport(words: english(), now: { at }, store: store)
+        first.playNext()
+        _ = try await CloudClient(transport: first, session: Sample.session).send("stop", to: "sample-access")
+        // A later launch: a new transport reads where the person left off.
+        let again = SampleTransport(words: english(), now: { at }, store: store)
+        try expectEqual(again.rounds, Sample.firstRounds + 1)
+        try expectEqual(again.talk.paused, ["access"])
+        try expectEqual(again.talk.said["access"]?.map(\.text), ["stop"])
+        let home = try await CloudClient(transport: again, session: Sample.session).home()
+        let access = home.tafs.first { $0.name == english()("sample.access.name") }
+        try expectEqual(access?.paused, true)
+        try expectEqual(access?.state, access?.waiting == 0 ? "paused" : "waiting")
+        // Clear the sample: nothing is kept.
+        again.forget()
+        try expectEqual(store.load(), nil)
+        try expectEqual(SampleTransport(words: english(), now: { at }, store: store).rounds, Sample.firstRounds)
+    }),
+    Test("a kept sample that doesn't read is as new; one with rounds past the scripts or a taf that isn't the sample's is held to them") {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sample-bad-\(UUID().uuidString)", isDirectory: true)
+        let store = SampleStore(url: folder.appendingPathComponent("sample.json"))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: store.url)
+        try expectEqual(SampleTransport(words: english(), now: { at }, store: store).rounds, Sample.firstRounds)
+        store.save(SampleStore.Saved(rounds: 99, said: [:], paused: ["access", "someone-else"]))
+        let held = SampleTransport(words: english(), now: { at }, store: store)
+        try expectEqual(held.rounds, Sample.lastRound)
+        try expectEqual(held.talk.paused, ["access"])
+    },
+    Test("the window opens a kept sample at launch with no one signed in, forgets it on Clear and on a sign-in (sources)") {
+        let app = try String(contentsOf: URL(fileURLWithPath: "Sources/App/entry/TafsApp.swift"), encoding: .utf8)
+        try expect(app.contains("if signIn.session == nil, sample == nil, SampleStore.standard.load() != nil { sample = Self.sample(words) }"), "opened at launch")
+        try expect(app.contains("signedOut: { transport.forget(); sample = nil }"), "Clear the sample forgets it")
+        try expect(app.contains("SampleStore.standard.clear()"), "a sign-in forgets it")
+    },
 ]

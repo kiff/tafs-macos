@@ -55,7 +55,12 @@ iPad's own, from the shared strings (`sample.*`).
   reads (which need this Mac's signed proof) and Coach's start never begin, and nothing streams.
   No sample answer names a logo, so the app's one logo reader (`AppLogoImages.app`, tafs cloud's
   `/v1/logos/`) is never asked; a test pins it.
-- **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
+- **It keeps only itself, as the iPad's `SampleStore`.** What changed in it (the rounds played,
+  what was said in each taf's chat, the tafs paused) is one local file, `tafs/sample.json` in
+  Application Support (`SampleStore`). The next launch with no one signed in opens the sample
+  where it was left; a file that doesn't read is as new, and one can't add rounds past the
+  scripts or a taf that isn't the sample's. Clear the sample removes it, and so does a sign-in.
+  The Overview's list last read (`RememberedHome`) isn't kept for the sample.
 - **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
   Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
 - **It writes and approves nothing.** Every write is refused with the shared line, "This isn't in
@@ -64,5 +69,5 @@ iPad's own, from the shared strings (`sample.*`).
 
 ## Not yet
 
-The iPad's local alerts for the sample's held calls (the Mac's sample announces nothing, and turning
-alerts on in it says it takes KIFF), and keeping it between launches (the iPad's `SampleStore`).
+The iPad's local alerts for the sample's held calls: the Mac's sample announces nothing, and turning
+alerts on in it says it takes KIFF.

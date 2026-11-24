@@ -386,11 +386,32 @@ final class SampleTransport: Transport, @unchecked Sendable {
     private var played = Sample.firstRounds
     private var loaded: [String: Words] = [:]
     private var talked = Sample.Talk()
+    /// Where the sample is kept between launches; nil keeps it this launch only.
+    private let store: SampleStore?
 
-    init(words: Words, now: @escaping () -> Date = Date.init, load: ((String) -> Words?)? = nil) {
+    init(words: Words, now: @escaping () -> Date = Date.init, load: ((String) -> Words?)? = nil, store: SampleStore? = nil) {
         self.words = words
         self.now = now
         self.load = load
+        self.store = store
+        // Where the person left off, as the iPad's `restore`: the rounds played, its chats and what they paused.
+        if let saved = store?.load() {
+            played = min(max(saved.rounds, Sample.firstRounds), Sample.lastRound)
+            talked.said = saved.said.mapValues { $0.map { Sample.Said(text: $0.text, reply: $0.reply, at: $0.at) } }
+            talked.paused = Set(saved.paused).intersection(Sample.tafs.map(\.key))
+        }
+    }
+
+    /// Keeps what changed, as the iPad's `save` after each change. Called with the lock held.
+    private func keep() {
+        store?.save(SampleStore.Saved(rounds: played, said: talked.said.mapValues { $0.map { .init(text: $0.text, reply: $0.reply, at: $0.at) } },
+                                      paused: talked.paused.sorted()))
+    }
+
+    /// Clear the sample: what was kept goes too.
+    func forget() {
+        lock.lock(); defer { lock.unlock() }
+        store?.clear()
     }
 
     /// The words a request is answered in: its `Accept-Language`, as tafs cloud and KIFF answer in it, so a language
@@ -418,6 +439,7 @@ final class SampleTransport: Transport, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard played < Sample.lastRound else { return false }
         played += 1
+        keep()
         return true
     }
 
@@ -447,6 +469,7 @@ final class SampleTransport: Transport, @unchecked Sendable {
                 case .resume: talked.paused.remove(taf.key)
                 case .none: break
                 }
+                keep()
                 return talked.said[taf.key]?.count ?? 0
             }()
             return (200, Sample.json(["session": "sample", "new_session": false, "message": ["id": "sample-said-\(count - 1)"]]))
