@@ -204,13 +204,15 @@ struct StartsWhenView: View {
     var myEmail: String? = nil
     /// Coach on this taf, a new conversation; nil draws no Change when it starts with Coach.
     var improveInCoach: (() -> Void)? = nil
+    /// The taf's page, for Make it live; nil leaves it to the phone.
+    var pages: TafPagesModel? = nil
     let close: () -> Void
     @State private var busy = false
 
     var body: some View {
         KnobSheet(title: words("setup.starts_when"), model: model, close: close) {
             if let knob = model.knob {
-                KnobPendingPanel(knob: knob, manages: manages)
+                KnobPendingPanel(knob: knob, manages: manages, dial: model, pages: pages)
                 schedule(knob)
                 events(knob)
                 if let doors { DoorsListPanel(taf: taf, doors: doors, myEmail: myEmail) }
@@ -485,7 +487,7 @@ struct ResultsGoToView: View {
                 // The live taf's places: a change's answer while it's the newer, else Home's.
                 let live = Self.liveBuiltIns(model.updated != nil ? model.updated?.results : taf.results, knob: knob)
                 Text(words("setup.at_least_one")).font(.system(size: 13)).foregroundColor(Theme.dim)
-                KnobPendingPanel(knob: knob, manages: manages)
+                KnobPendingPanel(knob: knob, manages: manages, dial: model, pages: pages)
                 KnobPanel {
                     Eyebrow(text: words("setup.from_tafs"))
                     ForEach(builtIns, id: \.place) { b in
@@ -622,6 +624,13 @@ struct KnobPendingPanel: View {
     @Environment(\.words) private var words
     let knob: Knob
     let manages: Bool
+    /// The dial, read again after.
+    var dial: TafKnobModel? = nil
+    /// The taf's page, which installs versions; nil, or one that can't, says to approve on the phone.
+    var pages: TafPagesModel? = nil
+    @State private var busy = false
+    /// The version whose Card the owner reads before the security key.
+    @State private var reading: TafVersions.Version?
 
     var body: some View {
         if let pending = knob.pending, manages {
@@ -631,9 +640,48 @@ struct KnobPendingPanel: View {
                 ForEach(Array((knob.draft?.words ?? []).enumerated()), id: \.offset) { _, line in
                     Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
                 }
-                Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let pages, pages.installsVersions {
+                    // Make it live, as the iPad's: the version's switch, its Card read first when it brings one.
+                    Button(busy ? words("common.confirming") : words("version.install_this")) { makeLive(pending.version, pages) }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .fixedSize()
+                        .disabled(busy || pages.installing != nil)
+                        .accessibilityIdentifier("setup.makeLive")
+                    if let error = pages.versionError {
+                        Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+            .sheet(item: $reading) { v in
+                if let pages {
+                    VersionCardSheet(model: pages, version: v, close: {
+                        reading = nil
+                        Task { await dial?.load(words: words) }
+                    }).environment(\.words, words)
+                }
+            }
+        }
+    }
+
+    /// As the iPad's `confirm`: the versions and the dial read again, and only if this is still the version waiting does
+    /// its switch begin. The dial is read again after.
+    private func makeLive(_ n: Int, _ pages: TafPagesModel) {
+        guard !busy else { return }
+        busy = true
+        Task {
+            await pages.loadVersions()
+            await dial?.load(words: words)
+            // Read on the main actor first: Swift 5.7 (macOS 12's) refuses these reads inside the condition.
+            let pending = await dial?.knob?.pending?.version
+            let listed = await pages.versionList?.first(where: { $0.n == n })
+            if dial == nil || pending == n, let version = listed {
+                if let read = await pages.install(version) { reading = read }
+                await dial?.load(words: words)
+            }
+            busy = false
         }
     }
 }

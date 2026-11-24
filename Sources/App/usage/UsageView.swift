@@ -44,6 +44,9 @@ final class UsageModel: ObservableObject {
         self.confirm = confirm
     }
 
+    /// One taf's runs in the period shown, for its line's sheet, as the iPad's `TafCreditsView(taf:previous:)`.
+    func runs(of taf: String) -> TafCreditsModel { TafCreditsModel(cloud: cloud, taf: taf, previous: previous) }
+
     /// Each half is read on its own: one that can't be read doesn't take the other away. Then
     /// KIFF's usage, as the iPad's `refreshUsage` (AppModel.swift:3344-3375).
     func load() async {
@@ -246,8 +249,20 @@ struct UsageView: View {
     /// Whether this person manages billing (KIFF's `billing.manage`): they answer members'
     /// requests; anyone else asks an admin.
     var managesBilling = true
+    /// A taf's name by its tafs cloud id, while it's listed: its line opens its runs only then, as
+    /// the iPad's opens only for a taf (a removed taf's line doesn't).
+    var tafName: (String) -> String? = { _ in nil }
     @State private var asking = false
     @State private var declining: PackRequest?
+    /// A taf's runs, opened from its line.
+    @State private var runs: OpenRuns?
+
+    /// A taf's line opened: its runs' model and its name for the sheet's head.
+    struct OpenRuns: Identifiable {
+        let model: TafCreditsModel
+        let name: String
+        var id: String { model.taf }
+    }
 
     var body: some View {
         ScrollView {
@@ -288,6 +303,9 @@ struct UsageView: View {
             AskAdminView(model: model, raise: model.usage.flatMap(Self.asks)).environment(\.words, words)
         }
         .sheet(item: $declining) { DeclineRequestView(model: model, request: $0).environment(\.words, words) }
+        .sheet(item: $runs) { open in
+            TafCreditsView(model: open.model, name: open.name) { runs = nil }.environment(\.words, words)
+        }
     }
 
     /// Who bills the plan, in one line, as the iPad's `billingPanel` (UsageView.swift:121-153):
@@ -494,14 +512,34 @@ struct UsageView: View {
         }
     }
 
+    /// A taf's line: tafs cloud's words, then its pace once its runs cover a week.
+    @ViewBuilder private func creditsLine(_ row: Usage.Credits.Row) -> some View {
+        Text(verbatim: row.words).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+        if let pace = row.pace { Text(verbatim: pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
+    }
+
     /// Each taf's line as its own panel, then Coach's use past what's included in a panel of its
     /// own (it is counted), then what wasn't counted, then tafs cloud's note.
     @ViewBuilder private var creditsRows: some View {
         if case .loaded(let credits) = model.credits {
             ForEach(credits.rows) { row in
-                panel {
-                    Text(verbatim: row.words).font(.system(size: 15)).foregroundColor(Theme.ink)
-                    if let pace = row.pace { Text(verbatim: pace).font(.system(size: 12)).foregroundColor(Theme.soft) }
+                // A listed taf's line opens its runs in the period shown, as the iPad's
+                // (CreditsViews.swift:64-73); the line for tafs removed since doesn't.
+                if let taf = row.taf, let name = tafName(taf) {
+                    Button { runs = OpenRuns(model: model.runs(of: taf), name: name) } label: {
+                        panel {
+                            HStack(alignment: .firstTextBaseline) {
+                                VStack(alignment: .leading, spacing: 4) { creditsLine(row) }
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("usage.credits.taf.\(taf)")
+                } else {
+                    panel { creditsLine(row) }
                 }
             }
             if let coach = credits.coach {
