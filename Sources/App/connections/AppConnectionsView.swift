@@ -37,7 +37,7 @@ struct AppConnectionsView: View {
     var body: some View {
         if let id = detail, let grant = model.grants.first(where: { $0.id == id }) {
             let end = grant.id + "|end"
-            ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards,
+            ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards, lastFailed: lastFailure(grant),
                                  ending: ConnectionEnd(route: model.endRoute, busy: model.ending.contains(end), note: model.notes[end],
                                                 perform: { [model] prompt in await model.disconnect(grant.id, prompt: prompt, id: end) })) { detail = nil }
         } else {
@@ -92,10 +92,16 @@ struct AppConnectionsView: View {
     }
 
     /// `taf` is the taf the connections were made for, by name: Remove access's question names it.
+    /// A connection's last failed call, from the Record's newest calls, its own taf's first.
+    private func lastFailure(_ g: AppConnections.Grant) -> String? {
+        AppConnections.lastFailure(g, record: model.calls, ownTaf: AppConnections.tafID(of: g, in: tafs), words)
+    }
+
     private func rows(_ grants: [AppConnections.Grant], taf: String?) -> some View {
         ForEach(grants) { g in
             if g.id != grants.first?.id { Rectangle().fill(Theme.line).frame(height: 1) }
-            ConnectionRow(grant: g, app: app, taf: taf, managesCards: managesCards, model: model, gated: $gated) { detail = g.id }
+            ConnectionRow(grant: g, app: app, taf: taf, alsoOn: AppConnections.alsoOn(g, in: tafs), lastFailed: lastFailure(g),
+                          managesCards: managesCards, model: model, gated: $gated) { detail = g.id }
         }
     }
 
@@ -225,6 +231,10 @@ private struct ConnectionRow: View {
     let app: Apps.App
     /// The taf it was made for, by name, when this app can name it.
     let taf: String?
+    /// The other tafs whose Card draws on its tools (`AppConnections.alsoOn`): its line, and Remove access names them.
+    let alsoOn: [String]
+    /// Its last failed call, in tafs cloud's words, when the Record has one.
+    let lastFailed: String?
     let managesCards: Bool
     @ObservedObject var model: ConnectAppsModel
     @Binding var gated: String?
@@ -236,6 +246,13 @@ private struct ConnectionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: grant.name ?? app.name).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
                 if grant.rowFromPlanque { planqueLines } else { ownLines }
+                // As the iPad's `entry`: the other Cards on it, then its last failed call (gap 13), in red.
+                if let also = AppConnections.alsoOnLine(alsoOn, words) {
+                    Text(verbatim: also).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                }
+                if let lastFailed {
+                    Text(verbatim: lastFailed).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                }
                 misplaced
                 if !grant.rowFromPlanque, managesCards { fix }
             }
@@ -263,15 +280,15 @@ private struct ConnectionRow: View {
     }
 
     /// The iPad's question before ending it: Cancel's for a request or a sign-in that waits
-    /// (`ConnectionFixWords`), else Remove access's (`DisconnectWords`), naming the taf it ends.
-    /// This Mac doesn't read which other tafs' Cards use its tools, so none is named.
+    /// (`ConnectionFixWords`), else Remove access's (`DisconnectWords`), naming the taf it ends and the other tafs
+    /// whose Cards stop with it (`alsoOn`).
     private var endQuestion: GateQuestion {
         if grant.cancellable {
             return GateQuestion(title: AppConnections.cancelTitle(grant, words), message: words("connect.cancel_sign_in.body", ["vendor": grant.vendor]),
                                 confirm: words(AppConnections.cancelWordKey(grant)), cancel: words("connect.cancel_sign_in.keep_waiting"))
         }
-        return GateQuestion(title: AppConnections.disconnectTitle(grant.vendor, taf: taf, words),
-                            message: AppConnections.disconnectMessage(grant.vendor, taf: taf, key: grant.takesKey, words),
+        return GateQuestion(title: AppConnections.disconnectTitle(grant.vendor, taf: taf, alsoStops: alsoOn, words),
+                            message: AppConnections.disconnectMessage(grant.vendor, taf: taf, alsoStops: alsoOn, key: grant.takesKey, words),
                             confirm: words("connect.disconnect_button"), cancel: words("common.cancel"))
     }
 
@@ -362,6 +379,8 @@ struct ConnectionDetailView: View {
     let grant: AppConnections.Grant
     let appTitle: String
     let managesCards: Bool
+    /// Its last failed call, in tafs cloud's words, under its health, as the iPad's detail.
+    var lastFailed: String? = nil
     /// How Remove is done here (`ConnectionEnding`); nil, on the phone.
     let ending: ConnectionEnd?
     let back: () -> Void
@@ -369,10 +388,12 @@ struct ConnectionDetailView: View {
     @State private var gated: String?
 
     /// `gated` starts the page as after a click on that action (its screenshot).
-    init(grant: AppConnections.Grant, appTitle: String, managesCards: Bool, ending: ConnectionEnd? = nil, gated: String? = nil, back: @escaping () -> Void) {
+    init(grant: AppConnections.Grant, appTitle: String, managesCards: Bool, lastFailed: String? = nil, ending: ConnectionEnd? = nil, gated: String? = nil,
+         back: @escaping () -> Void) {
         self.grant = grant
         self.appTitle = appTitle
         self.managesCards = managesCards
+        self.lastFailed = lastFailed
         self.ending = ending
         self.back = back
         _gated = State(initialValue: gated)
@@ -435,6 +456,9 @@ struct ConnectionDetailView: View {
             }
             if let used = grant.usedBy, !used.isEmpty {
                 Text(words("connect.apps.used_by", ["tafs": used.joined(separator: ", ")])).font(.system(size: 14)).foregroundColor(Theme.soft)
+            }
+            if let lastFailed {
+                Text(verbatim: lastFailed).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.vertical, 12)

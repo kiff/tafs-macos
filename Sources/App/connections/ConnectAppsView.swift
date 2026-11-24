@@ -22,6 +22,9 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var readsConnections = false
     /// The tafs removed since, as tafs cloud names them (`removed_tafs`).
     @Published private(set) var removedTafs: [Apps.RemovedTaf] = []
+    /// The Record's newest calls, for each connection's last failed call (`AppConnections.lastFailure`), as the iPad
+    /// reads its `record`. One that can't be read is none: the line isn't drawn, nothing else changes.
+    @Published private(set) var calls: [Record.Entry] = []
     /// The app whose connections are open ("Your {app} connections"), from its row's chevron.
     @Published var opened: Apps.App?
 
@@ -141,6 +144,11 @@ final class ConnectAppsModel: ObservableObject {
         await load()
     }
 
+    /// The Record's first page, read only.
+    private func readCalls() async {
+        do { calls = try await cloud.record().entries } catch is CancellationError {} catch { calls = [] }
+    }
+
     var yours: [Apps.App] { apps.filter(\.isYours) }
     var discover: [Apps.App] { apps.filter { !$0.isYours } }
 
@@ -152,7 +160,10 @@ final class ConnectAppsModel: ObservableObject {
         refreshRoute()
         // The account's connections too, as the iPad's `loadConnectApps`, so a connected app
         // lists each one.
-        if q.isEmpty { await readConnections() }
+        if q.isEmpty {
+            await readConnections()
+            await readCalls()
+        }
         do {
             // This Mac's signed read with it, as the iPad sends it: tafs cloud then names the
             // removed tafs' connections. A fresh one each time: planque takes each once.

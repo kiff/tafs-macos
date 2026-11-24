@@ -91,6 +91,11 @@ enum AppConnections {
         /// with its name in KIFF and the title Setup asked for it by. One that doesn't read is
         /// left out, never the grant.
         var tools: [Tool] = []
+        /// The tools planque says the connection holds, by their actions, when it sends them.
+        var heldTools: [String]?
+
+        /// The Card actions it connects, as the iPad's `g.tools ?? request.tools.filter(\.tafs).map(\.action)`.
+        var cardActions: Set<String> { Set(heldTools ?? tools.filter(\.tafs).map(\.action)) }
 
         /// A tool a grant was asked for, as the iPad's `PlanqueClient.Grant.Request.Tool`.
         struct Tool: Decodable, Equatable {
@@ -98,20 +103,25 @@ enum AppConnections {
             let name: String?
             /// What it does, in the owner's words, as Setup asked for it.
             let title: String?
-            enum CodingKeys: String, CodingKey { case tool, name, title }
+            /// Setup's own read, not one of the taf's tools.
+            var setupReads = false
+            enum CodingKeys: String, CodingKey { case tool, name, title, setupReads = "setup_reads" }
             init(tool: String, name: String? = nil, title: String? = nil) { self.tool = tool; self.name = name; self.title = title }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
                 tool = try c.decode(String.self, forKey: .tool)
                 name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? nil
                 title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil
+                setupReads = ((try? c.decodeIfPresent(Bool.self, forKey: .setupReads)) ?? nil) == true
             }
+            /// One of the taf's own tools, as the iPad's `tafs`: not Setup's read.
+            var tafs: Bool { !setupReads }
             /// Its name in KIFF and at the relay: the Card's action.
             var action: String { name ?? tool }
         }
 
         enum CodingKeys: String, CodingKey {
-            case id, status, title, account, request, health, actions, entry
+            case id, status, title, account, request, health, actions, entry, heldTools = "tools"
             case statusWords = "status_words", vendorName = "vendor", agentName = "agent_name", usedBy = "used_by", signedIn = "signed_in"
         }
         enum RequestKeys: String, CodingKey { case server, agent, connector, kind, tools }
@@ -145,6 +155,7 @@ enum AppConnections {
                 init(from decoder: Decoder) throws { tool = try? Tool(from: decoder) }
             }
             tools = (((try? request?.decodeIfPresent([Lenient].self, forKey: .tools)) ?? nil) ?? []).compactMap(\.tool)
+            heldTools = (try? c.decodeIfPresent([String].self, forKey: .heldTools)) ?? nil
         }
 
         /// planque draws this connection's row: its health and its actions.
@@ -237,6 +248,44 @@ enum AppConnections {
 
     /// The taf a connection was made for, by name, from the tafs listed (`Home.Taf`, by KIFF
     /// agent), as the iPad's `tafOf`; nil when this app can't name it.
+    /// The other tafs whose Card draws on a connection's tools, as the iPad's `alsoStops` and `tafsUsing`: a live,
+    /// active Card's rule on one of the actions it connects. KIFF's tools are the account's, so a taf can draw on a
+    /// connection another taf asked for; the one it was made for is left out. By name, in Home's order.
+    static func alsoOn(_ grant: Grant, in tafs: [Home.Taf]) -> [String] {
+        let actions = grant.cardActions
+        guard !actions.isEmpty else { return [] }
+        return tafs.filter { taf in
+            taf.kiffAgent != grant.agent
+                && taf.cards.contains { $0.active && $0.rules.contains { $0.action.map(actions.contains) == true } }
+        }.map(\.name)
+    }
+
+    /// "Also on Refunds' Card", "Also on the Cards of Refunds and Leads", as the iPad's `alsoOnCards`; nil with none.
+    static func alsoOnLine(_ names: [String], _ say: Words) -> String? {
+        switch names.count {
+        case 0: return nil
+        case 1: return say("connect.apps.also_on_one", ["owner": names[0]])
+        default: return say("connect.apps.also_on_many", ["tafs": say.list(names)])
+        }
+    }
+
+    /// A connection's last failed call, as the iPad's `lastFailure` (gap 13): the newest call through one of its tools
+    /// that wasn't done, its own taf's first, in tafs cloud's words for it ("Last failed: Refund · Stripe didn't answer").
+    /// Nil when none is in the Record read.
+    static func lastFailure(_ grant: Grant, record: [Record.Entry], ownTaf: String?, _ say: Words) -> String? {
+        let actions = grant.cardActions
+        guard !actions.isEmpty else { return nil }
+        let failed = record.filter { $0.kind == "not_done" && $0.action.map(actions.contains) == true }
+        let own = failed.filter { $0.taf.id == ownTaf }
+        guard let last = (own.isEmpty ? failed : own).max(by: { $0.at < $1.at }) else { return nil }
+        return say("connect.last_failed", ["title": last.title, "detail": last.detail])
+    }
+
+    /// The tafs cloud id of the taf a connection was made for, as Home lists it.
+    static func tafID(of grant: Grant, in tafs: [Home.Taf]) -> String? {
+        tafs.first { $0.kiffAgent == grant.agent }?.tafID
+    }
+
     static func taf(of grant: Grant, in tafs: [Home.Taf]) -> String? {
         tafs.first { $0.kiffAgent == grant.agent }?.name
     }
