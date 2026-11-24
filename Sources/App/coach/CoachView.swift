@@ -91,7 +91,8 @@ final class CoachModel: ObservableObject {
     /// reads them.
     init(cloud: CloudClient, taf: Coach? = nil, streamer: LineStream? = nil, sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) },
          now: @escaping () -> Date = Date.init, store: FileStore = URLSessionFileStore(), proof: (() async -> String?)? = nil,
-         grants: (() async throws -> [AppConnections.Grant])? = nil, drafts: ((String) async throws -> AccountClient.Draft)? = nil) {
+         grants: (() async throws -> [AppConnections.Grant])? = nil, drafts: ((String) async throws -> AccountClient.Draft)? = nil,
+         profileWords: ((JCS.Value) async throws -> ProfileWords)? = nil) {
         self.cloud = cloud
         self.fixed = taf
         self.proof = proof
@@ -102,16 +103,22 @@ final class CoachModel: ObservableObject {
         if taf == nil, let proof {
             let planque: () async throws -> [AppConnections.Grant] = {
                 try await ConnectionsSource(transport: NetworkTransport(base: URL(string: PlanqueClient.baseURL)!), tenant: cloud.session.tenant,
-                                            language: cloud.language, proof: proof).grants()
+                                            language: cloud.language, proof: proof, sha256: PasskeyCrypto.sha256).grants()
             }
             let kiff: (String) async throws -> AccountClient.Draft = { id in
                 try await AccountClient(transport: NetworkTransport(), session: cloud.session, language: cloud.language).draft(id: id)
             }
+            let words: (JCS.Value) async throws -> ProfileWords = { profile in
+                try await AccountClient(transport: NetworkTransport(), session: cloud.session, language: cloud.language)
+                    .profileWords(for: profile, sha256: PasskeyCrypto.sha256)
+            }
             self.readGrants = grants ?? planque
             self.readDraft = drafts ?? kiff
+            self.readProfileWords = profileWords ?? words
         } else {
             self.readGrants = taf == nil ? grants : nil
             self.readDraft = taf == nil ? drafts : nil
+            self.readProfileWords = taf == nil ? profileWords : nil
         }
     }
 
@@ -134,6 +141,46 @@ final class CoachModel: ObservableObject {
     @Published private(set) var coachTools: CoachTools?
     private let readGrants: (() async throws -> [AppConnections.Grant])?
     private let readDraft: ((String) async throws -> AccountClient.Draft)?
+    private let readProfileWords: ((JCS.Value) async throws -> ProfileWords)?
+
+    /// KIFF's words for each waiting approval's connection profile, by grant id, as the iPad's `profileWords` and
+    /// `profileWordsError`: read, or the line saying why not. Shown only for exactly the profile in the grant read
+    /// now (`shownWords`). Kept in memory only, and gone at sign-out.
+    @Published private(set) var profileWords: [String: ProfileWordsRead] = [:]
+    enum ProfileWordsRead: Equatable {
+        case read(ProfileWords)
+        /// The line's key, said in the words' place.
+        case failed(String)
+    }
+
+    /// The words to show for `grant`: only KIFF's words for exactly its profile, as the iPad's `shownWords`.
+    func shownWords(for grant: AppConnections.Grant) -> ProfileWords? {
+        guard let profile = grant.profile, case .read(let words)? = profileWords[grant.id],
+              (try? ProfileWords.digest(profile, sha256: PasskeyCrypto.sha256)) == words.profileSHA256 else { return nil }
+        return words
+    }
+
+    /// Why KIFF's words for `grant` weren't read, as a line's key; none while they're read or being read.
+    func profileWordsFailed(for grant: AppConnections.Grant) -> String? {
+        if case .failed(let key)? = profileWords[grant.id] { return key }
+        return nil
+    }
+
+    /// Reads KIFF's words for `grant`'s profile with the session, as the iPad's `loadProfileWords`: none for a grant
+    /// without one, and not again while the words read are still that profile's. A read after sign-out is dropped.
+    func readWords(for grant: AppConnections.Grant) async {
+        guard let readProfileWords, let profile = grant.profile else { return }
+        if shownWords(for: grant) != nil { return }
+        let gen = accountGeneration
+        do {
+            let words = try await readProfileWords(profile)
+            guard gen == accountGeneration else { return }
+            profileWords[grant.id] = .read(words)
+        } catch {
+            guard gen == accountGeneration else { return }
+            profileWords[grant.id] = .failed((error as? ProfileWords.Failure)?.key ?? ProfileWords.Failure.notWords.key)
+        }
+    }
 
     /// planque is read for Coach's cards with this Mac's proof, as Windows gates "Taking shape" on
     /// planque being there to read tools. It stands for the iPad's `planqueReady`, which this Mac is
@@ -171,6 +218,10 @@ final class CoachModel: ObservableObject {
             if let id = card.draft, !ids.contains(id) { ids.append(id) }
         }
         for id in ids { await read(draft: id) }
+        // KIFF's words for each waiting approval's connection, for the card to show under planque's.
+        for card in page.cards where card.type == "approval" && card.answerState == nil {
+            if let grant = grant(for: card), grant.profile != nil { await readWords(for: grant) }
+        }
     }
 
     /// Reads one of KIFF's drafts again, as the iPad's `readCardDraft`: Try again on a card whose
@@ -1099,6 +1150,7 @@ final class CoachModel: ObservableObject {
         accountGeneration += 1
         grants = []
         drafts = [:]
+        profileWords = [:]
         coachTools = nil
         files = ChatFiles()
         fileNotice = nil

@@ -2,7 +2,9 @@ import SwiftUI
 
 /// An approval in Coach's chat, waiting, failed or opened again, drawn up to the approval as the
 /// iPad's `SetupApproval.card` (SetupChatView.swift:1620-1802): its state, Coach's words for it, the
-/// connection's line, the Card KIFF drafted for it (or tafs cloud's words for a Card approved next),
+/// connection's line or, while it isn't made, planque's own words for the request with its terms under
+/// Details and KIFF's words for its profile (what the phone's Approve shows and signs), and a warning when
+/// planque's digest doesn't match what it sent; the Card KIFF drafted for it (or tafs cloud's words for a Card approved next),
 /// the wider line, why it didn't go through, then Decline and, in Approve's place, where to
 /// approve. Approving grants at planque or confirms KIFF's Card: the phone's, so nothing here
 /// approves. A card a newer request for the same connection replaced is history: its words only.
@@ -62,6 +64,8 @@ struct SetupApprovalCard: View {
         if let connection = ApprovalLines.connectionLine(card, grant: grant, words) {
             Label(connection, systemImage: "checkmark.circle.fill").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
                 .accessibilityIdentifier("approval.connection-done")
+        } else if let grant {
+            GrantWords(model: model, grant: grant, waits: card.answerState == nil && !replaced)
         }
     }
 
@@ -183,5 +187,74 @@ struct OutlineAction: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// planque's own words for a connection's request, as the iPad's card shows them before Approve
+/// (SetupChatView.swift:1693-1720): planque's text as sent, each tool's exact terms under Details, KIFF's
+/// words for the connection's profile while the approval waits, and a warning when planque's digest isn't
+/// the hash of what it sent. Read-only: this Mac approves no connection, the phone does, with these words.
+struct GrantWords: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: CoachModel
+    let grant: AppConnections.Grant
+    /// The approval still waits: KIFF's words for its profile are read and shown.
+    let waits: Bool
+
+    var body: some View {
+        if let text = grant.text {
+            Text(verbatim: text).font(.system(size: 15)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("approval.grant-text")
+        }
+        if let terms = grant.terms {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(terms.enumerated()), id: \.offset) { _, line in Text(verbatim: line) }
+                }
+                .font(.system(size: 11.5, design: .monospaced)).foregroundColor(Theme.dim).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
+            } label: {
+                Text(words("common.details")).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.blue)
+            }
+            .accessibilityIdentifier("approval.grant-terms")
+        }
+        if waits, grant.profile != nil {
+            ProfileWordsView(words: model.shownWords(for: grant), failed: model.profileWordsFailed(for: grant).map { words($0) })
+        }
+        if grant.digestMatches == false {
+            Text(words("connect.request_does_not_match_what")).font(.system(size: 13)).foregroundColor(Theme.no)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("approval.digest-mismatch")
+        }
+    }
+}
+
+/// KIFF's words for a connection's profile, as the iPad's `ProfileWordsView`: each line verbatim, in order, what KIFF
+/// can't check in amber; while they're read, or why they couldn't be.
+struct ProfileWordsView: View {
+    @Environment(\.words) private var lines
+    let words: ProfileWords?
+    let failed: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Eyebrow(text: lines("coach.kiff_counts_way"))
+            if let words {
+                ForEach(Array(words.lines.enumerated()), id: \.offset) { _, line in
+                    Text(verbatim: line.text).font(.system(size: 13))
+                        .foregroundColor(line.caution ? Theme.amberText : Theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if let failed {
+                Text(verbatim: failed).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(lines("coach.reading_kiff_words_short")).font(.system(size: 13)).foregroundColor(Theme.dim)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.raised))
+        .accessibilityIdentifier("approval.profile-words")
     }
 }
