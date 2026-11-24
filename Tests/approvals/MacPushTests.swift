@@ -27,8 +27,66 @@ let approvalsMacPushTests: [Test] = [
         // Off, or signed out: tafs cloud's is taken back; with none held, nothing is sent.
         try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: held), .unregister(token: token))
         try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: nil), MacPush.Step.none)
+        // At launch, or when tafs cloud says it doesn't alert this Mac: registered again, even with the same token kept.
+        try expectEqual(MacPush.step(wanted: true, token: token, sound: true, held: held, again: true), .register(token: token, sound: true))
+        try expectEqual(MacPush.step(wanted: false, token: nil, sound: true, held: held, again: true), .unregister(token: token))
         // On, but Apple's service gave no token: what's held is taken back, never left to alert a Mac that can't hear.
         try expectEqual(MacPush.step(wanted: true, token: nil, sound: true, held: held), .unregister(token: token))
+    },
+    Test("turning alerts on hands tafs cloud KIFF's alert target and the kinds chosen; what alerts this Mac is read for its token", awaiting: {
+        let transport = CannedTransport([(200, "{}"), (200, #"{"enabled":true,"sound":true,"kinds":[{"id":"holds","title":"Held calls","words":"With sound","enabled":true},{"id":"briefs","title":"Your brief","words":"Quiet","enabled":false}],"answering":{"title":"A taf answered someone","tafs":[{"id":"taf_1","name":"Support"}]}}"#)])
+        let cloud = CloudClient(transport: transport, session: session)
+        let target = MacPush.AlertTarget(id: "at_1", signingSecret: "s3cret")
+        _ = try? await cloud.registerPush(token: token, sound: true, target: target, kinds: ["briefs": false])
+        let body = try JSONSerialization.jsonObject(with: transport.sent[0].body) as? [String: Any]
+        try expectEqual((body?["alert_target"] as? [String: String]) ?? [:], ["id": "at_1", "signing_secret": "s3cret"])
+        try expectEqual((body?["kinds"] as? [String: Bool]) ?? [:], ["briefs": false])
+        let alerts = try await cloud.deviceAlerts(token: token)
+        try expectEqual(transport.sent[1].method + " " + transport.sent[1].path, "GET /v1/push")
+        try expectEqual(transport.sent[1].headers["Tafs-Device-Token"], token)
+        try expectEqual(alerts.kinds.map(\.id), ["holds", "briefs"])
+        try expectEqual(alerts.answering?.tafs.map(\.name), ["Support"])
+        try expectEqual(alerts.kinds(setting: "briefs", to: true), ["holds": true, "briefs": true])
+        // Without a target or kinds, neither is sent.
+        let plain = try JSONEncoder().encode(MacPush.Body(deviceToken: token, sound: true))
+        try expect(!String(decoding: plain, as: UTF8.self).contains("alert_target") && !String(decoding: plain, as: UTF8.self).contains("kinds"), "nothing extra")
+    }),
+    Test("KIFF's alert target points at tafs cloud's alerts, signed by the device key", awaiting: {
+        let transport = CannedTransport([(200, #"{"id":"at_1","signing_secret":"s3cret"}"#)])
+        let account = AccountClient(transport: transport, session: session, sign: { _ in "t=1,v1=SIG" })
+        let target = try await account.registerAlertTarget()
+        try expectEqual(target, MacPush.AlertTarget(id: "at_1", signingSecret: "s3cret"))
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/me/alert-targets")
+        try expectEqual(transport.sent[0].headers["KIFF-Device-Signature"], "t=1,v1=SIG")
+        let body = try JSONSerialization.jsonObject(with: transport.sent[0].body) as? [String: String]
+        try expectEqual(body?["url"], "https://cloud.tafs.kiff.dev/v1/kiff/alerts")
+    }),
+    Test("a clicked push opens where tafs cloud says, as the iPad's: a hold, a brief's alert and a handed step in Needs you") {
+        try expectEqual(MacPush.destination(["hold_id": "h1", "open": "needs-you"]), .needsYou)
+        try expectEqual(MacPush.destination(["brief_kind": "urgent"]), .needsYou)
+        try expectEqual(MacPush.destination(["brief_kind": "brief"]), .needsYou)
+        // `brief_kind` doesn't override an `open` tafs cloud sent.
+        try expectEqual(MacPush.destination(["brief_kind": "brief", "open": "taf:1"]), .other("taf:1"))
+        try expectEqual(MacPush.destination(["handoff": "step_1"]), .step("step_1"))
+        try expectEqual(MacPush.destination(["brief_kind": "weekly"]), nil)
+        try expect(MacPush.isBrief(["brief_kind": "urgent"]) && !MacPush.isBrief(["kind": "brief"]), "only brief_kind")
+    },
+    Test("sign-out stops before KIFF is asked when tafs cloud still alerts this Mac, unless signed out anyway; syncs run one at a time; the target only for who answers holds (sources)") {
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        guard let start = window.range(of: "private func signOut(anyway: Bool = false) async {"),
+              let ask = window.range(of: "if !anyway, !(await alerts.syncPush(signingOut: true, tries: 3)) {", range: start.upperBound..<window.endIndex),
+              let stop = window.range(of: "return", range: ask.upperBound..<window.endIndex),
+              let kiff = window.range(of: "try? await account.signOut()", range: start.upperBound..<window.endIndex) else {
+            throw Failure(description: "no sign-out gate")
+        }
+        try expect(stop.lowerBound < kiff.lowerBound, "it stops before KIFF is asked")
+        for key in ["alert.still_on_after_sign_out.title", "alert.still_on_after_sign_out.body", "alert.sign_out_anyway", "common.try_again"] {
+            try expect(window.contains(#"words(""# + key), "the question says \(key)")
+        }
+        let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
+        try expect(alerts.contains("await before?.value"), "one sync at a time")
+        try expect(alerts.contains("if pendingTarget == nil, answersHolds == true {"), "KIFF's target only for who answers held calls")
+        try expect(alerts.contains("(signingOut ? push.knownToken().map"), "the Mac's own token taken back at sign-out too")
     },
     Test("what tafs cloud holds is kept per account") {
         let defaults = UserDefaults(suiteName: "MacPushTests-\(UUID().uuidString)")!
