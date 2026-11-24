@@ -240,6 +240,7 @@ struct SignedInView: View {
         // Every choice in the sidebar closes the taf's page, the screen already open too.
         let choosing = Binding(get: { selection }, set: { selection = $0; openTaf = nil })
         return ShellView(selection: choosing, needsYou: needsYou.needsYouCount(onScreen: coachChatOnScreen), needsYouTitle: brief.brief == nil ? nil : brief.tabTitle(words), tafs: overview.listedTafs, noTafsLine: overview.hasNoTafs ? overview.noTafsLine : nil,
+                  sharedWithMe: { Access.sharedWithMe(access[$0.id]) },
                   settingUp: overview.settingUpList, discard: { await discardSettingUp($0) },
                   held: heldRows, tafPage: tafPage, openTaf: openTaf, open: open,
                   accountLine: accountModel.me?.email ?? accountModel.me?.account,
@@ -260,7 +261,8 @@ struct SignedInView: View {
                                                         playNextSample: playNextSample.map { play in { if play() { Task { await readRound() } } } }))
             case .record: return AnyView(RecordView(model: record, tafs: overview.tafs, timeZone: accountModel.me?.timeZone))
             case .calendar: return AnyView(CalendarView(model: calendar, tafs: overview.tafs, open: { open($0) }))
-            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true))
+            case .usage: return AnyView(UsageView(model: usage, managesBilling: accountModel.me?.managesBilling ?? true,
+                                                  tafName: { id in overview.tafs.first { $0.tafID == id }?.name }))
             case .connectApps: return AnyView(ConnectAppsView(model: connect, tafs: overview.tafs, connectable: overview.tafs.filter { $0.tafID != nil && Access.manages(access[$0.id]) }, managesCards: managesCards, openCoach: openCoach))
             // Coach is never a screen of its own: it opens over the one chosen (`coachPanel`).
             case .coach: return nil
@@ -559,11 +561,12 @@ struct SignedInView: View {
         }
     }
 
-    /// A recipe handed to Coach from the Overview, as the iPad's `handRecipeToCoach`
-    /// (AppModel.swift:7274-7280): its words in Coach's box, to edit and send. Nothing is sent.
+    /// A recipe handed to Coach from the Overview or the gallery, as the iPad's `handRecipeToCoach`
+    /// (AppModel.swift:8536-8542): a new conversation with its words in Coach's box, to edit and
+    /// send. Nothing is sent.
     private func handToCoach(_ recipe: Recipes.Recipe) {
         guard mayUseCoach else { return }
-        panel.hand(recipe.say, to: coach)
+        panel.handRecipe(recipe.say, to: coach)
     }
 
     /// Plan & usage in place of the taf's page, as the iPad's `usageRequested` from a health fix.
