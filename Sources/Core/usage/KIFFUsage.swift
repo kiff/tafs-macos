@@ -169,6 +169,15 @@ extension AccountClient {
         try read(try await send("POST", "/v1/me/pack-requests/\(CloudClient.escaped(id))/decline", body: try Self.json(["note": note]), signed: true))
     }
 
+    /// Raises the spend limit one step, as the iPad's `raiseLimit(from:)`: KIFF's `PUT /v1/me/usage/limit` with
+    /// `{"from_cents":…,"raise":true}`, **signed** by the device key (`PhoneSignedRules`; not an approval route, and
+    /// KIFF's handler takes only someone who manages billing). `from` is the limit the person saw: KIFF refuses
+    /// `limit_changed` when it moved meanwhile, and `limit_ceiling` at the most the app may raise it.
+    func raiseLimit(from fromCents: Int) async throws {
+        let body = Data(#"{"from_cents":\#(fromCents),"raise":true}"#.utf8)
+        _ = try await send("PUT", "/v1/me/usage/limit", body: body, signed: true)
+    }
+
     private static func json(_ fields: [String: String]) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
