@@ -13,10 +13,14 @@ final class TafCreditsModel: ObservableObject {
 
     private let cloud: CloudClient
     let taf: String
+    /// The last period, not this one, as the iPad's `TafCreditsView(previous:)`: the period
+    /// Plan & usage showed when the taf's line was opened.
+    let previous: Bool
 
-    init(cloud: CloudClient, taf: String) {
+    init(cloud: CloudClient, taf: String, previous: Bool = false) {
         self.cloud = cloud
         self.taf = taf
+        self.previous = previous
     }
 
     /// Reads its credits; with `more`, the runs after the ones read.
@@ -26,7 +30,7 @@ final class TafCreditsModel: ObservableObject {
         let after = more ? credits?.next : nil
         if more, after == nil { return }
         do {
-            let got = try await client.tafCredits(of: id, after: after)
+            let got = try await client.tafCredits(of: id, previous: previous, after: after)
             error = nil
             if more, var known = credits, let got {
                 known.append(got)

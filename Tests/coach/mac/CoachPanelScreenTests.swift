@@ -165,14 +165,25 @@ let coachPanelMacTests: [Test] = [
         try expectEqual(panel.open, true)
         try expectEqual(model.fresh, true)
         try expectEqual(model.improving, nil)
-        // A job's words, in the box of the chat shown, nothing sent.
+        // A job's words, in the box of a new conversation, as the iPad's `handRecipeToCoach`; nothing sent.
         let (handed, transport) = await coach([(200, panelChats), (200, panelThread)])
+        try expectEqual(handed.shownSession, "w1")
         let other = CoachPanelModel(defaults: defaults("hand"))
-        other.hand("Refund orders under €50", to: handed)
+        other.handRecipe("Refund orders under €50", to: handed)
         try expectEqual(other.open, true)
         try expectEqual(handed.draft, "Refund orders under €50")
-        try expectEqual(handed.shownSession, "w1")
+        try expectEqual(handed.fresh, true)
+        try expectEqual(handed.shownSession, nil)
+        try expectEqual(handed.improving, nil)
         try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 0)
+        // The brief's next move goes in the box of the chat shown, as the iPad's `startNextMove`.
+        let (moved, sent) = await coach([(200, panelChats), (200, panelThread)])
+        let third = CoachPanelModel(defaults: defaults("move"))
+        third.hand("Answer the two refunds", to: moved)
+        try expectEqual(third.open, true)
+        try expectEqual(moved.draft, "Answer the two refunds")
+        try expectEqual(moved.shownSession, "w1")
+        try expectEqual(sent.sent.filter { $0.method == "POST" }.count, 0)
     }),
     Test("the panel's width and ⤢ are kept on this Mac for the next time", awaiting: { @MainActor in
         let kept = defaults("kept")

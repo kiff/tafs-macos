@@ -229,6 +229,10 @@ let accountClientTests: [Test] = [
         try expectEqual(Access.manages(access["rae"]), true)
         try expectEqual(Access.manages(access["ben"]), false)
         try expectEqual(Access.manages(access["gone"]), false)
+        // Shared with this person: KIFF's answer without manage. No answer yet isn't shared.
+        try expectEqual(Access.sharedWithMe(access["rae"]), false)
+        try expectEqual(Access.sharedWithMe(access["ben"]), true)
+        try expectEqual(Access.sharedWithMe(access["gone"]), false)
     }),
     Test("Export my chats reads tafs cloud's export and splits it into its two files, as the iPad's", awaiting: {
         let export = #"{"exported_at":"2026-11-15T10:00:00Z","readable":"Refunds\nYou: hello","chats":[{"taf":"Refunds"}],"url":"a/b"}"#
