@@ -238,7 +238,46 @@ final class PlanqueClient {
         let name: String
         var browser: String?
         var os: String?
-        enum CodingKeys: String, CodingKey { case id = "chrome_id", name, browser, os }
+        /// The browser connections that run in this Chrome, as planque lists them ("Your Chrome" 3 and 4): live ones only, decided
+        /// there, never by the app. nil from a planque that doesn't list them, or a list that doesn't read: never a broken Chrome.
+        var connections: [Connection]?
+        enum CodingKeys: String, CodingKey { case id = "chrome_id", name, browser, os, connections }
+
+        /// One connection run in a Chrome, as the iPad's `PlanqueClient.Chrome.Connection`: its grant, its taf's name and its sites.
+        struct Connection: Decodable, Equatable {
+            let grant: String
+            var name = ""
+            var sites: [String] = []
+            enum CodingKeys: String, CodingKey { case grant, name, sites }
+            init(grant: String, name: String = "", sites: [String] = []) { self.grant = grant; self.name = name; self.sites = sites }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                grant = try c.decode(String.self, forKey: .grant)
+                name = ((try? c.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? ""
+                sites = ((try? c.decodeIfPresent([String].self, forKey: .sites)) ?? nil) ?? []
+            }
+        }
+
+        init(id: String, name: String, browser: String? = nil, os: String? = nil, connections: [Connection]? = nil) {
+            self.id = id; self.name = name; self.browser = browser; self.os = os; self.connections = connections
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            name = try c.decode(String.self, forKey: .name)
+            browser = (try? c.decodeIfPresent(String.self, forKey: .browser)) ?? nil
+            os = (try? c.decodeIfPresent(String.self, forKey: .os)) ?? nil
+            connections = (try? c.decodeIfPresent([Connection].self, forKey: .connections)) ?? nil
+        }
+
+        /// The sites of its connections, as the owner reads them ("wikipedia.org, shop.example"), each once, in planque's order, as
+        /// the iPad's `ChromeConnections.sites`: what the row says it's used for, and what unpairing ends. Empty when none.
+        var sites: String {
+            var seen: [String] = []
+            for site in (connections ?? []).flatMap(\.sites) where !seen.contains(site) { seen.append(site) }
+            return seen.joined(separator: ", ")
+        }
     }
 
     /// The Chromes paired to the account; nil while planque doesn't offer them (404), or this person may only view (403),

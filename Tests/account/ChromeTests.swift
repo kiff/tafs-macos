@@ -42,4 +42,31 @@ let accountChromeTests: [Test] = [
         try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["DELETE /v1/accounts/acme%2F1/chromes/chr%2F1"])
         try expectEqual(transport.sent[0].body, Data())
     }),
+    Test("each Chrome's connections, as planque lists them: their sites once each, in its order; a list that doesn't read is none", awaiting: {
+        let (client, _) = planque([(200, #"""
+        {"chromes":[
+          {"chrome_id":"chr_1","name":"Work Mac","connections":[{"grant":"g1","name":"Refunds","sites":["shop.example","wikipedia.org"]},{"grant":"g2","sites":["shop.example"]}]},
+          {"chrome_id":"chr_2","name":"Home","connections":[]},
+          {"chrome_id":"chr_3","name":"Old","connections":"broken"},
+          {"chrome_id":"chr_4","name":"Older planque"}
+        ]}
+        """#)])
+        let chromes = try await client.chromes(signedBy: { _ in "SIG" }) ?? []
+        try expectEqual(chromes.map(\.id), ["chr_1", "chr_2", "chr_3", "chr_4"])
+        try expectEqual(chromes[0].connections?.map(\.grant), ["g1", "g2"])
+        try expectEqual(chromes[0].connections?.first?.name, "Refunds")
+        try expectEqual(chromes.map(\.sites), ["shop.example, wikipedia.org", "", "", ""])
+        try expectEqual(chromes[2].connections, nil)
+        try expectEqual(chromes[3].connections, nil)
+    }),
+    Test("the row's and unpairing's lines are shared words in every shipped language, each naming the sites") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        for language in try Words.shipped(folder: folder) {
+            let words = try Words(language: language, folder: folder)
+            for key in ["chrome.used_for", "chrome.unpair_ends"] {
+                let line = words(key, ["sites": "shop.example"])
+                try expect(line != key && line.contains("shop.example"), "\(key) in \(language)")
+            }
+        }
+    },
 ]
