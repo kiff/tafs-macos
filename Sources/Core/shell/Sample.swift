@@ -159,12 +159,13 @@ enum Sample {
     }
 
     /// Home (`GET /v1/home`): the five tafs at work, the headline, and what waits.
-    static func home(words: Words, now: Date, rounds: Int = firstRounds) -> Data {
+    static func home(words: Words, now: Date, rounds: Int = firstRounds, paused: Set<String> = []) -> Data {
         let waiting = held(rounds: rounds)
         let list: [[String: Any]] = tafs.enumerated().map { index, taf in
             let name = words("sample.\(taf.key).name")
             return ["id": tafID(taf), "kiff_agent": agent(taf), "name": name, "job": words("sample.\(taf.key).job"),
-                    "job_summary": words("sample.\(taf.key).job"), "status": "active", "state": "working", "color": index,
+                    "job_summary": words("sample.\(taf.key).job"), "status": paused.contains(taf.key) ? "paused" : "active",
+                    "state": "working", "color": index,
                     "waiting": waiting.filter { $0.0.key == taf.key }.count, "card": card(taf, words: words, now: now)]
         }
         return json(["tafs": list, "headline": ["words": words.count("home.working", tafs.count)],
@@ -269,15 +270,25 @@ enum Sample {
 
     /// A taf's own reads: its chat (its hello, and for Support replies the iPad's sample question), its Setup (its job
     /// as its workflow), its Activity (what it did), and everything else it has: none yet.
-    static func tafAnswer(_ taf: Taf, _ rest: String, words: Words, now: Date, rounds: Int = firstRounds) -> (Int, Data)? {
+    static func tafAnswer(_ taf: Taf, _ rest: String, words: Words, now: Date, rounds: Int = firstRounds, said: [Said] = []) -> (Int, Data)? {
         let name = words("sample.\(taf.key).name")
         switch rest {
         case "/conversation":
-            var items: [[String: Any]] = [["type": "message", "message": ["id": "sample-hello-\(taf.key)", "from": "taf", "at": time(now.addingTimeInterval(-3600)),
-                                                                            "text": words("sample.hello", ["name": name, "now": words("sample.\(taf.key).job")])]]]
+            func message(_ id: String, _ from: String, _ at: Date, _ text: String) -> [String: Any] {
+                ["type": "message", "message": ["id": id, "from": from, "at": time(at), "text": text]]
+            }
+            var items: [[String: Any]] = [message("sample-hello-\(taf.key)", "taf", now.addingTimeInterval(-3600),
+                                                  words("sample.hello", ["name": name, "now": words("sample.\(taf.key).job")]))]
+            // Support replies' sample question, and its answer from its own record, as the iPad's `loadSample`.
             if taf.key == "support" {
-                items.append(["type": "message", "message": ["id": "sample-question", "from": "owner", "at": time(now.addingTimeInterval(-1800)),
-                                                             "text": words("sample.chat.question")]])
+                let question = words("sample.chat.question")
+                items.append(message("sample-question", "owner", now.addingTimeInterval(-1800), question))
+                items.append(message("sample-question-reply", "taf", now.addingTimeInterval(-1799), reply(to: question, taf: taf, words: words, rounds: rounds).0))
+            }
+            // What the person said here, each with the taf's reply.
+            for (index, one) in said.enumerated() {
+                items.append(message("sample-said-\(index)", "owner", one.at, one.text))
+                items.append(message("sample-said-\(index)-reply", "taf", one.at.addingTimeInterval(1), one.reply))
             }
             return (200, json(["working": false, "items": items]))
         case "/setup":
@@ -295,14 +306,15 @@ enum Sample {
 
     /// The answer the sample gives a request: its reads from the sample, every other read empty, and a write or an
     /// approval refused, with nothing done.
-    static func answer(method: String, path: String, words: Words, now: Date, rounds: Int = firstRounds) -> (Int, Data) {
+    static func answer(method: String, path: String, words: Words, now: Date, rounds: Int = firstRounds, talk: Talk = Talk()) -> (Int, Data) {
         let bare = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
         guard method == "GET" else {
             return (403, json(["error": "sample", "words": notInSample(words)]))
         }
-        if let (taf, rest) = taf(in: bare), let answer = tafAnswer(taf, rest, words: words, now: now, rounds: rounds) { return answer }
+        if let (taf, rest) = taf(in: bare),
+           let answer = tafAnswer(taf, rest, words: words, now: now, rounds: rounds, said: talk.said[taf.key] ?? []) { return answer }
         switch bare {
-        case "/v1/home": return (200, home(words: words, now: now, rounds: rounds))
+        case "/v1/home": return (200, home(words: words, now: now, rounds: rounds, paused: talk.paused))
         case "/v1/me": return (200, me(words: words))
         case "/v1/me/card-exceptions": return (200, heldCalls(words: words, now: now, rounds: rounds))
         case "/v1/me/did-this-happen": return (200, json(["calls": []]))
@@ -315,6 +327,44 @@ enum Sample {
         case "/v1/tenant/members": return (200, json(["members": []]))
         default: return (404, json(["error": "not_found", "words": notInSample(words)]))
         }
+    }
+
+    /// What the person said in a sample taf's chat, and the taf's reply.
+    struct Said: Equatable {
+        let text: String
+        let reply: String
+        let at: Date
+    }
+
+    /// What changes in the sample as the person talks to it: each taf's chat, and the tafs they paused.
+    struct Talk: Equatable {
+        var said: [String: [Said]] = [:]
+        var paused: Set<String> = []
+    }
+
+    /// What a message asks of the taf, besides its reply.
+    enum Turn: Equatable { case pause, resume, none }
+
+    /// A sample taf's reply, as the iPad's `sampleReply`: from its own record, what it did lately and what waits for
+    /// the owner, with the sample's note; or a pause, a return to work, or that only the owner gives it more room.
+    static func reply(to text: String, taf: Taf, words: Words, rounds: Int = firstRounds) -> (String, Turn) {
+        let lower = text.lowercased()
+        if ["stop", "pause", "hold off"].contains(where: { lower.contains($0) }) {
+            return (words("sample.reply.paused"), .pause)
+        }
+        if ["go", "carry on", "resume", "continue"].contains(where: { lower == $0 || lower.hasPrefix($0 + " ") }) {
+            return (words("sample.reply.back_to_work"), .resume)
+        }
+        if ["more", "raise", "limit", "bigger", "increase"].contains(where: { lower.contains($0) }) {
+            return (words("sample.reply.more_room"), .none)
+        }
+        // Its own calls, newest first, as the Record has them: the last three.
+        let done = made(rounds).reversed().filter { $0.0.key == taf.key }.prefix(3).map { "• " + $0.1.title(words) }
+        let waiting = held(rounds: rounds).filter { $0.0.key == taf.key }.count
+        var lines = [done.isEmpty ? words("sample.reply.nothing_done") : words("sample.reply.lately", ["done": done.joined(separator: "\n")])]
+        if waiting > 0 { lines.append(words.count("sample.reply.waiting", waiting)) }
+        lines.append(words("sample.reply.note"))
+        return (lines.joined(separator: "\n\n"), .none)
     }
 
     /// The line for what the sample can't do, in the person's language, the shared one every app says: "This isn't in
@@ -332,6 +382,7 @@ final class SampleTransport: Transport, @unchecked Sendable {
     private let lock = NSLock()
     private var played = Sample.firstRounds
     private var loaded: [String: Words] = [:]
+    private var talked = Sample.Talk()
 
     init(words: Words, now: @escaping () -> Date = Date.init, load: ((String) -> Words?)? = nil) {
         self.words = words
@@ -367,8 +418,36 @@ final class SampleTransport: Transport, @unchecked Sendable {
         return true
     }
 
+    /// What the person has said to the sample's tafs so far, and the tafs they paused.
+    var talk: Sample.Talk {
+        lock.lock(); defer { lock.unlock() }
+        return talked
+    }
+
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
-        let (status, body) = Sample.answer(method: request.method, path: request.path, words: words(for: request), now: now(), rounds: rounds)
-        return (status, body)
+        let said = words(for: request)
+        // A message to a sample taf: its reply, kept in memory with what was said, as the iPad's `sampleReply`. Nothing
+        // else is written.
+        if request.method == "POST", let (taf, rest) = Sample.taf(in: request.path), rest == "/messages" {
+            struct Message: Decodable { let text: String }
+            guard let text = (try? JSONDecoder().decode(Message.self, from: request.body))?.text,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return Sample.answer(method: request.method, path: request.path, words: said, now: now())
+            }
+            let at = now()
+            let (reply, turn) = Sample.reply(to: text, taf: taf, words: said, rounds: rounds)
+            let count: Int = {
+                lock.lock(); defer { lock.unlock() }
+                talked.said[taf.key, default: []].append(Sample.Said(text: text, reply: reply, at: at))
+                switch turn {
+                case .pause: talked.paused.insert(taf.key)
+                case .resume: talked.paused.remove(taf.key)
+                case .none: break
+                }
+                return talked.said[taf.key]?.count ?? 0
+            }()
+            return (200, Sample.json(["session": "sample", "new_session": false, "message": ["id": "sample-said-\(count - 1)"]]))
+        }
+        return Sample.answer(method: request.method, path: request.path, words: said, now: now(), rounds: rounds, talk: talk)
     }
 }

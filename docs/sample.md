@@ -40,6 +40,14 @@ iPad's own, from the shared strings (`sample.*`).
   `Accept-Language`, as tafs cloud and KIFF answer (`SampleTransport.words(for:)`), from the
   app's own strings; one that can't be loaded is answered in the sample's first language.
 
+- **A taf's chat answers**, as the iPad's `sampleReply`: what's sent (`POST …/messages`) is kept
+  in memory with the taf's reply, from its own record. That's its last three calls ("Lately: …"),
+  else "Nothing done yet today.", then how many of its calls wait in Needs you, then the
+  sample's note (`sample.reply.*`). "stop", "pause" or "hold off" pauses the taf on Home, and
+  "go", "carry on", "resume" or "continue" brings it back. "more", "raise", "limit", "bigger" or
+  "increase" says only its Card can give it room. Support replies' sample question has its
+  answer too, as on the iPad. Cleared with the sample.
+
 ## What it never does
 
 - **It reaches no network.** The session has no device key and no security key, so planque's
@@ -55,5 +63,5 @@ iPad's own, from the shared strings (`sample.*`).
 
 ## Not yet
 
-The sample chat's live replies (`sampleReply`), the iPad's two sample alerts in Account › Alerts,
-and keeping it between launches (the iPad's `SampleStore`).
+The iPad's local alerts for the sample's held calls (the Mac's sample announces nothing, and turning
+alerts on in it says it takes KIFF), and keeping it between launches (the iPad's `SampleStore`).

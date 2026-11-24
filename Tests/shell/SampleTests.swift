@@ -66,7 +66,8 @@ let shellSampleTests: [Test] = [
     Test("a sample taf's page reads its chat, its Setup, its Activity, its runs, notes and work through the page's own decoders", awaiting: {
         let (_, cloud, _) = clients()
         let thread: Thread.Page = try await cloud.get("/v1/tafs/sample-support/conversation")
-        try expectEqual(thread.items.count, 2)
+        // Its hello, the sample question, and the taf's answer to it, as the iPad's `loadSample`.
+        try expectEqual(thread.items.count, 3)
         let setup = try await cloud.setup(of: "sample-support")
         try expectEqual(setup.workflow?.summary, english()("sample.support.job"))
         let activity = try await cloud.activity(of: "sample-parcels")
@@ -145,5 +146,38 @@ let shellSampleTests: [Test] = [
         let plain = SampleTransport(words: english(), now: { at })
         let same = try await AccountClient(transport: plain, session: Sample.session, language: "fr").heldCalls()
         try expectEqual(same.first?.title, english()("sample.support.promise_7802"))
+    }),
+    Test("a sample taf answers in its chat from its own record, as the iPad's sampleReply: what it did, what waits, the note", awaiting: {
+        let (_, cloud, transport) = clients()
+        let words = english()
+        let sent = try await cloud.send("How's it going?", to: "sample-support")
+        try expectEqual(sent.session, "sample")
+        let page = try await cloud.thread(of: "sample-support")
+        let texts: [String] = page.items.compactMap { if case .message(let m, _) = $0 { return m.text } else { return nil } }
+        try expect(texts.contains("How's it going?"), "what was said")
+        let reply = texts.last ?? ""
+        try expect(reply.hasPrefix(words("sample.reply.lately", ["done": ""]).components(separatedBy: "\n").first ?? "Lately"), "what it did lately")
+        try expect(reply.contains(words.count("sample.reply.waiting", 1)), "what waits for the owner")
+        try expect(reply.hasSuffix(words("sample.reply.note")), "the sample's note")
+        // Support replies' sample question has its answer, as on the iPad.
+        try expectEqual(texts.filter { $0 == words("sample.chat.question") }.count, 1)
+        try expectEqual(transport.talk.said["support"]?.count, 1)
+    }),
+    Test("stop pauses a sample taf on Home and go brings it back; raise says only its Card gives room; nothing else is written", awaiting: {
+        let (_, cloud, transport) = clients()
+        let words = english()
+        _ = try await cloud.send("Please stop for now", to: "sample-parcels")
+        var home = try await cloud.home()
+        try expectEqual(home.tafs.first { $0.name == words("sample.parcels.name") }?.paused, true)
+        _ = try await cloud.send("go", to: "sample-parcels")
+        home = try await cloud.home()
+        try expectEqual(home.tafs.first { $0.name == words("sample.parcels.name") }?.paused, false)
+        try expectEqual(Sample.reply(to: "Can you raise your limit?", taf: Sample.tafs[0], words: words).0, words("sample.reply.more_room"))
+        try expectEqual(Sample.reply(to: "gold", taf: Sample.tafs[0], words: words).1, .none)
+        try expectEqual(transport.talk.paused, [])
+        // Any other write is still refused, with the sample's own line.
+        do { try await cloud.setPromise(of: "sample-support", hours: 4); throw Failure(description: "a write went through") } catch let r as CloudRefusal {
+            try expectEqual(r.words, words("sample.not_in_sample"))
+        }
     }),
 ]
