@@ -71,7 +71,13 @@ struct RetainedRuns: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafPagesModel
     var all = false
+    /// Whether this person manages the taf: a run's Send again and Ask Coach.
+    var manages = false
+    /// Opens Coach from a run, for someone who may use it.
+    var askCoach: (() -> Void)? = nil
     @State private var showAll = false
+    /// The run opened from its line.
+    @State private var opened: OpenRun?
 
     var body: some View {
         Group {
@@ -85,6 +91,9 @@ struct RetainedRuns: View {
             }
         }
         .task(id: model.taf) { await model.loadRunPage(all: all) }
+        .sheet(item: $opened) { open in
+            TafRunSheet(model: open.model, manages: manages, askCoach: askCoach) { opened = nil }.environment(\.words, words)
+        }
         .sheet(isPresented: $showAll) {
             // Titled as the panel is, in tafs cloud's words for the runs it kept.
             VStack(alignment: .leading, spacing: 0) {
@@ -94,7 +103,7 @@ struct RetainedRuns: View {
                     Button(words("common.done")) { showAll = false }.keyboardShortcut(.defaultAction)
                 }
                 .padding(16)
-                ScrollView { RetainedRuns(model: model, all: true).padding(16) }
+                ScrollView { RetainedRuns(model: model, all: true, manages: manages, askCoach: askCoach).padding(16) }
             }
             .frame(width: 520, height: 560)
             .background(Theme.background)
@@ -113,16 +122,22 @@ struct RetainedRuns: View {
             ForEach(page.rows(first: index == 0)) { row in
                 switch row {
                 case .request(let request):
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(verbatim: request.line).font(.system(size: 14)).foregroundColor(Theme.ink)
-                        // What the run used, in tafs cloud's words, once KIFF has counted it.
-                        if let used = request.creditsLine { Text(verbatim: used).font(.system(size: 12)).foregroundColor(Theme.dim) }
-                        ForEach(Array(request.deliveries.enumerated()), id: \.offset) { _, delivery in
-                            Text(verbatim: delivery.line).font(.system(size: 12)).foregroundColor(Theme.dim)
+                    // Each run opens itself, as the iPad's `NavigationLink` to `KnobRequestDetail`.
+                    Button { opened = OpenRun(model: TafRunModel(cloud: model.cloud, taf: model.taf, run: request.id)) } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(verbatim: request.line).font(.system(size: 14)).foregroundColor(Theme.ink)
+                            // What the run used, in tafs cloud's words, once KIFF has counted it.
+                            if let used = request.creditsLine { Text(verbatim: used).font(.system(size: 12)).foregroundColor(Theme.dim) }
+                            ForEach(Array(request.deliveries.enumerated()), id: \.offset) { _, delivery in
+                                Text(verbatim: delivery.line).font(.system(size: 12)).foregroundColor(Theme.dim)
+                            }
                         }
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("runs.run.\(request.id)")
                 case .skipped(let skipped):
                     // Dim: no run started, which isn't a run that failed.
                     Text(verbatim: skipped.words).font(.system(size: 13)).foregroundColor(Theme.dim)

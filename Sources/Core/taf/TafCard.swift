@@ -56,6 +56,8 @@ struct TafCard: Decodable, Identifiable, Equatable {
         }
 
         let label: String
+        /// KIFF's action the rule is on ("stripe_refund"): which connection's tools the Card draws on.
+        var action: String?
         let outside: Outside
         /// The most calls in its window, when the rule has such a limit.
         let countPerWindow: Int?
@@ -70,13 +72,14 @@ struct TafCard: Decodable, Identifiable, Equatable {
         var baseLimit: Amount?
 
         enum CodingKeys: String, CodingKey {
-            case label, outside, countPerWindow = "count_per_window", words = "window_words"
+            case label, action, outside, countPerWindow = "count_per_window", words = "window_words"
             case perAction = "per_action", perWindow = "per_window", extraRoom = "extra_room", baseLimit = "base_limit"
         }
         enum WordsKeys: String, CodingKey { case each, now }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             label = try c.decode(String.self, forKey: .label)
+            action = (try? c.decodeIfPresent(String.self, forKey: .action)) ?? nil
             switch (try? c.decodeIfPresent(String.self, forKey: .outside)) ?? nil {
             case "hold": outside = .hold
             case "refuse": outside = .refuse

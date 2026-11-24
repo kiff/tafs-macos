@@ -162,9 +162,18 @@ Ending access with Touch ID).
   only a known one with its words, `Action.known`: Sign in again by `approve` or `key`; `remove` or
   `remove_unfinished` by `delete`), in planque's words and order, each removing one in red. A removing one asks first in planque's words,
   with what stops (`stops`); then each says to approve on another device and sends nothing.
-- **Left out:** a connection's last failed call (KIFF's calls by tool aren't read here), and
-  "Also on …'s Card" (the Cards' actions by tool aren't read here); kiff/tafs-linux's checklist
-  leaves both out for the same reason (its ConnectAppsView row, `lastFailure` and `alsoStops`).
+- **Also on …'s Card** (`AppConnections.alsoOn`, the iPad's `alsoStops` and `tafsUsing`), under a
+  connection: the other tafs whose active Card has a rule on one of its actions, from Home's
+  Cards (each rule's `action`). Its actions are planque's `tools` when sent, else the tools it
+  was asked for, leaving out Setup's own reads (`setup_reads`). The taf it was made for is left
+  out. Remove access's question names them too ("…, which also stops Leads' Card"). Home's Card
+  `tools` are labels, not actions, so only the rules count; the iPad's tools half isn't read here.
+- **Its last failed call** (`AppConnections.lastFailure`, the iPad's gap 13), in red, under the
+  row and on its page: the newest call on one of its actions that wasn't done, its own taf's
+  first, in tafs cloud's words ("Last failed: Refund · Signed out of Stripe"). It comes from the
+  Record's newest page (`GET /v1/record`, each entry's `call.action_name`), read when an app's
+  connections open, never with the catalog's own reads. One that can't be read draws no line,
+  and nothing else changes.
 
 ## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
 
