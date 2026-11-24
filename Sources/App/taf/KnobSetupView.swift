@@ -674,7 +674,10 @@ struct KnobPendingPanel: View {
         Task {
             await pages.loadVersions()
             await dial?.load(words: words)
-            if dial.map({ $0.knob?.pending?.version == n }) ?? true, let version = pages.versionList?.first(where: { $0.n == n }) {
+            // Read on the main actor first: Swift 5.7 (macOS 12's) refuses these reads inside the condition.
+            let pending = await dial?.knob?.pending?.version
+            let listed = await pages.versionList?.first(where: { $0.n == n })
+            if dial == nil || pending == n, let version = listed {
                 if let read = await pages.install(version) { reading = read }
                 await dial?.load(words: words)
             }
