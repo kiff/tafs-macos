@@ -733,6 +733,34 @@ final class CoachModel: ObservableObject {
     }
 
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
+    /// This Mac's security key's assertion for a tafs cloud route (`KeyAct`), named in its PIN sheet; nil without one.
+    var signWithKey: ((KeyAct, String) async throws -> String)?
+
+    /// What a drafted door's approval came to: the door and its first key, or the line to show.
+    enum DoorApproval { case added(CloudClient.AddedAPIDoor), said(String, ok: Bool), closed }
+
+    /// Coach's drafted door approved on the security key, as the iPad's `approveDoorDraft`: the draft's canonical `body`,
+    /// signed and sent as it is (`KeyAct.addDraftedAPIDoor`). A used draft says so in the ok colour; a lapsed one in tafs
+    /// cloud's words; a door that needs the phone's approval key (`critical_key_required`) says to approve there.
+    func approveDoorDraft(taf: String, draft: DoorDraft, tafName: String) async -> DoorApproval {
+        guard let sign = signWithKey, !draft.body.isEmpty else { return .said(Words.app("approval.device_can_not_approve_approve"), ok: false) }
+        let act = KeyAct.addDraftedAPIDoor(taf: taf, body: draft.body)
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: draft.name + "|" + tafName))
+            return .added(try await cloud.addDraftedDoor(act, assertion: assertion))
+        } catch is CancellationError {
+            return .closed
+        } catch is ApproveOnPhone {
+            return .said(Words.app("approval.device_can_not_approve_approve"), ok: false)
+        } catch let refusal as CloudRefusal where refusal.code == "critical_key_required" {
+            return .said(Words.app("approval.device_can_not_approve_approve"), ok: false)
+        } catch let refusal as CloudRefusal where refusal.code == "draft_used" {
+            return .said(refusal.words ?? Self.why(refusal), ok: true)
+        } catch {
+            return .said((error as? CloudRefusal)?.words ?? Self.why(error), ok: false)
+        }
+    }
+
     func decline(_ card: Thread.Card) async {
         guard case .loaded(let coach, _) = state, answering == nil, card.grants else { return }
         // A sign-in while it waits; an approval as the iPad offers Decline, failed ones answered too.
@@ -2216,6 +2244,12 @@ struct AskCoachCard: View {
 /// door and shows its first key once, which this Mac doesn't show (as a door's New key): for whoever manages the taf,
 /// Approve says to approve on another device and sends nothing. A draft already made into a door says so in tafs
 /// cloud's words in the ok colour; a read that fails says why.
+/// A drafted door's first key, as a sheet's item.
+private struct KeyShown: Identifiable {
+    let added: CloudClient.AddedAPIDoor
+    var id: String { added.key.id }
+}
+
 struct DoorDraftCard: View {
     @Environment(\.words) private var words
     @ObservedObject var model: CoachModel
@@ -2227,6 +2261,9 @@ struct DoorDraftCard: View {
     @State private var failed: String?
     @State private var used = false
     @State private var gated: String?
+    @State private var approving = false
+    @State private var approved = false
+    @State private var added: CloudClient.AddedAPIDoor?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -2242,6 +2279,10 @@ struct DoorDraftCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
         .task(id: draft) { await load() }
+        // The first key, this once, in its own sheet kept out of capture: closing it forgets the key.
+        .sheet(item: Binding(get: { added.map { KeyShown(added: $0) } }, set: { if $0 == nil { added = nil } })) { shown in
+            IssuedKeySheet(key: shown.added.key, door: shown.added.door) { added = nil }.environment(\.words, words)
+        }
     }
 
     @ViewBuilder private func drawn(_ d: DoorDraft) -> some View {
@@ -2263,9 +2304,35 @@ struct DoorDraftCard: View {
         if d.text { ownWords(d) }
         Text(words("door.api.boundary", ["taf": tafName])).font(.system(size: 13)).foregroundColor(Theme.soft)
             .fixedSize(horizontal: false, vertical: true)
-        if manages {
+        if approved {
+            Text(words("door.status.open")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+        } else if manages, model.signWithKey != nil {
+            // On this Mac's security key, as the iPad's Approve: the door opens, and its first key is shown once.
+            Button(words(approving ? "common.confirming" : "approval.approve")) { approve(d) }
+                .buttonStyle(PrimaryButtonStyle()).disabled(approving)
+                .accessibilityIdentifier("door.draft.approve")
+        } else if manages {
             GatedAction(title: words("approval.approve"), id: "door-draft|" + d.id, color: Theme.amberText, gated: $gated)
                 .accessibilityIdentifier("door.draft.approve")
+        }
+    }
+
+    private func approve(_ d: DoorDraft) {
+        approving = true
+        Task {
+            let result = await model.approveDoorDraft(taf: taf, draft: d, tafName: tafName)
+            approving = false
+            switch result {
+            case .added(let door):
+                added = door
+                approved = true
+                failed = nil
+            case .said(let line, let ok):
+                used = ok
+                failed = line
+            case .closed:
+                break
+            }
         }
     }
 

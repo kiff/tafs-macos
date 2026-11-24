@@ -203,6 +203,8 @@ struct SignedInView: View {
             needsYou.answerWithKey = answerWithKey
             // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
             needsYou.approveWithKey = approveWithKey
+            // A drafted door's approval: tafs cloud's door route on the key, as the doors' own acts.
+            coach.signWithKey = signWithKey
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on

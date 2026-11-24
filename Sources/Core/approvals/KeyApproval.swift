@@ -54,6 +54,10 @@ enum KeyAct: Equatable {
     /// An API door's new key (the iPad's `DoorsModel.newKey`): tafs cloud's `POST …/doors/{door}/keys` with
     /// `{"name":…}`, on the security key as the door's other acts are. The answer carries the key, shown once.
     case newAPIDoorKey(taf: String, door: String, name: String)
+    /// Coach's drafted door approved (the iPad's `approveDoorDraft`): tafs cloud's `POST /v1/tafs/{taf}/doors` with the
+    /// draft's `body`, canonical (RFC 8785), these exact bytes, on the security key as the door's other acts. The answer
+    /// is the door and its first key, shown once.
+    case addDraftedAPIDoor(taf: String, body: Data)
     /// Sharing a taf's KIFF agent with a group or one person (the iPad's `KIFFClient.share(agent:with:)`):
     /// `POST /v1/agents/{agent}/grants` with the share, and stopping (`unshare(agent:from:)`): `DELETE` with the group
     /// or the subject in the query and `{}`. KIFF takes each as an approval (`PhoneApprovalRules`), so each is the key's,
@@ -76,7 +80,7 @@ enum KeyAct: Equatable {
         case .confirmTrial, .confirmDraft: return "POST"
         case .discardSettingUp: return "POST"
         case .reopenAPIDoor: return "PATCH"
-        case .newAPIDoorKey: return "POST"
+        case .newAPIDoorKey, .addDraftedAPIDoor: return "POST"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         case .share: return "POST"
         case .unshare: return "DELETE"
@@ -95,6 +99,7 @@ enum KeyAct: Equatable {
         case .discardSettingUp(let agent): return "/v1/home/setting-up/\(CloudClient.escaped(agent))/discard"
         case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
+        case .addDraftedAPIDoor(let taf, _): return "/v1/tafs/\(CloudClient.escaped(taf))/doors"
         case .newAPIDoorKey(let taf, let door, _):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys"
         case .revokeAPIDoorKey(let taf, let door, let key):
@@ -127,6 +132,7 @@ enum KeyAct: Equatable {
         // The iPad's `reopenBody`, these exact bytes.
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
         case .revokeAPIDoorKey, .removeAPIDoor: return Data()
+        case .addDraftedAPIDoor(_, let body): return body
         // `{"name":…}`, as the iPad's `newKeyBody`: the exact bytes that are signed and sent.
         case .newAPIDoorKey(_, _, let name):
             let encoder = JSONEncoder()
@@ -164,6 +170,10 @@ enum KeyAct: Equatable {
         case .removeAPIDoor: return words("door.remove_door")
         // The iPad's reason, "New key for {app}", with the door's app in `device`'s place.
         case .newAPIDoorKey: return words("door.api.new_key_reason", ["app": device])
+        // The iPad's reason, "{app} will be able to hand {taf} work", with "app|taf" in `device`'s place.
+        case .addDraftedAPIDoor:
+            let parts = device.split(separator: "|", maxSplits: 1).map(String.init)
+            return words("door.api.faceid_body", ["app": parts.first ?? device, "taf": parts.count > 1 ? parts[1] : ""])
         // The iPad's reason for the whole change, "Share {taf}", with the taf in `device`'s place.
         case .share, .unshare: return words("people.share.title", ["taf": device])
         // The iPad's prompts, "Say it happened: {title}" and "Say it didn't happen: {title}", the call's title in

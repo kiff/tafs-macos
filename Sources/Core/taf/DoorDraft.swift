@@ -1,8 +1,9 @@
 import Foundation
 
 /// A door Coach drafted for a taf, as tafs cloud keeps it (`GET /v1/tafs/{taf}/doors/drafts/{id}`), as the iPad's
-/// `TafsCloud.DoorDraft`: what another application could hand the taf, read to be drawn. This Mac never approves it:
-/// approving opens the door and shows its first key once, which stays the phone's (docs/approvals.md).
+/// `TafsCloud.DoorDraft`: what another application could hand the taf, read to be drawn, and approved on this Mac's
+/// security key (`KeyAct.addDraftedAPIDoor`): its `body`, canonical (RFC 8785), is what's signed and sent, and the
+/// approval's answer holds the door's first key, shown once (`IssuedKeySheet`).
 struct DoorDraft: Equatable {
     /// One field the application sends: its name, and for a choice, its values.
     struct Field: Decodable, Equatable {
@@ -19,6 +20,8 @@ struct DoorDraft: Equatable {
     let job: String
     let outcomes: [String]
     let text: Bool
+    /// tafs cloud's `body`, canonical (RFC 8785, the iPad's `JCS`): the exact bytes the approval signs and sends.
+    var body = Data()
 
     /// Read from tafs cloud's answer, as the iPad's `DoorDraft.read`: nil for one with no draft, one that isn't an API
     /// door's, or a draft with no name or job. A field that doesn't read is left out, never the draft.
@@ -48,8 +51,10 @@ struct DoorDraft: Equatable {
         let name = raw.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let job = raw.job?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !name.isEmpty, !job.isEmpty else { return nil }
+        // The body as tafs cloud gave it, canonical: "the apps sign and send exactly this draft".
+        guard let bodyValue = try JCS.parse(data)["body"], case .object = bodyValue else { return nil }
         return DoorDraft(id: id, name: name, fields: (raw.fields ?? []).compactMap(\.value), job: job,
-                         outcomes: raw.outcomes ?? [], text: raw.text ?? false)
+                         outcomes: raw.outcomes ?? [], text: raw.text ?? false, body: try JCS.canonical(bodyValue))
     }
 
     /// A field as the iPad's `APIDoorText.field`: its name, then its values, else its type.
