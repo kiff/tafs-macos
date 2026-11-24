@@ -105,7 +105,7 @@ amber with a warning, and the warning takes the same colour.
 - **Where to buy on a computer**, in the balance's panel, for whoever manages billing, only as
   tafs cloud's balance `buy` offers it (`Usage.whereToBuy`), as the other desktops and the iPad:
   "Buy Solo or credits in the tafs app on your phone." (`billing.buy_on_phone`) when `buy` offers
-  packs or Solo (`true`, or set and not `false` or null), and then **Get Team on kiff.dev**
+  packs or Solo (`true`, or set and not `false` or null), and then **Get Company on kiff.dev**
   (`billing.team_on_web`, opening `kiff.dev/dashboard/checkout`, `Usage.teamCheckout`) unless the
   plan is Team already. With `buy` null (a company's agreement) or nothing offered, neither.
   Nothing is bought here.
