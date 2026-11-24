@@ -7,8 +7,9 @@ import AppKit
 final class PushToken {
     static let shared = PushToken()
 
-    /// Whether this build asks for alerts with tafs closed (`scripts/build.sh`, `PUSH=1`).
-    static var built: Bool {
+    /// Whether this build asks for alerts with tafs closed (`scripts/build.sh`, `PUSH=1`). It holds no state, so it's
+    /// read from anywhere: `Notifier` isn't on the main actor.
+    nonisolated static var built: Bool {
         #if PUSH
         return true
         #else
