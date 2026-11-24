@@ -15,7 +15,9 @@ let shellSampleTests: [Test] = [
         let (_, cloud, _) = clients()
         let home = try await cloud.home()
         try expectEqual(home.tafs.map(\.name), ["Support replies", "Late parcels", "Access", "Deploys", "Lead follow-up"])
-        try expectEqual(home.tafs.map(\.state), Array(repeating: "working", count: 5))
+        // Waiting where a call of its waits on the owner, as tafs cloud's stateOf; working otherwise.
+        try expectEqual(home.tafs.map(\.state), home.tafs.map { $0.waiting > 0 ? "waiting" : "working" })
+        try expectEqual(home.tafs.map(\.state), ["waiting", "waiting", "working", "waiting", "working"])
         try expect(home.tafs.allSatisfy { !$0.cards.isEmpty }, "each with its Card")
         try expectEqual(home.tafs[0].cards.first?.rules.map(\.label), ["Replies", "Promises", "Customer data"])
         try expectEqual(home.tafs.map(\.waiting), [1, 1, 0, 1, 0])
@@ -168,7 +170,15 @@ let shellSampleTests: [Test] = [
         let words = english()
         _ = try await cloud.send("Please stop for now", to: "sample-parcels")
         var home = try await cloud.home()
-        try expectEqual(home.tafs.first { $0.name == words("sample.parcels.name") }?.paused, true)
+        let parcels = home.tafs.first { $0.name == words("sample.parcels.name") }
+        try expectEqual(parcels?.paused, true)
+        // The screens read the state: paused, unless a call of its waits on the owner, as tafs cloud's stateOf.
+        try expectEqual(parcels?.state, parcels?.waiting == 0 ? "paused" : "waiting")
+        _ = try await cloud.send("stop", to: "sample-access")
+        let access = try await cloud.home().tafs.first { $0.name == words("sample.access.name") }
+        try expectEqual(access?.state, "paused")
+        try expectEqual(access?.now(words, time: { _ in "" }), words("taf.state.paused"))
+        _ = try await cloud.send("carry on", to: "sample-access")
         _ = try await cloud.send("go", to: "sample-parcels")
         home = try await cloud.home()
         try expectEqual(home.tafs.first { $0.name == words("sample.parcels.name") }?.paused, false)

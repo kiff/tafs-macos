@@ -14,8 +14,9 @@ the signed-in one, unchanged: no screen has a second path for the sample. Every 
 iPad's own, from the shared strings (`sample.*`).
 
 - **Home:** the iPad's five sample tafs (`TafTemplates`: Support replies, Late parcels, Access,
-  Deploys, Lead follow-up), each working, with its Card (a count a day, held for you, or never),
-  and how many of its calls wait.
+  Deploys, Lead follow-up), each with its Card (a count a day, held for you, or never) and how
+  many of its calls wait. Each one's state is as tafs cloud's `stateOf` gives it: waiting while a
+  call of its waits for you, else paused once paused in its chat, else working.
 - **Needs you:** the calls the first two rounds made that a Card holds for its owner (the iPad's
   two `playNextDemoActions()`): Support replies' promise, the reship, the migration, with their
   next steps where the iPad has one.

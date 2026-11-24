@@ -163,10 +163,13 @@ enum Sample {
         let waiting = held(rounds: rounds)
         let list: [[String: Any]] = tafs.enumerated().map { index, taf in
             let name = words("sample.\(taf.key).name")
+            let mine = waiting.filter { $0.0.key == taf.key }.count
+            // Its state as tafs cloud's `stateOf` (`runtime/src/cloud/home.ts`): waiting while a call of its waits on the
+            // owner, else paused when paused, else working. The screens read the state, not `status`.
+            let state = mine > 0 ? "waiting" : paused.contains(taf.key) ? "paused" : "working"
             return ["id": tafID(taf), "kiff_agent": agent(taf), "name": name, "job": words("sample.\(taf.key).job"),
                     "job_summary": words("sample.\(taf.key).job"), "status": paused.contains(taf.key) ? "paused" : "active",
-                    "state": "working", "color": index,
-                    "waiting": waiting.filter { $0.0.key == taf.key }.count, "card": card(taf, words: words, now: now)]
+                    "state": state, "color": index, "waiting": mine, "card": card(taf, words: words, now: now)]
         }
         return json(["tafs": list, "headline": ["words": words.count("home.working", tafs.count)],
                      "setting_up": [], "others": [], "removing": [],
