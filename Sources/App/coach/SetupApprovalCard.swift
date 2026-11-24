@@ -90,7 +90,14 @@ struct SetupApprovalCard: View {
                 OutlineAction(title: words("coach.approval.decline")) { Task { await model.decline(card) } }
                     .disabled(model.answering != nil)
             }
-            if !canApprove {
+            if model.cardStepOffered(card), model.answering != card.key {
+                // The Card's step, on this Mac's security key (`SetupApproval`): its connection is made, and the Card is
+                // what's left to approve. The connection's own approval stays the phone's.
+                Button(words("approval.approve")) { Task { await model.approveCard(card) } }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.answering != nil)
+                    .accessibilityIdentifier("approval.card-step.approve")
+            } else if !canApprove {
                 // No Approve here: this Mac can't sign one. The phone has the same card.
                 Text(words("approval.device_can_not_approve_approve")).font(.system(size: 12)).foregroundColor(Theme.soft)
                     .frame(maxWidth: .infinity)

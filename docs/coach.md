@@ -620,6 +620,23 @@ As the iPad's `CoachToolsStep.swift`, from `GET /v1/setup`'s `tools`, read with 
 - Not here: Start's own screen of the same (`CoachToolsGiven(start: true)`, with Coach's first Start),
   and the step opening by itself after an install or a first Start.
 
+## An approval's Card step on this Mac (`SetupApproval`, `CoachModel.approveCard`)
+
+On an approval card whose connection is already made and whose Card comes next (`signs.card == false`), drawn from
+KIFF's draft at a version, Approve is offered here, as the iPad's `approve(_:shown:shownDraft:)` for its `cards` step.
+The connection's own approval is planque's routine route, which takes the phone's approval key only, so it stays the
+phone's, and a card that waits on it says to approve there.
+
+1. **tafs cloud is asked** (`POST /v1/tafs/{taf}/components/{component}/approval`, with the grant, the draft and the
+   version drawn, and this Mac's planque read proof). It answers `answered` (followed), `read_again` (the draft is read
+   again, nothing signed) or `sign` with one ask.
+2. **An ask is signed only when it's the Card's** (`SetupApproval.signsHere`): `step` `cards`, for the draft and version
+   the card drew, with exactly `tafs.cards.v1|{tenant}|{draft}|{version}`, the message this Mac builds itself. Any other
+   ask, the connection's above all, signs nothing and says to approve on the phone.
+3. **KIFF's draft confirm on the security key** (`KeyAct.confirmDraft`), named in the PIN sheet with the ask's reason.
+4. **What came of it is reported** (`POST …/approval/{ask}`, `confirmed` or `failed` with why), signed as a KIFF
+   request by the device key over the exact bytes sent, with a fresh planque read proof; the thread is followed.
+
 ## Not yet
 
 Approving a connection or a Card (the phone's: see above), giving Coach's tools, and Coach mode over a

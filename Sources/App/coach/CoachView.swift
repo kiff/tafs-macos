@@ -743,6 +743,74 @@ final class CoachModel: ObservableObject {
     }
 
     /// Says no to an approval or a sign-in. It grants nothing, so any Mac may.
+    /// This Mac's security key, for an act KIFF takes from it (`KeyAct`), named in its PIN sheet; nil without one.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
+    /// The device key's signature over a KIFF request (`AccountClient.sign`), for what an approval reports back.
+    var signRequest: ((HTTPRequest) throws -> String)?
+
+    /// Whether this card offers the Card step's Approve here (`SetupApproval.offered`), with the version the card drew.
+    func cardStepOffered(_ card: Thread.Card) -> Bool {
+        guard approveWithKey != nil, signRequest != nil, card.type == "approval" else { return false }
+        return SetupApproval.offered(connected: card.connected, cardNext: card.signs?.cardNext == true, draft: card.draft,
+                                     shownDraft: card.draft.flatMap { drafts[$0]?.draft?.version })
+    }
+
+    /// Approve on an approval card's Card step (`SetupApproval`), as the iPad's `approve(_:shown:shownDraft:)` for
+    /// `cards`: tafs cloud is asked with this Mac's planque read proof; an ask is signed only when it's the Card's, for
+    /// the draft and version drawn, with exactly the message this Mac builds; then KIFF's draft confirm on the security
+    /// key, and what came of it reported, signed by the device key. The connection's step is never signed here.
+    func approveCard(_ card: Thread.Card) async {
+        guard case .loaded(let coach, _) = state, answering == nil, cardStepOffered(card), let grant = card.grant,
+              let draft = card.draft, let shown = drafts[draft]?.draft?.version, let approve = approveWithKey,
+              let sign = signRequest else { return }
+        answering = card.key
+        defer { answering = nil }
+        notAnswered[card.key] = nil
+        let tenant = cloud.session.tenant
+        do {
+            let decision = try await cloud.approval(taf: coach.id, component: card.id,
+                                                    body: .init(grant: grant, draft: draft, shownDraft: shown, session: card.session),
+                                                    proof: await proof?())
+            switch decision.outcome {
+            case "answered":
+                notAnswered[card.key] = nil
+                await follow(coach)
+            case "read_again":
+                // What the card showed is out of date: the draft is read again, and nothing is signed.
+                notAnswered[card.key] = decision.note ?? Words.app("version.out_of_date_card")
+                drafts[draft] = nil
+                await reload(coach)
+            case "sign":
+                guard let ask = decision.ask, SetupApproval.signsHere(ask, draft: draft, shownDraft: shown, tenant: tenant) else {
+                    // Not the Card's step (the connection's is the phone's), or not what this card shows: nothing signed.
+                    notAnswered[card.key] = Words.app("approval.device_can_not_approve_approve")
+                    return
+                }
+                var came = SetupApproval.ReportBody(result: "confirmed", session: decision.session ?? card.session)
+                do {
+                    _ = try await approve(.confirmDraft(id: draft, version: shown), ask.reason)
+                } catch is CancellationError {
+                    return
+                } catch is ApproveOnPhone {
+                    notAnswered[card.key] = Words.app("approval.device_can_not_approve_approve")
+                    return
+                } catch {
+                    came = SetupApproval.ReportBody(result: "failed", why: Self.why(error), session: decision.session ?? card.session)
+                }
+                let reported = try await cloud.approvalReport(taf: coach.id, component: card.id, ask: ask.id, body: came,
+                                                              proof: await proof?(), sign: sign)
+                notAnswered[card.key] = came.result == "confirmed" ? nil : (reported.note ?? came.why)
+                await follow(coach)
+            default:
+                notAnswered[card.key] = Words.app("coach.unknown_answer")
+            }
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            await reload(coach)
+        } catch {
+            notAnswered[card.key] = Self.why(error)
+        }
+    }
+
     func decline(_ card: Thread.Card) async {
         guard case .loaded(let coach, _) = state, answering == nil, card.grants else { return }
         // A sign-in while it waits; an approval as the iPad offers Decline, failed ones answered too.
