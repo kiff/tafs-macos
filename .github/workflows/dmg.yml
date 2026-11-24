@@ -15,11 +15,21 @@ name: DMG
 #   (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8), all secrets of the `mac-signing`
 #   environment (main only, a required reviewer), never repository secrets, so no
 #   workflow on another branch can read them. It never prints any of them.
+# - With `push` ticked, the release is built with alerts with tafs closed (`PUSH=1`):
+#   scripts/push-profile.swift fetches, with the same App Store Connect key, the one
+#   active Developer ID profile for bot.tafs.macos that gives push with the
+#   certificate it signs with, and scripts/dmg.sh embeds it. Unticked, as before.
 
 on:
   pull_request:
-    paths: ["scripts/dmg.sh", "scripts/build.sh", "App/Info.plist", "App/tafs.entitlements", ".github/workflows/dmg.yml"]
+    paths: ["scripts/dmg.sh", "scripts/build.sh", "scripts/push-profile.swift", "App/Info.plist", "App/tafs.entitlements",
+            "App/tafs-push.entitlements", ".github/workflows/dmg.yml"]
   workflow_dispatch:
+    inputs:
+      push:
+        description: "Alerts with tafs closed (PUSH=1): embeds the Developer ID push profile"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,6 +51,8 @@ jobs:
         run: scripts/build.sh
       - name: Pack the image, signed ad hoc, and open it
         run: scripts/dmg.sh
+      - name: The push profile's script type-checks
+        run: swiftc -typecheck scripts/push-profile.swift
 
   release:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
@@ -72,6 +84,8 @@ jobs:
           fi
 
       - name: Build the app, Intel and Apple silicon
+        env:
+          PUSH: ${{ inputs.push && '1' || '0' }}
         run: scripts/build.sh
 
       - name: Import the Developer ID certificate into a keychain of this run's own
@@ -97,9 +111,26 @@ jobs:
           identity=$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
           [ -n "$identity" ] || { echo "::error::No Developer ID Application identity in the certificate"; exit 1; }
           echo "IDENTITY=$identity" >> "$GITHUB_ENV"
+          # Its certificate's SHA-1, public, for picking the push profile made for it.
+          sha1=$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) "Developer ID Application: .*/\1/p' | head -1)
+          echo "CERT_SHA1=$sha1" >> "$GITHUB_ENV"
           echo "signing as $identity"
 
+      - name: The push profile, for this certificate
+        if: inputs.push
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          umask 077
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" swift scripts/push-profile.swift "$CERT_SHA1" "$RUNNER_TEMP/push.provisionprofile"
+          echo "PROFILE=$RUNNER_TEMP/push.provisionprofile" >> "$GITHUB_ENV"
+
       - name: Sign the app and pack the image
+        env:
+          PUSH: ${{ inputs.push && '1' || '0' }}
         run: scripts/dmg.sh
 
       - name: Notarize the image and staple its ticket
@@ -148,4 +179,4 @@ jobs:
         if: always()
         run: |
           [ -n "${KEYCHAIN:-}" ] && security delete-keychain "$KEYCHAIN" 2>/dev/null || true
-          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/developer-id.p12"
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/push.provisionprofile"
