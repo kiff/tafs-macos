@@ -16,6 +16,9 @@ final class PushToken {
         #endif
     }
 
+    /// A held call changed elsewhere, as tafs cloud's silent push says: what needs the person is read again.
+    var heldChanged: () -> Void = {}
+
     /// The token AppKit gave, kept while the app runs: AppKit gives the same one again on each registration.
     private(set) var bytes: Data?
     private var waiting: [CheckedContinuation<Data?, Never>] = []
@@ -50,6 +53,13 @@ final class PushAppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         Task { @MainActor in PushToken.shared.received(nil) }
+    }
+
+    /// tafs cloud's silent push, as the iPad's: a held call answered elsewhere takes its alerts away, and Needs you is
+    /// read again.
+    func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
+        if let hold = userInfo["hold_id"] as? String, userInfo["answered"] as? Bool == true { Notifier.removeAlerts(forHold: hold) }
+        Task { @MainActor in PushToken.shared.heldChanged() }
     }
 }
 #endif

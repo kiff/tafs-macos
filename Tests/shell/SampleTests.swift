@@ -95,7 +95,7 @@ let shellSampleTests: [Test] = [
         // Nothing alerts in the sample, and its Alerts keep nothing: macOS is never asked.
         try expect(window.contains("AlertsModel(account: account.session.tenant, inSample: inSample,"), "Alerts know the sample")
         // Nor does it give tafs cloud a push token (`MacPush`).
-        try expect(window.contains("push: inSample ? nil : PushSync.mac(cloud: cloud)"), "no push token for the sample")
+        try expect(window.contains("push: inSample ? nil : PushSync.mac(cloud: cloud, account: account)"), "no push token for the sample")
         try expect(window.contains("guard !inSample else { return }"), "no alert for the sample's held calls")
         let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
         try expect(alerts.contains("why = Sample.notInSample(words)") && !alerts.contains("\n        prefs.save(to: defaults, account: account)"), "Turn on refused, nothing saved")

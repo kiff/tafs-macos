@@ -30,6 +30,44 @@ let approvalsMacPushTests: [Test] = [
         // On, but Apple's service gave no token: what's held is taken back, never left to alert a Mac that can't hear.
         try expectEqual(MacPush.step(wanted: true, token: nil, sound: true, held: held), .unregister(token: token))
     },
+    Test("turning alerts on hands tafs cloud KIFF's alert target and the kinds chosen; what alerts this Mac is read for its token", awaiting: {
+        let transport = CannedTransport([(200, "{}"), (200, #"{"enabled":true,"sound":true,"kinds":[{"id":"holds","title":"Held calls","words":"With sound","enabled":true},{"id":"briefs","title":"Your brief","words":"Quiet","enabled":false}],"answering":{"title":"A taf answered someone","tafs":[{"id":"taf_1","name":"Support"}]}}"#)])
+        let cloud = CloudClient(transport: transport, session: session)
+        let target = MacPush.AlertTarget(id: "at_1", signingSecret: "s3cret")
+        _ = try? await cloud.registerPush(token: token, sound: true, target: target, kinds: ["briefs": false])
+        let body = try JSONSerialization.jsonObject(with: transport.sent[0].body) as? [String: Any]
+        try expectEqual((body?["alert_target"] as? [String: String]) ?? [:], ["id": "at_1", "signing_secret": "s3cret"])
+        try expectEqual((body?["kinds"] as? [String: Bool]) ?? [:], ["briefs": false])
+        let alerts = try await cloud.deviceAlerts(token: token)
+        try expectEqual(transport.sent[1].method + " " + transport.sent[1].path, "GET /v1/push")
+        try expectEqual(transport.sent[1].headers["Tafs-Device-Token"], token)
+        try expectEqual(alerts.kinds.map(\.id), ["holds", "briefs"])
+        try expectEqual(alerts.answering?.tafs.map(\.name), ["Support"])
+        try expectEqual(alerts.kinds(setting: "briefs", to: true), ["holds": true, "briefs": true])
+        // Without a target or kinds, neither is sent.
+        let plain = try JSONEncoder().encode(MacPush.Body(deviceToken: token, sound: true))
+        try expect(!String(decoding: plain, as: UTF8.self).contains("alert_target") && !String(decoding: plain, as: UTF8.self).contains("kinds"), "nothing extra")
+    }),
+    Test("KIFF's alert target points at tafs cloud's alerts, signed by the device key", awaiting: {
+        let transport = CannedTransport([(200, #"{"id":"at_1","signing_secret":"s3cret"}"#)])
+        let account = AccountClient(transport: transport, session: session, sign: { _ in "t=1,v1=SIG" })
+        let target = try await account.registerAlertTarget()
+        try expectEqual(target, MacPush.AlertTarget(id: "at_1", signingSecret: "s3cret"))
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "POST /v1/me/alert-targets")
+        try expectEqual(transport.sent[0].headers["KIFF-Device-Signature"], "t=1,v1=SIG")
+        let body = try JSONSerialization.jsonObject(with: transport.sent[0].body) as? [String: String]
+        try expectEqual(body?["url"], "https://cloud.tafs.kiff.dev/v1/kiff/alerts")
+    }),
+    Test("a clicked push opens where tafs cloud says, as the iPad's: a hold, a brief's alert and a handed step in Needs you") {
+        try expectEqual(MacPush.destination(["hold_id": "h1", "open": "needs-you"]), .needsYou)
+        try expectEqual(MacPush.destination(["brief_kind": "urgent"]), .needsYou)
+        try expectEqual(MacPush.destination(["brief_kind": "brief"]), .needsYou)
+        // `brief_kind` doesn't override an `open` tafs cloud sent.
+        try expectEqual(MacPush.destination(["brief_kind": "brief", "open": "taf:1"]), .other("taf:1"))
+        try expectEqual(MacPush.destination(["handoff": "step_1"]), .step("step_1"))
+        try expectEqual(MacPush.destination(["brief_kind": "weekly"]), nil)
+        try expect(MacPush.isBrief(["brief_kind": "urgent"]) && !MacPush.isBrief(["kind": "brief"]), "only brief_kind")
+    },
     Test("what tafs cloud holds is kept per account") {
         let defaults = UserDefaults(suiteName: "MacPushTests-\(UUID().uuidString)")!
         MacPush.Registered.save(MacPush.Registered(token: token, sound: false), to: defaults, account: "t-a")

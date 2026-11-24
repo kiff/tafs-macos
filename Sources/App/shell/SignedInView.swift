@@ -142,7 +142,7 @@ struct SignedInView: View {
         _needsYou = StateObject(wrappedValue: NeedsYouModel(account: account, route: route, cloud: cloud, proof: coachProof))
         // Alerts are kept per account, as the iPad keys them by tenant.
         _alerts = StateObject(wrappedValue: AlertsModel(account: account.session.tenant, inSample: inSample,
-                                                        push: inSample ? nil : PushSync.mac(cloud: cloud)))
+                                                        push: inSample ? nil : PushSync.mac(cloud: cloud, account: account)))
     }
 
     var body: some View {
@@ -169,6 +169,10 @@ struct SignedInView: View {
         }
         .onAppear {
             notifier.opened = { selection = .needsYou }
+            // tafs cloud's push with tafs open (`PUSH=1` builds): the brief, or what needs the person, read again.
+            notifier.pushed = { brief in Task { if brief { await self.brief.load() } else { await needsYou.load() } } }
+            notifier.listen()
+            PushToken.shared.heldChanged = { Task { await needsYou.load() } }
             notifier.account = account.session.tenant
             LaunchClock.mark("first window")
         }
@@ -256,7 +260,8 @@ struct SignedInView: View {
             // A taf's knocks are answered on its Activity, so its row opens there.
             case .needsYou: return AnyView(BriefScreen(model: brief, needsYou: NeedsYouView(model: needsYou, tafs: overview.tafs, answersHolds: accountModel.me?.answersHolds ?? true, managesCards: accountModel.me?.managesCards ?? true, allowIsLive: accountModel.me?.allowIsLive ?? false,
                                                                                             openKnocks: { open($0, on: .activity) }, answered: { await needsYou.load(); await readTafs() },
-                                                                                            mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() }),
+                                                                                            mayUseCoach: mayUseCoach, openCoach: openCoachWaiting, setAsideDone: { coach.setAside(chats: $0); await readTafs() },
+                                                                                            alerts: alerts),
                                                        beyond: briefBeyond, tafs: overview.tafs, zone: accountModel.me?.timeZone, startNextMove: mayUseCoach ? startNextMove : nil))
             case .overview: return AnyView(OverviewView(model: overview, held: heldRows, openNeedsYou: { selection = .needsYou }, openTaf: open,
                                                         needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
