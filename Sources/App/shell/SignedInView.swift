@@ -203,6 +203,9 @@ struct SignedInView: View {
             needsYou.answerWithKey = answerWithKey
             // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
             needsYou.approveWithKey = approveWithKey
+            // An approval card's Card step: KIFF's draft confirm on the key, and the report signed by the device key.
+            coach.approveWithKey = approveWithKey
+            coach.signRequest = account.sign
         }
         // Any change of session (a sign-out, a pairing, a new sign-in) rebuilds this window:
         // what the old one started ends with it, as the iPad's `accountGeneration` bumps on
