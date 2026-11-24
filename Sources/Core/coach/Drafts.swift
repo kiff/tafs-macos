@@ -47,6 +47,8 @@ extension AccountClient {
                 var grants: [Grant]?
                 var aggregates: [Aggregate]?
                 var onExceed: String?
+                /// KIFF's own lines for the Card in force, when it sends them.
+                var kiffLines: [String]?
                 var subject: String?
                 var subjects: [String]?
                 var domain: String?
@@ -55,7 +57,7 @@ extension AccountClient {
                 var validFrom: String?
                 var validUntil: String?
                 enum CodingKeys: String, CodingKey {
-                    case id, grants, aggregates, onExceed = "on_exceed", subject, subjects, domain, environment, location
+                    case id, grants, aggregates, onExceed = "on_exceed", kiffLines = "lines", subject, subjects, domain, environment, location
                     case validFrom = "valid_from", validUntil = "valid_until"
                 }
             }
@@ -109,7 +111,11 @@ extension AccountClient {
             case id, status, version, cards, label, retires, agentID = "agent_id", noTools = "no_tools", fromHold = "from_hold"
         }
 
-        struct Retired: Decodable, Equatable { let id: String }
+        /// A Card the version doesn't have: confirming removes it. `current` is what it allows now.
+        struct Retired: Decodable, Equatable {
+            let id: String
+            var current: Card.Terms?
+        }
 
         var confirmed: Bool { status == "confirmed" }
         /// KIFF took the owner's signature for it: confirmed, or confirmed and its key claimed since.
@@ -128,9 +134,47 @@ extension AccountClient {
         /// Every Card's lines in one list, as the iPad's `lines`: two grants that read alike, on one
         /// Card or two, each add their action in words.
         func lines(_ words: Words) -> [String] {
+            cardLines(words).flatMap { $0 }
+        }
+
+        /// Each Card's lines, as the iPad's `cardLines`: two grants that read alike, on one Card or two, each add
+        /// their action.
+        func cardLines(_ words: Words) -> [[String]] {
             let all = cards ?? []
             let alike = Self.alike(all.flatMap { $0.grants ?? [] })
-            return all.flatMap { Self.lines(of: $0, alike: alike, words) }
+            return all.map { Self.lines(of: $0, alike: alike, words) }
+        }
+
+        /// The lines of a Card in force (a revised Card's now, a removed Card's), as the iPad's `Terms.lines`.
+        static func lines(of terms: Card.Terms, _ words: Words) -> [String] {
+            let card = Card(grants: terms.grants, aggregates: terms.aggregates, onExceed: terms.onExceed, kiffLines: terms.kiffLines)
+            return lines(of: card, alike: alike(terms.grants ?? []), words)
+        }
+
+        /// How a draft's Cards show, as the iPad's `DraftCardsView.Shown`: its new Cards as one, "A new Card" (KIFF
+        /// drafts one per tool, and five panels read as five Cards to approve); a changed or unchanged Card alone.
+        enum Shown: Equatable {
+            /// Every new Card's lines, in the draft's order. A Card whose lines are exactly an earlier one's shows
+            /// once; a single line is never dropped for being seen before, since a total names no tool and belongs to
+            /// the Card it follows (the owner never reads less than they sign).
+            case new(lines: [String])
+            /// A Card the version revises, with what it allows now (its terms once, when unchanged), and after.
+            case one(now: [String], after: [String], unchanged: Bool)
+        }
+
+        /// The new Cards go together where the first of them is; the others keep their place, as the iPad's `shown`.
+        func shown(_ words: Words) -> [Shown] {
+            let all = cards ?? []
+            let lines = cardLines(words)
+            let fresh = all.indices.filter { all[$0].current == nil }
+            return all.indices.compactMap { i -> Shown? in
+                if let current = all[i].current {
+                    return .one(now: Self.lines(of: current, words), after: lines[i], unchanged: all[i].isUnchanged)
+                }
+                guard i == fresh.first else { return nil }
+                var seen = Set<[String]>()
+                return .new(lines: fresh.filter { seen.insert(lines[$0]).inserted }.flatMap { lines[$0] })
+            }
         }
 
         /// The names, ignoring case, that more than one of these grants reads as.

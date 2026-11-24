@@ -97,9 +97,12 @@ struct CloudRefusal: Error, Equatable {
     let words: String?
     /// The AI-data consent's words, when the refusal is for want of it.
     let consent: TafsCloud.AIConsent?
+    /// A run is in the way of what was asked (a version's install, kiff/tafs#206): tafs cloud lists what blocks it.
+    let blocks: Bool
 
     init(status: Int, body: Data) {
-        struct Body: Decodable { let words: String?; let error: String? }
+        struct Run: Decodable {}
+        struct Body: Decodable { let words: String?; let error: String?; let blocking: [Run]? }
         let refusal = TafsCloud.Refusal(status: status, body: body)
         let read = try? JSONDecoder().decode(Body.self, from: body)
         self.status = status
@@ -107,6 +110,7 @@ struct CloudRefusal: Error, Equatable {
         code = refusal.code ?? read?.error
         words = read?.words
         consent = refusal.consent
+        blocks = read?.blocking?.isEmpty == false
     }
 
     /// What the person is told, as the iPad's `errorDescription`: tafs cloud's words, else its

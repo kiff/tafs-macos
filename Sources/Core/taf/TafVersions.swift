@@ -1,8 +1,8 @@
 import Foundation
 
 /// A taf's versions, like app builds (`GET /v1/tafs/{id}/versions`), ported from the iPad's
-/// `TafsCloud.Version`, `TrialSummary`, `Switching` and `VersionsPanel`'s lines. Installing one
-/// and trying one are signed by the phone, so on this Mac they're read, never changed.
+/// `TafsCloud.Version`, `TrialSummary`, `Switching` and `VersionsPanel`'s lines. Installing one is
+/// `VersionSwitch`; trying one is `Trials`.
 enum TafVersions {
     /// One trial of a version that ended: when, how many calls, and how it ended.
     struct Trial: Decodable, Equatable {
@@ -52,6 +52,12 @@ enum TafVersions {
         let at: Date
     }
 
+    /// A switch just begun: tafs cloud's switch, and its words when it stopped runs that were in the way.
+    struct Begun: Equatable {
+        let switching: Switching
+        let stoppedWords: String?
+    }
+
     struct State: Decodable, Equatable {
         let versions: [Version]
         let switching: Switching?
@@ -88,6 +94,28 @@ extension CloudClient {
     /// A taf's versions, oldest first, the live one marked, and a switch under way.
     func versions(of taf: String) async throws -> TafVersions.State {
         try await get("/v1/tafs/\(Self.escaped(taf))/versions")
+    }
+
+    /// Begins switching to version n, as the iPad's `beginSwitch` (`TafsCloud.swift:2777`): nothing of the taf runs until
+    /// the switch ends, and tafs cloud answers with the KIFF draft it waits for, if any. `redraft` drafts its Card again;
+    /// `stopBlocking` stops what's in the way first. With tafs cloud's words when it stopped any run. Not signed: it gives
+    /// nothing, and the Card's confirm is KIFF's.
+    func beginSwitch(of taf: String, version n: Int, redraft: Bool = false, stopBlocking: Bool = false) async throws -> TafVersions.Begun {
+        struct Body: Encodable {
+            let redraft: Bool
+            let stopBlocking: Bool
+            enum CodingKeys: String, CodingKey { case redraft, stopBlocking = "stop_blocking" }
+        }
+        struct Run: Decodable {}
+        struct Answer: Decodable { let switching: TafVersions.Switching; let stopped: [Run]?; let words: String? }
+        let answer: Answer = try decoded(try await post("/v1/tafs/\(Self.escaped(taf))/versions/\(n)/switch", body: Body(redraft: redraft, stopBlocking: stopBlocking)))
+        return TafVersions.Begun(switching: answer.switching, stoppedWords: answer.stopped?.isEmpty == false ? answer.words : nil)
+    }
+
+    /// Makes version n live, as the iPad's `makeLive`: tafs cloud refuses (409) while its Card isn't confirmed in KIFF.
+    func makeLive(of taf: String, version n: Int) async throws {
+        struct Answer: Decodable { let live: Int }
+        let _: Answer = try decoded(try await post("/v1/tafs/\(Self.escaped(taf))/versions/\(n)/live", body: [String: String]()))
     }
 
     /// Drops a switch under way, as the iPad's `cancelSwitch`: the live version runs again. It
