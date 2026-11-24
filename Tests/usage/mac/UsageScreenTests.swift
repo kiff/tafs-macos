@@ -29,6 +29,21 @@ let usageScreenTests: [Test] = [
         try expectEqual(transport.sent.map(\.path), ["/v1/usage/balance", "/v1/usage/credits", "/v1/usage/credits?period=previous"])
         try expectEqual(model.previous, true)
     }),
+    Test("a taf's line opens its runs in the period shown, as the iPad's TafCreditsView(taf:previous:)", awaiting: { @MainActor in
+        let runs = #"{"credits":40,"words":"40 credits last period","items":[]}"#
+        let (model, transport) = model([(200, balanceAnswer), (200, creditsAnswer), (200, runs), (200, creditsAnswer), (200, runs)])
+        await model.load()
+        let now = model.runs(of: "taf-1")
+        try expectEqual(now.previous, false)
+        await now.load()
+        await model.show(previous: true)
+        let before = model.runs(of: "taf-1")
+        try expectEqual(before.previous, true)
+        await before.load()
+        try expectEqual(before.credits?.words, "40 credits last period")
+        try expectEqual(transport.sent.map(\.path), ["/v1/usage/balance", "/v1/usage/credits", "/v1/usage/credits/tafs/taf-1",
+                                                      "/v1/usage/credits?period=previous", "/v1/usage/credits/tafs/taf-1?period=previous"])
+    }),
     Test("the screen only reads: nothing but GET is ever sent", awaiting: { @MainActor in
         let (model, transport) = model([(200, balanceAnswer), (200, creditsAnswer), (200, creditsAnswer)])
         await model.load()
