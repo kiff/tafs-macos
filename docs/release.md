@@ -33,13 +33,13 @@ The `mac-signing` approval (its required reviewer) is what turns a run into a si
 - **A download that opens with no warning** on macOS 12, even offline: Developer ID, the hardened runtime, notarized and stapled.
 - **One Keychain identity across builds.** Each unsigned build is a new app to the Keychain, so an earlier build's session and keys may refuse to change ([pairing.md](pairing.md), The Keychain). Builds signed by the same team are the same app, so an update keeps the session and needs no new pairing.
 
-**It doesn't unlock, by itself: alerts with tafs closed.** The four Partial rows in the port checklist all wait on that: Needs you's and Account › Alerts' "even with tafs closed", `AlertingTafsView`, and the brief's alert routing by `brief_kind`. Today an alert comes only while tafs is open (`approvals/Notifier.swift`). A push with the app closed comes through Apple's push service, which needs, beyond the signature:
+**It doesn't unlock, by itself: alerts with tafs closed.** Three of the four Partial rows in the port checklist wait on that: Needs you's and Account › Alerts' "even with tafs closed" (with `AlertingTafsView`), and the brief's alert routing by `brief_kind`. The fourth, the sample's alerts, is left out by design and isn't push. Today an alert comes only while tafs is open (`approvals/Notifier.swift`). A push with the app closed comes through Apple's push service, which needs, beyond the signature:
 1. the push capability on the app's identifier, `bot.tafs.macos`, at developer.apple.com;
 2. a Developer ID provisioning profile with it, embedded in the app;
 3. `com.apple.developer.aps-environment` in `App/tafs.entitlements`, which today asks for the microphone and the camera only;
 4. the app registering for remote notifications and sending its token to tafs cloud, and tafs cloud sending to a Mac's token.
 
-Steps 1 and 2 are the account holder's, at developer.apple.com. Steps 3 and 4 are code, which comes after them. Until all four are done, those rows stay Partial, and this app never says alerts come with tafs closed.
+Steps 1 and 2 are the account holder's, at developer.apple.com. Steps 3 and 4 are code, which comes after them. Until all four steps are done, those three rows stay Partial, and this app never says alerts come with tafs closed.
 
 ## The secrets
 
