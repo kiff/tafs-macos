@@ -562,10 +562,11 @@ final class CoachModel: ObservableObject {
     // MARK: Files (the iPad's AppModel.swift:4723-4835)
 
     /// Where this chat's files go on tafs cloud: Coach's, or the taf's. Nil where nothing can be
-    /// attached: before the chat is read, or a new conversation that improves a taf, whose first
-    /// message tafs cloud writes (the iPad's `filesTarget`).
+    /// attached: before the chat is read, a new conversation that improves a taf, whose first
+    /// message tafs cloud writes, or a version's trial chat, as the iPad's `filesTarget`
+    /// (`trialChats[tafID] == nil`).
     var filesTarget: String? {
-        guard case .loaded(let coach, _) = state else { return nil }
+        guard !trial, case .loaded(let coach, _) = state else { return nil }
         if isCoach { return improving == nil ? coach.id : nil }
         return coach.id
     }
@@ -1178,6 +1179,9 @@ struct CoachView: View {
     /// In a taf's page, its chat scrolled a step down (true) or up (false): the page folds its header line,
     /// as the iPad's `TafChatView(onScroll:)`. Nil reads nothing.
     var onScroll: ((Bool) -> Void)? = nil
+    /// In a taf's chat, what it draws besides tafs cloud's thread, as the iPad's `chatItems`: its Record outcomes and
+    /// its door's knocks by time, and KIFF's held calls where the taf made them. Nil in Coach's own chat.
+    var extras: TafChatExtras? = nil
     @State private var scrollFold = ScrollFold()
     @State private var planOpen = false
     /// Coach's width, for "Taking shape" beside its conversation at 780 or wider.
@@ -1340,13 +1344,21 @@ struct CoachView: View {
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
-                    ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
-                        // A time on the first item, and after an hour's gap, as on the iPad.
-                        if page.showsTime(at: index), let at = item.at {
-                            Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                    // A taf's chat places its Record outcomes and its door's knocks among the thread's items by time,
+                    // as the iPad's `chatItems`; Coach's own chat has none.
+                    let extras = self.extras?.extras ?? []
+                    ForEach(Array(TafChatTimeline.placed(items: page.items.map(\.at), extras: extras.map(\.at)).enumerated()), id: \.offset) { _, slot in
+                        switch slot {
+                        case .item(let index):
+                            // A time on the first item, and after an hour's gap, as on the iPad.
+                            if page.showsTime(at: index), let at = page.items[index].at {
+                                Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                            }
+                            // An answer to a card shown here reads once, on the card's folded line.
+                            if !Self.hidden(page.items[index], in: page) { self.item(page.items[index]) }
+                        case .extra(let index):
+                            extras[index].view
                         }
-                        // An answer to a card shown here reads once, on the card's folded line.
-                        if !Self.hidden(item, in: page) { self.item(item) }
                     }
                     if let pending = model.pending { unsent(pending) }
                     if let live = model.live { writing(live) }
@@ -1738,7 +1750,13 @@ struct CoachView: View {
                     // Coach's words, as text on the page, with no bubble; its work folded above them.
                     VStack(alignment: .leading, spacing: 8) {
                         if let work = message.work { workFold(work, id: item.id) }
+                        // Where the run's result went: tafs cloud's line, above the taf's words (the iPad's `RunLine`).
+                        if let above = message.runLines.above { runLine(above) }
                         rich(message.text)
+                        // What the run did, counted from the record: tafs cloud's line, under them.
+                        if let under = message.runLines.under { runLine(under) }
+                        // A connection its work asked for that was refused: tafs cloud's lines, never folded.
+                        if let refused = message.refusedLines { refusedLines(refused) }
                     }
                     // Report this answer, on an answer that can be reported, as the iPad's `reportable`.
                     .contextMenu {
@@ -1752,8 +1770,14 @@ struct CoachView: View {
             }
         case .card(let card, _):
             self.card(card)
-        case .held:
-            waiting(words("coach.needs_you_approve"))
+        case .held(let exception, _):
+            // In a taf's chat, KIFF's held call where the taf made it, as the iPad's `HeldCallCard`, while Needs you
+            // lists it; once answered it's gone, and its outcome is the Record's line. Elsewhere, Needs you's line.
+            if let extras, let held = extras.held(exception) {
+                held
+            } else {
+                waiting(words("coach.needs_you_approve"))
+            }
         case .other:
             EmptyView()
         }
@@ -1850,6 +1874,31 @@ struct CoachView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(tone.opacity(0.10)))
+    }
+
+    /// One of tafs cloud's lines about a run, beside the taf's own words, as the iPad's `RunLine`: small and secondary,
+    /// drawn as written. The app adds no word of its own and counts nothing.
+    private func runLine(_ text: String) -> some View {
+        Text(verbatim: text).font(.system(size: 13)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+    }
+
+    /// A refused connection's lines, each as tafs cloud wrote it, as the iPad's `RefusedLines`: the step's in the
+    /// failure colour, then why and what to do next.
+    private func refusedLines(_ refused: Thread.Message.Refused) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let words = Thread.Message.line(refused.words) {
+                Text(verbatim: words).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.no)
+            }
+            if let why = refused.why { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            if let next = Thread.Message.line(refused.next) { Text(verbatim: next).font(.system(size: 13)).foregroundColor(Theme.soft) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .accessibilityElement(children: .combine)
     }
 
     /// An answered card, folded into one line, as the iPad's `OutcomeLine`.

@@ -24,9 +24,18 @@ final class SystemKIFFSheet: NSObject, KIFFSheet, ASWebAuthenticationPresentatio
         var window = NSWindow?.none
     }
 
+    /// The one host whose pages this sheet opens: KIFF's sign-in by default, or tafs cloud's for WhatsApp's signup
+    /// (`WhatsAppSignup`, made with `CloudClient.base`'s host). Any other address is refused before anything opens.
+    private let host: String
+
+    init(host: String = "api.kiff.dev") {
+        self.host = host
+        super.init()
+    }
+
     func open(_ url: URL, callbackScheme: String) async throws -> URL {
-        // Only KIFF's own page, over HTTPS.
-        guard url.scheme == "https", url.host == "api.kiff.dev" else { throw AppSignIn.Failure.refused("not_kiff") }
+        // Only the one host's own page, over HTTPS.
+        guard url.scheme == "https", url.host == host else { throw AppSignIn.Failure.refused("not_kiff") }
         anchor.window = NSApp.keyWindow ?? NSApp.windows.first ?? ASPresentationAnchor()
         return try await withCheckedThrowingContinuation { continuation in
             let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) { back, error in

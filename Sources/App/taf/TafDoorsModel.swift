@@ -58,10 +58,41 @@ final class DoorsModel: ObservableObject {
         error = Words.app("door.not_read")
     }
 
-    /// Turns a door on. WhatsApp's signup runs on a phone: its row says so, and never comes here.
+    /// Turns a door on that needs nothing more (email). WhatsApp's goes through `addWhatsApp`.
     func add(_ app: TafDoors.App) async -> TafDoors.Door? {
         let cloud = cloud, taf = taf
         return await work { try await cloud.addDoor(taf, app: app.id) }
+    }
+
+    /// Where WhatsApp's signup page opens: the system's private sign-in sheet, for tafs cloud's own host only, which
+    /// catches `tafs:` itself. A test stands in for it.
+    lazy var signupSheet: KIFFSheet = SystemKIFFSheet(host: URL(string: CloudClient.base)?.host ?? "cloud.tafs.kiff.dev")
+    /// The time now, for the signup's 15 minutes; a test sets it.
+    var now: () -> Date = { Date() }
+
+    /// Adds a WhatsApp door, as the iPad's `DoorsModel.add` for WhatsApp: tafs cloud's signup page in the sign-in sheet,
+    /// with this signup's own `state` (`WhatsAppSignup`). Only its own return is taken (this state, this taf, within
+    /// 15 minutes); then the door is made with Meta's code, as the session. A closed sheet says nothing; a return that
+    /// isn't this signup's, or comes without a code, says the signup didn't finish.
+    func addWhatsApp(_ app: TafDoors.App) async -> TafDoors.Door? {
+        let signup = WhatsAppSignup(taf: taf, opened: now())
+        guard let page = signup.page() else { return nil }
+        error = nil
+        let back: URL
+        do {
+            back = try await signupSheet.open(page, callbackScheme: WhatsAppSignup.scheme)
+        } catch AppSignIn.Failure.closed {
+            return nil
+        } catch {
+            self.error = Words.app("door.whatsapp_signup_did_not_finish")
+            return nil
+        }
+        guard let answer = signup.answer(back, now: now()) else {
+            error = Words.app("door.whatsapp_signup_did_not_finish")
+            return nil
+        }
+        let cloud = cloud, taf = taf
+        return await work { try await cloud.addDoor(taf, app: app.id, extra: WhatsAppSignup.doorFields(answer)) }
     }
 
     func setOpen(_ door: TafDoors.Door, _ open: Bool) async {

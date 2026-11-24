@@ -52,6 +52,18 @@ private func expectNot(_ draft: String, _ what: String) throws {
 }
 
 let approvalsHoldAllowTests: [Test] = [
+    Test("allow: current.id must be the Card it revises: another Card's id is refused, the same passes, none is as today") {
+        let after = "\(g)[\(refund(raised))]", before = "\(g)[\(refund(cap))]"
+        try expectNot(card(after, #""id":"c2","# + before), "a current that's another Card's")
+        try expect(try signs(card(after, #""id":"c1","# + before)), "the Card it revises")
+        try expect(try signs(card(after, before)), "no current.id: as today")
+        // A Card marked unchanged is held to it too.
+        let unchanged = #",{"revises":"c3","unchanged":true,\#(before),"current":{"id":"c9",\#(before)}}"#
+        try expectNot(card(after, before, extra: unchanged), "an unchanged Card whose current is another's")
+        // The same unchanged Card naming itself passes: the id is checked, never compared as a term.
+        let itself = #",{"revises":"c3","unchanged":true,\#(before),"current":{"id":"c3",\#(before)}}"#
+        try expect(try signs(card(after, before, extra: itself)), "an unchanged Card whose current is its own")
+    },
     Test("the button shows on a hold a Card change can lift, and never on Coach's install, a Card unit request or a fill in Chrome") {
         try expect(HoldAllow.allowable(try held(#"{"outcome":"per_action_exceeded"}"#)), "a cap")
         try expect(HoldAllow.allowable(try held(#"{"outcome":"limit_reached"},{"outcome":"resource_not_on_card"}"#)), "a total and a scope")

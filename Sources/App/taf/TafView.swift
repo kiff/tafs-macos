@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 /// A taf's Card as the iPad draws it: in the taf's colour, its title, what is left as the
@@ -148,6 +149,9 @@ struct TafView: View {
     @State var tab: Tab = .chat
     /// The version and share lines folded away while the chat scrolls down, as the iPad's `folded`.
     @State private var folded = false
+    /// Counts the changes of what the chat's extras come from (the page's Activity, the doors, Needs you), which this
+    /// view doesn't observe otherwise: each draws the chat again.
+    @State private var extrasRead = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -280,12 +284,38 @@ struct TafView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold)
+                CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold, extras: chatExtras)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             cardColumn
         }
-        .task { await pages?.loadTrial() }
+        .task {
+            await pages?.loadTrial()
+            // What the chat places among its messages, as the iPad's `chatItems`: the Record's outcomes (the taf's
+            // Activity) and the door's knocks, read here when the page hasn't read them yet.
+            if let pages, case .loading = pages.activity { await pages.loadActivity() }
+            if let doors, doorsOffered, !doors.loaded { await doors.load() }
+        }
+        .onReceive(Self.changes(pages, doors, needsYou)) { _ in extrasRead &+= 1 }
+    }
+
+    /// The changes of the page's models the chat's extras are read from, as one stream.
+    private static func changes(_ pages: TafPagesModel?, _ doors: DoorsModel?, _ needsYou: NeedsYouModel?) -> AnyPublisher<Void, Never> {
+        let each: [AnyPublisher<Void, Never>] = [pages?.objectWillChange.eraseToAnyPublisher(),
+                                                 doors?.objectWillChange.eraseToAnyPublisher(),
+                                                 needsYou?.objectWillChange.eraseToAnyPublisher()].compactMap { $0 }
+        return Publishers.MergeMany(each).eraseToAnyPublisher()
+    }
+
+    /// The live chat's extras: the Record's outcomes, the door's open knocks, and KIFF's held calls in place.
+    private var chatExtras: TafChatExtras {
+        // Read so a change of the page's models draws the chat again.
+        _ = extrasRead
+        let thread: Thread.Page?
+        if case .loaded(_, let page) = chat.state { thread = page } else { thread = nil }
+        let activity: TafActivity?
+        if let pages, case .loaded(let read) = pages.activity { activity = read } else { activity = nil }
+        return TafChatExtras.of(thread: thread, activity: activity, doors: doorsOffered ? doors : nil, taf: taf, needsYou: needsYou, words: words)
     }
 
     /// The Activity, with the Card beside it in the same column as the chat's, as the iPad's
