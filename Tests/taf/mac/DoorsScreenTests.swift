@@ -93,4 +93,56 @@ let tafDoorsMacTests: [Test] = [
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
         try png.write(to: URL(fileURLWithPath: "build/screenshots/doors-en.png"))
     }),
+    Test("WhatsApp's door: tafs cloud's page in the sign-in sheet, only its own return taken, then the door made with Meta's code", awaiting: { @MainActor in
+        let added = #"{"door":{"id":"d9","app":"whatsapp","kind":"whatsapp","label":"WhatsApp","open":true,"address":"+34 600 000 000","proof":"proven","how":"Checks the number","keys":[],"today":0,"limit":50,"resting":false}}"#
+        let (model, transport) = doors([(200, doorPage), (201, added)])
+        await model.load()
+        guard let whatsapp = model.addable.first(where: { $0.kind == "whatsapp" }) else { throw Failure(description: "no WhatsApp") }
+        let sheet = SignupSheet { page, scheme in
+            let state = URLComponents(url: page, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value ?? ""
+            return URL(string: "\(scheme)://doors/whatsapp?taf=taf-1&state=\(state)&code=c9&phone_number_id=p1&waba_id=w1")!
+        }
+        model.signupSheet = sheet
+        let door = await model.addWhatsApp(whatsapp)
+        try expect(door != nil, "the door is added")
+        try expectEqual(sheet.opened.first?.host, "cloud.tafs.kiff.dev")
+        try expectEqual(sheet.opened.first?.path, "/doors/whatsapp/connect")
+        try expectEqual(sheet.schemes, ["tafs"])
+        let post = transport.sent.last
+        try expectEqual(post?.method, "POST")
+        try expectEqual(post?.path, "/v1/tafs/taf-1/doors")
+        let body = (try? JSONSerialization.jsonObject(with: post?.body ?? Data())) as? [String: String]
+        try expectEqual(body, ["app": "whatsapp", "code": "c9", "phone_number_id": "p1", "waba_id": "w1"])
+        try expectEqual(model.error, nil)
+    }),
+    Test("WhatsApp's door: a return with another state adds nothing and says the signup didn't finish; a closed sheet says nothing", awaiting: { @MainActor in
+        let (model, transport) = doors([(200, doorPage)])
+        await model.load()
+        guard let whatsapp = model.addable.first(where: { $0.kind == "whatsapp" }) else { throw Failure(description: "no WhatsApp") }
+        model.signupSheet = SignupSheet { _, scheme in URL(string: "\(scheme)://doors/whatsapp?taf=taf-1&state=not-mine&code=c9")! }
+        let none = await model.addWhatsApp(whatsapp)
+        try expect(none == nil, "nothing added")
+        try expectEqual(model.error, "WhatsApp's signup didn't finish.")
+        try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 0)
+        model.signupSheet = SignupSheet { _, _ in throw AppSignIn.Failure.closed }
+        let closed = await model.addWhatsApp(whatsapp)
+        try expect(closed == nil, "nothing added")
+        try expectEqual(model.error, nil)
+        try expectEqual(transport.sent.filter { $0.method == "POST" }.count, 0)
+    }),
 ]
+
+/// The sign-in sheet as a test drives it: it answers the page it's opened with as told, and keeps what it was opened with.
+@MainActor
+private final class SignupSheet: KIFFSheet {
+    let answer: (URL, String) throws -> URL
+    private(set) var opened: [URL] = []
+    private(set) var schemes: [String] = []
+    init(_ answer: @escaping (URL, String) throws -> URL) { self.answer = answer }
+
+    func open(_ url: URL, callbackScheme: String) async throws -> URL {
+        opened.append(url)
+        schemes.append(callbackScheme)
+        return try answer(url, callbackScheme)
+    }
+}

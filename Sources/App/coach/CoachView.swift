@@ -552,13 +552,21 @@ final class CoachModel: ObservableObject {
         }
     }
 
+    /// A door Coach drafted, read from tafs cloud, as the iPad's `DoorDraftCard.read`: nil when its answer holds none
+    /// this app can draw. Read only: approving it is the phone's.
+    func doorDraft(taf: String, draft: String) async throws -> DoorDraft? {
+        let client = cloud
+        return try await client.doorDraft(of: taf, draft: draft)
+    }
+
     // MARK: Files (the iPad's AppModel.swift:4723-4835)
 
     /// Where this chat's files go on tafs cloud: Coach's, or the taf's. Nil where nothing can be
-    /// attached: before the chat is read, or a new conversation that improves a taf, whose first
-    /// message tafs cloud writes (the iPad's `filesTarget`).
+    /// attached: before the chat is read, a new conversation that improves a taf, whose first
+    /// message tafs cloud writes, or a version's trial chat, as the iPad's `filesTarget`
+    /// (`trialChats[tafID] == nil`).
     var filesTarget: String? {
-        guard case .loaded(let coach, _) = state else { return nil }
+        guard !trial, case .loaded(let coach, _) = state else { return nil }
         if isCoach { return improving == nil ? coach.id : nil }
         return coach.id
     }
@@ -1145,6 +1153,8 @@ struct CoachView: View {
     var fullScreen: Binding<Bool>? = nil
     /// The tafs listed, for the taf a new version's card is about (`Thread.Card.improvedTaf`).
     var tafs: [Home.Taf] = []
+    /// Whether this person manages a taf, by its tafs cloud id: a drafted door's Approve is drawn only then.
+    var managesTaf: (String) -> Bool = { _ in false }
     /// A taf's versions, by its tafs cloud id, for a new version's See version; nil opens none.
     var versions: ((String) -> TafPagesModel?)? = nil
     /// The Versions sheet a new version's card opened.
@@ -1169,6 +1179,9 @@ struct CoachView: View {
     /// In a taf's page, its chat scrolled a step down (true) or up (false): the page folds its header line,
     /// as the iPad's `TafChatView(onScroll:)`. Nil reads nothing.
     var onScroll: ((Bool) -> Void)? = nil
+    /// In a taf's chat, what it draws besides tafs cloud's thread, as the iPad's `chatItems`: its Record outcomes and
+    /// its door's knocks by time, and KIFF's held calls where the taf made them. Nil in Coach's own chat.
+    var extras: TafChatExtras? = nil
     @State private var scrollFold = ScrollFold()
     @State private var planOpen = false
     /// Coach's width, for "Taking shape" beside its conversation at 780 or wider.
@@ -1331,13 +1344,21 @@ struct CoachView: View {
                     Text(words("coach.conversation_not_loaded", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                     Button(words("common.try_again")) { Task { await model.load() } }
                 case .loaded(_, let page):
-                    ForEach(Array(page.items.enumerated()), id: \.offset) { index, item in
-                        // A time on the first item, and after an hour's gap, as on the iPad.
-                        if page.showsTime(at: index), let at = item.at {
-                            Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                    // A taf's chat places its Record outcomes and its door's knocks among the thread's items by time,
+                    // as the iPad's `chatItems`; Coach's own chat has none.
+                    let extras = self.extras?.extras ?? []
+                    ForEach(Array(TafChatTimeline.placed(items: page.items.map(\.at), extras: extras.map(\.at)).enumerated()), id: \.offset) { _, slot in
+                        switch slot {
+                        case .item(let index):
+                            // A time on the first item, and after an hour's gap, as on the iPad.
+                            if page.showsTime(at: index), let at = page.items[index].at {
+                                Text(verbatim: Self.when(at, words: words)).font(.system(size: 12)).foregroundColor(Theme.dim).frame(maxWidth: .infinity)
+                            }
+                            // An answer to a card shown here reads once, on the card's folded line.
+                            if !Self.hidden(page.items[index], in: page) { self.item(page.items[index]) }
+                        case .extra(let index):
+                            extras[index].view
                         }
-                        // An answer to a card shown here reads once, on the card's folded line.
-                        if !Self.hidden(item, in: page) { self.item(item) }
                     }
                     if let pending = model.pending { unsent(pending) }
                     if let live = model.live { writing(live) }
@@ -1729,7 +1750,13 @@ struct CoachView: View {
                     // Coach's words, as text on the page, with no bubble; its work folded above them.
                     VStack(alignment: .leading, spacing: 8) {
                         if let work = message.work { workFold(work, id: item.id) }
+                        // Where the run's result went: tafs cloud's line, above the taf's words (the iPad's `RunLine`).
+                        if let above = message.runLines.above { runLine(above) }
                         rich(message.text)
+                        // What the run did, counted from the record: tafs cloud's line, under them.
+                        if let under = message.runLines.under { runLine(under) }
+                        // A connection its work asked for that was refused: tafs cloud's lines, never folded.
+                        if let refused = message.refusedLines { refusedLines(refused) }
                     }
                     // Report this answer, on an answer that can be reported, as the iPad's `reportable`.
                     .contextMenu {
@@ -1743,8 +1770,14 @@ struct CoachView: View {
             }
         case .card(let card, _):
             self.card(card)
-        case .held:
-            waiting(words("coach.needs_you_approve"))
+        case .held(let exception, _):
+            // In a taf's chat, KIFF's held call where the taf made it, as the iPad's `HeldCallCard`, while Needs you
+            // lists it; once answered it's gone, and its outcome is the Record's line. Elsewhere, Needs you's line.
+            if let extras, let held = extras.held(exception) {
+                held
+            } else {
+                waiting(words("coach.needs_you_approve"))
+            }
         case .other:
             EmptyView()
         }
@@ -1760,6 +1793,9 @@ struct CoachView: View {
     @ViewBuilder private func card(_ card: Thread.Card) -> some View {
         if let text = card.askCoach {
             AskCoachCard(text: text, ask: askingCoach(text))
+        } else if let door = card.door {
+            DoorDraftCard(model: model, taf: door.taf, draft: door.draft,
+                          tafName: tafs.first { $0.tafID == door.taf }?.name ?? "", manages: managesTaf(door.taf))
         } else if card.isPlan {
             // Beside the conversation while "Taking shape" shows, as the iPad's (SetupChatView.swift:86).
             if !shaping { plan(card) }
@@ -1838,6 +1874,31 @@ struct CoachView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(tone.opacity(0.10)))
+    }
+
+    /// One of tafs cloud's lines about a run, beside the taf's own words, as the iPad's `RunLine`: small and secondary,
+    /// drawn as written. The app adds no word of its own and counts nothing.
+    private func runLine(_ text: String) -> some View {
+        Text(verbatim: text).font(.system(size: 13)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .textSelection(.enabled)
+    }
+
+    /// A refused connection's lines, each as tafs cloud wrote it, as the iPad's `RefusedLines`: the step's in the
+    /// failure colour, then why and what to do next.
+    private func refusedLines(_ refused: Thread.Message.Refused) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let words = Thread.Message.line(refused.words) {
+                Text(verbatim: words).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.no)
+            }
+            if let why = refused.why { Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.soft) }
+            if let next = Thread.Message.line(refused.next) { Text(verbatim: next).font(.system(size: 13)).foregroundColor(Theme.soft) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
+        .accessibilityElement(children: .combine)
     }
 
     /// An answered card, folded into one line, as the iPad's `OutcomeLine`.
@@ -2146,5 +2207,82 @@ struct AskCoachCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+    }
+}
+
+/// A door Coach drafted, as the iPad's `DoorDraftCard` (APIDoorViews.swift:324-418): the draft read from tafs cloud
+/// (the card carries no words of Coach's), its app's name, what it can hand the taf, what the taf does, the fields it
+/// sends, what it gets back, the own-words line and its risk in amber, and the door's boundary. Approving opens the
+/// door and shows its first key once, which this Mac doesn't show (as a door's New key): for whoever manages the taf,
+/// Approve says to approve on another device and sends nothing. A draft already made into a door says so in tafs
+/// cloud's words in the ok colour; a read that fails says why.
+struct DoorDraftCard: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: CoachModel
+    let taf: String
+    let draft: String
+    let tafName: String
+    let manages: Bool
+    @State private var read: DoorDraft?
+    @State private var failed: String?
+    @State private var used = false
+    @State private var gated: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Eyebrow(text: words("door.api.draft_kind"))
+            if let d = read { drawn(d) }
+            if let failed {
+                Text(verbatim: failed).font(.system(size: 13)).foregroundColor(used ? Theme.ok : Theme.no)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier(used ? "door.draft.used" : "door.draft.failed")
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .task(id: draft) { await load() }
+    }
+
+    @ViewBuilder private func drawn(_ d: DoorDraft) -> some View {
+        Text(verbatim: d.name).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
+        Text(words("door.api.draft_scope", ["app": d.name, "taf": tafName])).font(.system(size: 14)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+        Text(words("door.api.draft_will", ["taf": tafName, "job": d.job])).font(.system(size: 15)).foregroundColor(Theme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+        if !d.fields.isEmpty {
+            Eyebrow(text: words("door.api.draft_sends"))
+            ForEach(Array(d.fields.enumerated()), id: \.offset) { _, field in
+                Text(verbatim: DoorDraft.line(field)).font(.system(size: 13, design: .monospaced)).foregroundColor(Theme.ink)
+            }
+        }
+        if !d.outcomes.isEmpty {
+            Text(words("door.api.draft_back", ["outcomes": words.list(d.outcomes)])).font(.system(size: 14)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if d.text { ownWords(d) }
+        Text(words("door.api.boundary", ["taf": tafName])).font(.system(size: 13)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+        if manages {
+            GatedAction(title: words("approval.approve"), id: "door-draft|" + d.id, color: Theme.amberText, gated: $gated)
+                .accessibilityIdentifier("door.draft.approve")
+        }
+    }
+
+    @ViewBuilder private func ownWords(_ d: DoorDraft) -> some View {
+        Text(words("door.api.draft_words", ["taf": tafName])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+        Text(words("door.api.draft_words_risk", ["taf": tafName, "app": d.name])).font(.system(size: 13)).foregroundColor(Theme.amberText)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func load() async {
+        do {
+            read = try await model.doorDraft(taf: taf, draft: draft)
+            failed = nil
+            used = false
+        } catch {
+            used = DoorDraft.isUsed(error)
+            failed = (error as? CloudRefusal)?.words ?? NeedsYouModel.why(error)
+        }
     }
 }

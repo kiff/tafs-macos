@@ -58,6 +58,19 @@ jobs:
             *) git diff --name-only "$BASE" HEAD | scripts/parts.sh ;;
           esac | tee -a "$GITHUB_OUTPUT"
 
+  # The repository is public: its text says each rule as itself, never who set it, where it was
+  # discussed or when (scripts/public-text.sh, the same check as tafs-linux's and tafs-windows').
+  # The script first proves itself on planted lines, then reads every tracked file. It needs no Mac.
+  public-text:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Public text says the rule, not who set it
+        run: scripts/public-text.sh
+
   # The pin of the shared words and contracts isn't left behind kiff/tafs (docs/shared.md).
   drift:
     if: github.event_name != 'push'

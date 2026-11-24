@@ -19,9 +19,46 @@ enum Thread {
         var session: String? = nil
         /// The files sent with it, by name, as the iPad's `ChatMessage.attachments`.
         var attachments: [AttachmentRef] = []
+        /// On a job run's report: where its result went, in tafs cloud's words ("Sent to Google Sheets · Refunds 2026"),
+        /// as the iPad's `delivered`. Drawn as written, above the taf's words; none where tafs cloud sends none or a blank.
+        var delivered: String? = nil
+        /// On a run's last message: what the run did, counted from the record, in tafs cloud's words ("From the record:
+        /// 5 done · 1 refused"), as the iPad's `counted`. Drawn as written, under the taf's words. This app counts nothing.
+        var counted: String? = nil
+        /// A connection its work asked for that the connection server refused, as the iPad's `refused`: tafs cloud's
+        /// lines, drawn under the taf's words, never folded.
+        var refused: Refused? = nil
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
+
+        /// tafs cloud's lines around a taf's words, as the iPad's `runLines`: where the run's result went above, what
+        /// the run did under. The person's message and a run's kickoff have none.
+        var runLines: (above: String?, under: String?) {
+            guard from == "taf", !isNote else { return (nil, nil) }
+            return (delivered, counted)
+        }
+
+        /// The refused connection drawn under a taf's words, as the iPad's `refusedLines`: none on the person's message
+        /// or a run's kickoff.
+        var refusedLines: Refused? { from == "taf" && !isNote ? refused : nil }
+
+        /// A refused connection's lines, each tafs cloud's words, as the iPad's `ChatMessage.Refused`: the step's
+        /// ("Coach couldn't connect Shippo yet"), the server's reason, and what to do next.
+        struct Refused: Equatable {
+            let words: String
+            let why: String?
+            let next: String
+            /// Its lines, in order, the blank ones left out.
+            var lines: [String] { [words, why ?? "", next].compactMap(Message.line) }
+        }
+
+        /// One of tafs cloud's lines as the app draws it, as the iPad's `ChatMessage.line`: as written, without the
+        /// space around it; none for a blank one.
+        static func line(_ words: String?) -> String? {
+            guard let trimmed = words?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+            return trimmed
+        }
     }
 
     /// A run's work, on its first message: the time from its start to its last words, and the
@@ -120,6 +157,11 @@ enum Thread {
         /// KIFF's draft of the taf's Cards an approval signs (`draft`), as the iPad's
         /// `SetupComponent.draft`: read from KIFF by this id (`AccountClient.draft(id:)`).
         var draft: String? = nil
+        /// A door card's taf and its draft (Coach's `taf_door_api`: `taf_id`, `draft_id`), as the iPad's
+        /// `SetupComponent.tafID` and `draftID`: the draft is read from tafs cloud by them, since the card carries no
+        /// words of Coach's.
+        var doorTaf: String? = nil
+        var doorDraftID: String? = nil
         /// tafs cloud's mark of what an approval's fingerprint covers (`signs`), as the iPad's
         /// `SetupComponent.Signs`; nil from a tafs cloud that doesn't say.
         var signs: Signs? = nil
@@ -222,6 +264,11 @@ enum Thread {
         /// (TafsCloud.swift:1178-1195): the person's request in the taf's words, which Ask Coach
         /// writes into Coach's box on that taf. Nil for any other card, or one with no words.
         var askCoach: String? { type == "ask_coach" ? text : nil }
+        /// A door Coach drafted (`taf_door_api`) with its taf and draft, as the iPad's `case .door`: nil otherwise.
+        var door: (taf: String, draft: String)? {
+            guard type == "taf_door_api", let doorTaf, let doorDraftID else { return nil }
+            return (doorTaf, doorDraftID)
+        }
         var planDone: Int { plan.filter { $0.status == "done" }.count }
 
         var waitsForPerson: Bool { waits == "owner" && answerState == nil }
@@ -273,11 +320,12 @@ enum Thread {
         /// A new conversation, before its first message: nothing to read yet.
         static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments, delivered, counted, refused }
+        enum RefusedKeys: String, CodingKey { case words, why, next }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
-        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider, grant, draft, signs }
+        enum ComponentKeys: String, CodingKey { case id, type, title, text, options, waits, steps, line, tone, taf, tools, connection, service, note, yes, no, questions, wider, grant, draft, signs, tafID = "taf_id", draftID = "draft_id" }
         enum PlanKeys: String, CodingKey { case label, status }
         enum TafKeys: String, CodingKey { case name, agent, improves, note }
         enum OutcomeKeys: String, CodingKey { case tafID = "taf_id", version, failed, planNeeded = "plan_needed" }
@@ -322,11 +370,22 @@ enum Thread {
                         }
                         work = Work(ms: ms, steps: steps)
                     }
+                    // A refused connection, as the iPad's `Refused`: kept only when some line of it says something.
+                    var refused: Message.Refused?
+                    if let r = try? m.nestedContainer(keyedBy: RefusedKeys.self, forKey: .refused) {
+                        let read = Message.Refused(words: ((try? r.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? "",
+                                                   why: Message.line((try? r.decodeIfPresent(String.self, forKey: .why)) ?? nil),
+                                                   next: ((try? r.decodeIfPresent(String.self, forKey: .next)) ?? nil) ?? "")
+                        refused = read.lines.isEmpty ? nil : read
+                    }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
                                                   kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work,
                                                   session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil,
                                                   // As the iPad's: the files read whole, or none.
-                                                  attachments: ((try? m.decodeIfPresent([AttachmentRef].self, forKey: .attachments)) ?? nil) ?? []),
+                                                  attachments: ((try? m.decodeIfPresent([AttachmentRef].self, forKey: .attachments)) ?? nil) ?? [],
+                                                  delivered: Message.line((try? m.decodeIfPresent(String.self, forKey: .delivered)) ?? nil),
+                                                  counted: Message.line((try? m.decodeIfPresent(String.self, forKey: .counted)) ?? nil),
+                                                  refused: refused),
                                           position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),
@@ -427,6 +486,8 @@ enum Thread {
                     }
                     made.grant = text(.grant)
                     made.draft = text(.draft)
+                    made.doorTaf = text(.tafID)
+                    made.doorDraftID = text(.draftID)
                     // As the iPad's `SetupComponent.Signs`: lenient, a field of another shape is none.
                     if let signs = try? shown.nestedContainer(keyedBy: SignsKeys.self, forKey: .signs) {
                         made.signs = Card.Signs(card: (try? signs.decodeIfPresent(Bool.self, forKey: .card)) ?? nil,

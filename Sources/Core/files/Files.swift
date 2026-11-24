@@ -55,7 +55,7 @@ struct FilePreviewText: Equatable {
     var truncated: Bool
 }
 
-/// A file's name and its preview as the app draws them, as the iPad's `FileText` (qa-kiff's musts): plain text only,
+/// A file's name and its preview as the app draws them, as the iPad's `FileText`: plain text only,
 /// never a path, and no control or direction character, even if tafs cloud's own cleaning ever let one through.
 enum FileText {
     /// U+202A–U+202E (embeddings and overrides), U+2066–U+2069 (isolates), and the marks U+200E, U+200F and U+061C.

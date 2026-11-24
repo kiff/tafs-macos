@@ -265,7 +265,9 @@ struct SignedInView: View {
         CoachView(model: coach, canApprove: false, openTaf: openHandedOver,
                   listed: Set(overview.tafs.map(\.id)), tafCount: overview.tafs.count, managesCards: accountModel.me?.managesCards ?? true,
                   openUsage: { panel.close(); selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach,
-                  fullScreen: $panel.full, tafs: overview.tafs, versions: versionsModel, dictation: dictation,
+                  fullScreen: $panel.full, tafs: overview.tafs,
+                  managesTaf: { id in overview.tafs.first { $0.tafID == id }.map { Access.manages(access[$0.id]) } ?? false },
+                  versions: versionsModel, dictation: dictation,
                   hints: Dictating.hints(tafs: overview.tafs.map(\.name)))
     }
 

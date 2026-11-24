@@ -204,6 +204,8 @@ let contractsTests: [Test] = [
         try expectEqual(expired.connections.map(\.reconnect), [true])
         try expect(expired.connectAgain?.title.isEmpty == false, "Connect again's title")
         try expect(expired.connectAgain?.words?.isEmpty == false, "Connect again's words")
+        try expect(expired.connectAgain?.grant.isEmpty == false, "the connection to sign in again")
+        try expect(expired.connectAgain?.usable == true, "drawn, as the iPad's usable")
     },
     Test("the consent's words come in the person's language, as sent") {
         let french = try cases("ai-consent.json").first { $0.name.contains("French") }

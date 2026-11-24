@@ -31,7 +31,7 @@ sign-in pass on the test account comes before any release. The contract is kiff/
 1. **The welcome, with one tick** (`OnboardingConsent`, `ConsentTick`): "I agree to KIFF's Terms of
    Service and the tafs Terms", each name a link to its page; privacy as two links below, never
    ticked; and the age line for this Mac's region (`Onboarding.ageLine`, from `strings/ages.json`,
-   legal-i18n's table at the pin). The box is its own control: a link opens its page and never
+   the shared table at the pin). The box is its own control: a link opens its page and never
    ticks it. The Terms version in force is read as the welcome shows (`GET /v1/auth/app/terms`), so
    the one sent is the one the person saw.
 2. **Continue waits on the tick**, then opens KIFF's `/oauth/authorize` in the system's own sign-in
@@ -39,7 +39,9 @@ sign-in pass on the test account comes before any release. The contract is kiff/
    (`prefersEphemeralWebBrowserSession`), so no earlier sign-in or cookie comes in. PKCE S256 with
    a 43-character verifier and a fresh `state` (`AppSignIn`). The way back is
    `dev.kiff.tafs:/oauth` exactly, with this attempt's `state` once; the sheet catches it itself,
-   so **nothing is registered with macOS** and no other app can be handed the code. The code goes to
+   so **nothing is registered with macOS** and no other app can be handed the code. The sheet opens
+   only `https://api.kiff.dev` here; the same sheet, made for tafs cloud's host alone, runs
+   WhatsApp's door signup (docs/taf.md, Add a door). The code goes to
    `POST /v1/auth/app/token` with its verifier, the ticked version, and this Mac's device fields
    exactly as `/v1/auth/device/start` sends them (`KIFFClient.device`): the same session as the
    device flow's, then the same celebration.

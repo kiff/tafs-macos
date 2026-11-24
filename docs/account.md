@@ -179,7 +179,7 @@ Ported from the iPad's `PeopleViews.swift` (`PeopleGroupsView`) and `KIFFClient`
   **Delete** (asked first, in the iPad's words); each person's menu with **Make the manager** or **Make a member**, and
   **Remove from {group}**. KIFF decides who may make each; a refusal says why.
 - **Each change is confirmed with Touch ID, then signed by the device key** (`PeopleModel.change`, `PeopleChange`), as
-  the owner's rule for ending access (docs/approvals.md › Ending access with Touch ID; the PM's (a), 23 Nov): the
+  the owner's rule for ending access (docs/approvals.md › Ending access with Touch ID): the
   ending key made at sign-in signs the iPad's `tafs.people.v1|{tenant}|{the change in words}`, asked with those words,
   never the password. Then KIFF's request (`POST /v1/groups` with `{"name"}`, `PATCH` and `DELETE /v1/groups/{id}`,
   `PUT /v1/groups/{id}/members/{subject}` with `{"role"}`, `DELETE` that), signed by the device key, which KIFF takes
