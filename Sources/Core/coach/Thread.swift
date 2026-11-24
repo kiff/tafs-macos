@@ -19,9 +19,46 @@ enum Thread {
         var session: String? = nil
         /// The files sent with it, by name, as the iPad's `ChatMessage.attachments`.
         var attachments: [AttachmentRef] = []
+        /// On a job run's report: where its result went, in tafs cloud's words ("Sent to Google Sheets · Refunds 2026"),
+        /// as the iPad's `delivered`. Drawn as written, above the taf's words; none where tafs cloud sends none or a blank.
+        var delivered: String? = nil
+        /// On a run's last message: what the run did, counted from the record, in tafs cloud's words ("From the record:
+        /// 5 done · 1 refused"), as the iPad's `counted`. Drawn as written, under the taf's words. This app counts nothing.
+        var counted: String? = nil
+        /// A connection its work asked for that the connection server refused, as the iPad's `refused`: tafs cloud's
+        /// lines, drawn under the taf's words, never folded.
+        var refused: Refused? = nil
 
         var fromPerson: Bool { from == "owner" }
         var isNote: Bool { kind == "kickoff" }
+
+        /// tafs cloud's lines around a taf's words, as the iPad's `runLines`: where the run's result went above, what
+        /// the run did under. The person's message and a run's kickoff have none.
+        var runLines: (above: String?, under: String?) {
+            guard from == "taf", !isNote else { return (nil, nil) }
+            return (delivered, counted)
+        }
+
+        /// The refused connection drawn under a taf's words, as the iPad's `refusedLines`: none on the person's message
+        /// or a run's kickoff.
+        var refusedLines: Refused? { from == "taf" && !isNote ? refused : nil }
+
+        /// A refused connection's lines, each tafs cloud's words, as the iPad's `ChatMessage.Refused`: the step's
+        /// ("Coach couldn't connect Shippo yet"), the server's reason, and what to do next.
+        struct Refused: Equatable {
+            let words: String
+            let why: String?
+            let next: String
+            /// Its lines, in order, the blank ones left out.
+            var lines: [String] { [words, why ?? "", next].compactMap(Message.line) }
+        }
+
+        /// One of tafs cloud's lines as the app draws it, as the iPad's `ChatMessage.line`: as written, without the
+        /// space around it; none for a blank one.
+        static func line(_ words: String?) -> String? {
+            guard let trimmed = words?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+            return trimmed
+        }
     }
 
     /// A run's work, on its first message: the time from its start to its last words, and the
@@ -283,7 +320,8 @@ enum Thread {
         /// A new conversation, before its first message: nothing to read yet.
         static let empty = Page(items: [], working: false)
         enum ItemKeys: String, CodingKey { case type, message, card, held }
-        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments }
+        enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments, delivered, counted, refused }
+        enum RefusedKeys: String, CodingKey { case words, why, next }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
         /// under `component`, what tafs cloud keeps about it beside it.
         enum CardKeys: String, CodingKey { case key, session, answer, component, at }
@@ -332,11 +370,22 @@ enum Thread {
                         }
                         work = Work(ms: ms, steps: steps)
                     }
+                    // A refused connection, as the iPad's `Refused`: kept only when some line of it says something.
+                    var refused: Message.Refused?
+                    if let r = try? m.nestedContainer(keyedBy: RefusedKeys.self, forKey: .refused) {
+                        let read = Message.Refused(words: ((try? r.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? "",
+                                                   why: Message.line((try? r.decodeIfPresent(String.self, forKey: .why)) ?? nil),
+                                                   next: ((try? r.decodeIfPresent(String.self, forKey: .next)) ?? nil) ?? "")
+                        refused = read.lines.isEmpty ? nil : read
+                    }
                     items.append(.message(Message(id: (try? m.decodeIfPresent(String.self, forKey: .id)) ?? nil, at: at, from: from,
                                                   kind: ((try? m.decodeIfPresent(String.self, forKey: .kind)) ?? nil) ?? "message", text: text, work: work,
                                                   session: (try? m.decodeIfPresent(String.self, forKey: .session)) ?? nil,
                                                   // As the iPad's: the files read whole, or none.
-                                                  attachments: ((try? m.decodeIfPresent([AttachmentRef].self, forKey: .attachments)) ?? nil) ?? []),
+                                                  attachments: ((try? m.decodeIfPresent([AttachmentRef].self, forKey: .attachments)) ?? nil) ?? [],
+                                                  delivered: Message.line((try? m.decodeIfPresent(String.self, forKey: .delivered)) ?? nil),
+                                                  counted: Message.line((try? m.decodeIfPresent(String.self, forKey: .counted)) ?? nil),
+                                                  refused: refused),
                                           position: position))
                 case "card":
                     guard let card = try? item.nestedContainer(keyedBy: CardKeys.self, forKey: .card),

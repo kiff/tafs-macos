@@ -482,7 +482,8 @@ chat and a taf's alike:
 - **The paperclip**, in the box's foot, offers Choose photos and Choose file, each an open panel
   for as many as the message has room for (5 at most, `FilePrep.perMessage`). With five, it's
   off, and says so. A new conversation that improves a taf takes none: tafs cloud writes its
-  first message (`filesTarget`).
+  first message (`filesTarget`). Nor does a version's trial chat, as the iPad's
+  (`trialChats[tafID] == nil`): its paperclip isn't offered.
 - **Each file is made ready first:** the kinds tafs takes (photos, PDF, text, CSV, Markdown,
   Word, Excel) under their limits (10 MB a photo, 25 MB a PDF, 2 MB the rest). Every image is
   made a JPEG, its long edge at most 2576 px, drawn again on white so it carries no metadata.
