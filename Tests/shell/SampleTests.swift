@@ -33,7 +33,8 @@ let shellSampleTests: [Test] = [
         try expectEqual(me.approvalMode, "view")
         try expectEqual(me.account, "Sample data")
         let devices = try await account.devices()
-        try expectEqual(devices, [])
+        try expectEqual(devices.map(\.name), ["tafs on Mac", "tafs on iPhone", "tafs on Mac"])
+        try expectEqual(devices.map(\.thisDevice), [true, false, false])
         let unproven = try await account.didThisHappen()
         try expectEqual(unproven, [])
     }),
@@ -60,7 +61,7 @@ let shellSampleTests: [Test] = [
         let record = try await cloud.record()
         try expectEqual(record.entries.count, 10)
         try expectEqual(record.entries.filter { $0.kind == "held" }.count, 3)
-        try expectEqual(record.entries.first?.taf.name, "Support replies")
+        try expectEqual(record.entries.last?.taf.name, "Support replies")
     }),
     Test("a sample taf's page reads its chat, its Setup, its Activity, its runs, notes and work through the page's own decoders", awaiting: {
         let (_, cloud, _) = clients()
@@ -88,5 +89,39 @@ let shellSampleTests: [Test] = [
         }
         let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
         try expect(window.contains("OverviewModel(cloud: cloud, remembered: inSample ? nil : .standard)"), "the sample's list is never kept")
+        // Nothing alerts in the sample, and its Alerts keep nothing: macOS is never asked.
+        try expect(window.contains("AlertsModel(account: account.session.tenant, inSample: inSample)"), "Alerts know the sample")
+        try expect(window.contains("guard !inSample else { return }"), "no alert for the sample's held calls")
+        let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
+        try expect(alerts.contains("why = Sample.notInSample(words)") && !alerts.contains("\n        prefs.save(to: defaults, account: account)"), "Turn on refused, nothing saved")
     }),
+    Test("Play the next sample actions plays each taf's next call, as the iPad's playNextDemoActions: new held calls, a refusal in the Record", awaiting: {
+        let (account, cloud, transport) = clients()
+        try expectEqual(transport.rounds, 2)
+        try expect(transport.playNext(), "a third round")
+        let held = try await account.heldCalls()
+        // Access's elevated access and the leads' discount are held now too; the first three still wait.
+        try expectEqual(held.count, 5)
+        let record = try await cloud.record()
+        try expectEqual(record.entries.count, 15)
+        try expect(record.entries.contains { $0.kind == "refused" && $0.title == "DROP TABLE sessions_old" }, "the Card refused dropping a table")
+        try expect(transport.playNext(), "a fourth round")
+        try expect(!transport.playNext(), "every script played")
+        let home = try await cloud.home()
+        let allHeld = try await account.heldCalls()
+        try expectEqual(home.tafs.map(\.waiting).reduce(0, +), allHeld.count)
+    }),
+    Test("every key the sample names is in English, so a sample line never reads as its key") {
+        let words = english()
+        var keys: [String] = []
+        for taf in Sample.tafs {
+            keys += ["sample.\(taf.key).name", "sample.\(taf.key).job"] + taf.tools + taf.rules.map(\.label)
+            keys += taf.script.flatMap { call in (call.literal ? [] : [call.summary]) + [call.why] }
+        }
+        keys += ["record.decided.refused_by_card", "record.waiting_for_you", "record.done_within_card",
+                 "needs_you.nothing", "card.window.a_day", "card.window.today", "settings.mode_sample", "sign_in.with_kiff"]
+        for key in keys { try expect(words(key) != key, "\(key) is in English") }
+        // The two counts are plural lines, read by their count.
+        for key in ["home.working", "needs_you.count"] { try expect(words.count(key, 2) != key, "\(key) is in English") }
+    },
 ]

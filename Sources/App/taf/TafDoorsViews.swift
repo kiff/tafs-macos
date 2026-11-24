@@ -144,9 +144,8 @@ struct DoorScreen: View {
                isPresented: Binding(get: { confirmRemove != nil }, set: { if !$0 { confirmRemove = nil } })) {
             Button(words("door.remove"), role: .destructive) {
                 if let d = confirmRemove { Task { await doors.remove(d) } }
-                // A Slack door's planque subscription is taken back first, signed, as the iPad's
-                // `removeSlackDoor`; this Mac has no planque connection to sign it with, so
-                // `DoorsModel.remove` says so and leaves the door.
+                // A Slack door's planque subscription is stopped first, signed by the device key, as the iPad's
+                // `removeSlackDoor` (`DoorsModel.remove`); if it isn't, the door stays and says why.
             }
             Button(words("common.cancel"), role: .cancel) {}
         } message: {

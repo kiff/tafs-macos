@@ -187,11 +187,16 @@ final class PlanqueClient {
         case chromeShots(operation: String)
         /// One step's picture: a read.
         case chromeShot(step: String)
+        /// Stops an app-event subscription (a Slack door's channel), as the iPad's `unsubscribe`: planque turns its
+        /// delivery off, then removes it upstream. It takes authority away, so the device key signs it (planque's safe
+        /// routes, docs/api.md).
+        case deleteTrigger(grant: String, trigger: String)
 
         var method: String {
             switch self {
             case .chromes, .chromeShots, .chromeShot: return "GET"
             case .unpairChrome: return "DELETE"
+            case .deleteTrigger: return "DELETE"
             }
         }
 
@@ -202,6 +207,7 @@ final class PlanqueClient {
             case .unpairChrome(let id): return "chromes/\(CloudClient.escaped(id))"
             case .chromeShots(let operation): return "chromes/screenshots?op=\(ChromeShots.queryEscaped(operation))"
             case .chromeShot(let step): return "chromes/screenshots/\(CloudClient.escaped(step))"
+            case .deleteTrigger(let grant, let trigger): return "grants/\(CloudClient.escaped(grant))/triggers/\(CloudClient.escaped(trigger))"
             }
         }
     }

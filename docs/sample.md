@@ -26,7 +26,15 @@ iPad's own, from the shared strings (`sample.*`).
 - **A taf's page:** its chat (its hello, and for Support replies the iPad's sample question), its
   Setup (its job as its workflow), and its runs, notes and work, none yet.
 - **Account:** Mode reads Sample data (`settings.mode_sample`). The account approves nothing
-  (`view`), and its devices, passkeys, groups and members are empty.
+  (`view`). **Devices** lists the iPad's three (`SampleScreens.devices`): this Mac, an iPhone used
+  three hours ago, and a Mac yesterday, each "tafs on …". Its passkeys, groups and members are
+  empty.
+- **Play the next sample actions** (`sample.play_next`), at the Overview's foot with "Sample
+  data. A new taf starts in Coach." (`home.sample_foot`), as the iPad's Home: each taf plays its
+  script's next call (`playNextDemoActions()`), up to the last, and every list is read again.
+  The scripts are the iPad's whole `TafTemplates`. A call its Card holds for you joins Needs you,
+  and one its Card refuses outright (`never`) is in the Record as "refused by its Card", never
+  sent: the third round has Deploys' `DROP TABLE sessions_old`.
 
 ## What it never does
 
@@ -35,12 +43,13 @@ iPad's own, from the shared strings (`sample.*`).
   No sample answer names a logo, so the app's one logo reader (`AppLogoImages.app`, tafs cloud's
   `/v1/logos/`) is never asked; a test pins it.
 - **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
+- **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
+  Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
 - **It writes and approves nothing.** Every write is refused with the line that it takes KIFF
   (`sign_in.with_kiff`), and nothing is done. A shared line of its own is asked of tafs's strings.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.
 
 ## Not yet
 
-The demo's later rounds (the iPad's pull to play the next), the sample chat's live replies
-(`sampleReply`), the sample's devices and alerts, and keeping it between launches (the iPad's
-`SampleStore`).
+The sample chat's live replies (`sampleReply`), the iPad's two sample alerts in Account › Alerts,
+and keeping it between launches (the iPad's `SampleStore`).

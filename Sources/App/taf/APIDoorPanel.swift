@@ -14,6 +14,7 @@ struct APIDoorPanel: View {
     let remove: () -> Void
     @State private var revoking: TafDoors.Door.Key?
     @State private var showingInstructions = false
+    @State private var naming = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -62,6 +63,11 @@ struct APIDoorPanel: View {
                             .accessibilityIdentifier("door.api.revoke." + key.id)
                     }
                 }
+                // New key, on the security key, as the iPad's: at most two live keys.
+                Button(words("door.api.new_key")) { naming = true }
+                    .buttonStyle(OutlineButtonStyle())
+                    .disabled(doors.busy || door.keys.count >= 2)
+                    .accessibilityIdentifier("door.api.new_key")
                 Text(words("door.api.two_keys")).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
                 Text(words("door.api.boundary", ["taf": taf.name])).font(.system(size: 13)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
@@ -84,6 +90,13 @@ struct APIDoorPanel: View {
                 .buttonStyle(.plain)
                 .disabled(doors.busy)
             }
+        }
+        .sheet(isPresented: $naming) {
+            NewKeySheet(door: door, doors: doors) { naming = false }.environment(\.words, words)
+        }
+        // The key, this once: closing it forgets the key.
+        .sheet(item: Binding(get: { doors.issued }, set: { if $0 == nil { doors.keyShown() } })) { key in
+            IssuedKeySheet(key: key, door: door) { doors.keyShown() }.environment(\.words, words)
         }
         .sheet(isPresented: $showingInstructions) {
             APIInstructionsView(endpoint: APIInstructions.endpoint(door.address), taf: taf) { showingInstructions = false }

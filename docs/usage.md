@@ -114,12 +114,32 @@ amber with a warning, and the warning takes the same colour.
 - Every line is drawn as sent (`Text(verbatim:)`).
 - **Each half is read on its own.** One that can't be read says so and leaves the other.
 
+## Raise the limit (`UsageModel.raiseLimit`)
+
+As the iPad's `raiseLimit` (`AppModel.swift:4613-4650`): for someone who manages billing, where
+tafs cloud's balance offers it (`balance.raise`: its words, "Raise the spend limit to €2,000",
+and the limit now, `from_cents`). It's on the balance's panel, and on a member's raise request
+in place of buying, since one raise answers every open one.
+
+- **The owner confirms first, every time**: Touch ID or the Mac's password, never cached, the
+  prompt naming the new limit. Closed, nothing is built or sent.
+- **Then KIFF's `PUT /v1/me/usage/limit`** with `{"from_cents":…,"raise":true}`, **signed by the
+  device key**. KIFF lists it in `PhoneSignedRules`, not `PhoneApprovalRules`, and its handler
+  takes only someone who manages billing, so no security key is asked for (kiff/cloud main).
+- **After it goes,** the balance is read again. Until a read works, only Read it again is offered
+  (`usage.raised_unread`), so a second click never raises it again for a balance the screen no
+  longer shows.
+- **KIFF's refusals:** `limit_changed` (the limit moved meanwhile) reads the balance again and
+  says so; `limit_ceiling` says to contact KIFF; anything else is "The limit wasn't raised", with
+  why in the app's words.
+- The old limit's own line (`usage.raise_limit.from`) comes once tafs's strings that carry it are
+  in the pin.
+
 ## Not on the Mac
 
-Buying credits or a plan, restoring purchases and raising the spend limit. The phones do
-these through their stores; the Mac has no store, so it says where to buy (above). So an admin answers a request here only by
-declining it: the iPad's Raise the limit (signed with the approval key) and Approve (buying the
-pack) aren't on the Mac. A taf's runs behind its line are not built.
+Buying credits or a plan and restoring purchases. The phones do these through their stores; the
+Mac has no store, so it says where to buy (above). So Approve on a member's pack request (buying
+the pack) isn't on the Mac. A taf's runs behind its line are not built.
 
 ## Tests
 

@@ -23,6 +23,10 @@ enum Sample {
         let action: String
         let summary: String
         let why: String
+        /// The summary is shown as it is, not a key: the iPad's `DROP TABLE sessions_old`.
+        var literal = false
+
+        func title(_ words: Words) -> String { literal ? summary : words(summary) }
     }
 
     struct Taf {
@@ -42,6 +46,8 @@ enum Sample {
         ], script: [
             Call(action: "reply_ticket", summary: "sample.support.reply_7781", why: "sample.support.reply_7781_why"),
             Call(action: "promise", summary: "sample.support.promise_7802", why: "sample.support.promise_7802_why"),
+            Call(action: "reply_ticket", summary: "sample.support.reply_7790", why: "sample.support.reply_7790_why"),
+            Call(action: "share_customer_data", summary: "sample.support.share_history", why: "sample.support.share_history_why"),
         ]),
         Taf(key: "parcels", tools: ["sample.tool.store", "sample.tool.email"], rules: [
             Rule(action: "delay_message", label: "sample.parcels.rule.delay_messages", count: 100),
@@ -51,6 +57,8 @@ enum Sample {
         ], script: [
             Call(action: "delay_message", summary: "sample.parcels.tell_5120", why: "sample.parcels.tell_5120_why"),
             Call(action: "reship", summary: "sample.parcels.reship_5098", why: "sample.parcels.reship_5098_why"),
+            Call(action: "delay_message", summary: "sample.parcels.tell_5134", why: "sample.parcels.tell_5134_why"),
+            Call(action: "change_address", summary: "sample.parcels.change_address", why: "sample.parcels.change_address_why"),
         ]),
         Taf(key: "access", tools: ["sample.tool.sign_in", "sample.tool.code"], rules: [
             Rule(action: "grant_role", label: "sample.access.rule.approved_roles", count: 40),
@@ -61,6 +69,8 @@ enum Sample {
         ], script: [
             Call(action: "grant_role", summary: "sample.access.sales_role", why: "sample.access.sales_role_why"),
             Call(action: "deactivate", summary: "sample.access.deactivate_tom", why: "sample.access.deactivate_tom_why"),
+            Call(action: "elevate", summary: "sample.access.database_lee", why: "sample.access.database_lee_why"),
+            Call(action: "grant_admin", summary: "sample.access.admin_lee", why: "sample.access.admin_lee_why"),
         ]),
         Taf(key: "deploys", tools: ["sample.tool.code", "sample.tool.hosting", "sample.tool.network"], rules: [
             Rule(action: "deploy", label: "sample.deploys.rule.deploys", count: 10),
@@ -70,6 +80,7 @@ enum Sample {
         ], script: [
             Call(action: "deploy", summary: "sample.deploys.deploy_api", why: "sample.deploys.deploy_api_why"),
             Call(action: "migration", summary: "sample.deploys.migration", why: "sample.deploys.migration_why"),
+            Call(action: "destroy_data", summary: "DROP TABLE sessions_old", why: "sample.deploys.drop_table_why", literal: true),
         ]),
         Taf(key: "leads", tools: ["sample.tool.email"], rules: [
             Rule(action: "reply_lead", label: "sample.leads.rule.replies", count: 50),
@@ -77,6 +88,7 @@ enum Sample {
         ], script: [
             Call(action: "reply_lead", summary: "sample.leads.reply_kaya", why: "sample.leads.reply_kaya_why"),
             Call(action: "reply_lead", summary: "sample.leads.confirm_nord", why: "sample.leads.confirm_nord_why"),
+            Call(action: "offer_discount", summary: "sample.leads.discount_lumen", why: "sample.leads.discount_lumen_why"),
         ]),
     ]
 
@@ -90,13 +102,28 @@ enum Sample {
 
     /// The calls the first two rounds made, as `loadSample`'s two `playNextDemoActions()`: a call its Card holds for
     /// the owner (`ask`) waits in Needs you; the rest were done within the Card.
-    static func held() -> [(Taf, Call)] {
-        tafs.flatMap { taf in taf.script.prefix(2).filter { call in rule(taf, call.action)?.ask == true }.map { (taf, $0) } }
+    static func held(rounds: Int = firstRounds) -> [(Taf, Call)] {
+        made(rounds).filter { taf, call in rule(taf, call.action)?.ask == true }
     }
 
-    static func done() -> [(Taf, Call)] {
-        tafs.flatMap { taf in taf.script.prefix(2).filter { call in rule(taf, call.action)?.ask != true }.map { (taf, $0) } }
+    static func done(rounds: Int = firstRounds) -> [(Taf, Call)] {
+        made(rounds).filter { taf, call in rule(taf, call.action)?.ask != true && rule(taf, call.action)?.never != true }
     }
+
+    /// The calls a Card refused outright (`never`), as the iPad's: refused, never sent, and in the Record.
+    static func refused(rounds: Int = firstRounds) -> [(Taf, Call)] {
+        made(rounds).filter { taf, call in rule(taf, call.action)?.never == true }
+    }
+
+    /// Every call the demo has made after `rounds` rounds, round by round, as the iPad's `playNextDemoActions()`: each
+    /// working taf plays its script's next call.
+    static func made(_ rounds: Int) -> [(Taf, Call)] {
+        (0..<max(0, rounds)).flatMap { round in tafs.compactMap { taf in round < taf.script.count ? (taf, taf.script[round]) : nil } }
+    }
+
+    /// The rounds `loadSample` plays at once; "Play the next sample actions" plays one more, up to the longest script.
+    static let firstRounds = 2
+    static var lastRound: Int { tafs.map(\.script.count).max() ?? firstRounds }
 
     static func rule(_ taf: Taf, _ action: String) -> Rule? { taf.rules.first { $0.action == action } }
 
@@ -132,8 +159,8 @@ enum Sample {
     }
 
     /// Home (`GET /v1/home`): the five tafs at work, the headline, and what waits.
-    static func home(words: Words, now: Date) -> Data {
-        let waiting = held()
+    static func home(words: Words, now: Date, rounds: Int = firstRounds) -> Data {
+        let waiting = held(rounds: rounds)
         let list: [[String: Any]] = tafs.enumerated().map { index, taf in
             let name = words("sample.\(taf.key).name")
             return ["id": tafID(taf), "kiff_agent": agent(taf), "name": name, "job": words("sample.\(taf.key).job"),
@@ -147,11 +174,11 @@ enum Sample {
 
     /// KIFF's held calls (`GET /v1/me/card-exceptions?status=held`): each held call the sample's Cards hold, for its
     /// owner's answer, expiring in an hour.
-    static func heldCalls(words: Words, now: Date) -> Data {
-        let calls: [[String: Any]] = held().enumerated().map { index, pair in
+    static func heldCalls(words: Words, now: Date, rounds: Int = firstRounds) -> Data {
+        let calls: [[String: Any]] = held(rounds: rounds).enumerated().map { index, pair in
             let (taf, call) = pair
-            return ["id": "sample-held-\(taf.key)", "subject": agent(taf), "action": call.action, "title": words(call.summary),
-                    "reason_text": words(rule(taf, call.action).map { $0.label } ?? call.summary), "taf_about": words(call.summary),
+            return ["id": "sample-held-\(taf.key)-\(call.action)", "subject": agent(taf), "action": call.action, "title": call.title(words),
+                    "reason_text": words(rule(taf, call.action).map { $0.label } ?? call.summary), "taf_about": call.title(words),
                     "taf_reason": words(call.why), "created_at": time(now.addingTimeInterval(Double(-600 * (index + 1)))),
                     "expires_at": time(now.addingTimeInterval(3600)), "accounting_version": 1, "next_steps": nextSteps(taf, words: words)]
         }
@@ -162,6 +189,17 @@ enum Sample {
         let key = "sample.\(taf.key).next_step"
         let line = words(key)
         return line == key ? [] : [line]
+    }
+
+    /// Devices (`GET /v1/me/devices`), as the iPad's `SampleScreens.devices`: this Mac, an iPhone used three hours ago,
+    /// and a Mac yesterday, each named as tafs names a device.
+    static func devices(words: Words, now: Date) -> Data {
+        let name = { (device: String) in words("settings.devices.this_device_name", ["device": device]) }
+        return json(["devices": [
+            ["id": "dev_this", "display_name": name(words("device.mac")), "platform": "macos", "last_used_at": time(now), "this_device": true],
+            ["id": "dev_phone", "display_name": name("iPhone"), "platform": "ios", "last_used_at": time(now.addingTimeInterval(-3 * 3600))],
+            ["id": "dev_mac", "display_name": name(words("device.mac")), "platform": "macos", "last_used_at": time(now.addingTimeInterval(-26 * 3600))],
+        ]])
     }
 
     /// Who is signed in (`GET /v1/me`): the sample's account, which approves nothing.
@@ -199,19 +237,21 @@ enum Sample {
 
     /// The Record (`GET /v1/record`): what the first two rounds did, newest first. Each call done within its Card,
     /// and each one held, waiting for the owner.
-    static func record(words: Words, now: Date) -> Data {
+    static func record(words: Words, now: Date, rounds: Int = firstRounds) -> Data {
         let clock = DateFormatter()
         clock.locale = Locale(identifier: words.language)
         clock.timeStyle = .short
         clock.dateStyle = .none
-        let made: [(Taf, Call, Bool)] = tafs.flatMap { taf in
-            taf.script.prefix(2).map { call in (taf, call, rule(taf, call.action)?.ask == true) }
-        }
+        // Newest first: the last round's calls at the top.
+        let made: [(Taf, Call)] = Self.made(rounds).reversed()
         let entries: [[String: Any]] = made.enumerated().map { index, item in
-            let (taf, call, waits) = item
+            let (taf, call) = item
+            let rule = Self.rule(taf, call.action)
+            let kind = rule?.never == true ? "refused" : rule?.ask == true ? "held" : "done"
+            let detail = kind == "refused" ? "record.decided.refused_by_card" : kind == "held" ? "record.waiting_for_you" : "record.done_within_card"
             let at = now.addingTimeInterval(Double(-300 * (index + 1)))
-            return ["id": "sample-record-\(taf.key)-\(call.action)", "at": time(at), "kind": waits ? "held" : "done",
-                    "title": words(call.summary), "detail": words(waits ? "record.waiting_for_you" : "record.done_within_card"),
+            return ["id": "sample-record-\(taf.key)-\(call.action)", "at": time(at), "kind": kind,
+                    "title": call.title(words), "detail": words(detail),
                     "time": clock.string(from: at), "call": ["proposal_id": "sample-\(taf.key)-\(call.action)"],
                     "taf": ["id": tafID(taf), "name": words("sample.\(taf.key).name")]]
         }
@@ -229,7 +269,7 @@ enum Sample {
 
     /// A taf's own reads: its chat (its hello, and for Support replies the iPad's sample question), its Setup (its job
     /// as its workflow), its Activity (what it did), and everything else it has: none yet.
-    static func tafAnswer(_ taf: Taf, _ rest: String, words: Words, now: Date) -> (Int, Data)? {
+    static func tafAnswer(_ taf: Taf, _ rest: String, words: Words, now: Date, rounds: Int = firstRounds) -> (Int, Data)? {
         let name = words("sample.\(taf.key).name")
         switch rest {
         case "/conversation":
@@ -243,7 +283,7 @@ enum Sample {
         case "/setup":
             return (200, json(["connections": [], "workflow": ["title": words("sample.\(taf.key).name"), "summary": words("sample.\(taf.key).job"), "steps": []]]))
         case "/activity":
-            let page = try? JSONSerialization.jsonObject(with: record(words: words, now: now)) as? [String: Any]
+            let page = try? JSONSerialization.jsonObject(with: record(words: words, now: now, rounds: rounds)) as? [String: Any]
             let mine = ((page?["entries"] as? [[String: Any]]) ?? []).filter { (($0["taf"] as? [String: Any])?["id"] as? String) == tafID(taf) }
             return (200, json(["entries": mine]))
         case "/runs": return (200, json(["runs": []]))
@@ -255,23 +295,23 @@ enum Sample {
 
     /// The answer the sample gives a request: its reads from the sample, every other read empty, and a write or an
     /// approval refused, with nothing done.
-    static func answer(method: String, path: String, words: Words, now: Date) -> (Int, Data) {
+    static func answer(method: String, path: String, words: Words, now: Date, rounds: Int = firstRounds) -> (Int, Data) {
         let bare = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
         guard method == "GET" else {
             return (403, json(["error": "sample", "words": notInSample(words)]))
         }
-        if let (taf, rest) = taf(in: bare), let answer = tafAnswer(taf, rest, words: words, now: now) { return answer }
+        if let (taf, rest) = taf(in: bare), let answer = tafAnswer(taf, rest, words: words, now: now, rounds: rounds) { return answer }
         switch bare {
-        case "/v1/home": return (200, home(words: words, now: now))
+        case "/v1/home": return (200, home(words: words, now: now, rounds: rounds))
         case "/v1/me": return (200, me(words: words))
-        case "/v1/me/card-exceptions": return (200, heldCalls(words: words, now: now))
+        case "/v1/me/card-exceptions": return (200, heldCalls(words: words, now: now, rounds: rounds))
         case "/v1/me/did-this-happen": return (200, json(["calls": []]))
-        case "/v1/me/devices": return (200, json(["devices": []]))
+        case "/v1/me/devices": return (200, devices(words: words, now: now))
         case "/v1/me/passkeys": return (200, json(["passkeys": []]))
         case "/v1/groups": return (200, json(["groups": []]))
         case "/v1/usage/balance": return (200, balance(words: words))
         case "/v1/usage/credits": return (200, credits(words: words, previous: path.contains("period=previous")))
-        case "/v1/record": return (200, record(words: words, now: now))
+        case "/v1/record": return (200, record(words: words, now: now, rounds: rounds))
         case "/v1/tenant/members": return (200, json(["members": []]))
         default: return (404, json(["error": "not_found", "words": notInSample(words)]))
         }
@@ -286,14 +326,32 @@ enum Sample {
 final class SampleTransport: Transport, @unchecked Sendable {
     let words: Words
     let now: () -> Date
+    private let lock = NSLock()
+    private var played = Sample.firstRounds
 
     init(words: Words, now: @escaping () -> Date = Date.init) {
         self.words = words
         self.now = now
     }
 
+    /// The rounds played so far.
+    var rounds: Int {
+        lock.lock(); defer { lock.unlock() }
+        return played
+    }
+
+    /// "Play the next sample actions", as the iPad's `playNextDemoActions()`: each taf plays its script's next call,
+    /// up to the last. False when every script is played.
+    @discardableResult
+    func playNext() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard played < Sample.lastRound else { return false }
+        played += 1
+        return true
+    }
+
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
-        let (status, body) = Sample.answer(method: request.method, path: request.path, words: words, now: now())
+        let (status, body) = Sample.answer(method: request.method, path: request.path, words: words, now: now(), rounds: rounds)
         return (status, body)
     }
 }
