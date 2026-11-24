@@ -130,7 +130,7 @@ struct AccountView: View {
     /// This Mac's device key is a software key (no Secure Enclave): adding it with the phone
     /// still leaves it view-only, so it isn't offered, and the line says where approvals go.
     var softwareKey = false
-    /// How this Mac's approvals are signed: How tafs works says where (`howItWorksKey`).
+    /// How this Mac's approvals are signed: Your account's sign-in says where (`howItWorksKey`).
     var route: ApprovalRoute = .phoneOrPasskey
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: Coach's panel is theirs.
     var mayUseCoach = false
@@ -181,7 +181,7 @@ struct AccountView: View {
             }
             .padding(.horizontal, Look.inset)
             .padding(.bottom, Look.inset)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         .task {
@@ -212,6 +212,9 @@ struct AccountView: View {
                 row(words("settings.signed_in_as"), value: email)
             }
         }
+        // Where this Mac's approvals are signed, under the sign-in it's about: an explanation sits beside its action, and
+        // How tafs works stays one entry, under Legal (kiff/tafs `docs/parity.md`, "One layout on every app").
+        AccountRow.footer(words(route.howItWorksKey, ["device": words("device.mac")]))
         if model.me?.viewOnly == true { viewOnly }
         group(words("settings.people_apps")) {
             // People & groups first, as the iPad's list has it.
@@ -328,12 +331,8 @@ struct AccountView: View {
     var onboarding = Onboarding.on
     @State private var showingHowItWorks = false
 
-    /// How tafs works, Legal, About and Sign out, as the iPad's list ends.
+    /// Legal (with How tafs works), About and Sign out, as the iPad's list ends.
     @ViewBuilder private var aboutGroups: some View {
-        group(words("sign_in.how_works")) {
-            Text(words(route.howItWorksKey, ["device": words("device.mac")]))
-                .font(.system(size: 14)).foregroundColor(Theme.soft).padding(.vertical, 12).fixedSize(horizontal: false, vertical: true)
-        }
         group(words("settings.legal")) {
             // The new onboarding's How tafs works: the three cards again, and KIFF's and tafs's pages (`HowTafsWorksView`).
             if onboarding {

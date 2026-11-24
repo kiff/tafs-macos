@@ -186,8 +186,7 @@ struct PeopleView: View {
                 }
             }
             .padding(28)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         .sheet(item: $naming) { naming in

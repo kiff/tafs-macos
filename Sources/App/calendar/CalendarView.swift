@@ -139,6 +139,7 @@ struct CalendarView: View {
             }
             .padding(.horizontal, Look.inset - 8)
             .padding(.bottom, Look.inset)
+            .pageColumn(.calendar)
         }
         .background(Theme.background)
         .task { await model.load() }

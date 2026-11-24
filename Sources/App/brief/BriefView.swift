@@ -64,8 +64,7 @@ struct BriefScreen<NeedsYouList: View>: View {
                 }
             }
             .padding(.horizontal, Look.inset).padding(.top, 56).padding(.bottom, Look.inset)
-            .frame(maxWidth: 1100, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.brief)
         }
         .background(Theme.background)
     }

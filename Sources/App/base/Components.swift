@@ -8,6 +8,29 @@ enum Look {
     static let panelRadius: CGFloat = 18
 }
 
+/// The most a page's column takes on a wide window, the same on every app (kiff/tafs `docs/parity.md`, "One layout on every
+/// app"): the iPad's and the Mac's caps. Every page sets its width only through `pageColumn`, never a number of its own.
+enum PageColumn: CGFloat {
+    /// Account and its pages, Devices, People, Alerts, Chrome, Needs you, Connect apps, a connection, Plan & usage.
+    case reading = 720
+    /// Overview and an app's connections.
+    case list = 980
+    /// The recipe gallery.
+    case gallery = 640
+    /// The Brief.
+    case brief = 1100
+    /// Calendar.
+    case calendar = 1180
+}
+
+extension View {
+    /// The page's column: at most `column`'s width, centred in the window, its own rows aligned left. A window narrower than
+    /// the cap is unchanged.
+    func pageColumn(_ column: PageColumn) -> some View {
+        frame(maxWidth: column.rawValue, alignment: .leading).frame(maxWidth: .infinity)
+    }
+}
+
 /// A screen's large title, with its one line under it when it has one, as the iPad's: rounded
 /// bold at 30 (the Overview), 34 for Record and Needs you; a plain bold large title for the
 /// iPad's navigation titles (Account, Connect apps, Devices). The line is `dim`.

@@ -75,8 +75,7 @@ struct ChromesView: View {
                 Text(words("chrome.profile_note")).font(.system(size: 12)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, Look.inset).padding(.bottom, Look.inset)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         .task { await model.load() }

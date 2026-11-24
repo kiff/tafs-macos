@@ -46,8 +46,7 @@ struct RecipeGallerySheet: View {
                     HomeRecipesView(recipes: recipes, ownWords: nil, canHand: canHand, hand: { _ in }, open: { open = $0 })
                 }
                 .padding(.horizontal, 20).padding(.vertical, 16)
-                .frame(maxWidth: 640, alignment: .leading)
-                .frame(maxWidth: .infinity)
+                .pageColumn(.gallery)
             }
         }
         .frame(width: 680, height: 640)

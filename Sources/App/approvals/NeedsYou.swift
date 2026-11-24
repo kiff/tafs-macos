@@ -515,8 +515,7 @@ struct NeedsYouView: View {
                 ForEach(knocked) { knockRow($0) }
             }
             .padding(28)
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         // "Allow this from now on", over Needs you, while it's open on a call.
