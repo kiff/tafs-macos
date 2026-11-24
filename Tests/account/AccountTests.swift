@@ -161,7 +161,7 @@ let accountClientTests: [Test] = [
         let declared = info["CFBundleLocalizations"] as? [String] ?? []
         let offered = try Words.shipped(folder: URL(fileURLWithPath: ".shared/app/strings"))
         try expectEqual(Set(declared), Set(offered))
-        try expectEqual(AppInfo.version(info), "0.1 (5)")
+        try expectEqual(AppInfo.version(info), "0.1 (6)")
         // The Dock and Finder show the app's own icon: Info.plist names it, and its 1024-point source is there.
         try expectEqual(info["CFBundleIconFile"] as? String ?? "", "tafs")
         let icon = try Data(contentsOf: URL(fileURLWithPath: "App/AppIcon.png"))
