@@ -496,6 +496,8 @@ struct SignedInView: View {
         // A version's trial: KIFF's draft read here, its confirm on the security key, going back with the device key.
         pages.account = account
         pages.confirmWithKey = approveWithKey
+        // A version installed with a new Card: the tafs read again, so its page shows the Card at once.
+        pages.refreshTafs = { await readTafs() }
         pages.tafName = taf.name
         pages.halt.agent = taf.kiffAgent
         pages.halt.name = taf.name

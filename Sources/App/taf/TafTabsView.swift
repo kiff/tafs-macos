@@ -15,6 +15,20 @@ final class TafPagesModel: ObservableObject {
     @Published private(set) var trialBusy = false
     /// The trial's own chat, made when a trial is open.
     @Published private(set) var trialChat: CoachModel?
+    /// Installing a version (`VersionSwitch`): the version whose install is on its way, so a second click sends nothing.
+    @Published var installing: Int?
+    /// The version whose Card KIFF refused as out of date: Draft its Card again is offered.
+    @Published var staleCard: Int?
+    /// The version a run is in the way of: Stop it and install is offered.
+    @Published var blockedInstall: Int?
+    /// A version's Card that changed between the screen and the click: shown again, to read anew.
+    @Published var changedCard: AccountClient.Draft?
+    /// tafs cloud's words when beginning a switch stopped runs that were in the way.
+    @Published var stoppedWords: String?
+    /// The owner's Touch ID or the Mac's password, before a version with no Card goes live.
+    var confirmOwner: (String) async throws -> Void = NeedsYouModel.confirmOwnerForCore
+    /// Reads the tafs again, after a version brought a Card, so its page shows the new one at once.
+    var refreshTafs: (() async -> Void)?
     /// Revokes the taf's Cards in KIFF, as the iPad's `revoke`: set by the window; nil draws no Revoke.
     var revokeCards: (([String]) async throws -> Void)?
     /// Whether this Mac's session is view-only (KIFF's `view`): Revoke isn't offered, as on the iPad.
@@ -35,9 +49,9 @@ final class TafPagesModel: ObservableObject {
     /// keeps them, with why beside them.
     @Published private(set) var versionList: [TafVersions.Version]?
     /// A switch under way, as tafs cloud keeps it: the taf doesn't run until it ends.
-    @Published private(set) var switching: TafVersions.Switching?
+    @Published var switching: TafVersions.Switching?
     /// Why the versions couldn't be read, or the switch wasn't cancelled.
-    @Published private(set) var versionError: String?
+    @Published var versionError: String?
     /// The Activity filter shown, as tafs cloud names it.
     @Published private(set) var filter = "all"
     /// tafs cloud's own query for the Activity shown, from an app in the Setup; nil for a filter.
@@ -60,7 +74,7 @@ final class TafPagesModel: ObservableObject {
     var runNotStarted: String? { runs.notStarted[taf] }
     private var following: AnyCancellable?
 
-    private let cloud: CloudClient
+    let cloud: CloudClient
     let taf: String
     /// The taf's halt, from its Setup.
     let halt: HaltModel
@@ -534,7 +548,7 @@ struct TafSetupTab: View {
         .sheet(isPresented: $startsOpen) {
             if let taf {
                 StartsWhenView(model: model.knob, taf: taf, manages: manages, timeZone: me?.timeZone, refreshed: halted,
-                               doors: doors, myEmail: myEmail, improveInCoach: improveInCoach) { startsOpen = false }
+                               doors: doors, myEmail: myEmail, improveInCoach: improveInCoach, pages: model) { startsOpen = false }
                     .environment(\.words, words)
             }
         }
