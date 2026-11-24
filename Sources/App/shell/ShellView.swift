@@ -15,6 +15,9 @@ struct ShellView: View {
     /// The person's tafs, listed under the screens; and tafs cloud's line for when there are none.
     var tafs: [Home.Taf] = []
     var noTafsLine: String?
+    /// Whether a taf was shared with this person to use, not theirs to manage
+    /// (`Access.sharedWithMe`): it's listed under Shared with you.
+    var sharedWithMe: (Home.Taf) -> Bool = { _ in false }
     /// The tafs being set up, among the person's tafs as the iPad's sidebar lists them (HomeSplitView.swift:343-357):
     /// by name, with tafs cloud's Finish setting up line, and Discard for the person who started it (`discard`).
     var settingUp: [SettingUp] = []
@@ -96,23 +99,23 @@ struct ShellView: View {
                         ForEach(held) { heldRow($0) }
                         Spacer().frame(height: 10)
                     }
-                    eyebrow(words("home.your_tafs"), color: Theme.soft)
-                    if tafs.isEmpty, let line = noTafsLine {
-                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    ForEach(tafs) { taf in
-                        // The open taf sits on the chosen row's grey, as on the iPad.
-                        Button { open(taf) } label: {
-                            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
-                                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.chosen : Color.clear))
-                                .contentShape(Rectangle())
+                    // Theirs, then the ones shared with them, as the iPad's sidebar (HomeSplitView.swift:338-368):
+                    // someone with only shared tafs sees just those.
+                    // A taf being set up is among their own, by name, as the iPad's (HomeSplitView.swift:343-357).
+                    if !ownTafs.isEmpty || !settingUp.isEmpty || sharedTafs.isEmpty {
+                        eyebrow(words("home.your_tafs"), color: Theme.soft)
+                        if tafs.isEmpty, let line = noTafsLine {
+                            Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, -10)
-                        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
+                        ForEach(ownTafs) { tafButton($0) }
+                        ForEach(settingUp) { SettingUpRow(taf: $0, discard: discard, inSidebar: true) }
                     }
-                    ForEach(settingUp) { SettingUpRow(taf: $0, discard: discard, inSidebar: true) }
+                    if !sharedTafs.isEmpty {
+                        if !ownTafs.isEmpty || !settingUp.isEmpty { Spacer().frame(height: 10) }
+                        eyebrow(words("home.shared_you"), color: Theme.soft)
+                        ForEach(sharedTafs) { tafButton($0) }
+                    }
                     jobs
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -218,6 +221,23 @@ struct ShellView: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The person's own tafs, in the list's order.
+    private var ownTafs: [Home.Taf] { tafs.filter { !sharedWithMe($0) } }
+    /// The tafs shared with this person, in the list's order.
+    private var sharedTafs: [Home.Taf] { tafs.filter(sharedWithMe) }
+
+    /// A taf's row: the open taf sits on the chosen row's grey, as on the iPad.
+    private func tafButton(_ taf: Home.Taf) -> some View {
+        Button { open(taf) } label: {
+            tafRow(taf).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 16).fill(openTaf == taf.id ? Theme.chosen : Color.clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, -10)
+        .accessibilityAddTraits(openTaf == taf.id ? .isSelected : [])
     }
 
     /// A taf in the sidebar, as the iPad's `tafRow`: its 34 avatar, its name (15 semibold), and
