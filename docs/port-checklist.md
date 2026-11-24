@@ -102,7 +102,7 @@ test.
 ## Counts
 
 Ported 34, partial 16, not started 0, not for macOS 12 8: the 58 view files at the pin
-(`cb699d4`).
+(`86fabb9`).
 
 A file counts as ported when what's left is a step the Mac can't take, each named in its row with
 the service that refuses it, or a limit of macOS 12 itself: the way Windows and Linux count. A
