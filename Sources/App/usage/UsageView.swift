@@ -19,6 +19,13 @@ final class UsageModel: ObservableObject {
     @Published private(set) var usageError: String?
     /// Why the last request wasn't sent, withdrawn or declined, as the iPad's `planMessage`.
     @Published private(set) var planMessage: String?
+    /// A raise is on its way: Raise the limit waits, and a second click asks nothing.
+    @Published private(set) var raising = false
+    /// The last raise went through and the balance hasn't been read since: only a read is offered, so a second click
+    /// never raises it again for a balance the screen no longer shows (the iPad's `balanceStale`).
+    @Published private(set) var balanceStale = false
+    /// Why the last raise didn't go, in the app's words; nil once it did.
+    @Published private(set) var raiseWhy: String?
 
     private let cloud: CloudClient
     /// KIFF, for its usage and the requests; nil reads tafs cloud's halves alone.
@@ -139,6 +146,65 @@ final class UsageModel: ObservableObject {
         guard !Task.isCancelled else { return false }
         await load()
         return true
+    }
+
+    /// Raises the spend limit one step, as the iPad's `raiseLimit`: for someone who manages billing, from the limit tafs
+    /// cloud's balance offers (`raise.from_cents`). The owner confirms first, **every time** (Touch ID or the Mac's
+    /// password, never cached): no request is built and nothing is signed before it. Then KIFF's `PUT`, signed by the
+    /// device key, and the balance read again. A raise from a limit that moved meanwhile reads the balance again and
+    /// says so; one at the ceiling says to contact KIFF.
+    func raiseLimit(managesBilling: Bool) async {
+        raiseWhy = nil
+        guard managesBilling, let account, case .loaded(let balance) = balance, let raise = balance.raise else {
+            raiseWhy = Words.app("card.limit_can_not_raised_right")
+            return
+        }
+        guard !balanceStale else {
+            raiseWhy = Words.app("card.limit_raised_read_balance_again")
+            return
+        }
+        guard !raising else { return }
+        guard account.sign != nil else {
+            raiseWhy = Words.app("sign_in.again_to_sign")
+            return
+        }
+        raising = true
+        defer { raising = false }
+        // The prompt names the new limit, tafs cloud's own words for this raise.
+        do { try await confirm(Words.app("usage.raise_limit.prompt") + ": " + raise.words) } catch {
+            guard !Task.isCancelled else { return }
+            raiseWhy = NeedsYouModel.closed(error) ? nil : Words.app("common.not_sent_unconfirmed")
+            return
+        }
+        guard !Task.isCancelled else { return }
+        do {
+            try await account.raiseLimit(from: raise.fromCents)
+        } catch KIFFError.refused(_, let code) where code == "limit_changed" {
+            await load()
+            raiseWhy = Words.app("usage.limit_changed")
+            return
+        } catch KIFFError.refused(_, let code) where code == "limit_ceiling" {
+            raiseWhy = Words.app("usage.limit_ceiling")
+            return
+        } catch {
+            raiseWhy = Words.app("usage.raise_limit.not_raised", ["why": Self.plainWhy(error)])
+            return
+        }
+        // It went through. Until the balance is read again, only a read is offered.
+        balanceStale = true
+        await readAfterRaise()
+    }
+
+    /// tafs cloud offers a raise now (`balance.raise`).
+    var offersRaise: Bool {
+        if case .loaded(let balance) = balance { return balance.raise != nil }
+        return false
+    }
+
+    /// Reads the balance again after a raise, as the iPad's Read again: once read, Raise the limit is offered again.
+    func readAfterRaise() async {
+        await load()
+        if case .loaded = balance { balanceStale = false }
     }
 
     /// Why KIFF didn't take a request or a read, in the app's plain words, never KIFF's code, as
@@ -295,7 +361,16 @@ struct UsageView: View {
                         if !r.reason.isEmpty {
                             Text(verbatim: r.reason).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
                         }
-                        Button(words("usage.requests.decline")) { declining = r }.buttonStyle(OutlineButtonStyle())
+                        HStack(spacing: 10) {
+                            // A member's raise request is answered by raising: one raise answers every open one, only
+                            // where tafs cloud offers it, as the iPad's `answerRaise`.
+                            if r.kind == "raise", model.offersRaise, !model.balanceStale {
+                                Button(words("usage.raise_limit_button")) { Task { await model.raiseLimit(managesBilling: managesBilling) } }
+                                    .buttonStyle(PrimaryButtonStyle())
+                                    .disabled(model.raising)
+                            }
+                            Button(words("usage.requests.decline")) { declining = r }.buttonStyle(OutlineButtonStyle())
+                        }
                     }
                 }
             }
@@ -325,6 +400,27 @@ struct UsageView: View {
         return Theme.line
     }
 
+    /// Raise the limit, as the iPad's: for whoever manages billing, where tafs cloud offers it, by its words; after a
+    /// raise, until the balance is read again, only Read it again. Each click confirms first (Touch ID or the password).
+    @ViewBuilder private func raiseRow(_ balance: Usage.Balance) -> some View {
+        if model.balanceStale {
+            Text(words("usage.raised_unread")).font(.system(size: 14)).foregroundColor(Theme.ink).fixedSize(horizontal: false, vertical: true)
+            Button(words("usage.read_again")) { Task { await model.readAfterRaise() } }
+                .buttonStyle(OutlineButtonStyle())
+                .accessibilityIdentifier("balance-read-again")
+        } else if managesBilling, let raise = balance.raise {
+            Button { Task { await model.raiseLimit(managesBilling: managesBilling) } } label: {
+                Label(model.raising ? words("usage.raising") : raise.words, systemImage: "lock.fill")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.raising)
+            .accessibilityIdentifier("raise-limit")
+        }
+        if let why = model.raiseWhy {
+            Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private var balance: some View {
         switch model.balance {
         case .loading:
@@ -340,6 +436,7 @@ struct UsageView: View {
                     .accessibilityValue(words.number(meter) + " %")
             }
             if let detail = balance.detail { Text(verbatim: detail).font(.system(size: 14)).foregroundColor(Theme.soft) }
+            raiseRow(balance)
             if let warning = balance.warning {
                 // Its colour is its tone: red while the tafs wait, else amber.
                 Text(verbatim: warning).font(.system(size: 14, weight: .semibold)).foregroundColor(balance.waiting ? Theme.no : Theme.amberText)

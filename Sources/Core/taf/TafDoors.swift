@@ -242,6 +242,27 @@ extension CloudClient {
         return try? AccountClient.decoder.decode(DoorAnswer.self, from: answer).door
     }
 
+    /// A door's new key, issued once (the iPad's `TafsCloud.IssuedKey`): the key itself, which is never shown again,
+    /// its id, its last four and when it was made.
+    struct IssuedKey: Decodable, Equatable, Identifiable {
+        let id: String
+        let key: String
+        let last4: String
+        let madeAt: String
+        enum CodingKeys: String, CodingKey { case id, key, last4, madeAt = "made_at" }
+    }
+
+    /// Makes an API door's new key on the security key (`KeyAct.newAPIDoorKey`), as `signedDoorChange` sends the door's
+    /// other acts. The answer is the key, which only this call ever sees.
+    func newDoorKey(_ act: KeyAct, assertion: String) async throws -> IssuedKey {
+        let headers = ["Authorization": "Bearer \(session.accessToken)", "Accept": "application/json", "Accept-Language": language,
+                       "User-Agent": "tafs-macos", Passkeys.headerName: assertion, "Content-Type": "application/json"]
+        let (status, answer) = try await transport.send(HTTPRequest(method: act.method, path: act.path, headers: headers, body: act.body))
+        guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: answer) }
+        guard let key = try? AccountClient.decoder.decode(IssuedKey.self, from: answer), !key.key.isEmpty else { throw KIFFError.unreadable }
+        return key
+    }
+
     func removeDoor(_ taf: String, door id: String) async throws {
         struct Answer: Decodable { let removed: String }
         let data = try await doorChange("DELETE", doorsPath(taf) + "/\(Self.escaped(id))", body: Optional<[String: String]>.none)

@@ -144,12 +144,17 @@ let planqueRoutesTests: [Test] = [
         let naming = all.filter { $0.text.contains("grants/") }
         try expectEqual(naming.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["PlanqueClient.swift"])
         let client = naming[0].text
-        try expectEqual(client.components(separatedBy: "grants/").count - 1, 1)
+        // Twice: the DELETE's path, and a Slack door's subscription stopped on planque's safe route (`Safe.deleteTrigger`,
+        // deleting a trigger, which takes authority away and is the device key's), this exact line and no other.
+        try expectEqual(client.components(separatedBy: "grants/").count - 1, 2)
+        try expect(client.contains(#"case .deleteTrigger(let grant, let trigger): return "grants/\(CloudClient.escaped(grant))/triggers/\(CloudClient.escaped(trigger))""#),
+                   "the second is the trigger's DELETE")
         try expect(client.contains(#""/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#), "the DELETE's path, the grant's id last")
         // Two DELETEs in the client: the disconnect's (named twice, signed and sent), and Account › Chrome's unpair (#173,
         // `Safe.unpairChrome`, a safe route of its own). Each signs the empty body.
-        try expectEqual(client.components(separatedBy: #""DELETE""#).count - 1, 3)
+        try expectEqual(client.components(separatedBy: #""DELETE""#).count - 1, 4)
         try expect(client.contains(#"case .unpairChrome: return "DELETE""#), "the third is the Chrome's unpair")
+        try expect(client.contains(#"case .deleteTrigger: return "DELETE""#), "the fourth is a trigger's, a safe route")
         try expect(client.contains(#"method: "DELETE", uri: uri, bodyHash: Self.emptyBodyHash"#), "the DELETE signs no body")
         try expect(client.contains(#"HTTPRequest(method: "DELETE", path: uri"#), "the DELETE is sent as signed")
         // The grants proof stays a read: GET, over the grants list, and nothing else.
