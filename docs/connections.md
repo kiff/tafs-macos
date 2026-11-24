@@ -171,8 +171,9 @@ Ending access with Touch ID).
 - **Its last failed call** (`AppConnections.lastFailure`, the iPad's gap 13), in red, under the
   row and on its page: the newest call on one of its actions that wasn't done, its own taf's
   first, in tafs cloud's words ("Last failed: Refund · Signed out of Stripe"). It comes from the
-  Record's newest page (`GET /v1/record`, each entry's `call.action_name`), read when Connect
-  apps loads. One that can't be read draws no line, and nothing else changes.
+  Record's newest page (`GET /v1/record`, each entry's `call.action_name`), read when an app's
+  connections open, never with the catalog's own reads. One that can't be read draws no line,
+  and nothing else changes.
 
 ## The receipt (`ConnectReceipt`, `ConnectReceiptSheet`)
 

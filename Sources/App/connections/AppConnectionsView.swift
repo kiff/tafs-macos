@@ -35,6 +35,12 @@ struct AppConnectionsView: View {
     }
 
     var body: some View {
+        Group { content }
+            // The Record's newest calls, for each connection's last failed call, read when this page opens.
+            .task(id: app.id) { await model.readCalls() }
+    }
+
+    @ViewBuilder private var content: some View {
         if let id = detail, let grant = model.grants.first(where: { $0.id == id }) {
             let end = grant.id + "|end"
             ConnectionDetailView(grant: grant, appTitle: app.name, managesCards: managesCards, lastFailed: lastFailure(grant),
