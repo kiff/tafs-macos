@@ -35,6 +35,24 @@ private func wordsIn(_ language: String) throws -> Words {
 }
 
 let pairingSignInScreenTests: [Test] = [
+    Test("the welcome has Try it with sample data under Continue, opening the sample: no key, no stream, its own transport", awaiting: { @MainActor in
+        let (model, _) = model([], key: CountingKey())
+        var opened = 0
+        let with = SignInView(model: model, trySample: { opened += 1 }).environment(\.words, try wordsIn("en"))
+        let without = SignInView(model: model).environment(\.words, try wordsIn("en"))
+        guard let a = Snapshot.bitmap(of: with, size: CGSize(width: 1280, height: 800)),
+              let b = Snapshot.bitmap(of: without, size: CGSize(width: 1280, height: 800)) else { throw Failure(description: "no bitmap") }
+        try expect(Snapshot.png(a) != Snapshot.png(b), "the sample's button is drawn when given")
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: "build/screenshots"), withIntermediateDirectories: true)
+        try Snapshot.png(a)?.write(to: URL(fileURLWithPath: "build/screenshots/welcome-try-sample.png"))
+        try expectEqual(opened, 0)
+        let app = try String(contentsOf: URL(fileURLWithPath: "Sources/App/entry/TafsApp.swift"), encoding: .utf8)
+        try expect(app.contains("SignInView(model: signIn, trySample: { sample = true })"), "the welcome opens the sample")
+        try expect(app.contains("let transport = SampleTransport(words: words)"), "its own transport, in memory")
+        try expect(app.contains("route: .phoneOrPasskey, signedOut: { sample = false }, inSample: true)"), "no key, no stream; leaving clears it")
+        let account = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AccountView.swift"), encoding: .utf8)
+        try expect(account.contains(#"action(words("settings.clear_sample"), color: Theme.no) { signOut() }"#), "Clear the sample")
+    }),
     Test("the QR is shown as the window opens, signed by the device key alone, with no prompt", awaiting: { @MainActor in
         let key = CountingKey()
         let (model, transport) = model([pending, (200, sessionAnswer)], key: key)

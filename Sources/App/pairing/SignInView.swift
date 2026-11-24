@@ -7,6 +7,9 @@ import SwiftUI
 struct SignInView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: SignInModel
+    /// "Try it with sample data", under Continue, as the iPad's welcome and Windows': the app opens on the sample
+    /// (`Sample`, `SampleTransport`), which reads no one's account. Nil draws none.
+    var trySample: (() -> Void)? = nil
 
     private var device: String { words("device.mac") }
     private var halves: SignInPlan.Halves { SignInPlan.halves(model.phase, signedIn: model.session != nil, asksKey: model.asksKey) }
@@ -69,6 +72,10 @@ struct SignInView: View {
             } else {
                 primary(words("common.continue")) { await model.signIn() }
                 if let raised = Onboarding.raisedAgeLine(region: region, ages: ages, words: words) { note(raised, size: 12) }
+            }
+            if let trySample, model.session == nil {
+                Button(words("sample.try_it"), action: trySample).buttonStyle(OutlineButtonStyle())
+                    .accessibilityIdentifier("welcome.try_sample")
             }
         }
     }
