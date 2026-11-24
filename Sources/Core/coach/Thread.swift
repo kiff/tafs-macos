@@ -290,12 +290,15 @@ enum Thread {
         case card(Card, position: Int)
         /// A call KIFF held, at the point it was held. Only KIFF's keys: it is answered in Needs you.
         case held(exception: String, position: Int)
-        /// Something this app doesn't draw yet (a drive's end, a kind it doesn't know).
+        /// A drive's end (`{type: "drive", drive: {…}}`): what Coach did on the phone, from tafs
+        /// cloud's record, as the iPad's `SetupThread.Item.drive` (docs/drive.md).
+        case drive(Drive, position: Int)
+        /// Something this app doesn't draw yet (a kind it doesn't know).
         case other(type: String, position: Int)
 
         var id: Int {
             switch self {
-            case .message(_, let p), .card(_, let p), .held(_, let p), .other(_, let p): return p
+            case .message(_, let p), .card(_, let p), .held(_, let p), .drive(_, let p), .other(_, let p): return p
             }
         }
 
@@ -304,9 +307,49 @@ enum Thread {
             switch self {
             case .message(let message, _): return message.at
             case .card(let card, _): return card.at
+            case .drive(let drive, _): return drive.at
             default: return nil
             }
         }
+    }
+
+    /// A drive's end in Coach's thread, as the iPad's `TafsCloud.DriveRecap`: the request, its steps
+    /// from tafs cloud's record and why it ended. Coach drove the phone's screen; this Mac only shows
+    /// what it did. One without its id or its request isn't drawn (`Item.other`), never the thread with it.
+    struct Drive: Equatable {
+        let id: String
+        let task: String
+        /// Why it ended (`owner_took_over`, `stopped`, …), and tafs cloud's words for it.
+        var why: String?
+        var words: String?
+        var steps: [Step] = []
+        var at: Date?
+
+        /// One step: the app's line for it, and what it touched, in tafs cloud's words, with its taf.
+        struct Step: Equatable {
+            let line: String
+            var touched: String?
+            var taf: String?
+
+            /// "Tapped Approve · Refunds · Chargebacks", as the iPad's `DriveRecapCard`.
+            var shown: String {
+                guard let touched else { return line }
+                return [line, touched, taf].compactMap { $0 }.joined(separator: " · ")
+            }
+        }
+
+        /// Why it ended, in words: tafs cloud's, as a sentence, else the app's for its reason, else
+        /// "Coach stopped", as the iPad's `DriveRecapCard.words`.
+        func ended(_ words: Words) -> String {
+            if let w = self.words?.trimmingCharacters(in: .whitespacesAndNewlines), !w.isEmpty {
+                return w.prefix(1).uppercased() + w.dropFirst()
+            }
+            if let why, Self.reasons.contains(why) { return words("drive.ended.\(why)") }
+            return words("drive.ended.other")
+        }
+
+        /// The reasons the app has words for (docs/drive.md, "How a drive ends").
+        static let reasons: Set<String> = ["owner_took_over", "left_app", "stopped", "locked", "signed_out", "halted", "done", "idle", "replaced"]
     }
 
     struct Page: Decodable, Equatable {
@@ -319,7 +362,10 @@ enum Thread {
         init(items: [Item], working: Bool) { self.items = items; self.working = working }
         /// A new conversation, before its first message: nothing to read yet.
         static let empty = Page(items: [], working: false)
-        enum ItemKeys: String, CodingKey { case type, message, card, held }
+        enum ItemKeys: String, CodingKey { case type, message, card, held, drive }
+        enum DriveKeys: String, CodingKey { case id, task, why, words, steps, at }
+        enum DriveStepKeys: String, CodingKey { case line, touched }
+        enum TouchedKeys: String, CodingKey { case words, taf }
         enum MessageKeys: String, CodingKey { case id, at, from, kind, text, work, session, attachments, delivered, counted, refused }
         enum RefusedKeys: String, CodingKey { case words, why, next }
         /// A card item is `{key, session, answer?, component: {…}}`: what the agent showed is
@@ -503,6 +549,28 @@ enum Thread {
                     guard let held = try? item.nestedContainer(keyedBy: HeldKeys.self, forKey: .held),
                           let exception = try? held.decode(String.self, forKey: .exception) else { continue }
                     items.append(.held(exception: exception, position: position))
+                case "drive":
+                    guard let d = try? item.nestedContainer(keyedBy: DriveKeys.self, forKey: .drive),
+                          let id = try? d.decode(String.self, forKey: .id),
+                          let task = try? d.decode(String.self, forKey: .task) else {
+                        // One that doesn't read stays a kind this app doesn't draw, never the thread unread.
+                        items.append(.other(type: type, position: position)); continue
+                    }
+                    var steps: [Drive.Step] = []
+                    if var list = try? d.nestedUnkeyedContainer(forKey: .steps) {
+                        while !list.isAtEnd {
+                            guard let step = try? list.nestedContainer(keyedBy: DriveStepKeys.self),
+                                  let line = try? step.decode(String.self, forKey: .line) else { _ = try? list.decode(Skipped.self); continue }
+                            let touched = try? step.nestedContainer(keyedBy: TouchedKeys.self, forKey: .touched)
+                            // What it touched, as the iPad's `DriveTouched`: its words, and its taf only beside them.
+                            let said: String? = try? touched?.decode(String.self, forKey: .words)
+                            let taf: String? = said == nil ? nil : try? touched?.decodeIfPresent(String.self, forKey: .taf)
+                            steps.append(Drive.Step(line: line, touched: said, taf: taf))
+                        }
+                    }
+                    items.append(.drive(Drive(id: id, task: task, why: (try? d.decodeIfPresent(String.self, forKey: .why)) ?? nil,
+                                              words: (try? d.decodeIfPresent(String.self, forKey: .words)) ?? nil, steps: steps,
+                                              at: ((try? d.decodeIfPresent(String.self, forKey: .at)) ?? nil).flatMap(Thread.time)), position: position))
                 default:
                     items.append(.other(type: type, position: position))
                 }
@@ -597,6 +665,17 @@ enum Thread {
             }
             return nil
         }
+
+        /// How a drive card reads here, as the iPad's `DriveCard`: `declined` is Not now, any other answer
+        /// is that Coach drove the app, and none is still asked, on the phone. This Mac never answers it.
+        func drive(_ card: Card) -> DriveCard {
+            let answer = card.stored ?? oldAnswer(card)
+            if answer == "declined" { return .declined }
+            if answer != nil || card.answerState == "answered" { return .drove }
+            return .asking
+        }
+
+        enum DriveCard: Equatable { case asking, declined, drove }
 
         /// Whether a message of the person's is an answer to a card this chat shows, as the iPad's
         /// `SetupChatView` (557-560): it reads once, on the card's folded line, so no bubble repeats

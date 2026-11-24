@@ -256,6 +256,12 @@ final class CoachModel: ObservableObject {
         return page.replaced(card)
     }
 
+    /// How a drive card reads (`Thread.Page.drive`).
+    func drive(_ card: Thread.Card) -> Thread.Page.DriveCard {
+        guard case .loaded(_, let page) = state else { return .asking }
+        return page.drive(card)
+    }
+
     /// An answer to `card` sent the old way, as a message (`Thread.Page.oldAnswer`).
     func oldAnswer(_ card: Thread.Card) -> String? {
         guard case .loaded(_, let page) = state else { return nil }
@@ -1940,6 +1946,9 @@ struct CoachView: View {
             } else {
                 waiting(words("coach.needs_you_approve"))
             }
+        case .drive(let drive, _):
+            // What Coach did while it drove the phone, where the drive ended (docs/drive.md).
+            DriveRecap(drive: drive)
         case .other:
             EmptyView()
         }
@@ -1973,8 +1982,10 @@ struct CoachView: View {
             notice(card)
         } else if card.type == "questions" {
             questions(card)
+        } else if card.type == "drive" {
+            // Coach asking to drive the phone's screen: approved only there (docs/drive.md), so shown here, never answered.
+            DriveAsk(card: card, state: model.drive(card))
         } else if card.drawsAsChoice {
-            // Never a drive's card: Coach driving the phone's screen is the phone's (docs/drive.md).
             choice(card)
         }
     }

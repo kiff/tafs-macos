@@ -36,8 +36,9 @@ The app draws the list as it comes. It places and folds nothing itself.
 | The hand-over (`result`) | Edged in green: "Set up · the taf's name", what it does, its tools by the title their approval asked for them by ("Refund a payment", the iPad's `toolTitle`), else in words ("list emails", never `list_emails`), and **See it on {taf}** once the taf is listed ("Setting up {name}…" until then). Failed: "{name} wasn't set up: {why}." and no button. Needing a plan: **Choose a plan**, to Plan & usage |
 | A new version (`result` whose taf `improves` one) | As the iPad's `improvement` (`SetupChatView.swift:1380-1420`): edged in green, "New version · the taf's name", what it does, tafs cloud's note of what changed ("Can now list your Google Calendar events."), and no tools. Made: **See version {n}**, which opens that taf's Versions; "Version {n} is made." when the taf isn't listed. Being made: the same button, greyed, "Preparing the new version…" with a spinner. Not made: "{taf}'s new version wasn't made: {why}." and "Coach knows, and hands it over again." Nothing goes live from it |
 | A call KIFF held | "Needs you · approve". It is answered in Needs you. |
-| A drive's card (`drive`) | Nothing: Coach driving the phone's own screen is the phone's (docs/drive.md), never a question to this Mac |
-| Anything else (a drive's end, a kind this app doesn't know) | Nothing |
+| A drive's card (`drive`) | As the iPad's `DriveCard` (`DriveViews.swift`), without its buttons: Coach driving the phone's own screen is approved only there, with the phone's approval key (tafs docs/drive.md). Edged in amber, "Needs you · let Coach drive", the request, and "Approve on your phone instead". No **Approve** and no **Not now**: this Mac never answers it. Answered: one line, "Coach drove the app · {request}" ticked in green, or "Not now: Coach didn't drive the app" with a grey minus (`Thread.Page.drive`) |
+| A drive's end (`{type: "drive", drive}`) | "What I did", as the iPad's `DriveRecapCard`: the request, each step from tafs cloud's record ("Tapped Run · Run now · Chargebacks"), else "No step was done.", and why it ended: tafs cloud's words as a sentence, else the app's for its reason, else "Coach stopped" (`Thread.Drive`). One without its id or request is drawn as nothing |
+| Anything else (a kind this app doesn't know) | Nothing |
 
 - **A run's steps** are tafs cloud's words for them, never a tool's name: a tick, a red mark
   for a failure, an arrow for one not made ("not made · read first"), and "{n} tries".
@@ -649,6 +650,6 @@ items that don't read, a card's key, an unreadable answer; what is and isn't a m
 send's exact body, each refusal, the following's pace and its limit, Retry, and both answers
 to the consent; a run's work, each kind of card, declining, the live steps, and what `Rich`
 reads; an approval's answer, state and lines, `replaced`, KIFF's draft and its lines, the draft read,
-a drive's card never a question (`ApprovalTests`); "Taking shape" (`SetupShapeTests`); Coach's tools
+a drive's card never a question (`ApprovalTests`); a drive's card and its end, read and never answered (`DriveTests`); "Taking shape" (`SetupShapeTests`); Coach's tools
 (`CoachToolsTests`). It writes `build/screenshots/coach-*.png`, `coach-shape-en.png`,
-`coach-replaced-en.png` and `coach-tools-en.png` among them.
+`coach-replaced-en.png`, `coach-tools-en.png` and `coach-drive.png` among them.
