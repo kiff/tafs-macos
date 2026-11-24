@@ -73,4 +73,4 @@ If anything readable ever reaches a log, revoke the certificate at once (develop
 |---|---|
 | **The first signed, notarized image** | **owed:** after the secrets are stored. Then it's installed on a Mac on macOS 12 to check it opens with no warning. |
 | Where the image is downloaded from | a draft release here, for the team. Publishing it, and linking it from kiff.dev/tafs/download for everyone, come later. |
-| The version | `App/Info.plist`'s 0.1 (4). Build 1 was the first draft, signed with a personal Developer ID; build 2 is the first signed with the company's; build 3 carries the macOS 12 fixes (#139); build 4 adds the app's icon. |
+| The version | `App/Info.plist`'s 0.1 (5). Build 1 was the first draft, signed with a personal Developer ID; build 2 is the first signed with the company's; build 3 carries the macOS 12 fixes (#139); build 4 adds the app's icon; build 5 is the next draft, with its notes in `release-notes/v0.1-5.md`. |
