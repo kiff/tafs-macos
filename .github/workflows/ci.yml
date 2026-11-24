@@ -44,7 +44,7 @@ jobs:
           # A change in one part alone still runs that part only, and on Linux only.
           out=$(printf 'Sources/Core/usage/Usage.swift\n' | scripts/parts.sh)
           echo "$out" | grep -qx 'mac=false' || { echo "a core-only change ran the Mac"; exit 1; }
-          echo "$out" | grep -qx 'parts=contracts strings usage' || { echo "a core-only change ran: $out"; exit 1; }
+          echo "$out" | grep -qx 'parts=contracts guards strings usage' || { echo "a core-only change ran: $out"; exit 1; }
       - name: The parts this change touches
         id: parts
         env:
