@@ -41,6 +41,9 @@ extension AccountClient {
             }
             /// A Card as it is in force, which a draft's Card revises (the iPad's `DraftCard.Terms`).
             struct Terms: Decodable, Equatable {
+                /// The Card in force's own id, when KIFF sends it: "Allow this from now on" then checks it's the Card
+                /// the draft says it revises (`HoldAllow.matches`). KIFF sends none today.
+                var id: String?
                 var grants: [Grant]?
                 var aggregates: [Aggregate]?
                 var onExceed: String?
@@ -52,7 +55,7 @@ extension AccountClient {
                 var validFrom: String?
                 var validUntil: String?
                 enum CodingKeys: String, CodingKey {
-                    case grants, aggregates, onExceed = "on_exceed", subject, subjects, domain, environment, location
+                    case id, grants, aggregates, onExceed = "on_exceed", subject, subjects, domain, environment, location
                     case validFrom = "valid_from", validUntil = "valid_until"
                 }
             }

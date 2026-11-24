@@ -59,7 +59,9 @@ one go on their own.
 - **Signed only when the draft is what was offered** (`HoldAllow.matches`, every term the iPad compares: actions, caps,
   scopes, states, next steps, totals with their window, measure and per-item parameter, what happens past a limit,
   holders, where it applies, and when it starts and ends; no Card retired or added; this call's agent, and from this
-  hold when KIFF says). Otherwise "This change isn't what was offered", and nothing is signed.
+  hold when KIFF says). Each Card in force the draft shows must be the one it revises: when KIFF names it
+  (`current.id`), the two must agree, for a changed Card and one marked unchanged alike. KIFF sends no `current.id`
+  today, so this holds until it does. Otherwise "This change isn't what was offered", and nothing is signed.
 - **One approval on the security key** (`KeyAct.confirmDraft`): KIFF's plain draft confirm at the version this Mac read,
   the same request as installing a tried version.
 - **The held call itself:** KIFF answers a held call inside a confirm only for Coach's install (`confirm_hold.go`), so
