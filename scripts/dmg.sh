@@ -5,6 +5,10 @@
 #   IDENTITY="Developer ID Application: …" scripts/dmg.sh
 #                                        signed with Developer ID and the hardened runtime,
 #                                        ready to notarize (the DMG workflow does that)
+#   PUSH=1 PROFILE=path/to.provisionprofile IDENTITY=… scripts/dmg.sh
+#                                        with alerts with tafs closed: the app built with PUSH=1,
+#                                        its Developer ID profile with push embedded, and
+#                                        aps-environment signed in (App/tafs-push.entitlements)
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -20,6 +24,13 @@ DMG="build/tafs-$VERSION-$BUILD.dmg"
 # With the app's entitlements (App/tafs.entitlements): under the hardened runtime, the
 # microphone and the camera each need their own, or dictation and Take photo fail without a word.
 ENTITLEMENTS=App/tafs.entitlements
+if [ "${PUSH:-0}" = "1" ]; then
+    # Push is a restricted entitlement: signed in only with the profile that allows it, or macOS won't launch the app.
+    [ "$IDENTITY" != "-" ] || { echo "PUSH=1 needs IDENTITY: push is signed with Developer ID only" >&2; exit 2; }
+    [ -f "${PROFILE:-}" ] || { echo "PUSH=1 needs PROFILE, the Developer ID provisioning profile with push" >&2; exit 2; }
+    cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
+    ENTITLEMENTS=App/tafs-push.entitlements
+fi
 if [ "$IDENTITY" = "-" ]; then
     codesign --force --entitlements "$ENTITLEMENTS" --sign - "$APP"
 else
@@ -33,6 +44,15 @@ codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.security.d
     || { echo "The app is signed without the microphone entitlement" >&2; exit 1; }
 codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.security.device.camera" \
     || { echo "The app is signed without the camera entitlement" >&2; exit 1; }
+# Push only with its profile, and never without PUSH=1.
+if [ "${PUSH:-0}" = "1" ]; then
+    codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.developer.aps-environment" \
+        || { echo "The app is signed without aps-environment" >&2; exit 1; }
+else
+    ! codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "aps-environment" \
+        || { echo "aps-environment is signed in without PUSH=1 and its profile" >&2; exit 1; }
+    [ ! -f "$APP/Contents/embedded.provisionprofile" ] || { echo "A profile is embedded without PUSH=1" >&2; exit 1; }
+fi
 
 # What the window shows: the app, and Applications to drag it to.
 STAGE=build/dmg

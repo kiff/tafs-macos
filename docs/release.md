@@ -39,7 +39,12 @@ The `mac-signing` approval (its required reviewer) is what turns a run into a si
 3. `com.apple.developer.aps-environment` in `App/tafs.entitlements`, which today asks for the microphone and the camera only;
 4. the app registering for remote notifications and sending its token to tafs cloud, and tafs cloud sending to a Mac's token.
 
-Steps 1 and 2 are the account holder's, at developer.apple.com. Steps 3 and 4 are code, which comes after them. Until all four steps are done, those three rows stay Partial, and this app never says alerts come with tafs closed.
+Steps 1 and 2 are the account holder's, at developer.apple.com. Steps 3 and 4 are written, and built only with `PUSH=1`:
+- `PUSH=1 scripts/build.sh` compiles them in (`-D PUSH`). The app asks AppKit for its push token (`PushToken`), and while Alerts on this Mac is on it gives the token to tafs cloud, `POST /v1/push` with `platform: macos`, `environment: production` and its sound. When alerts are turned off, or at sign-out, it takes the token back with `DELETE /v1/push/{token}` (`MacPush`, `AlertsModel.syncPush`).
+- `PUSH=1 PROFILE=… IDENTITY=… scripts/dmg.sh` embeds the profile as `Contents/embedded.provisionprofile` and signs with `App/tafs-push.entitlements`: the usual two, plus `aps-environment`, the app's identifier and its team. Without `PUSH=1` the script refuses an app that carries `aps-environment` or a profile, since macOS won't launch a restricted entitlement without the profile that allows it.
+- tafs cloud has to take `platform: macos` and send it with the topic `bot.tafs.macos`. Until then it refuses the registration, and nothing alerts.
+
+The DMG workflow doesn't set `PUSH`, so a release is built as before. Until all four steps are done and a signed build gets an alert with tafs closed, those three rows stay Partial, and this app never says alerts come with tafs closed.
 
 ## The secrets
 
