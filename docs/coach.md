@@ -126,6 +126,11 @@ read from `component`, and the card's key, its chat and tafs cloud's answer from
   written (`Rich`): bold, italic, inline code, headings, bulleted and numbered items. **A link
   is drawn as its label only, and an image as its words: nothing leads anywhere.** HTML and a
   mark with no partner stay as written. Text over 20,000 characters is left plain.
+  - **Links differ from the iPad's.** The iPad's links can be tapped, and one in an answer from
+    a page Coach read (`page_turn`, tafs docs/chat.md) shows its full address and asks before it
+    opens (`PageLinkGuard`). Nothing opens from this Mac's chat, so `page_turn` needs nothing
+    here, and the app doesn't read it. Making links open here would add the same confirm, with
+    tafs' `chat.link_confirm_*` words, for clean `https` addresses only.
 - **Declining** (`CloudClient.decline`) sends `declined` to an approval and `not now` to a
   sign-in, and refuses any other card before anything is sent. Saying no grants nothing, so
   it is never signed. Those two words are the only answers this app ever sends such a card.
