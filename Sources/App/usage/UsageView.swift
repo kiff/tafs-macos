@@ -427,6 +427,11 @@ struct UsageView: View {
                 .buttonStyle(OutlineButtonStyle())
                 .accessibilityIdentifier("balance-read-again")
         } else if managesBilling, let raise = balance.raise {
+            // The limit now, before the click, beside the offer's words for the new one, as the iPad's: from the signed
+            // `from_cents` in the account's currency, once tafs cloud sends it.
+            if let from = raise.fromLine(words) {
+                Text(verbatim: from).font(.system(size: 13)).foregroundColor(Theme.dim).fixedSize(horizontal: false, vertical: true)
+            }
             Button { Task { await model.raiseLimit(managesBilling: managesBilling) } } label: {
                 Label(model.raising ? words("usage.raising") : raise.words, systemImage: "lock.fill")
             }
