@@ -171,3 +171,22 @@ let guardsAccountTests: [Test] = [
         try expect(view.contains(#"words("approval.device_can_not_approve_approve")"#), "it says to approve on another device")
     },
 ]
+
+/// One layout on every app (kiff/tafs `docs/parity.md`): a page's column is set only through `pageColumn`, centred and capped
+/// by `PageColumn`, so no page sets a cap of its own or goes back to a column pinned to the left.
+let guardsLayoutTests: [Test] = [
+    Test("every page's column comes from pageColumn: no source but Components sets a page cap of its own") {
+        let caps = try NSRegularExpression(pattern: #"\.frame\(maxWidth: (720|980|640|1100|1180)\b"#)
+        var setOwn: [String] = []
+        for (path, text) in try sources() where !path.hasSuffix("Sources/App/base/Components.swift") {
+            if caps.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) > 0 {
+                setOwn.append(URL(fileURLWithPath: path).lastPathComponent)
+            }
+        }
+        try expectEqual(setOwn, [])
+        let pages = try sources().filter { $0.text.contains(".pageColumn(.") }.map { URL(fileURLWithPath: $0.path).lastPathComponent }.sorted()
+        try expectEqual(pages, ["AccountView.swift", "AlertsView.swift", "AppConnectionsView.swift", "BriefView.swift", "CalendarView.swift",
+                                "ChromesView.swift", "ConnectAppsView.swift", "Devices.swift", "KiffAccountView.swift", "LanguagePicker.swift",
+                                "NeedsYou.swift", "OverviewView.swift", "PeopleView.swift", "RecipeGalleryView.swift", "UsageView.swift"])
+    },
+]

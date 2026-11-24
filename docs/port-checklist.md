@@ -10,6 +10,18 @@ Paths under "Mac" are in `Sources/App` unless they start with `Core/` (`Sources/
 checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay.swift`, the
 `Design/` building blocks, `App/TafsApp.swift`) are out of its scope.
 
+**One layout on every app** (kiff/tafs `docs/parity.md`). Each page is one column, centred in the window and capped by
+`PageColumn` (`base/Components.swift`), and nothing else sets a page's width:
+- 720 for reading pages: Account and its pages, Devices, People, Alerts, Chrome, Needs you, Connect apps, a connection,
+  Plan & usage;
+- 980 for list pages: Overview, an app's connections;
+- 640 for the recipe gallery;
+- 1100 for the Brief and 1180 for Calendar.
+
+Rows stay aligned left inside the column. A guard in `Tests/guards` keeps every cap inside `PageColumn`. On Account, an
+explanation sits beside its action: where this Mac's approvals are signed is under the sign-in, and How tafs works is one
+entry, under Legal.
+
 ## Ported
 
 | iPad file | Lines | What | Models | Mac |

@@ -119,12 +119,12 @@ only the calls it makes.
 
 ## The Account page (`AccountView`, `AccountModel`)
 
-To the iPad's layout: a large title and grouped panels of rows. Rows are 17, the list's body
+To the iPad's layout: a large title and grouped panels of rows, in the reading column (`pageColumn(.reading)`: at most 720, centred). Rows are 17, the list's body
 size on the iPad; each group's heading is 17 semibold in the soft colour.
 
 | Group | Rows |
 |---|---|
-| Your account | Mode ("Signed in with KIFF"); **KIFF account**, the account's name (else its slug), which opens the KIFF account page (below); and **Signed in as**, the email, left out when it is the account's own name. From `GET /v1/me`. |
+| Your account | Mode ("Signed in with KIFF"); **KIFF account**, the account's name (else its slug), which opens the KIFF account page (below); and **Signed in as**, the email, left out when it is the account's own name. From `GET /v1/me`. Under it, where this Mac's approvals are signed (`ApprovalRoute.howItWorksKey`), beside the sign-in it's about. |
 | View only | **Only when KIFF says this session is `view`** (`approval_mode`). On a Mac with a Secure Enclave: what a view-only Mac does, and **Add this Mac**. On a Mac whose device key is a software key, adding it with the phone still leaves it view-only, so there's no Add: the shared line for such a computer, "This computer approves only through your phone or a passkey." (`settings.devices.pair_software_key`). A KIFF that doesn't say, and a session it calls `passkey` or `key`, show no such group. |
 | People & apps | Devices (opens the list), Connect apps. |
 | Plan | Always there. tafs cloud's `plan_line` at 16 semibold in `plan_tone`'s colour (red waiting, amber warning), then "Plan & usage"; just "Plan & usage" when the balance can't be read. It opens Plan & usage. |
@@ -135,7 +135,6 @@ size on the iPad; each group's heading is 17 semibold in the soft colour.
 | AI use | The AI-data consent, as the iPad's `AIConsentRow`, every word tafs cloud's: given, its `given` line ("AI use: allowed") and **Withdraw** in red (`DELETE /v1/me/ai-consent`); not given, its title in amber, which opens its screen (`AIConsentSheet`, the iPad's `AIConsentView`: the title, the lines, Not now and Allow). Allow sends the version of the words read; words changed meanwhile come back to be read again. Left out until the consent reads, and when it can't be drawn (`drawable`). |
 | Time zone | **Time zone**, the account's zone (UTC when KIFF hasn't said), which opens the picker (below). |
 | Export my chats | Below. |
-| How it works | The shared line. |
 | Legal | Terms and Privacy policy, on kiff.dev, in the app's language where kiff.dev has them: `kiff.dev/<lang>/tafs/terms` and `/privacy` for German, Spanish, French, Italian, Dutch, Polish and Portuguese, else the English pages (`LegalPages`). The English pages govern. Only those two pages are ever opened from here. In any other language each says "(in English)". |
 | About | **Version**, the version and its build ("0.1 (1)"), then the tagline in dim. |
 | Account actions | Sign out, **confirmed first** with the iPad's words ("Sign out of KIFF?", a destructive Sign out, and Cancel), so a stray click never ends the session. |

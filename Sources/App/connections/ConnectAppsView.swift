@@ -323,7 +323,7 @@ struct ConnectAppsView: View {
             }
             .padding(.horizontal, Look.inset)
             .padding(.bottom, Look.inset)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         .task { await model.load() }

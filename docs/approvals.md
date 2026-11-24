@@ -227,7 +227,7 @@ doesn't sign it.
 Nothing that grants access changes. Connecting, **Sign in again**, **Replace the key**, a key, and
 every approval and confirmation stay the phone's or the security key's, on every Mac.
 
-**Account › How tafs works** says where approvals are signed (`ApprovalRoute.howItWorksKey`).
+**Account**, under Your account's sign-in, says where approvals are signed (`ApprovalRoute.howItWorksKey`).
 Only the security key's route keeps "Your answers are signed on this Mac."
 (`sign_in.every_action_taf_takes_goes`). Every other Mac, which is every Mac while
 `macPasskeyApprovals` is off, says "Your approvals are signed on your phone."

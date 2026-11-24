@@ -303,8 +303,7 @@ struct OverviewView: View {
             }
             .padding(.horizontal, Look.inset)
             .padding(.bottom, Look.inset)
-            .frame(maxWidth: 980, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.list)
         }
         .background(Theme.background)
         .task { await model.loadLastResults(words: words) }

@@ -30,7 +30,7 @@ struct KiffAccountPage: View {
             .padding(.horizontal, Look.inset)
             .padding(.top, 18)
             .padding(.bottom, Look.inset)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
     }
@@ -97,7 +97,7 @@ struct TimeZonePicker: View {
             .padding(.horizontal, Look.inset)
             .padding(.top, 18)
             .padding(.bottom, Look.inset)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageColumn(.reading)
         }
         .background(Theme.background)
         // The list for the search, once typing pauses, as the iPad's `.task(id: query)`.
