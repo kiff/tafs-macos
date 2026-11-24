@@ -93,6 +93,18 @@ enum AppConnections {
         var tools: [Tool] = []
         /// The tools planque says the connection holds, by their actions, when it sends them.
         var heldTools: [String]?
+        /// What the owner reads before approving: each tool in planque's own words (kiff/planque#37), drawn as sent.
+        let text: String?
+        /// Each tool's exact terms, one line each, as planque gives them: drawn under Details.
+        let terms: [String]?
+        /// planque's digest of what the request covers (`GrantDigest.covers`).
+        let digest: String?
+        /// Whether `digest` is the SHA-256 of what it covers as planque sent it (`GrantDigest.check`): nil until it's
+        /// checked, false when it doesn't match. Never read from planque.
+        var digestMatches: Bool?
+        /// The connection's `kiff.profile.v1` in the request, as planque sent it: the digest covers it, and KIFF's words
+        /// for it are read before it's shown (`ProfileWords`). Set by `GrantDigest.check`, never decoded.
+        var profile: JCS.Value?
 
         /// The Card actions it connects, as the iPad's `g.tools ?? request.tools.filter(\.tafs).map(\.action)`.
         var cardActions: Set<String> { Set(heldTools ?? tools.filter(\.tafs).map(\.action)) }
@@ -121,7 +133,7 @@ enum AppConnections {
         }
 
         enum CodingKeys: String, CodingKey {
-            case id, status, title, account, request, health, actions, entry, heldTools = "tools"
+            case id, status, title, account, request, health, actions, entry, text, terms, digest, heldTools = "tools"
             case statusWords = "status_words", vendorName = "vendor", agentName = "agent_name", usedBy = "used_by", signedIn = "signed_in"
         }
         enum RequestKeys: String, CodingKey { case server, agent, connector, kind, tools }
@@ -156,6 +168,9 @@ enum AppConnections {
             }
             tools = (((try? request?.decodeIfPresent([Lenient].self, forKey: .tools)) ?? nil) ?? []).compactMap(\.tool)
             heldTools = (try? c.decodeIfPresent([String].self, forKey: .heldTools)) ?? nil
+            self.text = text(.text)
+            terms = ((try? c.decodeIfPresent([String].self, forKey: .terms)) ?? nil).flatMap { $0.isEmpty ? nil : $0 }
+            digest = text(.digest)
         }
 
         /// planque draws this connection's row: its health and its actions.
@@ -371,9 +386,13 @@ struct ConnectionsSource {
     /// Ends one connection at planque (`PlanqueClient.disconnect`), signed by the device key; nil
     /// ends none here. Called only after Touch ID (`ConnectionEnding.end`).
     let end: ((String) async throws -> Void)?
+    /// SHA-256, which Core is given (it builds on Linux): with it, each grant's digest is checked against what it covers
+    /// (`GrantDigest`); without it, none is, and `digestMatches` stays nil.
+    var sha256: ((Data) -> Data)?
 
     init(transport: Transport, tenant: String, language: String = "en", proof: @escaping () async -> String?,
-         enclaveKey: Bool = false, end: ((String) async throws -> Void)? = nil) {
+         enclaveKey: Bool = false, end: ((String) async throws -> Void)? = nil, sha256: ((Data) -> Data)? = nil) {
+        self.sha256 = sha256
         self.transport = transport
         self.tenant = tenant
         self.language = language
@@ -426,6 +445,8 @@ struct ConnectionsSource {
         }
         struct Answer: Decodable { let grants: [Lenient] }
         guard let answer = try? AccountClient.decoder.decode(Answer.self, from: body) else { throw KIFFError.unreadable }
-        return answer.grants.compactMap(\.grant)
+        var grants = answer.grants.map(\.grant)
+        if let sha256 { GrantDigest.check(&grants, answer: body, sha256: sha256) }
+        return grants.compactMap { $0 }
     }
 }
