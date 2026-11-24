@@ -218,6 +218,25 @@ let approvalsPasskeyTests: [Test] = [
                                   .unshare(agent: "a1", Shares.Share(group: "old"))])
         try expectEqual(Shares.changes(agent: "a1", had: [Shares.Share(group: "g")], chosen: [Shares.Share(group: "g")]), [])
     },
+    Test("adding someone to a group, or changing their role, is the key's (group changes step B): the iPad's PUT and {\"role\"}, named as Touch ID's line; taking someone out isn't") {
+        let add = KeyAct.setMember(group: "g/1", subject: "u|2", role: "member")
+        try expectEqual(add.method + " " + add.path, "PUT /v1/groups/g%2F1/members/u%7C2")
+        try expectEqual(String(decoding: add.body, as: UTF8.self), #"{"role":"member"}"#)
+        // The same request the device-key route sent, byte for byte.
+        let same = PeopleChange.setMember(group: "g/1", subject: "u|2", role: "member")
+        try expectEqual(add.path, same.path)
+        try expectEqual(add.body, same.body)
+        try expectEqual(String(decoding: KeyAct.setMember(group: "g1", subject: "u2", role: "manager").body, as: UTF8.self), #"{"role":"manager"}"#)
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(add.title(words, device: "Add Ana to Support"), "Add Ana to Support")
+        // People: a member change goes to the key, or to the phone without one; never Touch ID and the device key.
+        let people = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/PeopleView.swift"), encoding: .utf8)
+        try expect(people.contains("if case .setMember(let group, let subject, let role) = change {\n            return await setMember(KeyAct.setMember("),
+                   "a member change is the key's, before Touch ID's route")
+        try expect(people.contains("guard let approveWithKey else {\n            problem = Words.app(ConnectionEnding.phoneLine)"), "no key: the phone")
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        try expect(window.contains("people.approveWithKey = approveWithKey"), "the window hands People the key")
+    },
     Test("Resume on the key: KIFF's agent or the whole account, with {}, named as the iPad's reason; tafs cloud's release is a DELETE", awaiting: {
         let one = KeyAct.resume(agent: "agent_1"), all = KeyAct.resume(agent: nil)
         try expectEqual(one.method + " " + one.path, "POST /v1/agents/agent_1/resume")

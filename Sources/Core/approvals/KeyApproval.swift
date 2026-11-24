@@ -69,6 +69,11 @@ enum KeyAct: Equatable {
     /// `PhoneApprovalRules`: No gives a Card its room back), so it's the security key's, once, for this one call. The
     /// first answer stands.
     case happened(proposal: String, Bool)
+    /// Adding someone to a group, or changing their role (`manager` or `member`), as the iPad's `KIFFClient` writes it:
+    /// `PUT /v1/groups/{group}/members/{subject}` with `{"role": role}`. It grants access, so it's approved as sharing a
+    /// taf is: on the security key, once (group changes step B; KIFF verifies the assertion on this route). Taking someone
+    /// out (`DELETE`) stays the device key's, as stopping a share does.
+    case setMember(group: String, subject: String, role: String)
 
     var method: String {
         switch self {
@@ -85,6 +90,7 @@ enum KeyAct: Equatable {
         case .share: return "POST"
         case .unshare: return "DELETE"
         case .happened: return "POST"
+        case .setMember: return "PUT"
         }
     }
 
@@ -112,6 +118,8 @@ enum KeyAct: Equatable {
             let query = share.group.map { "group=\(q($0))" } ?? share.subject.map { "subject=\(q($0))" } ?? ""
             return "/v1/agents/\(CloudClient.escaped(agent))/grants?\(query)"
         case .happened(let proposal, _): return "/v1/me/did-this-happen/\(CloudClient.escaped(proposal))"
+        case .setMember(let group, let subject, let role):
+            return PeopleChange.setMember(group: group, subject: subject, role: role).path
         }
     }
 
@@ -147,6 +155,8 @@ enum KeyAct: Equatable {
         case .unshare: return Data("{}".utf8)
         // The iPad's body, `["happened": happened]`, these exact bytes.
         case .happened(_, let happened): return Data(happened ? #"{"happened":true}"#.utf8 : #"{"happened":false}"#.utf8)
+        // PeopleChange's body, `{"role":…}`: the same bytes as the device-key route sent.
+        case .setMember(let group, let subject, let role): return PeopleChange.setMember(group: group, subject: subject, role: role).body
         }
     }
 
@@ -180,6 +190,8 @@ enum KeyAct: Equatable {
         // `device`'s place.
         case .happened(_, let happened):
             return words(happened ? "needs_you.prompt.happened" : "needs_you.prompt.did_not_happen", ["title": device])
+        // The change in the person's words, the line Touch ID asked with ("Add {name} to {group}"), in `device`'s place.
+        case .setMember: return device
         }
     }
 }

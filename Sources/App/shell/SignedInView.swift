@@ -192,6 +192,8 @@ struct SignedInView: View {
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
         .onAppear {
             devices.approveWithKey = approveWithKey
+            // Adding someone to a group, or changing their role, on the security key (group changes step B).
+            people.approveWithKey = approveWithKey
             accountModel.approveWithKey = approveWithKey
             accountHalt.approveWithKey = approveWithKey
             // A reported payment halts its taf: the list is read again.

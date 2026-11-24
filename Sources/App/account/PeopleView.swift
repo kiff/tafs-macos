@@ -22,6 +22,9 @@ final class PeopleModel: ObservableObject {
     @Published private(set) var route: ConnectionEnding.Route = .phone
     private let account: AccountClient
     private let touchID: TouchIDOnly
+    /// The security key's approval, when this Mac has one: adding someone to a group, or changing their role, goes on it
+    /// (`KeyAct.setMember`), as sharing a taf does. Set by the window.
+    var approveWithKey: ((KeyAct, String) async throws -> Data)?
 
     init(account: AccountClient, touchID: TouchIDOnly? = nil) {
         self.account = account
@@ -39,10 +42,16 @@ final class PeopleModel: ObservableObject {
     /// the ending key, over the iPad's `tafs.people.v1` confirmation, then KIFF's request signed by the device key, then
     /// the lists read again. A closed or failed Touch ID sends nothing and says nothing; a Mac that can't confirm says to
     /// approve on the phone. True when it went through.
+    ///
+    /// Adding someone or changing their role grants access, so it's approved on the security key, as sharing is (group
+    /// changes step B): never Touch ID and the device key. Without a key on this Mac, it's the phone's.
     @discardableResult
     func change(_ change: PeopleChange, what: String) async -> Bool {
         guard !changing else { return false }
         problem = nil
+        if case .setMember(let group, let subject, let role) = change {
+            return await setMember(KeyAct.setMember(group: group, subject: subject, role: role), what: what)
+        }
         refreshRoute()
         guard route == .touchID else {
             problem = Words.app(ConnectionEnding.phoneLine)
@@ -70,6 +79,31 @@ final class PeopleModel: ObservableObject {
         }
         await load()
         changing = false
+        return true
+    }
+
+    /// One member change on the security key: its sheet names the change in the person's words. Closed, or "Approve on
+    /// your phone instead", it sends nothing; refused, it says why. The lists are read again either way.
+    private func setMember(_ act: KeyAct, what: String) async -> Bool {
+        guard let approveWithKey else {
+            problem = Words.app(ConnectionEnding.phoneLine)
+            return false
+        }
+        changing = true
+        defer { changing = false }
+        do {
+            _ = try await approveWithKey(act, what)
+        } catch is CancellationError {
+            return false
+        } catch is ApproveOnPhone {
+            problem = Words.app("approval.device_can_not_approve_approve")
+            return false
+        } catch {
+            await load()
+            problem = Words.app("common.didnt_go_through", ["what": what, "why": NeedsYouModel.why(error)])
+            return false
+        }
+        await load()
         return true
     }
 
