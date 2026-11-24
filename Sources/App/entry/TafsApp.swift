@@ -48,7 +48,7 @@ struct TafsApp: App {
                                  playNextSample: { transport.playNext() })
                         .id("sample|" + words.language)
                 } else {
-                    SignInView(model: signIn, trySample: { sample = SampleTransport(words: words) })
+                    SignInView(model: signIn, trySample: { sample = SampleTransport(words: words, load: Self.sampleWords) })
                 }
             }
             // A session just gained, on either path: celebrated once, over home.
@@ -76,6 +76,12 @@ struct TafsApp: App {
 
     /// This Mac's keys and session, from the Keychain. A Mac with no Secure Enclave has a
     /// software device key and no approval key: it approves on the phone or with a passkey.
+    /// Another language's words for the sample, from the app's own strings: the language chosen in Account while in it.
+    private static func sampleWords(_ language: String) -> Words? {
+        let words = Words.load(preferred: [language], chosen: language)
+        return words.language == language ? words : nil
+    }
+
     @MainActor private static func signInModel(words: Words) -> SignInModel {
         let store = KeychainStore()
         return SignInModel(client: KIFFClient(transport: NetworkTransport()), key: key, approval: .passkey,

@@ -317,21 +317,38 @@ enum Sample {
         }
     }
 
-    /// The line for what the sample can't do, in the person's language: that it takes KIFF. A shared line of its own
-    /// is asked of tafs's strings; until it's there, this is the app's own.
-    static func notInSample(_ words: Words) -> String { words("sign_in.with_kiff") }
+    /// The line for what the sample can't do, in the person's language, the shared one every app says: "This isn't in
+    /// the sample. Sign in with KIFF to do it."
+    static func notInSample(_ words: Words) -> String { words("sample.not_in_sample") }
 }
 
 /// tafs cloud and KIFF, stood in by the sample, in memory: what `Sample.answer` says, and never the network.
 final class SampleTransport: Transport, @unchecked Sendable {
+    /// The words the sample opened in.
     let words: Words
     let now: () -> Date
+    /// Another language's words, asked for by a request's `Accept-Language`; nil answers every one in `words`.
+    private let load: ((String) -> Words?)?
     private let lock = NSLock()
     private var played = Sample.firstRounds
+    private var loaded: [String: Words] = [:]
 
-    init(words: Words, now: @escaping () -> Date = Date.init) {
+    init(words: Words, now: @escaping () -> Date = Date.init, load: ((String) -> Words?)? = nil) {
         self.words = words
         self.now = now
+        self.load = load
+    }
+
+    /// The words a request is answered in: its `Accept-Language`, as tafs cloud and KIFF answer in it, so a language
+    /// chosen in Account while in the sample reads in that language with the rounds played kept. One that can't be
+    /// loaded is answered in the sample's own.
+    func words(for request: HTTPRequest) -> Words {
+        guard let language = request.headers["Accept-Language"], language != words.language, let load else { return words }
+        lock.lock(); defer { lock.unlock() }
+        if let known = loaded[language] { return known }
+        let other = load(language) ?? words
+        loaded[language] = other
+        return other
     }
 
     /// The rounds played so far.
@@ -351,7 +368,7 @@ final class SampleTransport: Transport, @unchecked Sendable {
     }
 
     func send(_ request: HTTPRequest) async throws -> (status: Int, body: Data) {
-        let (status, body) = Sample.answer(method: request.method, path: request.path, words: words, now: now(), rounds: rounds)
+        let (status, body) = Sample.answer(method: request.method, path: request.path, words: words(for: request), now: now(), rounds: rounds)
         return (status, body)
     }
 }
