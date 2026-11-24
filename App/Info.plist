@@ -4,16 +4,16 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleDisplayName</key>
-	<string>tafs</string>
 	<key>CFBundleExecutable</key>
-	<string>tafs</string>
-	<key>CFBundleIconFile</key>
 	<string>tafs</string>
 	<key>CFBundleIdentifier</key>
 	<string>bot.tafs.macos</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>tafs</string>
+	<key>CFBundleIconFile</key>
+	<string>tafs</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
@@ -60,7 +60,7 @@
 		<string>ur</string>
 		<string>pt-BR</string>
 	</array>
-	<key>CFBundleName</key>
+	<key>CFBundleDisplayName</key>
 	<string>tafs</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -72,13 +72,13 @@
 	<string>12.0</string>
 	<key>NSCameraUsageDescription</key>
 	<string>tafs takes a photo to attach to your message. A photo goes only with that message, to your own chat.</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>tafs turns your voice into text on this device. Your voice isn't sent anywhere.</string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>tafs turns your voice into text on this device. Your voice isn't sent anywhere.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
 </dict>
 </plist>
