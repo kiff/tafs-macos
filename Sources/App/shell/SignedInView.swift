@@ -192,6 +192,11 @@ struct SignedInView: View {
             }
             // An API door's Reopen, Revoke and Remove are approved on the key, as a removal is.
             doorModels.signWithKey = signWithKey
+            // A Slack door's subscription is stopped on planque's safe route, signed by the device key, before the door goes.
+            doorModels.unsubscribe = { [account, safePlanque] grant, trigger in
+                guard let sign = account.signMessage else { throw PlanqueClient.PlanqueError.notSigning }
+                _ = try await safePlanque.safe(.deleteTrigger(grant: grant, trigger: trigger), signedBy: sign)
+            }
             needsYou.answerWithKey = answerWithKey
             // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
             needsYou.approveWithKey = approveWithKey
