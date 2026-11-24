@@ -29,9 +29,19 @@ enum Usage {
         /// null. Where to buy on a computer follows them; `buy` itself null (a company's agreement) offers neither.
         let offersPacks: Bool
         let offersSolo: Bool
+        /// Raise the limit, as tafs cloud offers it (`balance.raise`), as the iPad's `Balance.Offer`: its words ("Raise
+        /// the spend limit to €2,000"), and the limit now (`from_cents`), which the raise sends back to KIFF. None when
+        /// it isn't offered, or offered without the limit now: there's nothing to raise from.
+        let raise: Raise?
+
+        struct Raise: Equatable {
+            let words: String
+            let fromCents: Int
+        }
 
         enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone", homeLine = "home_line" }
-        enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy }
+        enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy, raise }
+        enum RaiseKeys: String, CodingKey { case words, fromCents = "from_cents" }
         enum BuyKeys: String, CodingKey { case firstMonth = "first_month", packs, solo }
         enum FirstMonthKeys: String, CodingKey { case ready }
 
@@ -53,6 +63,13 @@ enum Usage {
             firstMonthReady = first.flatMap { (try? $0.decodeIfPresent(Bool.self, forKey: .ready)) ?? nil } == true
             offersPacks = buy.map { Usage.offered($0, .packs) } ?? false
             offersSolo = buy.map { Usage.offered($0, .solo) } ?? false
+            let raised = try? c.nestedContainer(keyedBy: RaiseKeys.self, forKey: .raise)
+            if let raised, let words = Usage.text((try? raised.decodeIfPresent(String.self, forKey: .words)) ?? nil),
+               let from = (try? raised.decodeIfPresent(Int.self, forKey: .fromCents)) ?? nil, from >= 0 {
+                raise = Raise(words: words, fromCents: from)
+            } else {
+                raise = nil
+            }
         }
 
         var waiting: Bool { state == "waiting" }
