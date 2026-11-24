@@ -89,6 +89,13 @@ one go on their own.
   - **Mac difference:** the summary is the call's title, else its action, as its card shows
     it. The iPad's own naming (`KIFFMapping.says`, `KIFFMapping.swift:58-80`, and the entity
     for a call without arguments) isn't ported yet.
+- **The paused run goes on at once** (`HeldContinue`, as the iPad's `continueHeld`, kiff/tafs#206, and Windows'): once
+  KIFF takes any answer (Refuse, Approve once, Extra room), tafs cloud is asked to continue that taf's run, `POST
+  /v1/tafs/{taf}/holds/{hold}/continue`, the taf found by the call's agent in Home (`NeedsYouModel.tafOf`), then the list
+  is read again. A refusal isn't swallowed: a run that had already ended says so at the top of Needs you, in tafs cloud's
+  words (`run_ended`), and another refusal, or tafs cloud not reached, says what didn't go through and why. A run KIFF's
+  alert continued first answers 409 (`not_paused`): it went on, so nothing is said. KIFF's alert and the hold's expiry
+  still continue a run this missed. An agent tafs doesn't run has no run to continue, so nothing is asked.
 
 **Approve once on the security key** (kiff/cloud's `checkPasskeyAnswer`, `mandate_exceptions.go`): a session that
 approves with this Mac's own passkey answers `approve-once` with that passkey's assertion in place of a device key's

@@ -215,6 +215,8 @@ struct SignedInView: View {
                 _ = try await safePlanque.safe(.deleteTrigger(grant: grant, trigger: trigger), signedBy: sign)
             }
             needsYou.answerWithKey = answerWithKey
+            // A held call's run is continued by its taf at tafs cloud, found by the call's agent in Home (`HeldContinue`).
+            needsYou.tafOf = { [overview] agent in overview.tafs.first { $0.kiffAgent == agent }?.tafID }
             // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
             needsYou.approveWithKey = approveWithKey
             // An approval card's Card step: KIFF's draft confirm on the key, and the report signed by the device key.

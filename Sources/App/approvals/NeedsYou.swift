@@ -24,6 +24,12 @@ final class NeedsYouModel: ObservableObject {
     @Published private(set) var answeringSteps: Set<String> = []
     /// Why the last step wasn't answered, in the iPad's words.
     @Published private(set) var stepNotAnswered: String?
+    /// Why the run a held call paused didn't go on after its answer (`HeldContinue`): tafs cloud's words when the run had
+    /// already ended, or what didn't go through and why. Nil once it went on.
+    @Published private(set) var runNotContinued: String?
+    /// The taf at tafs cloud that acts as a KIFF agent (Home's `tafID`), set by the window: a held call's run is continued
+    /// by it. Nil for an agent tafs doesn't run, whose call has no run to continue.
+    var tafOf: @MainActor (String) -> String? = { _ in nil }
     /// Steps answered or ended here that Home may still list.
     private var answeredSteps: Set<String> = []
     /// The answers on their way: cancelled at sign-out, so none outlives its session.
@@ -360,6 +366,7 @@ final class NeedsYouModel: ObservableObject {
                 try await self.confirm(Words.app("needs_you.prompt.answer", ["summary": call.title ?? call.action]))
             }
             notTaken[call.id] = nil
+            await goOn(call)
             await load()
         } catch let unconfirmed as Unconfirmed {
             notTaken[call.id] = Self.cancelled(unconfirmed.error) ?? Words.app("common.not_sent_unconfirmed")
@@ -391,6 +398,7 @@ final class NeedsYouModel: ObservableObject {
         do {
             try await answerWithKey(call, answer)
             notTaken[call.id] = nil
+            await goOn(call)
             await load()
         } catch is CancellationError {
             notTaken[call.id] = nil
@@ -398,6 +406,19 @@ final class NeedsYouModel: ObservableObject {
             notTaken[call.id] = Self.why(ApproveOnPhone())
         } catch {
             notTaken[call.id] = Self.answerRefusedWords(error)
+        }
+    }
+
+    /// Once KIFF took an answer to a held call, the run that paused on it is asked to go on now (`HeldContinue`, as the
+    /// iPad's `continueHeld` and Windows'), not only when KIFF's alert reaches tafs cloud. A run that had already ended
+    /// says so at the top of Needs you, in tafs cloud's words; one KIFF's alert already continued says nothing.
+    private func goOn(_ call: HeldCall) async {
+        runNotContinued = nil
+        guard let cloud, let taf = tafOf(call.subject) else { return }
+        do {
+            try await cloud.continueHeld(taf: taf, hold: call.id)
+        } catch {
+            runNotContinued = HeldContinue.said(Words.app, summary: call.summary, error: error)
         }
     }
 
@@ -466,6 +487,10 @@ struct NeedsYouView: View {
                 if let alerts, alerts.pushes, answersHolds { AlertsCard(model: alerts) }
                 if let why = model.stepNotAnswered {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                }
+                if let why = model.runNotContinued {
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("needs-you.run-not-continued")
                 }
                 // A step a taf handed its owner comes first, oldest first, as the iPad's.
                 ForEach(model.steps) { YourStepCard(model: model, step: $0, answersHolds: answersHolds, answered: answered) }
