@@ -176,6 +176,7 @@ struct SignedInView: View {
             notifier.listen()
             PushToken.shared.heldChanged = { Task { await needsYou.load() } }
             notifier.account = account.session.tenant
+            notifier.sample = inSample
             LaunchClock.mark("first window")
         }
         // A screen chosen from elsewhere (a notification) closes it too. Coach, over it, stays.
@@ -332,10 +333,11 @@ struct SignedInView: View {
     }
 
     private func announceHeld() {
-        // The sample's held calls are no one's: macOS is never asked to alert for them.
-        guard !inSample else { return }
         if case .loaded(let calls) = needsYou.state {
-            notifier.announce(announced.new(in: calls).map { Announcement($0, words: words) })
+            let fresh = announced.new(in: calls).map { Announcement($0, words: words) }
+            // The sample's newly held calls alert as the iPad's sample does: macOS is asked at the first, since Account ›
+            // Alerts' Turn on takes KIFF.
+            if inSample { notifier.announceSample(fresh) } else { notifier.announce(fresh) }
         }
     }
 

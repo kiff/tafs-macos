@@ -47,6 +47,15 @@ let accountAlertsTests: [Test] = [
         try expectEqual(Notifier.presentation(plays: false), [.list])
         try expectEqual(Notifier.interruption(plays: true), .active)
         try expectEqual(Notifier.interruption(plays: false), .passive)
+        // The sample's alerts show their banner with tafs in front, though Account › Alerts is never on in it.
+        let quiet = UserDefaults(suiteName: "tafs.notifier.sample.test")!
+        quiet.removePersistentDomain(forName: "tafs.notifier.sample.test")
+        let notifier = Notifier()
+        notifier.defaults = quiet
+        notifier.account = "sample"
+        try expectEqual(notifier.presentationNow(), [.list])
+        notifier.sample = true
+        try expectEqual(notifier.presentationNow(), [.banner, .sound])
     },
     Test("the screenshots: Alerts in three languages, on and with sound off", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
