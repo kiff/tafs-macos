@@ -174,7 +174,10 @@ final class UsageModel: ObservableObject {
         raising = true
         defer { raising = false }
         // The prompt names the new limit, tafs cloud's own words for this raise.
-        do { try await confirm(Words.app("usage.raise_limit.prompt") + ": " + raise.words) } catch {
+        // The prompt names the new limit in tafs cloud's words and, where tafs cloud sends the currency, the limit now
+        // from the signed `from_cents`, so the owner confirms the figure KIFF acts on.
+        let now = raise.fromLine(Words.app).map { " " + $0 } ?? ""
+        do { try await confirm(Words.app("usage.raise_limit.prompt") + ": " + raise.words + now) } catch {
             guard !Task.isCancelled else { return }
             raiseWhy = NeedsYouModel.closed(error) ? nil : Words.app("common.not_sent_unconfirmed")
             return
@@ -433,6 +436,10 @@ struct UsageView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.raising)
             .accessibilityIdentifier("raise-limit")
+            // The limit now, from the signed `from_cents` in the account's currency, once tafs cloud sends it.
+            if let from = raise.fromLine(words) {
+                Text(verbatim: from).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
         }
         if let why = model.raiseWhy {
             Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)

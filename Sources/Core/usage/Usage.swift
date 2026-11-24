@@ -37,11 +37,29 @@ enum Usage {
         struct Raise: Equatable {
             let words: String
             let fromCents: Int
+            /// The account's currency (ISO 4217), which tafs cloud sends beside `from_cents`: the old limit is written
+            /// from the signed `from_cents` in it, by this Mac's formatter. None, or one that isn't a code, is no line:
+            /// a currency is never guessed.
+            var currency: String? = nil
+
+            /// "The spend limit is €1,500 now." (`usage.raise_limit.from`), the limit the raise sends back, in the
+            /// person's language; nil without a currency.
+            func fromLine(_ words: Words) -> String? {
+                guard let currency else { return nil }
+                let amount = TafCard.Amount(minor: Int64(fromCents), unit: currency, scale: 2).written(language: words.language)
+                return words("usage.raise_limit.from", ["amount": amount])
+            }
+
+            /// A currency as ISO 4217 writes it: three capital letters, else none.
+            static func code(_ raw: String?) -> String? {
+                guard let raw, raw.count == 3, raw.allSatisfy({ $0.isASCII && $0.isUppercase }) else { return nil }
+                return raw
+            }
         }
 
         enum Keys: String, CodingKey { case balance, planLine = "plan_line", planTone = "plan_tone", homeLine = "home_line" }
         enum BalanceKeys: String, CodingKey { case state, meter = "meter_pct", words, detail, warning, buy, raise }
-        enum RaiseKeys: String, CodingKey { case words, fromCents = "from_cents" }
+        enum RaiseKeys: String, CodingKey { case words, fromCents = "from_cents", currency }
         enum BuyKeys: String, CodingKey { case firstMonth = "first_month", packs, solo }
         enum FirstMonthKeys: String, CodingKey { case ready }
 
@@ -66,7 +84,8 @@ enum Usage {
             let raised = try? c.nestedContainer(keyedBy: RaiseKeys.self, forKey: .raise)
             if let raised, let words = Usage.text((try? raised.decodeIfPresent(String.self, forKey: .words)) ?? nil),
                let from = (try? raised.decodeIfPresent(Int.self, forKey: .fromCents)) ?? nil, from >= 0 {
-                raise = Raise(words: words, fromCents: from)
+                raise = Raise(words: words, fromCents: from,
+                              currency: Raise.code((try? raised.decodeIfPresent(String.self, forKey: .currency)) ?? nil))
             } else {
                 raise = nil
             }

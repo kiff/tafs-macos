@@ -23,6 +23,27 @@ private func account(_ answers: [(Int, String)], signed: Bool = true) -> (Accoun
 }
 
 let usageRequestTests: [Test] = [
+    Test("the old limit is written from the signed from_cents in the currency tafs cloud sends; none, or a bad code, is no line") {
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        func raise(_ currency: String) throws -> Usage.Balance.Raise? {
+            let json = #"{"balance":{"state":"ok","words":"x","raise":{"words":"Raise the spend limit to €2,000","from_cents":150000"# + currency + "}}}"
+            return try JSONDecoder().decode(Usage.Balance.self, from: Data(json.utf8)).raise
+        }
+        let eur = try raise(#","currency":"EUR""#)
+        try expectEqual(eur?.currency, "EUR")
+        try expectEqual(eur?.fromLine(words), words("usage.raise_limit.from", ["amount": TafCard.Amount(minor: 150000, unit: "EUR", scale: 2).written(language: "en")]))
+        try expect(eur?.fromLine(words)?.contains("1,500") == true, "the figure is from_cents")
+        // tafs cloud today sends none: no line, never a guessed currency.
+        try expectEqual(try raise("")?.fromLine(words), nil)
+        for bad in [#","currency":"eur""#, #","currency":"EURO""#, #","currency":null"#, #","currency":12"#] {
+            let r = try raise(bad)
+            try expectEqual(r?.currency, nil)
+            try expectEqual(r?.fromCents, 150000)
+        }
+        // The prompt names it after tafs cloud's words, in UsageView (sources).
+        let view = try String(contentsOf: URL(fileURLWithPath: "Sources/App/usage/UsageView.swift"), encoding: .utf8)
+        try expect(view.contains(#"Words.app("usage.raise_limit.prompt") + ": " + raise.words + now"#), "the prompt carries the old limit")
+    },
     Test("Raise the limit is KIFF's PUT from the limit seen, signed by the device key; the balance reads tafs cloud's offer", awaiting: {
         let (client, transport) = account([(200, "{}")])
         try await client.raiseLimit(from: 100000)
