@@ -13,7 +13,7 @@ This page is about packaging only. The app's code is in the rest of the repo.
 3. signs the app, packs the image and signs it (`scripts/dmg.sh`);
 4. sends it to Apple's notary service and waits for its answer, then staples the ticket. If Apple refuses it, the run prints Apple's log and stops;
 5. checks the image as Gatekeeper would and prints its SHA-256. It isn't kept as a run artifact: this repository is public, so any signed-in GitHub user could download a run's artifacts, and the draft release is the image's only copy;
-6. attaches it to a **draft GitHub release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A draft is seen only by people with push access; publishing it is a separate, deliberate step. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one.
+6. attaches it to a **draft GitHub release** of this repo, `v<version>-<build>` (for example `v0.1-1`), with its SHA-256 in the notes. A draft is seen only by people with push access; publishing it is a separate, deliberate step. A version already released stops the run, so `App/Info.plist`'s version or build goes up before each new one. Its notes are `release-notes/v<version>-<build>.md`, in 8 languages: they're pasted into the draft by hand, under the SHA-256 line the run writes.
 
 **On a pull request** that changes the packaging (`scripts/dmg.sh`, `scripts/build.sh`, `App/Info.plist` or the workflow), the `check` job builds the image signed ad hoc and opens it, with no secret and no Apple.
 
@@ -73,4 +73,4 @@ If anything readable ever reaches a log, revoke the certificate at once (develop
 |---|---|
 | **The first signed, notarized image** | **owed:** after the secrets are stored. Then it's installed on a Mac on macOS 12 to check it opens with no warning. |
 | Where the image is downloaded from | a draft release here, for the team. Publishing it, and linking it from kiff.dev/tafs/download for everyone, come later. |
-| The version | `App/Info.plist`'s 0.1 (4). Build 1 was the first draft, signed with a personal Developer ID; build 2 is the first signed with the company's; build 3 carries the macOS 12 fixes (#139); build 4 adds the app's icon. |
+| The version | `App/Info.plist`'s 0.1 (5). Build 1 was the first draft, signed with a personal Developer ID; build 2 is the first signed with the company's; build 3 carries the macOS 12 fixes (#139); build 4 adds the app's icon; build 5 is the next draft, with its notes in `release-notes/v0.1-5.md`. |
