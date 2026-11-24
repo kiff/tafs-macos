@@ -9,6 +9,8 @@ struct HeldRow: Equatable, Identifiable {
     /// The taf's name, when the list has it, and what the call asks, apart: the Overview
     /// writes them "Taf · what it asks".
     let taf: String?
+    /// The taf's KIFF agent, when the list has it: the row opens its page, as the iPad's `HomeSelection.held`.
+    let agent: String?
     let asks: String
     /// KIFF's words for why it is held.
     let reason: String?
@@ -18,9 +20,11 @@ struct HeldRow: Equatable, Identifiable {
         id = call.id
         // The call as the iPad names it (`proposed.summary`, HomeSplitView.swift:510).
         let asks = call.summary
-        let name = tafs.first(where: { $0.kiffAgent == call.subject })?.name
+        let listed = tafs.first(where: { $0.kiffAgent == call.subject })
+        let name = listed?.name
         self.asks = asks
         taf = name
+        agent = listed?.kiffAgent
         title = name.map { $0 + ": " + asks } ?? asks
         reason = call.reasonText
         answerBy = call.expiresAt

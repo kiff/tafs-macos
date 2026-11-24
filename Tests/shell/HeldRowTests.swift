@@ -31,6 +31,8 @@ let shellHeldTests: [Test] = [
         try expectEqual(rows[3].line(words, time: time), "answer by 00:27")
         try expectEqual(rows.map(\.id), ["exc_1", "exc_2", "exc_3", "exc_4"])
         try expectEqual(rows.map(\.taf), ["Deploys", nil, "Deploys", "Deploys"])
+        // Its taf's agent, where the list has it: the row opens that taf's page; with none, Needs you.
+        try expectEqual(rows.map { $0.agent != nil }, [true, false, true, true])
         try expectEqual(rows[0].asks, "Run migration 0042 · migrate")
     },
 ]

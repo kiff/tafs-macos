@@ -58,6 +58,12 @@ let shellViewMacTests: [Test] = [
         try expectEqual(AppDates.fixed("HH:mm", zone: utc).string(from: at), "14:05")
         try expectEqual(london.shortTime(at), "14:05")
     },
+    Test("a held call in NEEDS YOU opens its taf's page, as the iPad's HomeSelection.held; one whose taf isn't listed opens Needs you (sources)") {
+        let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/ShellView.swift"), encoding: .utf8)
+        try expect(source.contains("if let taf = tafs.first(where: { $0.kiffAgent == row.agent }), taf.tafID != nil { open(taf) } else { selection = .needsYou }"),
+                   "the row opens its taf's page")
+        try expectEqual(sidebarHeld.first?.agent, "a1")
+    },
     Test("the shell draws the sidebar on the raised ground and the rest on the background") {
         for dark in [false, true] {
             let size = ShellView.minimumSize
