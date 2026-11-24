@@ -203,6 +203,9 @@ struct SignedInView: View {
             needsYou.answerWithKey = answerWithKey
             // "Allow this from now on" confirms KIFF's draft on the key, as any act that grants authority.
             needsYou.approveWithKey = approveWithKey
+            // An approval card's Card step: KIFF's draft confirm on the key, and the report signed by the device key.
+            coach.approveWithKey = approveWithKey
+            coach.signRequest = account.sign
             // A drafted door's approval: tafs cloud's door route on the key, as the doors' own acts.
             coach.signWithKey = signWithKey
         }

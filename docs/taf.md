@@ -76,7 +76,7 @@ and `taf-setup.json` in kiff/tafs, read by `scripts/test.sh contracts`.
   next page (`?after=`) and adds it after the runs read, a run already read not twice. A read
   that fails keeps what was read and says tafs cloud's words, else "{what} couldn't be read:
   {why}"; with nothing read, "These runs couldn't be read." A tafs cloud without the read
-  (404) shows nothing. A run's request isn't on this Mac yet, so a run doesn't open.
+  (404) shows nothing. A run tafs cloud says opens (`opens`) has a chevron and opens itself (below).
 - **See all**, under What it remembers, opens every note (`GET /v1/tafs/{id}/memory?all=true`)
   as the iPad's `MemoryPanel` (`TafDetailView.swift:1132-1181`): each note's words, its name
   from its path ("customers · acme") and when it changed, and **Forget**, confirmed first
@@ -113,6 +113,14 @@ order (`TafActivityList.parts`):
 - The page's `title` and `more_title` are needed, as are each run's `id` and `at`, and each
   skipped firing's `due`, `why` and `words`: without one the page doesn't read. A run's other
   fields that can't be read are none.
+- **A run opened** (`TafRunModel`, `TafRunSheet`, the iPad's `KnobRequestDetail`), from the runs
+  it kept and from its Usage: `GET /v1/tafs/{id}/requests/{run}` (`TafRequest`), read when it
+  opens. It shows tafs cloud's heading (`from`) and line, then each step with its mark (done
+  green, next a clock, any other amber) and its line, as sent. For whoever manages the taf: Send
+  again ("Try the reply now") for each delivery that offers it (`send_again`), then the run read
+  again; and Ask Coach for someone who may use Coach, opening Coach on this taf. Each field is
+  needed, as the iPad's reader: a run that doesn't read whole says why, with Try again, and a
+  refusal says tafs cloud's words.
 
 ## Halt (`Halt`, `HaltModel`, `HaltRow`, `HaltView`)
 

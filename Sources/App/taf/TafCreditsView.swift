@@ -11,7 +11,7 @@ final class TafCreditsModel: ObservableObject {
     /// A read on this sheet is over, whatever it gave: an earlier read isn't shown as now.
     @Published private(set) var read = false
 
-    private let cloud: CloudClient
+    let cloud: CloudClient
     let taf: String
     /// The last period, not this one, as the iPad's `TafCreditsView(previous:)`: the period
     /// Plan & usage showed when the taf's line was opened.
@@ -59,7 +59,11 @@ struct TafCreditsView: View {
     @Environment(\.words) private var words
     @ObservedObject var model: TafCreditsModel
     let name: String
+    /// Whether this person manages the taf: a run's Send again.
+    var manages = false
     let close: () -> Void
+    /// The run opened from its row.
+    @State private var opened: OpenRun?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -77,6 +81,9 @@ struct TafCreditsView: View {
         .frame(width: 520, height: 520)
         .background(Theme.background)
         .task { await model.load() }
+        .sheet(item: $opened) { open in
+            TafRunSheet(model: open.model, manages: manages) { opened = nil }.environment(\.words, words)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -109,8 +116,25 @@ struct TafCreditsView: View {
         }
     }
 
-    /// One run, as the iPad's `CreditsRunRow`: tafs cloud's words, and when it ended.
-    private func run(_ run: TafCredits.Run) -> some View {
+    /// One run, as the iPad's `CreditsRunRow`: tafs cloud's words, and when it ended. One tafs cloud says opens
+    /// (`opens`) opens the run itself (`KnobRequestDetail`), with a chevron.
+    @ViewBuilder private func run(_ run: TafCredits.Run) -> some View {
+        if run.opens {
+            Button { opened = OpenRun(model: TafRunModel(cloud: model.cloud, taf: model.taf, run: run.run)) } label: {
+                HStack(alignment: .firstTextBaseline) {
+                    runLines(run)
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.dim)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("credits.run.\(run.run)")
+        } else {
+            runLines(run)
+        }
+    }
+
+    private func runLines(_ run: TafCredits.Run) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(verbatim: run.words).font(.system(size: 14, weight: run.counted ? .semibold : .regular))
                 .foregroundColor(run.counted ? Theme.ink : Theme.soft)
