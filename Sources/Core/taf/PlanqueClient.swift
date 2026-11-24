@@ -195,7 +195,8 @@ final class PlanqueClient {
         var method: String {
             switch self {
             case .chromes, .chromeShots, .chromeShot: return "GET"
-            case .unpairChrome, .deleteTrigger: return "DELETE"
+            case .unpairChrome: return "DELETE"
+            case .deleteTrigger: return "DELETE"
             }
         }
 

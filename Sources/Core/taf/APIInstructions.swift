@@ -29,6 +29,15 @@ enum APIInstructions {
         path.range(of: #"^/[A-Za-z0-9/_.~-]*$"#, options: .regularExpression) != nil
     }
 
+    /// The longest key name the field takes (tafs cloud takes 80; 60, as the iPad and Android).
+    static let maxKeyName = 60
+
+    /// A new key's name, as the iPad's `APIDoorText.keyName`: what the owner typed, trimmed, else the door's own name.
+    static func keyName(_ typed: String, door label: String) -> String {
+        let name = String(typed.trimmingCharacters(in: .whitespacesAndNewlines).prefix(maxKeyName))
+        return name.isEmpty ? String(label.prefix(maxKeyName)) : name
+    }
+
     /// An example request, as the iPad's. It reads the key from the caller's own secret: the key is never written in it.
     /// The endpoint is single-quoted, so whatever slipped past the plain path stays inert in a shell.
     static func example(endpoint: String) -> String {

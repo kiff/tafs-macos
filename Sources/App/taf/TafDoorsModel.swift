@@ -143,6 +143,37 @@ final class DoorsModel: ObservableObject {
         }
     }
 
+    /// The key just made, held only until its sheet closes (`keyShown`): never kept, never shown again.
+    @Published private(set) var issued: CloudClient.IssuedKey?
+
+    /// An API door's new key, on the security key, as the iPad's `newKey`: its name (the door's own when left blank),
+    /// then the key once, in its own sheet. Without a key on this Mac it says to approve elsewhere.
+    func newKey(_ door: TafDoors.Door, name: String) async -> Bool {
+        guard let sign = signWithKey else {
+            error = Words.app("approval.device_can_not_approve_approve")
+            return false
+        }
+        let act = KeyAct.newAPIDoorKey(taf: taf, door: door.id, name: APIInstructions.keyName(name, door: door.label))
+        let cloud = cloud
+        busy = true
+        defer { busy = false }
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: door.label))
+            issued = try await cloud.newDoorKey(act, assertion: assertion)
+            error = nil
+            await load()
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            self.error = NeedsYouModel.why(error)
+            return false
+        }
+    }
+
+    /// The key's sheet was left: the key is forgotten here, and the list only ever has its last four.
+    func keyShown() { issued = nil }
+
     func remove(_ door: TafDoors.Door) async {
         // An API door is removed on the key, as the iPad's `removeAPI`: its keys stop working with it.
         if door.kind == "api" {
