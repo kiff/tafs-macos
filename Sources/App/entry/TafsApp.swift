@@ -3,6 +3,10 @@ import SwiftUI
 
 @main
 struct TafsApp: App {
+    #if PUSH
+    /// AppKit's push registration answers, for alerts with tafs closed (`PushToken`).
+    @NSApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
+    #endif
     /// The app's language, kept for this Mac and changed from Account › Language.
     @StateObject private var language = AppLanguage()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())

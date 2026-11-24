@@ -3,12 +3,16 @@
 # the Swift compiler alone (docs/building.md).
 #   ARCHS="x86_64"   builds one architecture, for a quick local run
 #   CONFIG=debug     builds without optimization
+#   PUSH=1           builds alerts with tafs closed in (`-D PUSH`): only for a signed build with its push profile
+#                    (scripts/dmg.sh, docs/release.md)
 set -eu
 cd "$(dirname "$0")/.."
 
 ARCHS="${ARCHS:-x86_64 arm64}"
 OPT="-O"
 [ "${CONFIG:-release}" = "debug" ] && OPT="-Onone"
+FLAGS=""
+[ "${PUSH:-0}" = "1" ] && FLAGS="-D PUSH"
 OUT=build
 APP="$OUT/tafs.app"
 
@@ -30,7 +34,8 @@ scripts/shared.sh fetch
 SLICES=""
 for arch in $ARCHS; do
     echo "Compiling for $arch"
-    { find Sources -name '*.swift' | sort; scripts/shared.sh sources; } | xargs swiftc -swift-version 5 -parse-as-library $OPT -sdk "$SDK" \
+    # shellcheck disable=SC2086
+    { find Sources -name '*.swift' | sort; scripts/shared.sh sources; } | xargs swiftc -swift-version 5 -parse-as-library $OPT $FLAGS -sdk "$SDK" \
         -target "$arch-apple-macos12.0" -I "build/fido/$arch/include" -L "build/fido/$arch/lib" \
         -module-name Tafs -o "$OUT/tafs-$arch"
     SLICES="$SLICES $OUT/tafs-$arch"

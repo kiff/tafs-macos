@@ -31,6 +31,22 @@ struct SystemAlertPermission: AlertPermission {
     }
 }
 
+/// Alerts with tafs closed (`MacPush`): this Mac's token, and tafs cloud's routes for it. Only a build made with
+/// `PUSH=1` has one (`mac`); otherwise it's nil and nothing is sent.
+struct PushSync {
+    let token: () async -> String?
+    let register: (String, Bool) async throws -> Void
+    let unregister: (String) async throws -> Void
+
+    /// The Mac's own, with the signed-in account's tafs cloud; nil in a build that doesn't ask for push.
+    @MainActor static func mac(cloud: CloudClient) -> PushSync? {
+        guard PushToken.built else { return nil }
+        return PushSync(token: { await PushToken.shared.token().map(MacPush.token) },
+                        register: { token, sound in _ = try await cloud.registerPush(token: token, sound: sound) },
+                        unregister: { try await cloud.unregisterPush(token: $0) })
+    }
+}
+
 /// Alerts on this Mac, for the signed-in account, as the iPad's `turnOnAlerts`/`turnOffAlerts`
 /// and `alertSound` keep them: on only once the person turned them on and macOS allowed it.
 @MainActor
@@ -48,12 +64,16 @@ final class AlertsModel: ObservableObject {
 
     /// The sample is open: alerts stay off, macOS isn't asked, and nothing is kept (`Sample`).
     private let inSample: Bool
+    /// Alerts with tafs closed, in a build made with `PUSH=1`: nil otherwise, and in the sample.
+    private let push: PushSync?
 
-    init(account: String, defaults: UserDefaults = .standard, permission: AlertPermission = SystemAlertPermission(), inSample: Bool = false) {
+    init(account: String, defaults: UserDefaults = .standard, permission: AlertPermission = SystemAlertPermission(), inSample: Bool = false,
+         push: PushSync? = nil) {
         self.account = account
         self.defaults = defaults
         self.permission = permission
         self.inSample = inSample
+        self.push = inSample ? nil : push
         prefs = inSample ? AlertPrefs() : AlertPrefs(defaults: defaults, account: account)
     }
 
@@ -83,16 +103,40 @@ final class AlertsModel: ObservableObject {
         why = nil
         prefs.on = true
         if !inSample { prefs.save(to: defaults, account: account) }
+        await syncPush()
     }
 
     func turnOff() {
         prefs.on = false
         if !inSample { prefs.save(to: defaults, account: account) }
+        Task { await syncPush() }
     }
 
     func setSound(_ sound: Bool) {
         prefs.sound = sound
         if !inSample { prefs.save(to: defaults, account: account) }
+        Task { await syncPush() }
+    }
+
+    /// Gives tafs cloud this Mac's token while alerts are on, with their sound, and takes it back when they're off
+    /// (`MacPush.step`). `signingOut`: taken back whatever the switch says. Only in a build made with `PUSH=1`; a send
+    /// that fails is tried again at the next change or launch.
+    func syncPush(signingOut: Bool = false) async {
+        guard let push else { return }
+        if !signingOut { allowed = await permission.allowed() }
+        let held = MacPush.Registered.load(from: defaults, account: account)
+        let wanted = on && !signingOut
+        let token = wanted ? await push.token() : nil
+        switch MacPush.step(wanted: wanted, token: token, sound: prefs.sound, held: held) {
+        case .none:
+            return
+        case .register(let token, let sound):
+            guard (try? await push.register(token, sound)) != nil else { return }
+            MacPush.Registered.save(MacPush.Registered(token: token, sound: sound), to: defaults, account: account)
+        case .unregister(let token):
+            guard (try? await push.unregister(token)) != nil else { return }
+            MacPush.Registered.save(nil, to: defaults, account: account)
+        }
     }
 }
 
