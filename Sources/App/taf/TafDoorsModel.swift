@@ -15,6 +15,9 @@ final class DoorsModel: ObservableObject {
     /// tafs cloud's id for the taf.
     private let taf: String
 
+    /// Stops a Slack door's planque subscription (grant, trigger), signed by this Mac's device key; nil without one.
+    var unsubscribe: ((String, String) async throws -> Void)?
+
     init(cloud: CloudClient, taf: String) {
         self.cloud = cloud
         self.taf = taf
@@ -140,18 +143,57 @@ final class DoorsModel: ObservableObject {
         }
     }
 
+    /// The key just made, held only until its sheet closes (`keyShown`): never kept, never shown again.
+    @Published private(set) var issued: CloudClient.IssuedKey?
+
+    /// An API door's new key, on the security key, as the iPad's `newKey`: its name (the door's own when left blank),
+    /// then the key once, in its own sheet. Without a key on this Mac it says to approve elsewhere.
+    func newKey(_ door: TafDoors.Door, name: String) async -> Bool {
+        guard let sign = signWithKey else {
+            error = Words.app("approval.device_can_not_approve_approve")
+            return false
+        }
+        let act = KeyAct.newAPIDoorKey(taf: taf, door: door.id, name: APIInstructions.keyName(name, door: door.label))
+        let cloud = cloud
+        busy = true
+        defer { busy = false }
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: door.label))
+            issued = try await cloud.newDoorKey(act, assertion: assertion)
+            error = nil
+            await load()
+            return true
+        } catch is CancellationError {
+            return false
+        } catch {
+            self.error = NeedsYouModel.why(error)
+            return false
+        }
+    }
+
+    /// The key's sheet was left: the key is forgotten here, and the list only ever has its last four.
+    func keyShown() { issued = nil }
+
     func remove(_ door: TafDoors.Door) async {
         // An API door is removed on the key, as the iPad's `removeAPI`: its keys stop working with it.
         if door.kind == "api" {
             if await signed(.removeAPIDoor(taf: taf, door: door.id), named: door.label) != nil { doors.removeAll { $0.id == door.id } }
             return
         }
-        // A Slack door with a channel subscription: the iPad takes planque's subscription back
-        // first, signed (`removeSlackDoor`); with no planque connection it says to start
-        // connected tools first and removes nothing. This Mac has none.
-        if door.kind == "slack", door.grant != nil, door.trigger != nil {
-            error = Words.app("door.start_connected_tools_first_slack", ["device": Words.app("device.mac")])
-            return
+        // A Slack door with a channel subscription: planque's subscription is stopped first, as the iPad's
+        // `removeSlackDoor`, on planque's safe route signed by this Mac's device key (`unsubscribe`). Without that, or if
+        // planque refuses, the door stays and says why: a door left without its subscription would still be delivered to.
+        if door.kind == "slack", let grant = door.grant, let trigger = door.trigger {
+            guard let unsubscribe else {
+                error = Words.app("door.start_connected_tools_first_slack", ["device": Words.app("device.mac")])
+                return
+            }
+            do {
+                try await unsubscribe(grant, trigger)
+            } catch {
+                self.error = Words.app("door.slack_subscription_not_stopped_door", ["why": NeedsYouModel.why(error)])
+                return
+            }
         }
         let cloud = cloud, taf = taf
         _ = await work { () -> TafDoors.Door? in
@@ -214,12 +256,17 @@ final class DoorModels: ObservableObject {
     var signWithKey: ((KeyAct, String) async throws -> String)? {
         didSet { for model in models.values { model.signWithKey = signWithKey } }
     }
+    /// planque's safe route that stops a Slack door's subscription, signed by the device key; nil without one.
+    var unsubscribe: ((String, String) async throws -> Void)? {
+        didSet { for model in models.values { model.unsubscribe = unsubscribe } }
+    }
 
     func model(for taf: Home.Taf, cloud: CloudClient) -> DoorsModel? {
         if let model = models[taf.id] { return model }
         guard let id = taf.tafID else { return nil }
         let model = DoorsModel(cloud: cloud, taf: id)
         model.signWithKey = signWithKey
+        model.unsubscribe = unsubscribe
         models[taf.id] = model
         return model
     }

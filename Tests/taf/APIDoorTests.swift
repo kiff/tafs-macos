@@ -121,3 +121,30 @@ let tafAPIInstructionsTests: [Test] = [
         try expect(!APIInstructions.example(endpoint: "https://x/'$(id)'").contains("'$(id)'"), "a quote can't close the quoting")
     },
 ]
+
+/// New key on the security key (`KeyAct.newAPIDoorKey`, the iPad's `DoorsModel.newKey`), and a Slack door's subscription
+/// stopped on planque's safe route (`PlanqueClient.Safe.deleteTrigger`, the iPad's `unsubscribe`).
+let tafNewKeyTests: [Test] = [
+    Test("New key is tafs cloud's POST to the door's keys, with the name as the only field, signed as sent") {
+        let act = KeyAct.newAPIDoorKey(taf: "taf/1", door: "api-7", name: "ERP / production")
+        try expectEqual(act.method, "POST")
+        try expectEqual(act.path, "/v1/tafs/taf%2F1/doors/api-7/keys")
+        try expectEqual(String(decoding: act.body, as: UTF8.self), #"{"name":"ERP / production"}"#)
+    },
+    Test("a new key's name is what was typed, trimmed and at most 60, else the door's own name") {
+        try expectEqual(APIInstructions.keyName("  ", door: "Order system"), "Order system")
+        try expectEqual(APIInstructions.keyName(" ERP staging ", door: "Order system"), "ERP staging")
+        try expectEqual(APIInstructions.keyName(String(repeating: "k", count: 90), door: "x").count, 60)
+    },
+    Test("the issued key reads with its id, last four and time, and an answer without a key is unreadable") {
+        let key = try AccountClient.decoder.decode(CloudClient.IssuedKey.self, from: Data(
+            #"{"id":"k3","key":"tafs_api_abc123","last4":"c123","made_at":"2026-11-24T01:00:00Z"}"#.utf8))
+        try expectEqual(key.key, "tafs_api_abc123")
+        try expectEqual(key.last4, "c123")
+    },
+    Test("a Slack door's subscription is stopped with planque's DELETE of its trigger, a safe route") {
+        let route = PlanqueClient.Safe.deleteTrigger(grant: "g/1", trigger: "t 2")
+        try expectEqual(route.method, "DELETE")
+        try expectEqual(route.path, "grants/g%2F1/triggers/t%202")
+    },
+]

@@ -23,6 +23,19 @@ private func account(_ answers: [(Int, String)], signed: Bool = true) -> (Accoun
 }
 
 let usageRequestTests: [Test] = [
+    Test("Raise the limit is KIFF's PUT from the limit seen, signed by the device key; the balance reads tafs cloud's offer", awaiting: {
+        let (client, transport) = account([(200, "{}")])
+        try await client.raiseLimit(from: 100000)
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["PUT /v1/me/usage/limit"])
+        try expectEqual(String(decoding: transport.sent[0].body, as: UTF8.self), #"{"from_cents":100000,"raise":true}"#)
+        try expect(transport.sent[0].headers["KIFF-Device-Signature"] != nil, "signed")
+        let offered = #"{"balance":{"state":"ok","words":"820 credits left","raise":{"words":"Raise the spend limit to €2,000","from_cents":100000}}}"#
+        let balance = try JSONDecoder().decode(Usage.Balance.self, from: Data(offered.utf8))
+        try expectEqual(balance.raise, Usage.Balance.Raise(words: "Raise the spend limit to €2,000", fromCents: 100000))
+        // Without the limit now there's nothing to raise from: no offer.
+        let noFrom = try JSONDecoder().decode(Usage.Balance.self, from: Data(#"{"balance":{"state":"ok","words":"x","raise":{"words":"Raise"}}}"#.utf8))
+        try expect(noFrom.raise == nil, "no from_cents, no raise")
+    }),
     Test("KIFF's usage reads as the iPad's: the plan, the packs that read, and the requests that read", awaiting: {
         let (client, transport) = account([(200, kiffUsageAnswer)])
         let usage = try await client.usage()

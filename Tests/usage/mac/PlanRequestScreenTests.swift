@@ -16,6 +16,51 @@ private func model(_ kiff: [(Int, String)], signed: Bool = true,
 }
 
 let usageRequestScreenTests: [Test] = [
+    Test("Raise the limit asks the owner first, every time; closed, nothing is built or sent; then a signed PUT and the balance read again", awaiting: { @MainActor in
+        let offered = #"{"balance":{"state":"ok","words":"820 credits left","raise":{"words":"Raise the spend limit to €2,000","from_cents":100000}}}"#
+        let raised = #"{"balance":{"state":"ok","words":"1,820 credits left","raise":{"words":"Raise the spend limit to €3,000","from_cents":200000}}}"#
+        let cloud = CannedTransport([(200, offered), (200, creditsAnswer), (200, raised), (200, creditsAnswer), (200, raised), (200, creditsAnswer)])
+        let kiff = CannedTransport([(200, teamUsage), (200, "{}"), (200, teamUsage), (200, teamUsage)])
+        var asked: [String] = []
+        var allow = false
+        let account = AccountClient(transport: kiff, session: session, sign: { _ in "t=x,v1=SIG" })
+        let model = UsageModel(cloud: CloudClient(transport: cloud, session: session), account: account, confirm: { prompt in
+            asked.append(prompt)
+            if !allow { throw LAError(.userCancel) }
+        })
+        await model.load()
+        // Not someone who manages billing: nothing is asked or sent.
+        await model.raiseLimit(managesBilling: false)
+        try expectEqual(asked.count, 0)
+        // The prompt closed: no request is built.
+        await model.raiseLimit(managesBilling: true)
+        try expectEqual(asked, [Words.app("usage.raise_limit.prompt") + ": Raise the spend limit to €2,000"])
+        try expect(!kiff.sent.contains { $0.method == "PUT" }, "nothing sent without the owner's yes")
+        try expectEqual(model.raiseWhy, nil)
+        // Confirmed: one signed PUT from the limit seen, then the balance read again, offering the next raise.
+        allow = true
+        await model.raiseLimit(managesBilling: true)
+        let puts = kiff.sent.filter { $0.method == "PUT" }
+        try expectEqual(puts.map(\.path), ["/v1/me/usage/limit"])
+        try expectEqual(String(decoding: puts[0].body, as: UTF8.self), #"{"from_cents":100000,"raise":true}"#)
+        try expect(puts[0].headers["KIFF-Device-Signature"] != nil, "signed by the device key")
+        try expectEqual(asked.count, 2)
+        try expectEqual(model.balanceStale, false)
+        guard case .loaded(let now) = model.balance else { throw Failure(description: "not read") }
+        try expectEqual(now.raise?.fromCents, 200000)
+    }),
+    Test("a raise KIFF refuses as changed reads the balance again and says so; at the ceiling it says to contact KIFF", awaiting: { @MainActor in
+        let offered = #"{"balance":{"state":"ok","words":"820 credits left","raise":{"words":"Raise the spend limit to €2,000","from_cents":100000}}}"#
+        let cloud = CannedTransport([(200, offered), (200, creditsAnswer), (200, offered), (200, creditsAnswer)])
+        let kiff = CannedTransport([(200, teamUsage), (409, #"{"error":"limit_changed"}"#), (200, teamUsage), (409, #"{"error":"limit_ceiling"}"#)])
+        let account = AccountClient(transport: kiff, session: session, sign: { _ in "t=x,v1=SIG" })
+        let model = UsageModel(cloud: CloudClient(transport: cloud, session: session), account: account, confirm: { _ in })
+        await model.load()
+        await model.raiseLimit(managesBilling: true)
+        try expectEqual(model.raiseWhy, Words.app("usage.limit_changed"))
+        await model.raiseLimit(managesBilling: true)
+        try expectEqual(model.raiseWhy, Words.app("usage.limit_ceiling"))
+    }),
     Test("KIFF's usage is read with each read; one that fails keeps what was read and says why", awaiting: { @MainActor in
         let (model, transport) = model([(200, kiffUsageAnswer), (503, "")])
         await model.load()
