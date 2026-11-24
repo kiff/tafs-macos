@@ -33,6 +33,9 @@ enum HoldAllow {
         var changed = Set<String>()
         for card in cards {
             guard let revises = card.revises, let current = card.current else { return false }
+            // The Card in force the draft shows must be the one it revises: when KIFF names it (`current.id`), the
+            // names must agree, or nothing is signed. KIFF sends no `current.id` today, so this holds until it does.
+            if let shown = current.id, shown != revises { return false }
             // A draft that sets how long a hold waits, or revokes, changes more than a limit.
             guard (card.holdExpiry ?? "").isEmpty, card.revokedAt == nil else { return false }
             let inForce = Terms(current)
