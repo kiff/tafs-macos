@@ -263,8 +263,16 @@ own software handing the taf work with a key (tafs docs/doors.md). Drawn for wha
   a query or a fragment; anything else is tafs cloud's address alone. That's every app's shared rule
   (`vectors/api-door-endpoint.json`), hardening the iPad's host pin: the example is a shell line pasted with the
   developer's key, so it never names another host, and a path can't carry `$ ( ) ; & '` into the shell.
-- **Not here:** **New key**, which stays the phone's: a key is shown once, and this Mac can't keep it
-  out of screen recording or the clipboard's history. Also not here: Coach's drafted door (`DoorDraftCard`).
+- **New key**, as the iPad's, on this Mac's security key (`KeyAct.newAPIDoorKey`: tafs cloud's
+  `POST …/doors/{door}/keys` with `{"name":…}`, at most two live keys), named as typed or the door's own name
+  (at most 60). The key comes back once and is shown in its own sheet (`IssuedKeySheet`) with Copy, where to send
+  work and the example; leaving it forgets the key, and the list only ever has its last four. As the iPad covers
+  the key from the app switcher and recording, **the sheet's window is kept out of screenshots and screen
+  recording** (`CaptureShield`, `NSWindow.sharingType = .none`), and **a copied key leaves the clipboard after a
+  minute** unless something else was copied since (`SecretClipboard`, as Android's).
+- **A Slack door's removal** stops its planque subscription first (`PlanqueClient.Safe.deleteTrigger`, a safe
+  route the device key signs), as the iPad's `removeSlackDoor`; if planque refuses, the door stays and says why.
+- **Not here:** a drafted door's Approve, which issues a key too (`DoorDraftCard`, the phone's for now).
 
 ## Tests
 
