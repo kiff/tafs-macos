@@ -71,6 +71,23 @@ let approvalsMacPushTests: [Test] = [
         try expectEqual(MacPush.destination(["brief_kind": "weekly"]), nil)
         try expect(MacPush.isBrief(["brief_kind": "urgent"]) && !MacPush.isBrief(["kind": "brief"]), "only brief_kind")
     },
+    Test("sign-out stops before KIFF is asked when tafs cloud still alerts this Mac, unless signed out anyway; syncs run one at a time; the target only for who answers holds (sources)") {
+        let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
+        guard let start = window.range(of: "private func signOut(anyway: Bool = false) async {"),
+              let ask = window.range(of: "if !anyway, !(await alerts.syncPush(signingOut: true, tries: 3)) {", range: start.upperBound..<window.endIndex),
+              let stop = window.range(of: "return", range: ask.upperBound..<window.endIndex),
+              let kiff = window.range(of: "try? await account.signOut()", range: start.upperBound..<window.endIndex) else {
+            throw Failure(description: "no sign-out gate")
+        }
+        try expect(stop.lowerBound < kiff.lowerBound, "it stops before KIFF is asked")
+        for key in ["alert.still_on_after_sign_out.title", "alert.still_on_after_sign_out.body", "alert.sign_out_anyway", "common.try_again"] {
+            try expect(window.contains(#"words(""# + key), "the question says \(key)")
+        }
+        let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
+        try expect(alerts.contains("await before?.value"), "one sync at a time")
+        try expect(alerts.contains("if pendingTarget == nil, answersHolds == true {"), "KIFF's target only for who answers held calls")
+        try expect(alerts.contains("(signingOut ? push.knownToken().map"), "the Mac's own token taken back at sign-out too")
+    },
     Test("what tafs cloud holds is kept per account") {
         let defaults = UserDefaults(suiteName: "MacPushTests-\(UUID().uuidString)")!
         MacPush.Registered.save(MacPush.Registered(token: token, sound: false), to: defaults, account: "t-a")

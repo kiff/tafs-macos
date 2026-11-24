@@ -36,6 +36,8 @@ struct SignedInView: View {
     @State private var selection: Screen = .overview
     /// The taf whose page is open, by its agent, and its chat.
     @State private var openTaf: String?
+    /// Why tafs cloud couldn't stop alerting this Mac at sign-out: the question that stops it (PUSH=1 builds).
+    @State private var alertsLeftOn: String?
     /// A discard tafs cloud refused while KIFF still held Cards in force: those Cards, by agent, revoked on the next try.
     @State private var discardCardsLeft: [String: [String]] = [:]
     @State private var tafChat: CoachModel?
@@ -182,6 +184,8 @@ struct SignedInView: View {
         .task { await accountModel.load() }
         // Alerts with tafs closed, in a build made with PUSH=1: this Mac's token given again at each launch while alerts are on.
         .task { await alerts.syncPush(again: true) }
+        // KIFF's alert target is asked for only by someone who answers held calls (`AlertsModel.answersHolds`).
+        .onChange(of: accountModel.me?.answersHolds) { alerts.answersHolds = $0 }
         // Account's Chrome row shows once planque lists Chromes: read once with the window.
         .task { await chromes.load() }
         // Signing another device out is approved by this Mac's security key, when it has one (kiff/cloud#96).
@@ -628,26 +632,48 @@ struct SignedInView: View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
                     open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, inSample: inSample, signOut: {
-            // A list read still on its way keeps nothing from here.
-            overview.endSession()
-            brief.endSession()
-            // An ending of a connection on its way sends nothing more (`ConnectAppsModel.endSession`).
-            connect.endSession()
-            // No answer outlives the session it was started in.
-            needsYou.cancelAnswers()
-            usage.cancelAnswers()
-            Task {
-                // tafs cloud stops alerting this Mac first, while the session still reads (PUSH=1 builds only): tried
-                // three times, a second and three seconds apart.
-                await alerts.syncPush(signingOut: true, tries: 3)
-                // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
-                // either way.
-                try? await account.signOut()
-                // What's still on its way in a chat is the session before's.
-                coach.signedOut()
-                tafChat?.signedOut()
-                signedOut()
-            }
+            Task { await signOut() }
         })
+        // tafs cloud couldn't stop alerting this Mac (PUSH=1 builds): sign-out stopped before KIFF was asked, so the
+        // session is still here. Try again, or sign out anyway.
+        .alert(words("alert.still_on_after_sign_out.title", ["device": words("device.mac")]),
+               isPresented: Binding(get: { alertsLeftOn != nil }, set: { if !$0 { alertsLeftOn = nil } })) {
+            Button(words("common.try_again")) { Task { await signOut() } }
+            Button(words("alert.sign_out_anyway"), role: .destructive) { Task { await signOut(anyway: true) } }
+            Button(words("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(words("alert.still_on_after_sign_out.body", ["why": alertsLeftOn ?? ""]))
+        }
+    }
+
+    /// Signs out, as the iPhone does: tafs cloud stops alerting this Mac first, while the session still reads (PUSH=1
+    /// builds only), tried three times, a second and three seconds apart. If it still can't, sign-out stops before KIFF
+    /// is asked and says so (`alertsLeftOn`), unless the person signs out `anyway`.
+    private func signOut(anyway: Bool = false) async {
+        if !anyway, !(await alerts.syncPush(signingOut: true, tries: 3)) {
+            alertsLeftOn = alerts.takeBackFailed ?? ""
+            return
+        }
+        alertsLeftOn = nil
+        endSession()
+        // Ended at KIFF first; this Mac forgets its session, and the list kept with it,
+        // either way.
+        try? await account.signOut()
+        // What's still on its way in a chat is the session before's.
+        coach.signedOut()
+        tafChat?.signedOut()
+        signedOut()
+    }
+
+    /// What's on its way for this session stops before it's signed out.
+    private func endSession() {
+        // A list read still on its way keeps nothing from here.
+        overview.endSession()
+        brief.endSession()
+        // An ending of a connection on its way sends nothing more (`ConnectAppsModel.endSession`).
+        connect.endSession()
+        // No answer outlives the session it was started in.
+        needsYou.cancelAnswers()
+        usage.cancelAnswers()
     }
 }

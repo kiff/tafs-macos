@@ -35,6 +35,8 @@ struct SystemAlertPermission: AlertPermission {
 /// build made with `PUSH=1` has one (`mac`); otherwise it's nil and nothing is sent.
 struct PushSync {
     let token: () async -> String?
+    /// The token this Mac already has, without asking AppKit: taken back at sign-out even when nothing was kept.
+    let knownToken: () -> String?
     let register: (_ token: String, _ sound: Bool, _ target: MacPush.AlertTarget?, _ kinds: [String: Bool]?) async throws -> MacPush.Status
     let unregister: (String) async throws -> Void
     let alerts: (String) async throws -> MacPush.DeviceAlerts
@@ -45,6 +47,7 @@ struct PushSync {
     @MainActor static func mac(cloud: CloudClient, account: AccountClient) -> PushSync? {
         guard PushToken.built else { return nil }
         return PushSync(token: { await PushToken.shared.token().map(MacPush.token) },
+                        knownToken: { PushToken.shared.bytes.map(MacPush.token) },
                         register: { try await cloud.registerPush(token: $0, sound: $1, target: $2, kinds: $3) },
                         unregister: { try await cloud.unregisterPush(token: $0) },
                         alerts: { try await cloud.deviceAlerts(token: $0) },
@@ -79,6 +82,12 @@ final class AlertsModel: ObservableObject {
     private let inSample: Bool
     /// Alerts with tafs closed, in a build made with `PUSH=1`: nil otherwise, and in the sample.
     private let push: PushSync?
+    /// Whether this person answers the account's held calls (KIFF's `holds.answer`), once Account's read says: KIFF's
+    /// alert target is asked for only then, since it replaces the account's. Nil until read.
+    var answersHolds: Bool?
+    /// The push sync running now: each waits for the one before, so a register can't land after a take-back.
+    private var inFlight: Task<Void, Never>?
+
     /// KIFF's alert target registered but not yet taken by tafs cloud, as the iPad's `pendingHandoff`: handed over again
     /// at the next try, without registering another. Kept in memory only.
     private var pendingTarget: MacPush.AlertTarget?
@@ -122,7 +131,9 @@ final class AlertsModel: ObservableObject {
         allowed = true
         why = nil
         if let push {
-            guard let failed = await turnOnPush(push, words: words) else { return keepOn() }
+            var failed: String?
+            await serially { failed = await self.turnOnPush(push, words: words) }
+            guard let failed else { return keepOn() }
             why = failed
             return
         }
@@ -137,7 +148,9 @@ final class AlertsModel: ObservableObject {
     /// The token, KIFF's target and tafs cloud's registration; why not, in the iPad's words, when one fails.
     private func turnOnPush(_ push: PushSync, words: Words) async -> String? {
         guard let token = await push.token() else { return words("alert.no_push_token_device", ["device": words("device.mac")]) }
-        if pendingTarget == nil {
+        // KIFF's target replaces the account's: asked for only by someone who answers held calls. Anyone else registers
+        // for their own kinds without it.
+        if pendingTarget == nil, answersHolds == true {
             do {
                 pendingTarget = try await push.alertTarget()
             } catch KIFFError.refused(403, let code) {
@@ -180,12 +193,14 @@ final class AlertsModel: ObservableObject {
         pushBusy = true
         defer { pushBusy = false }
         let kinds = alerts.kinds(setting: id, to: enabled)
-        do {
-            _ = try await push.register(token, prefs.sound, nil, kinds)
-            defaults.set(kinds, forKey: MacPush.kindsKey(account))
-            await loadDeviceAlerts()
-        } catch {
-            deviceAlertsError = NeedsYouModel.why(error)
+        await serially {
+            do {
+                _ = try await push.register(token, self.prefs.sound, nil, kinds)
+                self.defaults.set(kinds, forKey: MacPush.kindsKey(self.account))
+                await self.loadDeviceAlerts()
+            } catch {
+                self.deviceAlertsError = NeedsYouModel.why(error)
+            }
         }
     }
 
@@ -212,9 +227,31 @@ final class AlertsModel: ObservableObject {
     /// when a token tafs cloud holds couldn't be taken back: at sign-out it's tried `tries` times first.
     @discardableResult
     func syncPush(signingOut: Bool = false, again: Bool = false, tries: Int = 1) async -> Bool {
+        guard push != nil else { return true }
+        var done = true
+        await serially { done = await self.syncPushNow(signingOut: signingOut, again: again, tries: tries) }
+        return done
+    }
+
+    /// Runs `body` once every push sync started before it is over: a register still on its way can't
+    /// land after sign-out's take-back.
+    private func serially(_ body: @escaping @MainActor () async -> Void) async {
+        let before = inFlight
+        let task = Task { @MainActor in
+            await before?.value
+            await body()
+        }
+        inFlight = task
+        await task.value
+    }
+
+    private func syncPushNow(signingOut: Bool, again: Bool, tries: Int) async -> Bool {
         guard let push else { return true }
         if !signingOut { allowed = await permission.allowed() }
-        let held = MacPush.Registered.load(from: defaults, account: account)
+        // At sign-out, the token this Mac has is taken back even when nothing was kept: a register whose answer was
+        // lost left a row at tafs cloud all the same. Taking back is idempotent there.
+        let kept = MacPush.Registered.load(from: defaults, account: account)
+        let held = kept ?? (signingOut ? push.knownToken().map { MacPush.Registered(token: $0, sound: prefs.sound) } : nil)
         let wanted = on && !signingOut
         let token = wanted ? await push.token() : nil
         switch MacPush.step(wanted: wanted, token: token, sound: prefs.sound, held: held, again: again) {
@@ -242,13 +279,21 @@ final class AlertsModel: ObservableObject {
         return true
     }
 
-    /// The token taken back, tried `tries` times, waiting longer each time (`waits`).
+    /// Why the last take-back failed, in words: what the sign-out question says (`{why}`).
+    @Published private(set) var takeBackFailed: String?
+
+    /// The token taken back, tried `tries` times, waiting longer each time (`waits`). A 401, the session already
+    /// over, is a failure like any other: the row is still at tafs cloud.
     private func takeBack(_ push: PushSync, token: String, tries: Int) async -> Bool {
         for attempt in 0..<max(1, tries) {
             if attempt > 0 { await wait(Self.waits[min(attempt - 1, Self.waits.count - 1)]) }
-            if (try? await push.unregister(token)) != nil {
+            do {
+                try await push.unregister(token)
                 MacPush.Registered.save(nil, to: defaults, account: account)
+                takeBackFailed = nil
                 return true
+            } catch {
+                takeBackFailed = NeedsYouModel.why(error)
             }
         }
         return false
