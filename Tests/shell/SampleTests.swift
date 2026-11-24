@@ -92,21 +92,32 @@ let shellSampleTests: [Test] = [
         }
         let window = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/SignedInView.swift"), encoding: .utf8)
         try expect(window.contains("OverviewModel(cloud: cloud, remembered: inSample ? nil : .standard)"), "the sample's list is never kept")
-        // Nothing alerts in the sample, and its Alerts keep nothing: macOS is never asked.
+        // Its Alerts keep nothing.
         try expect(window.contains("AlertsModel(account: account.session.tenant, inSample: inSample,"), "Alerts know the sample")
         // Nor does it give tafs cloud a push token (`MacPush`).
         try expect(window.contains("push: inSample ? nil : PushSync.mac(cloud: cloud)"), "no push token for the sample")
-        try expect(window.contains("guard !inSample else { return }"), "no alert for the sample's held calls")
+        // Its newly held calls alert as the iPad's sample does, asking macOS at the first, never through Account › Alerts.
+        try expect(window.contains("if inSample { notifier.announceSample(fresh) } else { notifier.announce(fresh) }"), "the sample's held calls alert")
+        let notifier = try String(contentsOf: URL(fileURLWithPath: "Sources/App/approvals/Notifier.swift"), encoding: .utf8)
+        try expect(notifier.contains("guard !askedForSample else {") && notifier.contains("center.requestAuthorization(options: [.alert, .sound])"), "macOS is asked once, at the first")
         let alerts = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AlertsView.swift"), encoding: .utf8)
         try expect(alerts.contains("why = Sample.notInSample(words)") && !alerts.contains("\n        prefs.save(to: defaults, account: account)"), "Turn on refused, nothing saved")
     }),
     Test("Play the next sample actions plays each taf's next call, as the iPad's playNextDemoActions: new held calls, a refusal in the Record", awaiting: {
         let (account, cloud, transport) = clients()
         try expectEqual(transport.rounds, 2)
+        // What's held at the start is only noted; what a play holds is announced, as the window does (`Announced`).
+        var announced = Announced()
+        let first = try await account.heldCalls()
+        try expectEqual(announced.new(in: first).count, 0)
         try expect(transport.playNext(), "a third round")
         let held = try await account.heldCalls()
         // Access's elevated access and the leads' discount are held now too; the first three still wait.
         try expectEqual(held.count, 5)
+        let fresh = announced.new(in: held)
+        try expectEqual(fresh.count, 2)
+        let words = english()
+        try expect(fresh.map { Announcement($0, words: words) }.allSatisfy { $0.title == words("alert.needs_you") && !$0.body.isEmpty }, "each says what it asks")
         let record = try await cloud.record()
         try expectEqual(record.entries.count, 15)
         try expect(record.entries.contains { $0.kind == "refused" && $0.title == "DROP TABLE sessions_old" }, "the Card refused dropping a table")

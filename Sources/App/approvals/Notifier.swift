@@ -25,14 +25,39 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let prefs = AlertPrefs(defaults: defaults, account: account)
         guard prefs.on, !announcements.isEmpty, let center else { return }
         center.delegate = self
-        for announcement in announcements {
-            let content = UNMutableNotificationContent()
-            content.title = announcement.title
-            content.body = announcement.body
-            content.sound = prefs.plays ? .default : nil
-            content.interruptionLevel = Self.interruption(plays: prefs.plays)
-            center.add(UNNotificationRequest(identifier: announcement.id, content: content, trigger: nil))
+        for announcement in announcements { center.add(Self.request(announcement, plays: prefs.plays)) }
+    }
+
+    /// Whether macOS was asked for the sample's alerts yet, this run.
+    private var askedForSample = false
+
+    /// The sample's held calls, as the iPad's sample alerts for them (`LockScreen.notifyNew`): not behind Account ›
+    /// Alerts, whose Turn on takes KIFF, which the sample has none of. macOS is asked once, at the sample's first alert, as
+    /// the iPad asks at its first, and its answer decides. Sound as chosen in Account › Alerts.
+    func announceSample(_ announcements: [Announcement]) {
+        guard !announcements.isEmpty, let center else { return }
+        center.delegate = self
+        let plays = AlertPrefs(defaults: defaults, account: account).plays
+        let requests = announcements.map { Self.request($0, plays: plays) }
+        guard !askedForSample else {
+            requests.forEach { center.add($0) }
+            return
         }
+        askedForSample = true
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            requests.forEach { center.add($0) }
+        }
+    }
+
+    /// One call's alert: its words, with a sound and as an interruption only with Sound on.
+    static func request(_ announcement: Announcement, plays: Bool) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = announcement.title
+        content.body = announcement.body
+        content.sound = plays ? .default : nil
+        content.interruptionLevel = interruption(plays: plays)
+        return UNNotificationRequest(identifier: announcement.id, content: content, trigger: nil)
     }
 
     /// How an alert interrupts: as usual with Sound on, quietly with it off.
