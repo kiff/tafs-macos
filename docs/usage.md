@@ -132,8 +132,12 @@ in place of buying, since one raise answers every open one.
 - **KIFF's refusals:** `limit_changed` (the limit moved meanwhile) reads the balance again and
   says so; `limit_ceiling` says to contact KIFF; anything else is "The limit wasn't raised", with
   why in the app's words.
-- The old limit's own line (`usage.raise_limit.from`) comes once tafs's strings that carry it are
-  in the pin.
+- **The limit now**, above the button, as the iPad's: "The spend limit is €1,500 now."
+  (`usage.raise_limit.from`). It's written from the signed `from_cents` in the currency tafs cloud
+  sends beside it (`raise.currency`, ISO 4217) by this Mac's own formatter, in the app's language,
+  with the currency's own decimals (ISO 4217's minor unit: 2 for EUR, 0 for JPY, 3 for KWD).
+  Without a currency, or with anything that isn't a code (a tafs cloud from before it), there's no
+  line: a currency is never assumed. The prompt and what's signed are unchanged.
 
 ## Not on the Mac
 

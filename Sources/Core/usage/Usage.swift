@@ -46,8 +46,24 @@ enum Usage {
             /// person's language; nil without a currency.
             func fromLine(_ words: Words) -> String? {
                 guard let currency else { return nil }
-                let amount = TafCard.Amount(minor: Int64(fromCents), unit: currency, scale: 2).written(language: words.language)
+                // `from_cents` is in the currency's smallest unit: its own decimals, as ISO 4217 has them (2 for EUR, 0 for JPY).
+                let amount = TafCard.Amount(minor: Int64(fromCents), unit: currency, scale: Self.decimals(currency)).written(language: words.language)
                 return words("usage.raise_limit.from", ["amount": amount])
+            }
+
+            /// A currency's decimals as ISO 4217's list has them (its minor unit): 2 for most, the codes below otherwise. Kept
+            /// here, not read from the system, so a Mac and the Linux tests write the same figure.
+            static func decimals(_ currency: String) -> Int {
+                switch currency {
+                case "BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "UYI", "VND", "VUV", "XAF", "XOF", "XPF":
+                    return 0
+                case "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND":
+                    return 3
+                case "CLF", "UYW":
+                    return 4
+                default:
+                    return 2
+                }
             }
 
             /// A currency as ISO 4217 writes it: three capital letters, else none.
