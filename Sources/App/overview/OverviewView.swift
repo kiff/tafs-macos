@@ -248,8 +248,20 @@ struct OverviewView: View {
     var onboarding = Onboarding.on
     /// Discard a taf being set up (Home's `setting_up[].discard`), on the security key; what to tell the person, or nil.
     var discard: ((SettingUp) async -> String?)? = nil
+    /// The sample's "Play the next sample actions", as the iPad's Home in sample mode: each taf plays its next call,
+    /// and the lists are read again. Nil outside the sample.
+    var playNextSample: (() -> Void)? = nil
     /// How tafs works, opened from the first Home.
     @State private var showingHowItWorks = false
+
+    /// The sample's foot, as the iPad's: Play the next sample actions, then that a new taf starts in Coach.
+    private func sampleFoot(_ play: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(words("sample.play_next"), action: play).buttonStyle(OutlineButtonStyle(color: Theme.soft))
+                .accessibilityIdentifier("sample.play_next")
+            Text(words("home.sample_foot")).font(.system(size: 12)).foregroundColor(Theme.dim)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -286,6 +298,7 @@ struct OverviewView: View {
                     if openTaf != nil, !page.tafs.isEmpty {
                         Text(words("home.overview.each_line_opens")).font(.system(size: 12)).foregroundColor(Theme.dim)
                     }
+                    if let playNextSample { sampleFoot(playNextSample) }
                 }
             }
             .padding(.horizontal, Look.inset)
