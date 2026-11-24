@@ -70,6 +70,8 @@ enum Record {
         /// KIFF's call names the taf that made it (`call.actor_id`): what the iPad's `SourceActivityRow`
         /// needs to open the call's sheet (its `evidence`), receipt or not.
         let hasActor: Bool
+        /// KIFF's action the call made (`call.action_name`): which connection's tools it went through.
+        let action: String?
 
         enum CodingKeys: String, CodingKey { case id, at, kind, title, detail, time, amountText = "amount_text", taf, about, call, next
             case report, reportedAt = "reported_at"
@@ -132,10 +134,11 @@ enum Record {
             var onArg: String?
             var reason: String?
             var actorID: String?
+            var actionName: String?
             enum CodingKeys: String, CodingKey {
                 case receipt, amount, answer, readOnly = "read_only", outcome, held
                 case proposalID = "proposal_id", entityID = "entity_id", onHash = "on_hash", onArg = "on_arg", reason
-                case actorID = "actor_id"
+                case actorID = "actor_id", actionName = "action_name"
             }
             init(from decoder: Decoder) throws {
                 let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -151,6 +154,7 @@ enum Record {
                 onArg = (try? c.decodeIfPresent(String.self, forKey: .onArg)) ?? nil
                 reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? nil
                 actorID = (try? c.decodeIfPresent(String.self, forKey: .actorID)) ?? nil
+                actionName = (try? c.decodeIfPresent(String.self, forKey: .actionName)) ?? nil
             }
         }
 
@@ -202,6 +206,7 @@ enum Record {
             answerDevice = call?.answer?.device
             next = (try? c.decodeIfPresent(NextStep.self, forKey: .next)) ?? nil
             hasActor = call?.actorID != nil
+            action = call?.actionName
         }
     }
 
