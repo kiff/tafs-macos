@@ -6,7 +6,12 @@ needs. So the two kinds of code it refused on a Mac on macOS 12 are looked for b
 - a weak `self` read by a `Task` inside the closure that took it ("reference to captured var
   'self' in concurrently-executing code"): hold it in a `WeakBox`, a constant;
 - a `defer` inside a `Task` ("main actor-isolated property ... can not be mutated from the main
-  actor"): set what it sets after the awaited call instead.
+  actor"): set what it sets after the awaited call instead;
+- a view's model read inside a `Task` in one of the view's own functions, not its `body`, with no
+  `await` on the line ("main actor-isolated property ... can not be referenced from a
+  non-isolated context"). On macOS 12's SDK only a view's `body` is on the main actor, so such a
+  `Task` isn't, and each read of an `@ObservedObject`, `@StateObject` or `@EnvironmentObject`, or
+  of a `...Model` the function takes, needs `await`: read it with `await` first, then use it.
 Usage: scripts/swift57patterns.py FILE..."""
 import re, sys
 
@@ -30,8 +35,40 @@ def block(src, start):
     return src[i:]
 
 
-def problems(src):
+VIEW = re.compile(r'\bstruct\s+\w+\s*(<[^>{]*>)?\s*:[^{]*\bView\b[^{]*\{')
+MODEL_PROP = re.compile(r'@(?:ObservedObject|StateObject|EnvironmentObject)\s+(?:private\s+)?(?:var|let)\s+(\w+)')
+FUNC = re.compile(r'\bfunc\s+\w+\s*(<[^>(]*>)?\s*\(([^)]*)\)[^{]*\{')
+TASK = re.compile(r'\bTask\b\s*(\([^)]*\))?\s*\{')
+
+
+def task_reads(src):
+    """A view's model read with no `await`, inside a Task in one of the view's own functions."""
     found = []
+    for v in VIEW.finditer(src):
+        view = block(src, v.end() - 1)
+        models = set(MODEL_PROP.findall(view))
+        for f in FUNC.finditer(view):
+            params = set(re.findall(r'(\w+)\s*:\s*\w*Model\b', f.group(2)))
+            names = models | params
+            if not names:
+                continue
+            body = block(view, f.end() - 1)
+            for t in TASK.finditer(body):
+                task = block(body, t.start())
+                at = v.end() - 1 + view.find(body) + t.start()
+                for k, line in enumerate(task.split('\n')):
+                    if 'await' in line:
+                        continue
+                    for name in names:
+                        if re.search(r'(?<![\w.])' + name + r'\b\s*(\?|!)?\s*\.', line):
+                            row = src.count('\n', 0, at) + 1 + k
+                            found.append((row, f"{name} read with no await inside a Task in a view's function: read it with await first"))
+                            break
+    return found
+
+
+def problems(src):
+    found = task_reads(src)
     for m in re.finditer(r'\[\s*weak\s+self\s*\]', src):
         # The closure that took the weak `self`: from its `{` (just before the capture list) on.
         opening = src.rfind('{', 0, m.start())

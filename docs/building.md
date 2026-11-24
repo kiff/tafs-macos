@@ -22,7 +22,13 @@ the Mac App Store app ([macos-13.md](macos-13.md)). It is written in Swift with 
       read it on its actor (`me.object?`). A weak capture is a var, which Swift 5.7 refuses in a
       `@Sendable` closure too;
     - a `defer` inside a `Task` in a view ("main actor-isolated property … can not be mutated
-      from the main actor"). Set what it sets after the awaited call.
+      from the main actor"). Set what it sets after the awaited call;
+    - a view's model read with no `await`, inside a `Task` in one of the view's own functions
+      ("main actor-isolated property … can not be referenced from a non-isolated context"). On
+      macOS 12's SDK only a view's `body` is on the main actor, so a `Task` in its other functions
+      isn't: read each `@ObservedObject`, `@StateObject` or `@EnvironmentObject`, or a `…Model` the
+      function takes, with `await` first, then use the value. A newer SDK puts the whole view on
+      the main actor, so neither GitHub's Mac nor a newer Swift says.
 
   **The app's code isn't type-checked with Swift 5.7 on CI.** The `swift57` job runs in a Linux
   container, with no SwiftUI or AppKit, and no Mac runner has the macOS 12 or 13 SDK that Swift 5.7
@@ -131,7 +137,7 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
   always run.
 - **The tests that need no Mac run on Linux** with Swift 5.7.
 - **The Swift 5.7 checks** (`swift57`) run on every change, on Linux. A step first checks that
-  the shape check catches both shapes it looks for.
+  the shape check catches each shape it looks for, and takes a model read with `await` first.
 - **A Mac job** builds the app for both architectures, with the native libraries (above),
   checks the libraries' licences are in it, and runs the parts' Mac tests. It runs
   when `Sources/App/`, `App/`, a `mac/` test folder, shared code, the runner, a script, the
