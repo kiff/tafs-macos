@@ -25,6 +25,22 @@ scripts/build.sh && scripts/dmg.sh            # signed ad hoc: for a check, not 
 
 `dmg.sh` signs the app with `App/tafs.entitlements`, which holds only the microphone (`com.apple.security.device.audio-input`) and the camera (`com.apple.security.device.camera`): under the hardened runtime, dictation needs the first and Take photo the second. It prints the app's entitlements and stops if either is missing. It then opens the image it made, as a person would, and checks that `tafs.app` and the `Applications` link are there and that the app is still signed.
 
+## What approving a signing run unlocks, and what it doesn't
+
+The `mac-signing` approval (its required reviewer) is what turns a run into a signed, notarized draft. Then the owner publishes the draft.
+
+**It unlocks:**
+- **A download that opens with no warning** on macOS 12, even offline: Developer ID, the hardened runtime, notarized and stapled.
+- **One Keychain identity across builds.** Each unsigned build is a new app to the Keychain, so an earlier build's session and keys may refuse to change ([pairing.md](pairing.md), The Keychain). Builds signed by the same team are the same app, so an update keeps the session and needs no new pairing.
+
+**It doesn't unlock, by itself: alerts with tafs closed.** Three of the four Partial rows in the port checklist wait on that: Needs you's and Account › Alerts' "even with tafs closed" (with `AlertingTafsView`), and the brief's alert routing by `brief_kind`. The fourth, the sample's alerts, is left out by design and isn't push. Today an alert comes only while tafs is open (`approvals/Notifier.swift`). A push with the app closed comes through Apple's push service, which needs, beyond the signature:
+1. the push capability on the app's identifier, `bot.tafs.macos`, at developer.apple.com;
+2. a Developer ID provisioning profile with it, embedded in the app;
+3. `com.apple.developer.aps-environment` in `App/tafs.entitlements`, which today asks for the microphone and the camera only;
+4. the app registering for remote notifications and sending its token to tafs cloud, and tafs cloud sending to a Mac's token.
+
+Steps 1 and 2 are the account holder's, at developer.apple.com. Steps 3 and 4 are code, which comes after them. Until all four steps are done, those three rows stay Partial, and this app never says alerts come with tafs closed.
+
 ## The secrets
 
 All are secrets of kiff/tafs-macos's **`mac-signing` environment**, never repository secrets. Any workflow on any branch that someone with write access pushes can read a repository secret, and a leaked Developer ID certificate signs software that Macs trust as ours. The environment allows `main` only and asks its reviewer before each run, so only the DMG workflow's `release` job and the certificate workflow read them, run from main and approved:
