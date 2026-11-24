@@ -1,10 +1,11 @@
 import Foundation
 
-/// The Markdown that Coach's and a taf's words are drawn with, as the iPad's `MarkdownText`
+/// The Markdown that Coach's and a taf's words are drawn with, read as the iPad's `MarkdownText`
 /// reads it, so no mark shows as written: **bold**, *italic*, `code`, headings, and bulleted
-/// and numbered items. A link is drawn as its label only, and an image as its words: nothing
-/// here can lead anywhere. HTML, and a mark with no partner, stay as written, so nothing the
-/// model writes can look like one of the app's own controls.
+/// and numbered items. Unlike the iPad's, a link is drawn as its label only, and an image as
+/// its words: nothing here can lead anywhere, so a link from a page Coach read (`page_turn`,
+/// tafs docs/chat.md) needs no confirm here. HTML, and a mark with no partner, stay as written,
+/// so nothing the model writes can look like one of the app's own controls.
 enum Rich {
     struct Span: Equatable {
         let text: String
