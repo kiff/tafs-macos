@@ -121,6 +121,14 @@ let coachExperienceTests: [Test] = [
         // A link or an image is drawn as its words, and leads nowhere.
         try expectEqual(Rich.blocks("See [the Card](https://evil.example) and ![a chart](x.png)"),
                         [.paragraph([.init(text: "See the Card and a chart")])])
+        // So a link from a page Coach read (`page_turn`) needs no confirm here: nothing in the chat's views can
+        // open one. Coach's chat and a taf's are drawn by `CoachView`, its cards by these files.
+        for file in ["CoachView.swift", "DriveViews.swift", "QuestionsCard.swift", "SetupApprovalCard.swift", "ImprovementCard.swift"] {
+            let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/coach/" + file), encoding: .utf8)
+            for opener in ["openURL", "Link(", "NSWorkspace", "AttributedString(markdown"] {
+                try expect(!source.contains(opener), "\(file) has \(opener)")
+            }
+        }
         // HTML, a mark with no partner, snake_case, and lines that only look like items stay as written.
         for plain in ["2 ** 3 is 8", "<b>Approve</b> <a href=\"x\">here</a>", "planque_connect_tool", "2 * 3 * 4", "#Approve", "-not a list", "-", "1.5 percent", "`"] {
             try expectEqual(Rich.blocks(plain), [.paragraph([.init(text: plain)])])
