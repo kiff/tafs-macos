@@ -126,6 +126,10 @@ in place of buying, since one raise answers every open one.
 - **Then KIFF's `PUT /v1/me/usage/limit`** with `{"from_cents":…,"raise":true}`, **signed by the
   device key**. KIFF lists it in `PhoneSignedRules`, not `PhoneApprovalRules`, and its handler
   takes only someone who manages billing, so no security key is asked for (kiff/cloud main).
+- **KIFF sets the new limit**, one step up from `from_cents`, the limit the screen read, which is
+  what's signed: the body names no target. The prompt's figure is tafs cloud's offer words
+  (`raise.words`), so it names KIFF's step only as long as those words describe it. The old
+  limit's line (below) will tie the prompt to the value signed.
 - **After it goes,** the balance is read again. Until a read works, only Read it again is offered
   (`usage.raised_unread`), so a second click never raises it again for a balance the screen no
   longer shows.

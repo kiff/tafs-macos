@@ -18,9 +18,12 @@ struct AttachButton: View {
     var body: some View {
         let room = max(0, FilePrep.perMessage - model.files.count)
         Menu {
-            // This Mac's camera, where it has one tafs may use, as the iPad offers its camera.
+            // This Mac's camera, where it has one, as the iPad offers its camera. Refused to tafs, it says where to turn
+            // it on, in the tray, as any file that can't go.
             if CameraSession.offered {
-                Button { takingPhoto = true } label: { Label(words("chat.file.take_photo"), systemImage: "camera") }
+                Button {
+                    if CameraSession.refused { Task { @MainActor in cameraOff() } } else { takingPhoto = true }
+                } label: { Label(words("chat.file.take_photo"), systemImage: "camera") }
             }
             Button { choose(photos: true, room: room) } label: { Label(words("chat.file.choose_photos"), systemImage: "photo.on.rectangle") }
             Button { choose(photos: false, room: room) } label: { Label(words("chat.file.choose_file"), systemImage: "doc") }
@@ -38,9 +41,16 @@ struct AttachButton: View {
         .disabled(room == 0)
         .accessibilityLabel(room == 0 ? words.count("chat.file.attach_full", FilePrep.perMessage) : words("chat.file.attach"))
         .sheet(isPresented: $takingPhoto) {
-            CameraSheet(took: { data in Task { @MainActor in await addPhoto(data) } }, close: { takingPhoto = false })
+            CameraSheet(took: { data in Task { @MainActor in await addPhoto(data) } }, close: { takingPhoto = false },
+                        refused: { Task { @MainActor in cameraOff() } })
                 .environment(\.words, words)
         }
+    }
+
+    /// The camera is off for tafs: where to turn it on, in macOS 12's words and later ones', in the tray.
+    @MainActor
+    private func cameraOff() {
+        model.refuseFile(FileProblem(message: words("chat.file.mac_camera_off")))
     }
 
     /// A photo taken here, made ready as a chosen one is and named "Photo", as the iPad's camera.

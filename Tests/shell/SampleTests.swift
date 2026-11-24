@@ -42,7 +42,7 @@ let shellSampleTests: [Test] = [
         let (_, cloud, transport) = clients()
         do { _ = try await cloud.post("/v1/tafs/sample-support/runs", [:]); throw Failure(description: "written") } catch let refusal as CloudRefusal {
             try expectEqual(refusal.status, 403)
-            try expectEqual(refusal.words, english()("sign_in.with_kiff"))
+            try expectEqual(refusal.words, english()("sample.not_in_sample"))
         }
         // An unknown read is "not found", in the same words: a screen says it as it says any read that failed.
         let (status, _) = try await transport.send(HTTPRequest(method: "GET", path: "/v1/tafs/sample-support/knob", headers: [:], body: Data()))
@@ -119,9 +119,31 @@ let shellSampleTests: [Test] = [
             keys += taf.script.flatMap { call in (call.literal ? [] : [call.summary]) + [call.why] }
         }
         keys += ["record.decided.refused_by_card", "record.waiting_for_you", "record.done_within_card",
-                 "needs_you.nothing", "card.window.a_day", "card.window.today", "settings.mode_sample", "sign_in.with_kiff"]
+                 "needs_you.nothing", "card.window.a_day", "card.window.today", "settings.mode_sample", "sample.not_in_sample"]
         for key in keys { try expect(words(key) != key, "\(key) is in English") }
         // The two counts are plural lines, read by their count.
         for key in ["home.working", "needs_you.count"] { try expect(words.count(key, 2) != key, "\(key) is in English") }
     },
+    Test("a language chosen in the sample answers in it, from each request's Accept-Language, with the rounds played kept", awaiting: {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        var asked: [String] = []
+        let transport = SampleTransport(words: english(), now: { at }, load: { language in
+            asked.append(language)
+            return try? Words(language: language, folder: folder)
+        })
+        transport.playNext()
+        let french = try Words(language: "fr", folder: folder)
+        let held = try await AccountClient(transport: transport, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(held.first?.title, french("sample.support.promise_7802"))
+        try expectEqual(transport.rounds, Sample.firstRounds + 1)
+        let again = try await AccountClient(transport: transport, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(again.first?.title, held.first?.title)
+        try expectEqual(asked, ["fr"])
+        let back = try await AccountClient(transport: transport, session: Sample.session, language: "en").heldCalls()
+        try expectEqual(back.first?.title, english()("sample.support.promise_7802"))
+        // With no loader, every request is answered in the sample's own words.
+        let plain = SampleTransport(words: english(), now: { at })
+        let same = try await AccountClient(transport: plain, session: Sample.session, language: "fr").heldCalls()
+        try expectEqual(same.first?.title, english()("sample.support.promise_7802"))
+    }),
 ]

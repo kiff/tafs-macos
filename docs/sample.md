@@ -35,6 +35,10 @@ iPad's own, from the shared strings (`sample.*`).
   The scripts are the iPad's whole `TafTemplates`. A call its Card holds for you joins Needs you,
   and one its Card refuses outright (`never`) is in the Record as "refused by its Card", never
   sent: the third round has Deploys' `DROP TABLE sessions_old`.
+- **A language chosen in Account** while in the sample: its tafs, calls and devices read in it
+  from the next read on, with the rounds played kept. Each request is answered in its
+  `Accept-Language`, as tafs cloud and KIFF answer (`SampleTransport.words(for:)`), from the
+  app's own strings; one that can't be loaded is answered in the sample's first language.
 
 ## What it never does
 
@@ -45,8 +49,8 @@ iPad's own, from the shared strings (`sample.*`).
 - **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
 - **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
   Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
-- **It writes and approves nothing.** Every write is refused with the line that it takes KIFF
-  (`sign_in.with_kiff`), and nothing is done. A shared line of its own is asked of tafs's strings.
+- **It writes and approves nothing.** Every write is refused with the shared line, "This isn't in
+  the sample. Sign in with KIFF to do it." (`sample.not_in_sample`), and nothing is done.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.
 
 ## Not yet

@@ -47,7 +47,7 @@ let pairingSignInScreenTests: [Test] = [
         try Snapshot.png(a)?.write(to: URL(fileURLWithPath: "build/screenshots/welcome-try-sample.png"))
         try expectEqual(opened, 0)
         let app = try String(contentsOf: URL(fileURLWithPath: "Sources/App/entry/TafsApp.swift"), encoding: .utf8)
-        try expect(app.contains("SignInView(model: signIn, trySample: { sample = SampleTransport(words: words) })"), "the welcome opens the sample, its own transport")
+        try expect(app.contains("SignInView(model: signIn, trySample: { sample = SampleTransport(words: words, load: Self.sampleWords) })"), "the welcome opens the sample, its own transport")
         try expect(app.contains("route: .phoneOrPasskey, signedOut: { sample = nil }, inSample: true,"), "no key, no stream; leaving clears it")
         try expect(app.contains("playNextSample: { transport.playNext() })"), "its next round, on the window's one transport")
         let account = try String(contentsOf: URL(fileURLWithPath: "Sources/App/account/AccountView.swift"), encoding: .utf8)
