@@ -149,8 +149,9 @@ final class CoachModel: ObservableObject {
     @Published private(set) var profileWords: [String: ProfileWordsRead] = [:]
     enum ProfileWordsRead: Equatable {
         case read(ProfileWords)
-        /// The line's key, said in the words' place.
-        case failed(String)
+        /// The line's key, said in the words' place, and the digest of the profile it failed for: not read again
+        /// for that same profile, as the iPad's, which reads once per digest.
+        case failed(String, profile: String)
     }
 
     /// The words to show for `grant`: only KIFF's words for exactly its profile, as the iPad's `shownWords`.
@@ -162,15 +163,18 @@ final class CoachModel: ObservableObject {
 
     /// Why KIFF's words for `grant` weren't read, as a line's key; none while they're read or being read.
     func profileWordsFailed(for grant: AppConnections.Grant) -> String? {
-        if case .failed(let key)? = profileWords[grant.id] { return key }
+        if case .failed(let key, _)? = profileWords[grant.id] { return key }
         return nil
     }
 
     /// Reads KIFF's words for `grant`'s profile with the session, as the iPad's `loadProfileWords`: none for a grant
     /// without one, and not again while the words read are still that profile's. A read after sign-out is dropped.
     func readWords(for grant: AppConnections.Grant) async {
-        guard let readProfileWords, let profile = grant.profile else { return }
+        guard let readProfileWords, let profile = grant.profile,
+              let digest = try? ProfileWords.digest(profile, sha256: PasskeyCrypto.sha256) else { return }
         if shownWords(for: grant) != nil { return }
+        // Failed for this very profile: not again on every refresh. A new profile (another digest) is read.
+        if case .failed(_, let failedFor)? = profileWords[grant.id], failedFor == digest { return }
         let gen = accountGeneration
         do {
             let words = try await readProfileWords(profile)
@@ -178,7 +182,7 @@ final class CoachModel: ObservableObject {
             profileWords[grant.id] = .read(words)
         } catch {
             guard gen == accountGeneration else { return }
-            profileWords[grant.id] = .failed((error as? ProfileWords.Failure)?.key ?? ProfileWords.Failure.notWords.key)
+            profileWords[grant.id] = .failed((error as? ProfileWords.Failure)?.key ?? ProfileWords.Failure.notWords.key, profile: digest)
         }
     }
 

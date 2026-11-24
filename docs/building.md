@@ -133,8 +133,13 @@ dark appearance. Tests read colours from it, and it writes the PNG screenshots.
 
 - **Only the parts a change touches run** (`scripts/parts.sh` reads the changed paths). A
   change to shared code, the test runner, a script, the workflow or the shared pin runs every
-  part, **on the Mac too**: the pin brings new words and contracts every screen reads. `strings` and `contracts`
-  always run.
+  part, **on the Mac too**: the pin brings new words and contracts every screen reads. `strings`, `contracts`
+  and `guards` always run. **`guards`** holds the tests that read every source file (`Tests/guards`):
+  planque's routes (`PlanqueBan`: only the DELETE names a grant's route, no approve, confirm or
+  grants list by name), where `PlanqueClient` is made and armed, where the DELETE is called, and
+  that no source names an account deletion. A change in any part can break one, so a guard never
+  waits for its own part to be touched (tafs-macos#245 named the grants list in `connections`, and
+  the ban, then in `taf`, didn't run).
 - **The tests that need no Mac run on Linux** with Swift 5.7.
 - **The Swift 5.7 checks** (`swift57`) run on every change, on Linux. A step first checks that
   the shape check catches each shape it looks for, and takes a model read with `await` first.
