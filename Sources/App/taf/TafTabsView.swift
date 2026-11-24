@@ -60,7 +60,7 @@ final class TafPagesModel: ObservableObject {
     var runNotStarted: String? { runs.notStarted[taf] }
     private var following: AnyCancellable?
 
-    private let cloud: CloudClient
+    let cloud: CloudClient
     let taf: String
     /// The taf's halt, from its Setup.
     let halt: HaltModel
@@ -364,7 +364,8 @@ struct TafActivityTab: View {
                              needsYou: needsYou, answersHolds: answersHolds, answered: answered)
                 // Then its runs, and the runs it kept, as the iPad's `TafActivityList.parts`.
                 RunsPanel(model: model, taf: taf)
-                RetainedRuns(model: model)
+                // Each run opens itself; Ask Coach opens Coach on this taf, as the iPad's `openCoach`.
+                RetainedRuns(model: model, manages: manages, askCoach: askCoach.map { ask in { ask("") } })
                 switch model.activity {
                 case .loading:
                     ProgressView().controlSize(.small)
