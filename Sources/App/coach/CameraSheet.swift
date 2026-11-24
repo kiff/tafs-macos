@@ -25,13 +25,14 @@ final class CameraSession: NSObject, ObservableObject, AVCapturePhotoCaptureDele
         return stoppedFlag
     }
 
-    /// Take photo is offered only on a Mac with a camera that tafs hasn't been refused, as the
-    /// iPad offers it only where there's a camera. A Mac where it was refused says nothing more.
-    static var offered: Bool {
-        guard AVCaptureDevice.default(for: .video) != nil else { return false }
+    /// Take photo is offered on a Mac with a camera, as the iPad offers it only where there's one.
+    static var offered: Bool { AVCaptureDevice.default(for: .video) != nil }
+
+    /// tafs was refused the camera: Take photo says where to turn it on (`chat.file.mac_camera_off`), and no sheet opens.
+    static var refused: Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .denied, .restricted: return false
-        default: return true
+        case .denied, .restricted: return true
+        default: return false
         }
     }
 
@@ -133,6 +134,8 @@ struct CameraSheet: View {
     @StateObject private var camera = CameraSession()
     let took: (Data?) -> Void
     let close: () -> Void
+    /// The camera was refused at the system's question: the sheet closes and the tray says where to turn it on.
+    var refused: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 14) {
@@ -165,8 +168,12 @@ struct CameraSheet: View {
         .padding(20)
         .background(Theme.background)
         .task {
-            // Refused at the system's question, or no camera: the sheet closes, nothing taken.
-            if !(await camera.start()) { close() }
+            // Refused at the system's question, or no camera: the sheet closes, nothing taken. Refused, it says
+            // where to turn the camera on.
+            if !(await camera.start()) {
+                if CameraSession.refused { refused() }
+                close()
+            }
         }
         .onDisappear { camera.stop() }
     }

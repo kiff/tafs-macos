@@ -317,9 +317,9 @@ enum Sample {
         }
     }
 
-    /// The line for what the sample can't do, in the person's language: that it takes KIFF. A shared line of its own
-    /// is asked of tafs's strings; until it's there, this is the app's own.
-    static func notInSample(_ words: Words) -> String { words("sign_in.with_kiff") }
+    /// The line for what the sample can't do, in the person's language, the shared one every app says: "This isn't in
+    /// the sample. Sign in with KIFF to do it."
+    static func notInSample(_ words: Words) -> String { words("sample.not_in_sample") }
 }
 
 /// tafs cloud and KIFF, stood in by the sample, in memory: what `Sample.answer` says, and never the network.

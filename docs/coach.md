@@ -510,13 +510,13 @@ chat and a taf's alike:
   folder, and shown full size in place, in Quick Look (`quickLookPreview`), as the iPad's. Sign-out
   removes the copies and the files picked; one read after sign-out is neither written nor opened.
 - **Take photo** (`CameraSheet`, the iPad's `CameraPicker`), first in the paperclip's menu on a Mac with a
-  camera tafs hasn't been refused: the system asks the first time, then the camera's picture, **Take photo**
-  and Cancel. The photo goes as a chosen one does (`FilePrep.photo`, a JPEG at most 2576 px), named "Photo".
-  Refused at the system's question, the sheet closes and nothing is taken. The camera runs only while the sheet
+  camera: the system asks the first time, then the camera's picture, **Take photo** and Cancel. The photo goes
+  as a chosen one does (`FilePrep.photo`, a JPEG at most 2576 px), named "Photo". Refused at the system's
+  question, the sheet closes and nothing is taken. Refused then or before, the tray says where to turn it on,
+  in macOS 12's settings and later ones' (`chat.file.mac_camera_off`), and no sheet opens. The camera runs only while the sheet
   shows. It needs the camera entitlement and `NSCameraUsageDescription` (App/tafs.entitlements, App/Info.plist).
 - **Mac differences:** chosen photos come from files, so each keeps its own name where the iPad's
-  picker gives "Photo {n}"; a Mac whose camera tafs was refused offers no Take photo and says nothing
-  more (no shared line says where to allow it); nothing is dropped onto the box, as on the iPad; a
+  picker gives "Photo {n}"; nothing is dropped onto the box, as on the iPad; a
   file that can't be read says `chat.file.unreadable`, where the iPad shows the system's words.
   The open panel's files are read inside their security scope, as on the iPad, though the app
   isn't sandboxed.

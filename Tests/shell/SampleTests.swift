@@ -42,7 +42,7 @@ let shellSampleTests: [Test] = [
         let (_, cloud, transport) = clients()
         do { _ = try await cloud.post("/v1/tafs/sample-support/runs", [:]); throw Failure(description: "written") } catch let refusal as CloudRefusal {
             try expectEqual(refusal.status, 403)
-            try expectEqual(refusal.words, english()("sign_in.with_kiff"))
+            try expectEqual(refusal.words, english()("sample.not_in_sample"))
         }
         // An unknown read is "not found", in the same words: a screen says it as it says any read that failed.
         let (status, _) = try await transport.send(HTTPRequest(method: "GET", path: "/v1/tafs/sample-support/knob", headers: [:], body: Data()))
@@ -119,7 +119,7 @@ let shellSampleTests: [Test] = [
             keys += taf.script.flatMap { call in (call.literal ? [] : [call.summary]) + [call.why] }
         }
         keys += ["record.decided.refused_by_card", "record.waiting_for_you", "record.done_within_card",
-                 "needs_you.nothing", "card.window.a_day", "card.window.today", "settings.mode_sample", "sign_in.with_kiff"]
+                 "needs_you.nothing", "card.window.a_day", "card.window.today", "settings.mode_sample", "sample.not_in_sample"]
         for key in keys { try expect(words(key) != key, "\(key) is in English") }
         // The two counts are plural lines, read by their count.
         for key in ["home.working", "needs_you.count"] { try expect(words.count(key, 2) != key, "\(key) is in English") }

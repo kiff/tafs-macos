@@ -93,4 +93,14 @@ let coachDictatingTests: [Test] = [
         guard let out = signIn.range(of: "func signedOut()") else { throw Failure(description: "no signedOut") }
         try expect(signIn[out.upperBound...].prefix(300).contains("FilesModel.clearCopies()"), "sign-out clears the copies")
     },
+    Test("a camera refused to tafs says where to turn it on, before the sheet or at the system's question (sources)") {
+        func read(_ path: String) throws -> String { try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) }
+        let camera = try read("Sources/App/coach/CameraSheet.swift"), files = try read("Sources/App/coach/ChatFilesViews.swift")
+        try expect(camera.contains("static var offered: Bool { AVCaptureDevice.default(for: .video) != nil }"), "offered wherever there's a camera")
+        try expect(camera.contains("if CameraSession.refused { refused() }"), "refused at the question says so")
+        try expect(files.contains("if CameraSession.refused { Task { @MainActor in cameraOff() } } else { takingPhoto = true }"), "refused before: no sheet")
+        try expect(files.contains(#"model.refuseFile(FileProblem(message: words("chat.file.mac_camera_off")))"#), "the shared line, in the tray")
+        let words = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expect(words("chat.file.mac_camera_off").contains("System Preferences"), "macOS 12's own settings named")
+    },
 ]

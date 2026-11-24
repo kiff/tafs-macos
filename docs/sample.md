@@ -49,8 +49,8 @@ iPad's own, from the shared strings (`sample.*`).
 - **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
 - **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
   Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
-- **It writes and approves nothing.** Every write is refused with the line that it takes KIFF
-  (`sign_in.with_kiff`), and nothing is done. A shared line of its own is asked of tafs's strings.
+- **It writes and approves nothing.** Every write is refused with the shared line, "This isn't in
+  the sample. Sign in with KIFF to do it." (`sample.not_in_sample`), and nothing is done.
 - **A read it doesn't have** is "not found", said as the screen says any read that failed.
 
 ## Not yet
