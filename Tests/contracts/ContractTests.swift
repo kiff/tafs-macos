@@ -5,7 +5,9 @@ private let folder = URL(fileURLWithPath: ".shared/contracts")
 
 /// The fixtures this app reads today, and the ones whose screens haven't arrived, each with
 /// the pull request that will read it. A fixture in neither list fails the test below.
-private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json", "taf-setup-connected.json", "taf-setup-reconnect.json", "coach-wider.json"]
+private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes-home.json", "taf-runs.json", "taf-run-report.json", "taf-run-report-running.json", "taf-run-report-terminated.json", "taf-activity.json", "taf-setup.json", "taf-setup-connected.json", "taf-setup-reconnect.json", "coach-wider.json",
+                         // KIFF's "Allow this from now on" draft: its keys and its change, read by the approvals part's HoldAllowTests.
+                         "kiff-agent-draft-from-hold.json"]
 private let notYet = [
     "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",

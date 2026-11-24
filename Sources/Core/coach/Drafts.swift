@@ -250,4 +250,11 @@ extension AccountClient {
     func draft(id: String) async throws -> Draft {
         try read(try await send("GET", "/v1/me/agent-drafts/\(CloudClient.escaped(id))"))
     }
+
+    /// A draft and its bytes as KIFF sent them, for the check that reads every key of its Cards before the security key
+    /// signs it (`HoldAllow.keysKnown`), as the iPad's `draftRaw(id:)`.
+    func draftRaw(id: String) async throws -> (draft: Draft, raw: Data) {
+        let raw = try await send("GET", "/v1/me/agent-drafts/\(CloudClient.escaped(id))")
+        return (try read(raw), raw)
+    }
 }

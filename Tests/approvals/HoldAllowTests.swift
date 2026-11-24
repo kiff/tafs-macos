@@ -27,6 +27,25 @@ private func offerJSON(kind: String = "per_action", before: String = "15000", af
     #"{"offer":{"changes":[{"mandate_id":"c1","kind":"\#(kind)","before":\#(before),"after":\#(after),\#(unit)\#(window)"words_before":"Refunds up to €150 each","words_after":"Refunds up to €320 each","rounded":false}],"would":{"calls":4,"words":"With this Card, 4 more refunds would have gone out on their own (€1,180)"},"draft":"dr_9","confirm_key":"critical","send_held":true,"round":{"after":35000,"words":"€350"}}}"#
 }
 
+/// A JSON file of kiff/tafs at the pin (`scripts/shared.sh fetch`), as an object.
+private func sharedJSON(_ path: String) throws -> [String: Any] {
+    let data = try Data(contentsOf: URL(fileURLWithPath: ".shared").appendingPathComponent(path))
+    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure(description: "\(path) isn't an object") }
+    return object
+}
+
+/// One RFC 6901 pointer's value set in a JSON document, its last key made when it isn't there.
+private func setting(_ doc: Any, _ path: ArraySlice<String>, _ value: Any) -> Any {
+    guard let key = path.first else { return value }
+    if var list = doc as? [Any], let i = Int(key) {
+        list[i] = setting(list[i], path.dropFirst(), value)
+        return list
+    }
+    var object = doc as? [String: Any] ?? [:]
+    object[key] = setting(object[key] ?? NSNull(), path.dropFirst(), value)
+    return object
+}
+
 private func offer(_ json: String = offerJSON()) throws -> CloudClient.AllowOffer {
     guard let offer = try JSONDecoder().decode(CloudClient.AllowAnswer.self, from: Data(json.utf8)).offer else { throw Failure(description: "no offer") }
     return offer
@@ -228,7 +247,7 @@ let approvalsHoldAllowTests: [Test] = [
         let call = try held(#"{"outcome":"per_action_exceeded"}"#)
         var asked: [Bool] = [], drafts: [String] = []
         let read = try await HoldAllow.read(offer: { asked.append($0); return try JSONDecoder().decode(CloudClient.AllowAnswer.self, from: Data(offerJSON().utf8)) },
-                                            draft: { drafts.append($0); return try JSONDecoder().decode(AccountClient.Draft.self, from: Data(draft().utf8)) },
+                                            draft: { drafts.append($0); return (try JSONDecoder().decode(AccountClient.Draft.self, from: Data(draft().utf8)), Data(draft().utf8)) },
                                             call: call, round: true)
         try expectEqual(asked, [true])
         try expectEqual(drafts, ["dr_9"])
@@ -256,4 +275,38 @@ let approvalsHoldAllowTests: [Test] = [
         try expectEqual(act.path, "/v1/me/agent-drafts/dr_9/confirm")
         try expectEqual(String(decoding: act.body, as: UTF8.self), #"{"version":"v7"}"#)
     },
+    Test("its second half: a draft Card key the check doesn't read is never signed, the shared vector's cases over KIFF's pinned draft") {
+        let vector = try sharedJSON("vectors/agent-draft-keys.json")
+        guard let keys = vector["keys"] as? [String: [String]], let path = vector["contract"] as? String,
+              let cases = vector["cases"] as? [[String: Any]] else { throw Failure(description: "the vector's shape") }
+        try expectEqual(keys.mapValues { Set($0) }, HoldAllow.keys)
+        guard let answer = try sharedJSON(path)["answer"] else { throw Failure(description: "the contract's answer") }
+        try expect(cases.count > 10, "the vector's cases: \(cases.count)")
+        for c in cases {
+            guard let set = c["set"] as? [String: Any], let ok = c["ok"] as? Bool else { throw Failure(description: "a case's shape") }
+            var draft: Any = answer
+            for (pointer, value) in set {
+                draft = setting(draft, pointer.split(separator: "/", omittingEmptySubsequences: false).dropFirst().map(String.init)[...], value)
+            }
+            let raw = try JSONSerialization.data(withJSONObject: draft)
+            try expect(HoldAllow.keysKnown(raw) == ok, "\(c["name"] as? String ?? ""): \(ok ? "passes" : "refused")")
+        }
+    },
+    Test("KIFF's pinned draft (Rae's €150 refund cap raised to €320) is what its offer says, keys and all") {
+        guard let answer = try sharedJSON("contracts/kiff-agent-draft-from-hold.json")["answer"] else { throw Failure(description: "no answer") }
+        let raw = try JSONSerialization.data(withJSONObject: answer)
+        let draft = try JSONDecoder().decode(AccountClient.Draft.self, from: raw)
+        let offered = #"{"offer":{"changes":[{"mandate_id":"rae-refund","kind":"per_action","before":15000,"after":32000,"unit":"EUR","words_before":"up to €150 each","words_after":"up to €320 each","rounded":false}],"draft":"drf_fixed","confirm_key":"critical","send_held":true}}"#
+        try expect(HoldAllow.keysKnown(raw), "every key read")
+        try expect(HoldAllow.matches(draft, try offer(offered), agent: "rae", hold: "exc_fixed", action: "refund"), "the offered change")
+    },
+    Test("a draft whose Card carries a key KIFF adds later reads as not offered, so nothing is signed", awaiting: {
+        let call = try held(#"{"outcome":"per_action_exceeded"}"#)
+        let later = draft(extra: "").replacingOccurrences(of: #""revises":"c1","#, with: #""revises":"c1","room_grants":["rae"],"#)
+        let read = try await HoldAllow.read(offer: { _ in try JSONDecoder().decode(CloudClient.AllowAnswer.self, from: Data(offerJSON().utf8)) },
+                                            draft: { _ in (try JSONDecoder().decode(AccountClient.Draft.self, from: Data(later.utf8)), Data(later.utf8)) },
+                                            call: call, round: false)
+        try expect(!read.matches, "a key the check doesn't read")
+    }),
+
 ]

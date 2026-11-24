@@ -34,11 +34,11 @@ verdict() {
 
 case "${1:-}" in
     fetch)
-        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && [ -d .shared/ios/Shared ] && [ -f "$KECCAK" ] && [ -f "$JCS" ] && exit 0
+        [ "$(cat .shared/.pin 2>/dev/null || true)" = "$PIN" ] && [ -d .shared/ios/Shared ] && [ -f "$KECCAK" ] && [ -f "$JCS" ] && [ -f .shared/vectors/agent-draft-keys.json ] && exit 0
         rm -rf .shared
         git init -q .shared
         git -C .shared remote add origin "https://github.com/$REPO.git"
-        git -C .shared sparse-checkout set app/strings contracts ios/Shared/Mascot.xcassets ios/Tafs/KIFF
+        git -C .shared sparse-checkout set app/strings contracts vectors ios/Shared/Mascot.xcassets ios/Tafs/KIFF
         git -C .shared fetch -q --depth 1 --filter=blob:none origin "$PIN"
         git -C .shared checkout -q FETCH_HEAD
         echo "$PIN" > .shared/.pin

@@ -15,6 +15,9 @@ private func sources() throws -> [(path: String, text: String)] {
 /// open: KIFF's draft confirm, exactly this line, in `KeyAct` alone, signed by the security key.
 enum PlanqueBan {
     static let kiffDraftConfirm = #"case .confirmTrial(let id, _), .confirmDraft(let id, _): return "/v1/me/agent-drafts/\(CloudClient.escaped(id))/confirm""#
+    /// The other exception, in `HoldAllow` alone: the JSON keys of a KIFF draft's Card terms, which "Allow this from now on"
+    /// reads before the security key signs (`HoldAllow.keysKnown`). A Card's key, never planque's grants list.
+    static let kiffCardTermKeys = #"static let term = (grants: "grants", aggregates: "aggregates")"#
 
     /// What no source names (#178's list): planque's approve and confirm, a fresh connection, a grant's own path beyond the
     /// DELETE's, and the grants list by its bare name.
@@ -30,6 +33,7 @@ enum PlanqueBan {
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
             .joined(separator: "\n")
         if path.hasSuffix("Sources/Core/approvals/KeyApproval.swift") { text = text.replacingOccurrences(of: kiffDraftConfirm, with: "") }
+        if path.hasSuffix("Sources/Core/approvals/HoldAllow.swift") { text = text.replacingOccurrences(of: kiffCardTermKeys, with: "") }
         if let named = banned.first(where: { text.contains($0) }) { return named }
         return subRoute.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) > 0 ? "a grant's sub-route" : nil
     }
@@ -47,6 +51,8 @@ let guardsPlanqueTests: [Test] = [
         // planque's approve and confirm, and every grant's sub-route, stay banned.
         let allowedIn = all.filter { $0.text.contains(PlanqueBan.kiffDraftConfirm) }.map { URL(fileURLWithPath: $0.path).lastPathComponent }
         try expectEqual(allowedIn, ["KeyApproval.swift"])
+        // A KIFF draft's Card term keys, the one other line that names "grants": once, in `HoldAllow`.
+        try expectEqual(all.filter { $0.text.contains(PlanqueBan.kiffCardTermKeys) }.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["HoldAllow.swift"])
         // Every line of code that names planque's account routes or a grants list, exactly: the
         // enrolment's root, the grants read (its proof and the source's), the DELETE's path, and
         // KIFF's read of a taf's shares. A line built from any of them is a new line, and fails here.

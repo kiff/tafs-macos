@@ -62,6 +62,12 @@ one go on their own.
   hold when KIFF says). Each Card in force the draft shows must be the one it revises: when KIFF names it
   (`current.id`), the two must agree, for a changed Card and one marked unchanged alike. KIFF sends no `current.id`
   today, so this holds until it does. Otherwise "This change isn't what was offered", and nothing is signed.
+- **And only when every key of its Cards is one the check reads** (`HoldAllow.keysKnown`, over the draft's bytes as
+  KIFF sent them, `AccountClient.draftRaw`): a term KIFF adds later is never signed unseen. The keys are kiff/tafs
+  `vectors/agent-draft-keys.json`'s, by object (a Card, the Card in force, a grant, a per-call cap, a total, a scope, a
+  `quantity_of`). A key whose value is null sets nothing. A Card's `id`, when sent, is the Card it revises, and a
+  `quantity_of` says what its `quantity` says. The vector's cases, over KIFF's own draft pinned in kiff/tafs
+  `contracts/kiff-agent-draft-from-hold.json`, are this Mac's tests, as they are the iPad's, Android's and tafs cloud's.
 - **One approval on the security key** (`KeyAct.confirmDraft`): KIFF's plain draft confirm at the version this Mac read,
   the same request as installing a tried version.
 - **The held call itself:** KIFF answers a held call inside a confirm only for Coach's install (`confirm_hold.go`), so
