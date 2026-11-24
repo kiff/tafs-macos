@@ -95,7 +95,7 @@ let shellSampleTests: [Test] = [
         // Its Alerts keep nothing.
         try expect(window.contains("AlertsModel(account: account.session.tenant, inSample: inSample,"), "Alerts know the sample")
         // Nor does it give tafs cloud a push token (`MacPush`).
-        try expect(window.contains("push: inSample ? nil : PushSync.mac(cloud: cloud)"), "no push token for the sample")
+        try expect(window.contains("push: inSample ? nil : PushSync.mac(cloud: cloud, account: account)"), "no push token for the sample")
         // Its newly held calls alert as the iPad's sample does, asking macOS at the first, never through Account › Alerts.
         try expect(window.contains("if inSample { notifier.announceSample(fresh) } else { notifier.announce(fresh) }"), "the sample's held calls alert")
         let notifier = try String(contentsOf: URL(fileURLWithPath: "Sources/App/approvals/Notifier.swift"), encoding: .utf8)

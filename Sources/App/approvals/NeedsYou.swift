@@ -454,6 +454,8 @@ struct NeedsYouView: View {
     var openCoach: (CoachWaiting) -> Void = { _ in }
     /// What follows chats set aside: Coach leaves them, and the lists are read again.
     var setAsideDone: (Set<String>) async -> Void = { _ in }
+    /// Alerts on this Mac: in a `PUSH=1` build, `AlertsCard` offers them while they're off.
+    var alerts: AlertsModel?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -461,6 +463,7 @@ struct NeedsYouView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(words("needs_you.title")).font(Theme.display(34)).foregroundColor(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
+                if let alerts, alerts.pushes, answersHolds { AlertsCard(model: alerts) }
                 if let why = model.stepNotAnswered {
                     Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
                 }
@@ -781,5 +784,33 @@ struct NeedsYouView: View {
             ? String(format: "%d:%02d:%02d", seconds / 3600, seconds % 3600 / 60, seconds % 60)
             : String(format: "%d:%02d", seconds / 60, seconds % 60)
         return words("needs_you.left", ["time": time])
+    }
+}
+
+/// Alerts offered on Needs you while they're off, as the iPad's `AlertsCard`: a call waiting for the person reaches this
+/// Mac even with tafs closed. Only in a `PUSH=1` build (`AlertsModel.pushes`), for someone whose role may answer held
+/// calls; gone once alerts are on.
+struct AlertsCard: View {
+    @Environment(\.words) private var words
+    @ObservedObject var model: AlertsModel
+
+    var body: some View {
+        if !model.on, model.canAnswerHolds != false {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(words("needs_you.know_moment_taf_needs_you")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(words("needs_you.get_alert_when_call_waits")).font(.system(size: 14)).foregroundColor(Theme.soft)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let why = model.why {
+                    Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                }
+                Button(words(model.turningOn ? "needs_you.turning_on" : "needs_you.turn_alerts")) { Task { await model.turnOn(words: words) } }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(model.turningOn)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+            .accessibilityIdentifier("needs-you.alerts-card")
+        }
     }
 }
