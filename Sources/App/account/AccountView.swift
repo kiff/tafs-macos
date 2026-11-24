@@ -134,6 +134,9 @@ struct AccountView: View {
     var route: ApprovalRoute = .phoneOrPasskey
     /// Whether this person may use Coach, as the iPad's `mayUseCoach`: Coach's panel is theirs.
     var mayUseCoach = false
+    /// The sample is open (`Sample`): Mode says Sample data, and the account's action is Clear the sample, which
+    /// leaves it at once (nothing of anyone's is lost), as Windows' and the iPad's.
+    var inSample = false
     let signOut: () -> Void
     /// The pages open over Account, the last on screen; none shows Account itself.
     @State var pages: [AccountPage] = []
@@ -199,7 +202,7 @@ struct AccountView: View {
     /// Your account, view only, People & apps, Plan, and Coach, as the iPad's list starts.
     @ViewBuilder private var accountGroups: some View {
         group(words("settings.your_account")) {
-            row(words("settings.mode"), value: words("settings.mode_kiff"))
+            row(words("settings.mode"), value: words(inSample ? "settings.mode_sample" : "settings.mode_kiff"))
             divider
             // The account's own page: its id, its time zone, Export and Delete account.
             AccountRow.link(words("settings.kiff_account"), value: model.me?.account ?? "") { pages.append(.kiffAccount) }
@@ -350,8 +353,13 @@ struct AccountView: View {
             Text(words("home.tagline")).font(.system(size: 17)).foregroundColor(Theme.dim).padding(.vertical, 12)
         }
         group(words("settings.account_actions")) {
-            // Confirmed first, so a stray click never ends the session.
-            action(words("settings.sign_out"), color: Theme.no) { confirmingSignOut = true }
+            if inSample {
+                // The sample holds nothing of anyone's: it's left at once, back to the welcome.
+                action(words("settings.clear_sample"), color: Theme.no) { signOut() }
+            } else {
+                // Confirmed first, so a stray click never ends the session.
+                action(words("settings.sign_out"), color: Theme.no) { confirmingSignOut = true }
+            }
         }
     }
 

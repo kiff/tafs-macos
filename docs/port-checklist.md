@@ -91,8 +91,7 @@ checklist moves with `shared.pin`. Screens outside `Views/` (`Drive/DriveOverlay
 ## In review
 
 Pull requests open against `main`, not counted above. Each updates its lines here as it
-merges. Open now: #207 (HomeRecipes, CreditsViews' runs, HomeSplitView's Shared with you) and
-#219 (OnboardingView's Try it with sample data).
+merges. Open now: #207 (HomeRecipes, CreditsViews' runs, HomeSplitView's Shared with you).
 
 Closed without merging, so their screens are owed again (each branch is read before its screen
 is ported again, and what's sound is reused): #80 a taf's runs (`RunsPanel`, `RetainedRuns`),
