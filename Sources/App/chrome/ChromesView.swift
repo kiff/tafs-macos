@@ -85,6 +85,9 @@ struct ChromesView: View {
                             presenting: removing) { chrome in
             Button(words("chrome.remove"), role: .destructive) { Task { await model.remove(chrome) } }
             Button(words("common.cancel"), role: .cancel) {}
+        } message: { chrome in
+            // What unpairing ends ("Your Chrome" 3): the connections run in it, which come back only by connecting again.
+            if !chrome.sites.isEmpty { Text(words("chrome.unpair_ends", ["sites": chrome.sites])) }
         }
     }
 
@@ -94,6 +97,12 @@ struct ChromesView: View {
                 Text(verbatim: chrome.name).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
                 if let browser = chrome.browser, let os = chrome.os {
                     Text(words("chrome.browser_on", ["browser": browser, "system": os])).font(.system(size: 13)).foregroundColor(Theme.dim)
+                }
+                // What it's used for: the sites of the connections planque runs in it.
+                if !chrome.sites.isEmpty {
+                    Text(words("chrome.used_for", ["sites": chrome.sites])).font(.system(size: 13)).foregroundColor(Theme.soft)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("chrome.used-for")
                 }
             }
             Spacer()
