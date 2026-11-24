@@ -14,8 +14,9 @@ the signed-in one, unchanged: no screen has a second path for the sample. Every 
 iPad's own, from the shared strings (`sample.*`).
 
 - **Home:** the iPad's five sample tafs (`TafTemplates`: Support replies, Late parcels, Access,
-  Deploys, Lead follow-up), each working, with its Card (a count a day, held for you, or never),
-  and how many of its calls wait.
+  Deploys, Lead follow-up), each with its Card (a count a day, held for you, or never) and how
+  many of its calls wait. Each one's state is as tafs cloud's `stateOf` gives it: waiting while a
+  call of its waits for you, else paused once paused in its chat, else working.
 - **Needs you:** the calls the first two rounds made that a Card holds for its owner (the iPad's
   two `playNextDemoActions()`): Support replies' promise, the reship, the migration, with their
   next steps where the iPad has one.
@@ -40,13 +41,27 @@ iPad's own, from the shared strings (`sample.*`).
   `Accept-Language`, as tafs cloud and KIFF answer (`SampleTransport.words(for:)`), from the
   app's own strings; one that can't be loaded is answered in the sample's first language.
 
+- **A taf's chat answers**, as the iPad's `sampleReply`: what's sent (`POST …/messages`) is kept
+  in memory with the taf's reply, from its own record. That's its last three calls ("Lately: …"),
+  else "Nothing done yet today.", then how many of its calls wait in Needs you, then the
+  sample's note (`sample.reply.*`). "stop", "pause" or "hold off" pauses the taf on Home, and
+  "go", "carry on", "resume" or "continue" brings it back. "more", "raise", "limit", "bigger" or
+  "increase" says only its Card can give it room. Support replies' sample question has its
+  answer too, as on the iPad. Cleared with the sample.
+
 ## What it never does
 
 - **It reaches no network.** The session has no device key and no security key, so planque's
   reads (which need this Mac's signed proof) and Coach's start never begin, and nothing streams.
   No sample answer names a logo, so the app's one logo reader (`AppLogoImages.app`, tafs cloud's
   `/v1/logos/`) is never asked; a test pins it.
-- **It keeps nothing.** The Overview's list last read (`RememberedHome`) isn't kept for the sample.
+- **It keeps only itself, as the iPad's `SampleStore`.** What changed in it (the rounds played,
+  what was said in each taf's chat, the tafs paused) is one local file, `tafs/sample.json` in
+  Application Support (`SampleStore`), from the moment it's opened, as the iPad's `loadSample`
+  saves at once. The next launch with no one signed in opens the sample
+  where it was left; a file that doesn't read is as new, and one can't add rounds past the
+  scripts or a taf that isn't the sample's. Clear the sample removes it, and so does a sign-in.
+  The Overview's list last read (`RememberedHome`) isn't kept for the sample.
 - **It alerts for nothing.** Its held calls are no one's, so the window never announces them, and
   Account › Alerts' Turn on says it takes KIFF, without asking macOS or saving a choice.
 - **It writes and approves nothing.** Every write is refused with the shared line, "This isn't in
@@ -55,5 +70,5 @@ iPad's own, from the shared strings (`sample.*`).
 
 ## Not yet
 
-The sample chat's live replies (`sampleReply`), the iPad's two sample alerts in Account › Alerts,
-and keeping it between launches (the iPad's `SampleStore`).
+The iPad's local alerts for the sample's held calls: the Mac's sample announces nothing, and turning
+alerts on in it says it takes KIFF.
