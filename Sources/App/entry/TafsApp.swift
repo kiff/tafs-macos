@@ -6,6 +6,8 @@ struct TafsApp: App {
     /// The app's language, kept for this Mac and changed from Account › Language.
     @StateObject private var language = AppLanguage()
     @StateObject private var signIn = TafsApp.signInModel(words: Words.load())
+    /// The sample is open (`Sample`): this launch only, and left with Account's Clear the sample.
+    @State private var sample = false
 
     init() {
         // The launch's time, for how long the first window and the first list take.
@@ -36,8 +38,16 @@ struct TafsApp: App {
                         // Accept-Language follows; the window opens on Account, where it was chosen.
                         .id(session.accessToken + "|" + words.language)
                         .environment(\.languageChooser, language.chooser(session: session.accessToken))
+                } else if sample {
+                    // The sample, as the iPad's `startSample`: the same window, its clients answered by the sample in
+                    // memory (`SampleTransport`), with no key, no stream and no network. Signing out of it clears it.
+                    let transport = SampleTransport(words: words)
+                    SignedInView(account: AccountClient(transport: transport, session: Sample.session, language: words.language),
+                                 cloud: CloudClient(transport: transport, session: Sample.session, language: words.language),
+                                 route: .phoneOrPasskey, signedOut: { sample = false }, inSample: true)
+                        .id("sample|" + words.language)
                 } else {
-                    SignInView(model: signIn)
+                    SignInView(model: signIn, trySample: { sample = true })
                 }
             }
             // A session just gained, on either path: celebrated once, over home.

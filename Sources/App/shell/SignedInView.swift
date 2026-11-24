@@ -61,6 +61,8 @@ struct SignedInView: View {
     /// This Mac's device key is a software key: pairing it again with the phone gives no more.
     private let softwareKey: Bool
     private let route: ApprovalRoute
+    /// The sample is open (`Sample`, `SampleTransport`): Account says so, and Clear the sample leaves it.
+    private let inSample: Bool
     /// This Mac's device key, its public half (SPKI DER), for planque's enrolment.
     private let deviceKey: Data
     /// The credential of the security key that goes with this Mac (`SecurityKeyStore`), if any.
@@ -76,7 +78,7 @@ struct SignedInView: View {
 
     init(account: AccountClient, cloud: CloudClient, route: ApprovalRoute, streamer: LineStream? = nil, signedOut: @escaping () -> Void,
          addThisMac: @escaping () -> Void = {}, softwareKey: Bool = false, deviceKey: Data = Data(), securityKey: Data? = nil,
-         startOn: Screen = .overview) {
+         startOn: Screen = .overview, inSample: Bool = false) {
         self.account = account
         _selection = State(initialValue: startOn)
         let planque = PlanqueClient()
@@ -95,6 +97,7 @@ struct SignedInView: View {
         self.deviceKey = deviceKey
         self.securityKey = securityKey
         self.route = route
+        self.inSample = inSample
         _brief = StateObject(wrappedValue: BriefModel(cloud: cloud))
         _devices = StateObject(wrappedValue: DevicesModel(account: account))
         _people = StateObject(wrappedValue: PeopleModel(account: account))
@@ -118,7 +121,8 @@ struct SignedInView: View {
         _accountModel = StateObject(wrappedValue: AccountModel(account: account, cloud: cloud))
         _record = StateObject(wrappedValue: RecordModel(cloud: cloud, account: account))
         // The list last read shows in the first frame, as the iPad's remembered list.
-        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: .standard))
+        // The list last read is kept for the next launch, but never the sample's: nothing of it is kept.
+        _overview = StateObject(wrappedValue: OverviewModel(cloud: cloud, remembered: inSample ? nil : .standard))
         _calendar = StateObject(wrappedValue: CalendarModel(cloud: cloud))
         _usage = StateObject(wrappedValue: UsageModel(cloud: cloud, account: account))
         _connect = StateObject(wrappedValue: ConnectAppsModel(cloud: cloud, connections: ConnectionsSource(account: account, planque: planque, transport: NetworkTransport(base: URL(string: PlanqueClient.baseURL)!))))
@@ -263,7 +267,9 @@ struct SignedInView: View {
         CoachView(model: coach, canApprove: false, openTaf: openHandedOver,
                   listed: Set(overview.tafs.map(\.id)), tafCount: overview.tafs.count, managesCards: accountModel.me?.managesCards ?? true,
                   openUsage: { panel.close(); selection = .usage }, mayUseCoach: mayUseCoach, start: coachStart, close: closeCoach,
-                  fullScreen: $panel.full, tafs: overview.tafs, versions: versionsModel, dictation: dictation,
+                  fullScreen: $panel.full, tafs: overview.tafs,
+                  managesTaf: { id in overview.tafs.first { $0.tafID == id }.map { Access.manages(access[$0.id]) } ?? false },
+                  versions: versionsModel, dictation: dictation,
                   hints: Dictating.hints(tafs: overview.tafs.map(\.name)))
     }
 
@@ -594,7 +600,7 @@ struct SignedInView: View {
     private var accountScreen: some View {
         AccountView(model: accountModel, devices: devices, people: people, exportChats: exportChats, alerts: alerts, files: files, chrome: chromes,
                     tafName: { agent in overview.tafs.first { $0.id == agent }?.name },
-                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, signOut: {
+                    open: { selection = $0 }, addThisMac: addThisMac, softwareKey: softwareKey, route: route, mayUseCoach: mayUseCoach, inSample: inSample, signOut: {
             // A list read still on its way keeps nothing from here.
             overview.endSession()
             brief.endSession()

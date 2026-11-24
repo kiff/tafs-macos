@@ -9,6 +9,28 @@ private let apiDoor = #"""
 """#
 
 let tafAPIDoorTests: [Test] = [
+    Test("a door Coach drafted reads as the iPad's DoorDraft, from its own path; one it can't draw is none, a used one says so", awaiting: {
+        let answer = #"{"draft_id":"dd/1","body":{"kind":"api","draft":{"name":" Shop site ","fields":[{"name":"order","type":"string"},{"name":"reason","type":"choice","values":["refund","exchange"]},{"name":7}],"job":"Answer a customer's refund request","outcomes":["done","needs_you"],"text":true}}}"#
+        let transport = CannedTransport([(200, answer), (200, #"{"draft_id":"d2","body":{"kind":"slack","draft":{"name":"x","job":"y"}}}"#),
+                                         (200, #"{"draft_id":"d3","body":{"kind":"api","draft":{"name":"Shop","job":"  "}}}"#),
+                                         (410, #"{"error":"draft_used","words":"A door was already made from this draft."}"#)])
+        let cloud = CloudClient(transport: transport, session: session)
+        guard let draft = try await cloud.doorDraft(of: "taf 1", draft: "dd/1") else { throw Failure(description: "not read") }
+        try expectEqual(transport.sent[0].method + " " + transport.sent[0].path, "GET /v1/tafs/taf%201/doors/drafts/dd%2F1")
+        try expectEqual(draft.id, "dd/1")
+        try expectEqual(draft.name, "Shop site")
+        try expectEqual(draft.fields.map(DoorDraft.line), ["order · string", "reason · refund | exchange"])
+        try expectEqual(draft.outcomes, ["done", "needs_you"])
+        try expectEqual(draft.text, true)
+        let other = try await cloud.doorDraft(of: "t", draft: "d2")
+        try expect(other == nil, "only an API door's draft is drawn")
+        let noJob = try await cloud.doorDraft(of: "t", draft: "d3")
+        try expect(noJob == nil, "a draft with no job is none")
+        do { _ = try await cloud.doorDraft(of: "t", draft: "d4"); throw Failure(description: "read") } catch {
+            try expect(DoorDraft.isUsed(error), "a used draft is told apart")
+            try expectEqual((error as? CloudRefusal)?.words, "A door was already made from this draft.")
+        }
+    }),
     Test("an API door reads its keys' last four and times, and its last request in tafs cloud's words only") {
         struct Answer: Decodable { let door: TafDoors.Door }
         let door = try AccountClient.decoder.decode(Answer.self, from: Data(apiDoor.utf8)).door

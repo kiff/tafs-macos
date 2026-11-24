@@ -290,6 +290,10 @@ struct AddDoorSheet: View {
                     }
                     Text(words("door.replies_only")).font(.system(size: 12)).foregroundColor(Theme.dim).padding(.top, 6)
                         .fixedSize(horizontal: false, vertical: true)
+                    // Why the last door didn't go on (WhatsApp's signup that didn't finish, or tafs cloud's refusal).
+                    if let why = doors.error {
+                        Text(verbatim: why).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
@@ -302,11 +306,10 @@ struct AddDoorSheet: View {
         query.isEmpty || app.label.localizedCaseInsensitiveContains(query)
     }
 
-    /// What stands in for adding, on this Mac: WhatsApp's signup is a phone's; a Slack door is
-    /// approved where an approval can be made.
+    /// What stands in for adding, on this Mac: a Slack door is approved where an approval can be made. WhatsApp's is
+    /// added here, through its signup (`DoorsModel.addWhatsApp`).
     private func elsewhere(_ app: TafDoors.App) -> String? {
         switch app.kind {
-        case "whatsapp": return words("door.whatsapp_elsewhere")
         case "slack": return words("approval.device_can_not_approve_approve")
         default: return nil
         }
@@ -320,7 +323,9 @@ struct AddDoorSheet: View {
                 let instead = elsewhere(app)
                 Button {
                     Task {
-                        if await doors.add(app) != nil { close() }
+                        // WhatsApp's starts with Meta's signup on tafs cloud's page; any other door turns on at once.
+                        let added = app.kind == "whatsapp" ? await doors.addWhatsApp(app) : await doors.add(app)
+                        if added != nil { close() }
                     }
                 } label: {
                     HStack(spacing: 12) {
