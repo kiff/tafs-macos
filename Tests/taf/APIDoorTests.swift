@@ -148,3 +148,39 @@ let tafNewKeyTests: [Test] = [
         try expectEqual(route.path, "grants/g%2F1/triggers/t%202")
     },
 ]
+
+/// Coach's drafted door approved on the security key (`KeyAct.addDraftedAPIDoor`, the iPad's `approveDoorDraft`): the
+/// draft's `body`, canonical (RFC 8785, the iPad's `JCS`), is what's signed and sent, and the answer is the door and
+/// its first key.
+let tafDraftedDoorTests: [Test] = [
+    Test("the draft keeps tafs cloud's body in canonical form, and the act sends exactly those bytes to the doors") {
+        let answer = #"{"draft_id":"dd-1","made_at":"2026-11-24T03:00:00Z","body":{"kind":"api","draft_id":"dd-1","draft":{"text":false,"name":"ERP","job":"File invoices","fields":[{"type":"string","name":"invoice"}],"outcomes":["filed"]}}}"#
+        guard let draft = try DoorDraft.read(Data(answer.utf8)) else { throw Failure(description: "no draft") }
+        try expectEqual(draft.id, "dd-1")
+        let canonical = #"{"draft":{"fields":[{"name":"invoice","type":"string"}],"job":"File invoices","name":"ERP","outcomes":["filed"],"text":false},"draft_id":"dd-1","kind":"api"}"#
+        try expectEqual(String(decoding: draft.body, as: UTF8.self), canonical)
+        let act = KeyAct.addDraftedAPIDoor(taf: "taf/1", body: draft.body)
+        try expectEqual(act.method, "POST")
+        try expectEqual(act.path, "/v1/tafs/taf%2F1/doors")
+        try expectEqual(act.body, draft.body)
+    },
+    Test("the approval's answer reads as the door and its first key; a used draft is refused with tafs cloud's words", awaiting: {
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev1")
+        let added = #"{"door":{"id":"api-7","app":"api","kind":"api","label":"ERP","open":true,"address":"/v1/doors/api/api-7/requests","proof":"proven","how":"by its key","keys":[],"today":0,"limit":100,"resting":false},"key":{"id":"k1","key":"tafs_api_x","last4":"k_x1","made_at":"2026-11-24T03:01:00Z"}}"#
+        let transport = CannedTransport([(201, added), (410, #"{"error":"draft_used","words":"A door was already made from this draft."}"#)])
+        let cloud = CloudClient(transport: transport, session: session)
+        let act = KeyAct.addDraftedAPIDoor(taf: "taf-1", body: Data(#"{"kind":"api"}"#.utf8))
+        let door = try await cloud.addDraftedDoor(act, assertion: "assert")
+        try expectEqual(door.key.key, "tafs_api_x")
+        try expectEqual(door.door.id, "api-7")
+        try expectEqual(transport.sent[0].headers[Passkeys.headerName], "assert")
+        try expectEqual(transport.sent[0].body, Data(#"{"kind":"api"}"#.utf8))
+        do {
+            _ = try await cloud.addDraftedDoor(act, assertion: "assert")
+            throw Failure(description: "a used draft went through")
+        } catch let refusal as CloudRefusal {
+            try expectEqual(refusal.code, "draft_used")
+            try expectEqual(refusal.words, "A door was already made from this draft.")
+        }
+    }),
+]

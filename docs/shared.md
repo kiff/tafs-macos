@@ -13,6 +13,7 @@ repository.
 | `app/strings/languages.json` | The languages the apps ship | `Words.shipped` |
 | `contracts/*.json` | What tafs cloud answers the apps | the `contracts` tests |
 | `ios/Tafs/KIFF/Keccak.swift` | The iPad's Keccak-256, for KIFF's receipts | Core, compiled as it is (`scripts/shared.sh sources`; docs/record.md) |
+| `ios/Tafs/KIFF/JCS.swift` | The iPad's RFC 8785 canonical JSON, for the exact bytes a drafted door's approval signs and sends | Core, compiled as it is (`scripts/shared.sh sources`; docs/taf.md) |
 
 `scripts/shared.sh fetch` puts them in `.shared/`, which git ignores. The tests, the build and the
 Swift 5.7 check run it first.
