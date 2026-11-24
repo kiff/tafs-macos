@@ -122,8 +122,8 @@ let coachExperienceTests: [Test] = [
         try expectEqual(Rich.blocks("See [the Card](https://evil.example) and ![a chart](x.png)"),
                         [.paragraph([.init(text: "See the Card and a chart")])])
         // So a link from a page Coach read (`page_turn`) needs no confirm here: nothing in the chat's views can
-        // open one. Coach's chat and a taf's are drawn by `CoachView`, its cards by these files.
-        for file in ["CoachView.swift", "DriveViews.swift", "QuestionsCard.swift", "SetupApprovalCard.swift", "ImprovementCard.swift"] {
+        // open one. Coach's chat and a taf's are drawn by `CoachView`, the answer still arriving by `SteadyText`, its cards by the rest.
+        for file in ["CoachView.swift", "DriveViews.swift", "QuestionsCard.swift", "SetupApprovalCard.swift", "ImprovementCard.swift", "SteadyText.swift"] {
             let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/coach/" + file), encoding: .utf8)
             for opener in ["openURL", "Link(", "NSWorkspace", "AttributedString(markdown"] {
                 try expect(!source.contains(opener), "\(file) has \(opener)")
