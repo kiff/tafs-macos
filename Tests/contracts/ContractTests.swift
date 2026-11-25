@@ -29,6 +29,8 @@ private let notYet = [
     "connect-apps-next.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-removed.json": "Connect apps' pages and search, read against these with that screen",
     "coach-wording.json": "Coach's wording rules, for tafs cloud's Setup and kiff/agents: no app draws a screen from it",
+    "chrome-welcome.json": "planque's welcome to a Chrome, for the Chrome extension: no desktop app reads it",
+    "chrome-connections.json": "planque's list of a Chrome's connections, for the Chrome extension: no desktop app reads it",
 ]
 
 /// A fixture's cases (`{about, cases: [{name, status, body}]}`), each body as the bytes the app would read.
