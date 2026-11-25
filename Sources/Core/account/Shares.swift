@@ -42,7 +42,9 @@ enum Shares {
                 subjects.insert(subject)
             }
         }
-        return names.joined(separator: ", ") + " · " + words.count("people.count", subjects.count)
+        // The count is held together by no-break spaces, so a narrow column moves "3 people" (or "1 persona") to the
+        // next line whole, never splitting or cutting it (the iPad's `OverviewView.peopleLine`).
+        return names.joined(separator: ", ") + " · " + words.count("people.count", subjects.count).replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 
     /// The same, with the people read from KIFF: the reader is the person KIFF marks as them,

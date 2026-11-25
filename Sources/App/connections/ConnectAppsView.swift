@@ -378,21 +378,18 @@ struct ConnectAppsView: View {
                 .frame(width: Self.whose, alignment: .leading)
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    if app.needsReconnect {
-                        Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
-                    } else if app.isYours {
-                        Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
-                    } else if setup, let line = app.words {
-                        // For an app an operator sets up first: tafs cloud's own line, in its status.
-                        Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
-                    }
-                    // Which tafs use one of the account's own connections, under its status.
-                    if yours, !app.usedBy.isEmpty {
-                        Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
+                    statusWords(app, yours: yours, setup: setup)
+                    // With words beside it, the button goes under them, at the trailing edge, so a long label
+                    // ("Volver a iniciar sesión", "Preguntar a Coach") never squeezes the status (the iPad's
+                    // `BesideOrUnder`, Windows' `ButtonUnder`).
+                    if Self.buttonUnder(app, yours: yours, setup: setup) {
+                        trailing(app).frame(maxWidth: .infinity, alignment: .trailing).padding(.top, 4)
                     }
                 }
-                Spacer(minLength: 4)
-                trailing(app)
+                if !Self.buttonUnder(app, yours: yours, setup: setup) {
+                    Spacer(minLength: 4)
+                    trailing(app)
+                }
             }
             .frame(width: Self.status, alignment: .leading)
             chevron(app)
@@ -403,6 +400,31 @@ struct ConnectAppsView: View {
         .contentShape(Rectangle())
         .onTapGesture { if app.isConnected { model.opened = app } }
         .accessibilityElement(children: .contain)
+    }
+
+    /// The Status column's words, as the iPad's: Sign in again, Connected, an operator's setup line, and which tafs use it.
+    @ViewBuilder private func statusWords(_ app: Apps.App, yours: Bool, setup: Bool) -> some View {
+        if app.needsReconnect {
+            Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if app.isYours {
+            Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
+        } else if setup, let line = app.words {
+            // For an app an operator sets up first: tafs cloud's own line, in its status.
+            Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
+        }
+        // Which tafs use one of the account's own connections, under its status.
+        if yours, !app.usedBy.isEmpty {
+            Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
+        }
+    }
+
+    /// Whether the row's button goes under its status words: it has a button (Connect, Sign in again, Ask Coach) and
+    /// words beside it. A check mark, or a button alone, stays beside.
+    static func buttonUnder(_ app: Apps.App, yours: Bool, setup: Bool) -> Bool {
+        let button = !app.needsSetup && !app.isConnected
+        let worded = app.needsReconnect || app.isYours || (setup && app.words != nil) || (yours && !app.usedBy.isEmpty)
+        return button && worded
     }
 
     /// The row's end, as the iPad's `trailing`: a green check for a connected app; nothing for

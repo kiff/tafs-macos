@@ -58,8 +58,8 @@ let overviewListOrderTests: [Test] = [
         let support = try group(#"{"id":"g1","name":"Support","members":[{"subject":"u1","role":"manager"},{"subject":"u2","role":"member"},{"subject":"u3","role":"member"}],"agents":["a_new"]}"#)
         let people = [try person(#"{"subject":"u4","role":"member","status":"active","email":"ana@acme.com"}"#)]
         let grants = [Shares.Share(group: "g1"), Shares.Share(subject: "u4"), Shares.Share(subject: "u2"), Shares.Share(group: "gone")]
-        try expectEqual(Shares.usedBy(grants, groups: [support], people: people, words: words), "Support, ana@acme.com, u2 · 4 people")
-        try expectEqual(Shares.usedBy([Shares.Share(subject: "u4")], groups: [], people: people, words: words), "ana@acme.com · 1 person")
+        try expectEqual(Shares.usedBy(grants, groups: [support], people: people, words: words), "Support, ana@acme.com, u2 · 4\u{00A0}people")
+        try expectEqual(Shares.usedBy([Shares.Share(subject: "u4")], groups: [], people: people, words: words), "ana@acme.com · 1\u{00A0}person")
         try expectEqual(Shares.usedBy([], groups: [support], people: people, words: words), "Not shared")
         // Not read yet: no line.
         try expectEqual(Shares.usedBy(nil, groups: [support], people: people, words: words), nil)
