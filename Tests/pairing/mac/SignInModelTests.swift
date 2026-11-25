@@ -34,9 +34,9 @@ let pairingModelTests: [Test] = [
         model.removeAlerts = { count.removed += 1 }
         await model.signIn()
         try expectEqual(model.session?.tenant, "t1")
-        try expectEqual(count.removed, 1, "a new session shows only its own")
+        try expect(count.removed == 1, "a new session shows only its own")
         model.signedOut()
-        try expectEqual(count.removed, 2, "and a sign-out leaves none")
+        try expect(count.removed == 2, "and a sign-out leaves none")
     }),
     Test("a read KIFF refuses with 401 forgets the session once, and sign-in opens; a newer session stays", awaiting: { @MainActor in
         let store = MemoryStore()
