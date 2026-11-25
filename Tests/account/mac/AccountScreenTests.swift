@@ -143,7 +143,7 @@ let accountControlsMacTests: [Test] = [
         await model.loadSettings()
         try expectEqual(model.consent?.given, false)
         model.askConsent()
-        try expectEqual(model.consentAsked?.version, "1")
+        try expectEqual(model.consentAsked?.version, "2")
         model.notNowAI()
         try expectEqual(model.consentAsked, nil)
         let sent = cloud.sent.count

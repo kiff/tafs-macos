@@ -167,7 +167,7 @@ let accountControlsTests: [Test] = [
         let withdrawn = try await cloud.withdrawAI()
         try expectEqual(withdrawn.given, false)
         try expectEqual(sent.sent.map { $0.method + " " + $0.path }, ["GET /v1/me/ai-consent", "POST /v1/me/ai-consent", "DELETE /v1/me/ai-consent"])
-        try expectEqual(String(decoding: sent.sent[1].body, as: UTF8.self), #"{"version":"1"}"#)
+        try expectEqual(String(decoding: sent.sent[1].body, as: UTF8.self), #"{"version":"2"}"#)
         try expectEqual(sent.sent[2].body, Data())
     }),
     Test("a yes to older words is refused with the newer ones, to be read again", awaiting: {
