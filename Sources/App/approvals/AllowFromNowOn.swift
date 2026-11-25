@@ -56,7 +56,7 @@ extension NeedsYouModel {
         let call = open.call
         do {
             let read = try await HoldAllow.read(offer: { try await cloud.allowOffer(taf: open.taf, exception: call.id, round: $0) },
-                                                draft: { try await self.account.draft(id: $0) }, call: call, round: round)
+                                                draft: { try await self.account.draftRaw(id: $0) }, call: call, round: round)
             guard var now = allow, now.call.id == call.id else { return false }
             now.read = read
             now.busy = false
