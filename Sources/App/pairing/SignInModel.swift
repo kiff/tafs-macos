@@ -90,6 +90,8 @@ final class SignInModel: ObservableObject {
     /// it's forgotten with each session kept or ended, as the iPad's `useSession` and
     /// `forgetSession` (AppModel.swift:868, 1323).
     var rememberedList: UserDefaults = .standard
+    /// Takes away tafs's alerts, shown and waiting, at each session change (`Notifier.removeAll`): a test's own.
+    var removeAlerts: () -> Void = Notifier.removeAll
     /// Ends a session at KIFF, signed in with its own key: for the view-only session a
     /// pairing replaces.
     private let endSession: (Session, SigningKey) async -> Void
@@ -432,6 +434,8 @@ final class SignInModel: ObservableObject {
     /// Forgets the session on this Mac, and the security key and ending key that went with it. Ending it at KIFF
     /// is the caller's, with the session.
     func signedOut() {
+        // The account's alerts too, shown and waiting: a held call's alert names its taf and what it asks.
+        removeAlerts()
         ChatsExport.removeFiles(in: exportFolder)
         // Files' private copies go with the session, open or not.
         FilesModel.clearCopies()
@@ -456,6 +460,8 @@ final class SignInModel: ObservableObject {
         try sessions.save(got)
         // This sign-in's ending key, next to its session: made or not, the sign-in goes on.
         endingKey.kept(got, key.keyStore)
+        // The alerts of any session before: a new one shows only its own.
+        removeAlerts()
         ChatsExport.removeFiles(in: exportFolder)
         RememberedHome.forget(in: rememberedList)
         session = got

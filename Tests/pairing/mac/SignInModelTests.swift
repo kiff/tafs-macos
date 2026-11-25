@@ -26,6 +26,18 @@ let pairingModelTests: [Test] = [
         model.signedOut()
         try expectEqual(FileManager.default.fileExists(atPath: folder.path), false)
     }),
+    Test("a new session and a sign-out each take away tafs's alerts, shown and waiting: the last account's never stay", awaiting: { @MainActor in
+        final class Count { var removed = 0 }
+        let count = Count()
+        let (model, _) = try model([(200, startAnswer), (200, sessionAnswer)])
+        model.exportFolder = FileManager.default.temporaryDirectory.appendingPathComponent("export-alerts-\(UUID().uuidString)", isDirectory: true)
+        model.removeAlerts = { count.removed += 1 }
+        await model.signIn()
+        try expectEqual(model.session?.tenant, "t1")
+        try expect(count.removed == 1, "a new session shows only its own")
+        model.signedOut()
+        try expect(count.removed == 2, "and a sign-out leaves none")
+    }),
     Test("a read KIFF refuses with 401 forgets the session once, and sign-in opens; a newer session stays", awaiting: { @MainActor in
         let store = MemoryStore()
         let (signIn, _) = try model([(200, startAnswer), (200, sessionAnswer)], store: store)

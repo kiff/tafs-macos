@@ -106,6 +106,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// Every alert of tafs's, shown and waiting, on a sign-out, as the iPhone's and Windows': each names one account's
+    /// held call and taf, so none stays in Notification Center for whoever uses this Mac next.
+    static func removeAll() {
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        let center = UNUserNotificationCenter.current()
+        center.removeAllDeliveredNotifications()
+        center.removeAllPendingNotificationRequests()
+    }
+
     /// Hears clicks from the start, in a `PUSH=1` build: a push clicked with tafs closed launches it and arrives here.
     func listen() {
         guard PushToken.built else { return }
