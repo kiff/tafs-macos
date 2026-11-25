@@ -491,7 +491,8 @@ private struct UsedByLine: View {
 
     var body: some View {
         if let line = Shares.usedBy(shares, groups: groups, people: persons, words: words) {
-            Text(verbatim: line).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(1)
+            // Two lines at most, so a medium window ends on "1 persona", never "1 per…" (the iPad's).
+            Text(verbatim: line).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2).fixedSize(horizontal: false, vertical: true)
         }
     }
 
