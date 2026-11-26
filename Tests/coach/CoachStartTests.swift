@@ -91,6 +91,14 @@ private final class Start {
 private func words(_ language: String = "en") throws -> Words { try Words(language: language, folder: URL(fileURLWithPath: ".shared/app/strings")) }
 
 let coachStartTests: [Test] = [
+    Test("the PIN sheet that starts Coach says why, a whole line in every shipped language") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        try expectEqual(try Words(language: "en", folder: folder)(CoachStart.reasonKey), "Coach can act only within what you approve.")
+        for language in try Words.shipped(folder: folder) {
+            let line = try Words(language: language, folder: folder)(CoachStart.reasonKey)
+            try expect(!line.isEmpty && line != CoachStart.reasonKey && !line.contains("{"), "\(language): \(line)")
+        }
+    },
     Test("Start on the security key's route: Setup read, the draft approved by the key over its exact bytes, planque, then the draft sent and claimed", awaiting: { @MainActor in
         let start = Start(cloud: [(200, none), (201, coachRead)], passkey: [(201, draft)])
         let (outcome, ready) = try await start.run()
