@@ -22,6 +22,12 @@ enum CoachStart {
         case stopped(String?)
     }
 
+    /// Why the security key is asked when it starts Coach, under the PIN sheet's title: "Coach can
+    /// act only within what you approve." (`coach.prompt.why`, kiff/tafs#2174, for the desktops'
+    /// passkey step). The iPad says it in its Face ID sheet (kiff/tafs#2175); Windows' passkey step
+    /// and Android's prompt say the same line.
+    static let reasonKey = "coach.prompt.why"
+
     /// Setup's KIFF agent, as the iPad's `setupAgent`.
     static let setupAgent = "setup"
     /// Where a draft is submitted (KIFF's API).

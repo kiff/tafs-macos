@@ -416,7 +416,9 @@ struct SignedInView: View {
         guard let passkey = passkeySession else { return }
         let key = deviceKey, reason = words("coach.prompt.connect_tools_mac")
         await coach.startSetup(account: account, approval: passkey,
-                               sign: { body in try await askSecurityKey { pin in try await passkey.signDraft(body, pin: pin) } },
+                               sign: { body in
+                                   try await askSecurityKey(why: words(CoachStart.reasonKey)) { pin in try await passkey.signDraft(body, pin: pin) }
+                               },
                                confirm: { try await NeedsYouModel.confirmOwnerForCore(reason) },
                                enrol: { [planque, account] ended in
                                    planque.tenant = account.session.tenant
@@ -482,10 +484,11 @@ struct SignedInView: View {
 
     /// Asks this Mac's security key through the PIN sheet: its PIN, then its touch, as many tries
     /// as the person makes; it answers once the key approved, or throws once the sheet is closed.
-    @MainActor private func askSecurityKey<Answer>(act: String? = nil, _ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
+    @MainActor private func askSecurityKey<Answer>(act: String? = nil, why: String? = nil,
+                                                   _ ask: @escaping (SecurityKeyPIN) async throws -> Answer) async throws -> Answer {
         try await withCheckedThrowingContinuation { continuation in
             var answer: Answer?
-            pinSheet = PINSheetModel(words: words, act: act, attempt: { pin in answer = try await ask(pin) },
+            pinSheet = PINSheetModel(words: words, act: act, why: why, attempt: { pin in answer = try await ask(pin) },
                                      readTries: { try await FidoKey().triesLeft() },
                                      done: { error in
                                          pinSheet = nil

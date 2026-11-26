@@ -32,6 +32,9 @@ final class PINSheetModel: ObservableObject, Identifiable {
     /// The act the key approves, named in the sheet: "Sign MacBook out of
     /// your account". Nil for adding the key while pairing.
     let act: String?
+    /// Why the key is asked, under the title, in its own line: Coach's start says what its approval
+    /// gives (`CoachStart.reasonKey`). Nil for every other approval.
+    let why: String?
     private let words: Words
     private let attempt: (SecurityKeyPIN) async throws -> Void
     private let readTries: () async throws -> Int
@@ -40,11 +43,13 @@ final class PINSheetModel: ObservableObject, Identifiable {
     /// - `attempt` asks the key with the PIN; it returns once the key approved.
     /// - `readTries` reads the PIN tries left, before the PIN is asked.
     /// - `done` hears once: nil once approved, or the error that closed the sheet.
-    init(words: Words, purpose: SecurityKeySheetPurpose = .approve, act: String? = nil, attempt: @escaping (SecurityKeyPIN) async throws -> Void,
+    init(words: Words, purpose: SecurityKeySheetPurpose = .approve, act: String? = nil, why: String? = nil,
+         attempt: @escaping (SecurityKeyPIN) async throws -> Void,
          readTries: @escaping () async throws -> Int, done: @escaping (Error?) -> Void) {
         self.words = words
         self.purpose = purpose
         self.act = act
+        self.why = why
         self.attempt = attempt
         self.readTries = readTries
         self.done = done
@@ -172,6 +177,11 @@ struct PINSheet: View {
             if let act = model.act {
                 // What is being approved, before the PIN, in the shared line (tafs#1718).
                 Text(words("approval.security_key.before", ["act": act])).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let why = model.why {
+                // Why the key is asked, before the PIN (Coach's start: kiff/tafs#2174).
+                Text(verbatim: why).font(.system(size: 14)).foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(words(model.purpose.leadKey)).font(.system(size: 14)).foregroundColor(Theme.soft)
