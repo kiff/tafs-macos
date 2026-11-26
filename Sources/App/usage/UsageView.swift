@@ -472,6 +472,10 @@ struct UsageView: View {
             let buying = Usage.whereToBuy(balance, plan: model.usage?.plan)
             if managesBilling, buying.phone {
                 Divider().padding(.vertical, 2)
+                // What credits buy, before where to buy them, as the iPad's Add credits says it (kiff/tafs#2177).
+                Text(words(Usage.creditsBuyKey)).font(.system(size: 14)).foregroundColor(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("usage.credits_buy")
                 Text(words("billing.buy_on_phone")).font(.system(size: 14)).foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("usage.buy_on_phone")

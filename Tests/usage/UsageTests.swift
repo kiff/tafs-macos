@@ -11,6 +11,15 @@ private func cloud(_ answers: [(Int, String)]) -> (CloudClient, CannedTransport)
 }
 
 let usageReadTests: [Test] = [
+    Test("Plan & usage says what credits buy before where to buy them, a whole line in every shipped language") {
+        let folder = URL(fileURLWithPath: ".shared/app/strings")
+        try expectEqual(try Words(language: "en", folder: folder)(Usage.creditsBuyKey),
+                        "Credits pay for your tafs' runs; a quiet check, when nothing is new, uses none. Solo includes Coach to set up about 4 new jobs a month.")
+        for language in try Words.shipped(folder: folder) {
+            let line = try Words(language: language, folder: folder)(Usage.creditsBuyKey)
+            try expect(!line.isEmpty && line != Usage.creditsBuyKey && !line.contains("{"), "\(language): \(line)")
+        }
+    },
     Test("the balance is tafs cloud's words and meter, as sent", awaiting: {
         let (client, transport) = cloud([(200, balanceAnswer)])
         let balance = try await client.balance()

@@ -7,6 +7,11 @@ enum Usage {
     /// (`billing.buy_on_phone`) and Team is this page's (`billing.team_on_web`).
     static let teamCheckout = URL(string: "https://kiff.dev/dashboard/checkout")!
 
+    /// What credits buy, before where to buy them (`billing.credits_buy`, kiff/tafs#2177): what a run
+    /// costs, that a quiet check costs nothing, and Coach's set-up that Solo includes. Its words are
+    /// the shared line, so the figure it names is the one the other apps say.
+    static let creditsBuyKey = "billing.credits_buy"
+
     /// The balance now (`GET /v1/usage/balance`).
     struct Balance: Decodable, Equatable {
         /// `ok`, `warning` or `waiting` (the tafs wait for credits, a limit or a plan).
