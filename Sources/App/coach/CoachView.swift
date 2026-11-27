@@ -358,8 +358,37 @@ final class CoachModel: ObservableObject {
     func loadChats() async {
         guard isCoach, case .loaded(let coach, _) = state else { return }
         let gen = accountGeneration
-        guard let read = try? await cloud.chats(of: coach.id), gen == accountGeneration else { return }
-        chats = read
+        guard let read = try? await cloud.chatsRead(of: coach.id), gen == accountGeneration else { return }
+        chats = read.chats
+        if let words = read.delete { deleteWords = words }
+    }
+
+    /// tafs cloud's words for deleting a conversation, from the last chats-list read that sent them all; nil until one
+    /// has, and then Delete isn't offered (the app has no words of its own for it), as the iPad's `chatDeleteWords`.
+    @Published private(set) var deleteWords: ChatDeleteWords?
+
+    /// Deletes one of Coach's conversations for good, after the person confirmed it in tafs cloud's words, as the iPad's
+    /// `deleteSetupChat` (kiff/tafs#2107): gone (or never this person's, 404), it leaves both lists, the files opened full
+    /// size go (`openedFiles`, only a cache), and the one shown gives way to a new conversation. Working or waiting on a
+    /// card (409), it stays with the refusal's words; anything else keeps it with `failed` from the last read. Nil once
+    /// gone, else why. Never asked without tafs cloud's words; an answer after sign-out says nothing.
+    func delete(chat session: String) async -> String? {
+        guard isCoach, case .loaded(let coach, _) = state, let words = deleteWords else { return nil }
+        let gen = accountGeneration
+        var failure: Error?
+        do { try await cloud.deleteChat(session, of: coach.id) } catch { failure = error }
+        guard gen == accountGeneration else { return nil }
+        switch ChatDelete.outcome(failure, words: words, say: Words.app) {
+        case .kept(let why):
+            return why
+        case .gone:
+            let shown = shownSession == session
+            chats.removeAll { $0.session == session }
+            archivedChats.removeAll { $0.session == session }
+            Self.removeOpenedFiles()
+            if shown { newChat() }
+            return nil
+        }
     }
 
     /// Coach's archived chats, for Archived, as the iPad's `archivedSetupChats`.
@@ -429,8 +458,9 @@ final class CoachModel: ObservableObject {
     func loadArchivedChats() async {
         guard isCoach, case .loaded(let coach, _) = state else { return }
         let gen = accountGeneration
-        guard let read = try? await cloud.archivedChats(of: coach.id), gen == accountGeneration else { return }
-        archivedChats = read
+        guard let read = try? await cloud.archivedChatsRead(of: coach.id), gen == accountGeneration else { return }
+        archivedChats = read.chats
+        if let words = read.delete { deleteWords = words }
     }
 
     /// Puts an archived chat back in the list, as the iPad's `unarchiveSetupChat`

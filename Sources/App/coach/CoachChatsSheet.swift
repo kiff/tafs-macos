@@ -7,7 +7,8 @@ import SwiftUI
 /// (`ArchivedSetupChats`, :875-925). Done (Esc) closes the list.
 ///
 /// A Mac has no swipe: Archive and Put back are each row's own button at its end, and its
-/// right-click menu.
+/// right-click menu. Delete conversation sits beside them, in both lists, only in tafs cloud's words and once a read has
+/// brought them all (kiff/tafs#2107): its question names the conversation, then says what goes and what stays.
 struct CoachChatsSheet: View {
     @Environment(\.words) private var words
     @Environment(\.dismiss) private var dismiss
@@ -23,6 +24,8 @@ struct CoachChatsSheet: View {
     @State private var confirming: CoachChat?
     /// Why the last archive or put-back didn't go through, said in the sheet.
     @State private var notMoved: String?
+    /// The conversation waiting for the person's yes to delete it for good.
+    @State private var deleting: CoachChat?
 
     init(model: CoachModel, watch: WatchDaysModel, open: @escaping (String) -> Void, archived: Bool = false) {
         self.model = model
@@ -52,6 +55,17 @@ struct CoachChatsSheet: View {
         } message: { _ in
             Text(words("coach.chats.archive_body"))
         }
+        .background(EmptyView().confirmationDialog(model.deleteWords?.confirmTitle ?? "",
+                                                   isPresented: Binding(get: { deleting != nil && model.deleteWords != nil },
+                                                                        set: { if !$0 { deleting = nil } }),
+                                                   titleVisibility: .visible, presenting: deleting) { chat in
+            if let delete = model.deleteWords {
+                Button(delete.confirmButton, role: .destructive) { remove(chat.session) }
+            }
+            Button(words("common.cancel"), role: .cancel) {}
+        } message: { chat in
+            Text(verbatim: "\(chat.title)\n\n\(model.deleteWords?.confirmBody ?? "")")
+        })
     }
 
     /// The sheet's name, with ‹ Back on Archived, and Done.
@@ -79,7 +93,8 @@ struct CoachChatsSheet: View {
             VStack(spacing: 6) {
                 ForEach(model.chats) { chat in
                     ChatRow(chat: chat, shown: model.chat == chat.session, action: words("coach.chats.archive"), symbol: "archivebox",
-                            open: { open(chat.session) }, act: { confirming = chat })
+                            deleteItem: model.deleteWords?.item,
+                            open: { open(chat.session) }, act: { confirming = chat }, delete: { deleting = chat })
                 }
                 if !watch.days.isEmpty { watchSection }
                 Button { archived = true; notMoved = nil } label: {
@@ -128,7 +143,8 @@ struct CoachChatsSheet: View {
             VStack(spacing: 6) {
                 ForEach(model.archivedChats) { chat in
                     ChatRow(chat: chat, shown: false, action: words("coach.chats.put_back"), symbol: "tray.and.arrow.up",
-                            open: { open(chat.session) }, act: { putBack(chat.session) })
+                            deleteItem: model.deleteWords?.item,
+                            open: { open(chat.session) }, act: { putBack(chat.session) }, delete: { deleting = chat })
                 }
             }
             .padding(.horizontal, 20).padding(.bottom, 20)
@@ -151,6 +167,11 @@ struct CoachChatsSheet: View {
         Task { notMoved = await model.putBack(chat: session) }
     }
 
+    private func remove(_ session: String) {
+        notMoved = nil
+        Task { notMoved = await model.delete(chat: session) }
+    }
+
     /// When a chat was last written to: the date abbreviated and the time short, as the iPad's
     /// `shown(date: .abbreviated, time: .shortened)`.
     static func when(_ date: Date, words: Words) -> String {
@@ -159,15 +180,19 @@ struct CoachChatsSheet: View {
 }
 
 /// One conversation: its title and when, opened by a click, with its one move (Archive, or
-/// Put back) as a button at its end and in its right-click menu.
+/// Put back) as a button at its end and in its right-click menu, and Delete conversation beside it when tafs cloud has
+/// sent its words (`deleteItem`).
 private struct ChatRow: View {
     @Environment(\.words) private var words
     let chat: CoachChat
     let shown: Bool
     let action: String
     let symbol: String
+    /// tafs cloud's "Delete conversation"; nil, and there's no Delete.
+    let deleteItem: String?
     let open: () -> Void
     let act: () -> Void
+    let delete: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -187,10 +212,21 @@ private struct ChatRow: View {
             .buttonStyle(.plain)
             .help(action)
             .accessibilityLabel(action)
+            if let deleteItem {
+                Button(action: delete) {
+                    Image(systemName: "trash").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.soft)
+                }
+                .buttonStyle(.plain)
+                .help(deleteItem)
+                .accessibilityLabel(deleteItem)
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(shown ? Theme.raised : Theme.panel))
-        .contextMenu { Button(action, action: act) }
+        .contextMenu {
+            Button(action, action: act)
+            if let deleteItem { Button(deleteItem, role: .destructive, action: delete) }
+        }
         .accessibilityAddTraits(shown ? .isSelected : [])
     }
 }
