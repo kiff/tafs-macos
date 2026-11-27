@@ -9,7 +9,9 @@ private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes
                          // KIFF's "Allow this from now on" draft: its keys and its change, read by the approvals part's HoldAllowTests.
                          "kiff-agent-draft-from-hold.json",
                          // A held call's arguments under Details, read by the approvals part's HeldCallTests.
-                         "held-arguments.json"]
+                         "held-arguments.json",
+                         // Connect apps' first page, read by the connections part's AppsTests (every sign-in under Yours).
+                         "connect-apps.json"]
 private let notYet = [
     "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
@@ -26,7 +28,6 @@ private let notYet = [
     "coach-chats.json": "Coach's conversations, with the pull request that reads them",
     "coach-conversation.json": "Coach's conversations, with the pull request that reads them",
     "conversation-failed.json": "a run that ended refused says so in the chat (failed), with the Coach screens",
-    "connect-apps.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-search.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-next.json": "Connect apps' pages and search, read against these with that screen",
     "connect-apps-removed.json": "Connect apps' pages and search, read against these with that screen",
