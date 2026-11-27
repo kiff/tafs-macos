@@ -145,7 +145,8 @@ let recordReadsTests: [Test] = [
         try expectEqual(try decision("refused"), "refused by the Card")
         try expectEqual(try decision("held"), "held for you by the Card")
         try expectEqual(try decision("approved"), "held → approved by you")
-        try expectEqual(try decision("done", #","outcome":"allowed","held":true"#), "allowed by the Card", "held, no answer: the Card's (kiff/tafs#2225)")
+        // Held, no answer: the Card's (kiff/tafs#2225).
+        try expectEqual(try decision("done", #","outcome":"allowed","held":true"#), "allowed by the Card")
         try expectEqual(try decision("done", #","answer":{"decision":"approved_once","you":true}"#), "held → approved once by you")
         try expectEqual(try decision("refused", #","answer":{"decision":"refused","by":"admin"}"#), "held → refused by an admin")
         // No receipt and no answer: tafs cloud's line, as the iPad's own.
