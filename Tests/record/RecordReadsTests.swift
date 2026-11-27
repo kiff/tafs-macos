@@ -127,7 +127,9 @@ let recordReadsTests: [Test] = [
         try expectEqual(try line("refused"), "refused by its Card · nothing sent")
         try expectEqual(try line("revoked"), "Card revoked · nothing sent")
         try expectEqual(try line("approved"), "approved by you · done")
-        try expectEqual(try line("done", #","outcome":"allowed","held":true"#), "approved by you · done")
+        // Held, then allowed with no answer from the owner (its Card changed): the Card's, never "approved by you" (kiff/tafs#2225).
+        try expectEqual(try line("done", #","outcome":"allowed","held":true"#), "within its Card · done")
+        try expectEqual(try line("done", #","outcome":"allowed","held":true,"answer":{"decision":"approved_once","you":true}"#), "approved by you · done")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once","you":true}"#), "approved by you · done")
         try expectEqual(try line("refused", #","answer":{"decision":"refused","by":"admin"}"#), "refused by an admin · nothing sent")
         try expectEqual(try line("done", #","answer":{"decision":"approved_once","by":"finance_lead"}"#), "approved by someone with the role finance lead · done")
@@ -143,6 +145,8 @@ let recordReadsTests: [Test] = [
         try expectEqual(try decision("refused"), "refused by the Card")
         try expectEqual(try decision("held"), "held for you by the Card")
         try expectEqual(try decision("approved"), "held → approved by you")
+        // Held, no answer: the Card's (kiff/tafs#2225).
+        try expectEqual(try decision("done", #","outcome":"allowed","held":true"#), "allowed by the Card")
         try expectEqual(try decision("done", #","answer":{"decision":"approved_once","you":true}"#), "held → approved once by you")
         try expectEqual(try decision("refused", #","answer":{"decision":"refused","by":"admin"}"#), "held → refused by an admin")
         // No receipt and no answer: tafs cloud's line, as the iPad's own.
