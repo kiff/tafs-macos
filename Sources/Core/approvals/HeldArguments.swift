@@ -75,6 +75,9 @@ enum HeldArguments {
         var text = Substring(number)
         let negative = text.first == "-"
         if negative { text = text.dropFirst() }
+        // A zero is 0 whatever its exponent says (0e500, 0e99999999999999999999), checked before the exponent is read.
+        let mantissaText = text.prefix { $0 != "e" && $0 != "E" }
+        if !mantissaText.isEmpty, mantissaText.allSatisfy({ $0 == "0" || $0 == "." }), mantissaText.contains("0") { return "0" }
         var exponent = 0
         if let e = text.firstIndex(where: { $0 == "e" || $0 == "E" }) {
             guard let value = Int(text[text.index(after: e)...].drop { $0 == "+" }) else { return number }
@@ -107,6 +110,31 @@ enum HeldArguments {
             head = String(digits.prefix(point)); tail = String(digits.dropFirst(point))
         }
         return (negative ? "-" : "") + head + (tail.isEmpty ? "" : "." + tail)
+    }
+
+    /// A value written back as JSON, each number as its own text: what's left once the arguments are set apart.
+    static func json(_ value: Value) -> String {
+        switch value {
+        case .text(let text): return quoted(text)
+        case .number(let number): return number
+        case .flag(let flag): return flag ? "true" : "false"
+        case .null: return "null"
+        case .list(let items): return "[" + items.map(json).joined(separator: ",") + "]"
+        case .object(let fields): return "{" + fields.map { quoted($0.key) + ":" + json($0.value) }.joined(separator: ",") + "}"
+        }
+    }
+
+    private static func quoted(_ text: String) -> String {
+        var out = "\""
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            default:
+                if scalar.value < 0x20 { out += String(format: "\\u%04x", scalar.value) } else { out.unicodeScalars.append(scalar) }
+            }
+        }
+        return out + "\""
     }
 
     /// One JSON document read as sent, its numbers kept as text. Nil when it isn't JSON.

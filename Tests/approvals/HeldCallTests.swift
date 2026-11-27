@@ -59,6 +59,19 @@ let approvalsHeldTests: [Test] = [
         try expect(held[1].hasArguments, "it still has arguments")
         try expectEqual(held[2].argumentLines, [])
     }),
+    Test("a number the decoder can't hold in a call's arguments never empties Needs you", awaiting: {
+        let json = #"""
+        {"exceptions":[{"id":"exc_h","subject":"a","action":"b","created_at":"2026-11-27T17:00:00Z","title":"Pay \"x\"\n",
+          "arguments":{"huge":1e400,"small":1e-400,"zero":0e99999999999999999999}},
+         {"id":"exc_o","subject":"a","action":"b","created_at":"2026-11-27T17:00:00Z","arguments":null}]}
+        """#
+        let held = try await client([(200, json)]).0.heldCalls()
+        try expectEqual(held.map(\.id), ["exc_h", "exc_o"])
+        try expectEqual(held[0].argumentLines, ["huge: 1e400", "small: 1e-400", "zero: 0"])
+        try expect(held[0].hasArguments, "it has arguments")
+        try expectEqual(held[0].title, "Pay \"x\"\n")
+        try expect(!held[1].hasArguments, "null is none")
+    }),
     Test("a number is written with the digits sent: no exponent, no trailing zeros, never rounded through Double") {
         try expectEqual(HeldArguments.plain("1.5e-05"), "0.000015")
         try expectEqual(HeldArguments.plain("-2.5E-3"), "-0.0025")
@@ -78,6 +91,9 @@ let approvalsHeldTests: [Test] = [
         // The count is of the significant digits: trailing zeros sent don't push a number past the bound.
         try expectEqual(HeldArguments.plain("1.0000000000e-95"), "0." + String(repeating: "0", count: 94) + "1")
         try expectEqual(HeldArguments.plain("0.000"), "0")
+        // A zero is 0 before its exponent is read, however far it reaches.
+        try expectEqual(HeldArguments.plain("0e500"), "0")
+        try expectEqual(HeldArguments.plain("-0.00e99999999999999999999"), "0")
         try expectEqual(HeldArguments.plain("1e999999999"), "1e999999999")
         try expectEqual(HeldArguments.plain("-1e-9223372036854775808"), "-1e-9223372036854775808")
         try expectEqual(HeldArguments.plain("1e99999999999999999999"), "1e99999999999999999999")

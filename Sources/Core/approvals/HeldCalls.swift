@@ -49,6 +49,20 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     /// opens a fill, and this Mac holds no approval key to make one: it offers no allowing answer for it, only the phone.
     let fillsInChrome: Bool
 
+    /// The held list with each call's arguments set apart (an object left empty in their place, so `hasArguments` reads
+    /// the same): the decoder reads numbers through `Double` and refuses the whole list for one it can't hold (`1e400`),
+    /// so a taf's argument could otherwise empty Needs you. The arguments are read by `withArguments` instead. An answer
+    /// that isn't JSON is passed on as it is, for the decoder to refuse.
+    static func argumentsApart(_ body: Data) -> Data {
+        guard case .object(var top)? = HeldArguments.parse(body), case .list(let sent)? = top["exceptions"] else { return body }
+        top["exceptions"] = .list(sent.map { one in
+            guard case .object(var fields) = one, let arguments = fields["arguments"], arguments != .null else { return one }
+            fields["arguments"] = .object([:])
+            return .object(fields)
+        })
+        return Data(HeldArguments.json(.object(top)).utf8)
+    }
+
     /// Each call's Details lines, from the same answer's bytes read as sent (`HeldArguments.parse`): the
     /// decoder reads numbers as `Double`, which would show digits the taf never sent.
     static func withArguments(_ calls: [HeldCall], from body: Data) -> [HeldCall] {
@@ -194,7 +208,7 @@ extension AccountClient {
     func heldCalls() async throws -> [HeldCall] {
         struct Answer: Decodable { let exceptions: [HeldCall] }
         let body = try await send("GET", "/v1/me/card-exceptions?status=held")
-        let answer: Answer = try read(body)
+        let answer: Answer = try read(HeldCall.argumentsApart(body))
         return HeldCall.withArguments(answer.exceptions, from: body)
     }
 
