@@ -45,8 +45,8 @@ enum Record {
         let answeredByYou: Bool
         /// A read of data, as KIFF marks the call (`call.read_only`): a day's reads fold into one line.
         let readOnly: Bool
-        /// The owner approved it, a held call that KIFF then allowed, whatever the tool did: the
-        /// iPad's `ownerApproved` (`outcome` allowed and `held`), or a call tafs cloud names approved.
+        /// The owner approved it, a held call that KIFF then allowed with their approval as its answer,
+        /// whatever the tool did: the iPad's `ownerApproved`, or a call tafs cloud names approved.
         let ownerApproved: Bool
         /// KIFF's id for the call (`call.proposal_id`): what a held call is matched by in KIFF's held list.
         let proposalID: String?
@@ -194,7 +194,10 @@ enum Record {
             answerBy = call?.answer?.by
             answeredByYou = call?.answer?.you == true
             readOnly = call?.readOnly == true
-            ownerApproved = kind == "approved" || (call?.outcome == "allowed" && call?.held == true)
+            // Approved once only when KIFF carries the owner's approval as the call's answer (kiff/tafs#2225): a held
+            // call that went through because its Card changed has none, and is the Card's, as KIFF's trail says.
+            ownerApproved = kind == "approved"
+                || (call?.outcome == "allowed" && call?.held == true && call?.answer.map { $0.decision != "refused" } == true)
             report = (try? c.decodeIfPresent(ReportOffer.self, forKey: .report)) ?? nil
             reportedAt = text(.reportedAt).flatMap(Record.time)
             proposalID = call?.proposalID
