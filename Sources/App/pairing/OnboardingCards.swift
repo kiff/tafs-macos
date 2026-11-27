@@ -33,9 +33,11 @@ enum OnboardingPage: Int, CaseIterable, Identifiable {
     func lead(_ words: Words) -> String { leadKeys.map { words($0) }.joined(separator: " ") }
 
     var next: OnboardingPage? { OnboardingPage(rawValue: rawValue + 1) }
+    var previous: OnboardingPage? { OnboardingPage(rawValue: rawValue - 1) }
 }
 
-/// Where the person is in the cards: Next goes on, the last card's button ends them, and Skip ends them from any card.
+/// Where the person is in the cards: Next (or →) goes on, ← goes back, the last card's button ends them, and Skip ends
+/// them from any card.
 struct OnboardingSteps: Equatable {
     private(set) var page: OnboardingPage
     private(set) var finished = false
@@ -47,6 +49,16 @@ struct OnboardingSteps: Equatable {
     /// Next, or Get started on the last card.
     mutating func advance() {
         if let next = page.next { page = next } else { finished = true }
+    }
+
+    /// ← : the card before, staying on the first.
+    mutating func back() {
+        if let previous = page.previous { page = previous }
+    }
+
+    /// → : the next card, staying on the last (only its button ends the cards).
+    mutating func forward() {
+        if let next = page.next { page = next }
     }
 
     mutating func skip() { finished = true }
@@ -116,7 +128,26 @@ struct OnboardingCards: View {
         .frame(maxWidth: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        // The arrow keys move between the cards, as a swipe does on a phone; mirrored in a right-to-left language,
+        // where the next card is to the left. Shortcuts, so they work wherever the focus is.
+        .background(arrows)
         .onChange(of: steps.finished) { if $0 { done() } }
+    }
+
+    @Environment(\.layoutDirection) private var direction
+
+    private var arrows: some View {
+        let rtl = direction == .rightToLeft
+        return ZStack {
+            Button("") { withAnimation(.easeInOut(duration: 0.2)) { if rtl { steps.back() } else { steps.forward() } } }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+            Button("") { withAnimation(.easeInOut(duration: 0.2)) { if rtl { steps.forward() } else { steps.back() } } }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+        }
+        .buttonStyle(.plain)
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
     }
 }
 

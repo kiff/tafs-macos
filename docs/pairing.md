@@ -56,7 +56,8 @@ sign-in pass on the test account comes before any release. The contract is kiff/
    Mac however the person signs in. `terms_outdated` there unticks the box too.
 5. **The four cards** (`OnboardingCards`, first run v2, every app alike): Your tafs work for you,
    Coach sets it up with you, A Card is your permission, Credits pay for the work, with Skip (Esc),
-   Next and Get started (Return). They follow the celebration once on this Mac
+   Next and Get started (Return), and the arrow keys as a phone's swipe: → the next card, ← the one
+   before, never past either end (mirrored in a right-to-left language). They follow the celebration once on this Mac
    (`Onboarding.cardsSeenKey`). Each picture is drawn by the app's own views with the sample's words.
    The Card's line ends with a desktop's approval (`onboarding.control_lead_desktop`): on the phone,
    or on this Mac when it was signed in with a security key (macOS 12 has no Touch ID). The credits
