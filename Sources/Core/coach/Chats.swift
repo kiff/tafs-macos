@@ -40,6 +40,64 @@ struct ChatTarget: Equatable {
     }
 }
 
+/// tafs cloud's words for deleting a conversation, in the person's language, sent with each chats-list read (`delete`), as
+/// the iPad's `TafsCloud.DeleteWords` (kiff/tafs#2107). The app has none of its own: Delete is offered only once a read has
+/// brought all five, each with something in it.
+struct ChatDeleteWords: Decodable, Equatable {
+    let item: String
+    let confirmTitle: String
+    let confirmBody: String
+    let confirmButton: String
+    let failed: String
+
+    enum CodingKeys: String, CodingKey {
+        case item, failed
+        case confirmTitle = "confirm_title", confirmBody = "confirm_body", confirmButton = "confirm_button"
+    }
+
+    /// Every line there: a read with one missing or blank offers no Delete at all.
+    var complete: Bool {
+        ![item, confirmTitle, confirmBody, confirmButton, failed].contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+}
+
+/// A chats-list read (`GET …/chats`, `…/chats/archived`): the chats, newest first, and the words for deleting one when
+/// tafs cloud sends them all, as the iPad's `ChatsRead`.
+struct CoachChatsRead: Decodable {
+    let chats: [CoachChat]
+    /// Nil from a tafs cloud that doesn't send them, or whose words don't read or leave a line blank.
+    let delete: ChatDeleteWords?
+
+    enum CodingKeys: String, CodingKey { case chats, delete }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        chats = try c.decode([CoachChat].self, forKey: .chats)
+        // Words that don't read leave the list as it is, with no Delete.
+        delete = (try? c.decodeIfPresent(ChatDeleteWords.self, forKey: .delete)).flatMap { $0?.complete == true ? $0 : nil }
+    }
+}
+
+/// What became of a conversation the person asked to delete, as the iPad's `deleteSetupChat` (kiff/tafs#2107). tafs
+/// cloud decides whose it is; the app decides nothing.
+enum ChatDelete: Equatable {
+    /// Gone (or tafs cloud never had it for this person: 404), so it leaves both lists.
+    case gone
+    /// Still there, with the line saying why: the 409's own words (working or waiting on a card), or tafs cloud's
+    /// `failed` from the last read for anything else, the network included.
+    case kept(String)
+
+    /// The outcome of the `DELETE`: nil, it went through.
+    static func outcome(_ error: Error?, words: ChatDeleteWords, say: Words) -> ChatDelete {
+        guard let error else { return .gone }
+        if let refusal = error as? CloudRefusal {
+            if refusal.status == 404 { return .gone }
+            if refusal.status == 409 { return .kept(refusal.why(say)) }
+        }
+        return .kept(words.failed)
+    }
+}
+
 extension CloudClient {
     /// Opens a new conversation with Coach on this taf, as the iPad's `improve`: tafs cloud puts
     /// the taf's job, Card and latest calls in front of the person's words.
@@ -51,10 +109,11 @@ extension CloudClient {
     }
 
     /// The taf's chats, newest first.
-    func chats(of taf: String) async throws -> [CoachChat] {
-        struct Answer: Decodable { let chats: [CoachChat] }
-        let answer: Answer = try await get("/v1/tafs/\(Self.escaped(taf))/chats")
-        return answer.chats
+    func chats(of taf: String) async throws -> [CoachChat] { try await chatsRead(of: taf).chats }
+
+    /// The taf's chats, with what tafs cloud sends beside them (the words for deleting one).
+    func chatsRead(of taf: String) async throws -> CoachChatsRead {
+        try await get("/v1/tafs/\(Self.escaped(taf))/chats")
     }
 
     /// Archives one of the taf's chats, as the iPad's `archiveChat` (TafsCloud.swift:1560-1565):
@@ -66,10 +125,18 @@ extension CloudClient {
 
     /// The chats archived, to open one or put it back, as the iPad's `archivedChats`
     /// (TafsCloud.swift:1567-1572).
-    func archivedChats(of taf: String) async throws -> [CoachChat] {
-        struct Answer: Decodable { let chats: [CoachChat] }
-        let answer: Answer = try await get("/v1/tafs/\(Self.escaped(taf))/chats/archived")
-        return answer.chats
+    func archivedChats(of taf: String) async throws -> [CoachChat] { try await archivedChatsRead(of: taf).chats }
+
+    /// The archived chats, with what tafs cloud sends beside them.
+    func archivedChatsRead(of taf: String) async throws -> CoachChatsRead {
+        try await get("/v1/tafs/\(Self.escaped(taf))/chats/archived")
+    }
+
+    /// Deletes one of the person's own chats for good (`DELETE /v1/tafs/{id}/chats/{session}`, kiff/tafs#2095): its
+    /// messages and the files they added, on every device. Unsigned, with the session's token, as Archive. tafs cloud
+    /// decides whose it is: 404 for one that isn't theirs or is already gone, 409 while its run works or waits on a card.
+    func deleteChat(_ session: String, of taf: String) async throws {
+        _ = try await delete("/v1/tafs/\(Self.escaped(taf))/chats/\(Self.escaped(session))")
     }
 
     /// Puts an archived chat back in the list, as the iPad's `unarchiveChat`
