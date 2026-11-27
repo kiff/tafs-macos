@@ -137,6 +137,16 @@ let overviewHomeTests: [Test] = [
         try expectEqual(lenient?.homeListsRecipes, true)
         try expectEqual(lenient?.homeWords, nil)
         try expect(lenient?.homeOwnWords == nil, "no own-words row without a title")
+        // A first taf to try (first run v2): drawn only as served, and only whole. A missing or empty field, or one that
+        // isn't words, is no card; tafs cloud serves it only in the person's language.
+        let first = reads(#"{"recipes":[\#(ok)],"home":{"shown":false,"words":"x","first_taf":{"title":"Acknowledge every ticket","line":" Acknowledges each new ticket. ","say":"Set up Acknowledge every ticket"}}}"#)
+        try expectEqual(first?.homeFirstTaf, Recipes.Home.FirstTaf(title: "Acknowledge every ticket", line: "Acknowledges each new ticket.", say: "Set up Acknowledge every ticket"))
+        for partial in [#""first_taf":{"title":"A","line":"","say":"s"}"#, #""first_taf":{"title":"A","line":"l"}"#, #""first_taf":{"title":7,"line":"l","say":"s"}"#, #""first_taf":"A""#] {
+            let read = reads(#"{"recipes":[\#(ok)],"home":{"shown":false,"words":"x",\#(partial)}}"#)
+            try expect(read != nil, "\(partial) doesn't fail the read")
+            try expect(read?.homeFirstTaf == nil, "\(partial) is no card")
+        }
+        try expect(reads(#"{"recipes":[\#(ok)],"home":{"shown":false,"words":"x"}}"#)?.homeFirstTaf == nil, "none served, no card")
     },
     Test("who may use Coach, as the iPad's mayUseCoach: KIFF's answer for Setup, else an account admin") {
         try expectEqual(Access.mayUseCoach(setup: Access(use: true), capabilities: nil), true)

@@ -242,6 +242,8 @@ struct OverviewView: View {
     var ownWords: () -> Void = {}
     /// Hands a recipe to Coach, as the iPad's `handRecipeToCoach`.
     var hand: (Recipes.Recipe) -> Void = { _ in }
+    /// Puts words in Coach's box, as handing a recipe does: the first taf to try's `say`.
+    var handSay: (String) -> Void = { _ in }
     /// Whether planque offers this person Chromes: How tafs works then has Chrome's help section.
     var chromeOffered = false
     /// Whether the new onboarding is on (`Onboarding.on`): then Home with no taf is the first Home.
@@ -360,12 +362,31 @@ struct OverviewView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+        firstTaf
         HStack(spacing: 12) {
             Button(words("coach.ask"), action: ownWords).buttonStyle(PrimaryButtonStyle()).frame(maxWidth: 260)
             Button(words("onboarding.how_it_works")) { showingHowItWorks = true }.buttonStyle(OutlineButtonStyle()).frame(maxWidth: 260)
         }
         .sheet(isPresented: $showingHowItWorks) {
             HowTafsWorksView(chromeOffered: chromeOffered) { showingHowItWorks = false }.inLanguage(words).frame(minWidth: 620, minHeight: 640)
+        }
+    }
+
+    /// A first taf to try (first run v2): tafs cloud's first proved job in this person's language, its title and line as
+    /// served, and Set it up with Coach, which puts its words in Coach's box to edit and send. None served, or no Coach
+    /// for this person: nothing here.
+    @ViewBuilder private var firstTaf: some View {
+        if mayUseCoach, let first = model.recipes?.homeFirstTaf {
+            VStack(alignment: .leading, spacing: 8) {
+                Eyebrow(text: words("home.first_taf_try"))
+                Text(verbatim: first.title).font(.system(size: 17, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(verbatim: first.line).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                Button(words("home.first_taf_coach")) { handSay(first.say) }.buttonStyle(PrimaryButtonStyle()).frame(maxWidth: 260)
+                    .accessibilityIdentifier("first-taf")
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
         }
     }
 
@@ -385,6 +406,7 @@ struct OverviewView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.panel))
+        firstTaf
         // No job listed: "Say it in your own words" still leads to Coach.
         if mayUseCoach, let own = model.recipes?.homeOwnWords {
             OwnWordsRow(title: own.title, line: own.line, action: ownWords)
