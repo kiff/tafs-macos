@@ -67,7 +67,10 @@ enum HeldArguments {
 
     /// A JSON number's text written out in full, from its own digits: no exponent (1.5e-05 is
     /// 0.000015) and no trailing zeros after the point (1.50 is 1.5, 2.0 is 2). No digit is
-    /// added or rounded away.
+    /// added or rounded away. One that would take more than `longest` digits is shown as sent.
+    /// The most digits a number is written out to (contracts/held-arguments.json, case 7).
+    static let longest = 100
+
     static func plain(_ number: String) -> String {
         var text = Substring(number)
         let negative = text.first == "-"
@@ -81,16 +84,29 @@ enum HeldArguments {
         let parts = text.split(separator: ".", omittingEmptySubsequences: false)
         guard (1...2).contains(parts.count), parts.allSatisfy({ $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }) else { return number }
         let whole = String(parts[0]), fraction = parts.count > 1 ? String(parts[1]) : ""
-        var digits = whole + fraction
+        // An exponent past what any digit could bring back under `longest` is shown as sent before any arithmetic.
+        let mantissa = whole.count + fraction.count
+        guard (-(longest + mantissa)...(longest + mantissa)).contains(exponent) else { return number }
+        // The significant digits (D), leading and trailing zeros dropped, and where the point falls in them.
+        var digits = Substring(whole + fraction)
         var point = whole.count + exponent
-        if point < 0 { digits = String(repeating: "0", count: -point) + digits; point = 0 }
-        if point > digits.count { digits += String(repeating: "0", count: point - digits.count) }
-        var head = String(digits.prefix(point)), tail = String(digits.dropFirst(point))
-        while tail.hasSuffix("0") { tail.removeLast() }
-        while head.hasPrefix("0") { head.removeFirst() }
-        if head.isEmpty { head = "0" }
-        let zero = head == "0" && tail.isEmpty
-        return (negative && !zero ? "-" : "") + head + (tail.isEmpty ? "" : "." + tail)
+        while digits.first == "0" { digits.removeFirst(); point -= 1 }
+        while digits.last == "0" { digits.removeLast() }
+        if digits.isEmpty { return "0" }
+        // How many digits it takes written out (the leading 0 and the zeros after the point count, the sign and the
+        // point don't), worked out before any zero is added: past `longest` it's shown as sent (1e400), still exact,
+        // so a taf can't make a card build a string without limit (1e999999999).
+        let after = digits.count - point
+        guard (after <= 0 ? digits.count - after : max(digits.count, after + 1)) <= longest else { return number }
+        let head: String, tail: String
+        if point <= 0 {
+            head = "0"; tail = String(repeating: "0", count: -point) + String(digits)
+        } else if point >= digits.count {
+            head = String(digits) + String(repeating: "0", count: point - digits.count); tail = ""
+        } else {
+            head = String(digits.prefix(point)); tail = String(digits.dropFirst(point))
+        }
+        return (negative ? "-" : "") + head + (tail.isEmpty ? "" : "." + tail)
     }
 
     /// One JSON document read as sent, its numbers kept as text. Nil when it isn't JSON.

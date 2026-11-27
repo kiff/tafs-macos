@@ -504,7 +504,8 @@ signature verifies with the device key and is not an approval's.
   (`HeldArguments.lines`, kiff/tafs `contracts/held-arguments.json`): one line each, nested values two
   spaces deeper below their name (a list's items numbered 1, 2…), keys sorted by code point at every
   level, the gateway's own (`kiff_operation_id`, `kiff_reason`, `kiff_about`) left out, a number written
-  out without an exponent or trailing zeros, a control character as a space, a direction mark dropped,
+  out without an exponent or trailing zeros from its own digits (never through `Double`; one longer than 100
+  digits written out is shown as sent, `1e400`), a control character as a space, a direction mark dropped,
   and nothing ever shortened to "…". A held browser call's `steps` (each fill's field and value, each
   click's button) are what the person reads before approving. Arguments that aren't an object show no
   Details;

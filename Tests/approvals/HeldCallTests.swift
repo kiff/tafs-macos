@@ -65,6 +65,22 @@ let approvalsHeldTests: [Test] = [
         try expectEqual(HeldArguments.plain("1e+20"), "100000000000000000000")
         try expectEqual(HeldArguments.plain("12.75"), "12.75")
         try expectEqual(HeldArguments.plain("-0.0"), "0")
+        // Case 7: past 100 digits written out, shown as sent, and at once, however large the exponent.
+        try expectEqual(HeldArguments.plain("1e400"), "1e400")
+        try expectEqual(HeldArguments.plain("1e-400"), "1e-400")
+        try expectEqual(HeldArguments.plain("1e99"), "1" + String(repeating: "0", count: 99))
+        try expectEqual(HeldArguments.plain("1e100"), "1e100")
+        try expectEqual(HeldArguments.plain("1e-99"), "0." + String(repeating: "0", count: 98) + "1")
+        try expectEqual(HeldArguments.plain("1e-100"), "1e-100")
+        try expectEqual(HeldArguments.plain("-1E+400"), "-1E+400")
+        try expectEqual(HeldArguments.plain("1234567890e91"), "1234567890e91")
+        try expectEqual(HeldArguments.plain("1234567890e90"), "123456789" + String(repeating: "0", count: 91))
+        // The count is of the significant digits: trailing zeros sent don't push a number past the bound.
+        try expectEqual(HeldArguments.plain("1.0000000000e-95"), "0." + String(repeating: "0", count: 94) + "1")
+        try expectEqual(HeldArguments.plain("0.000"), "0")
+        try expectEqual(HeldArguments.plain("1e999999999"), "1e999999999")
+        try expectEqual(HeldArguments.plain("-1e-9223372036854775808"), "-1e-9223372036854775808")
+        try expectEqual(HeldArguments.plain("1e99999999999999999999"), "1e99999999999999999999")
         let sent = Data(#"{"price": 1.50, "rate": 2.0, "tiny": 1.5e-05, "id_like": 12345678901234567.89, "long": 0.12345678901234567890, "big": 98765432109876543210987}"#.utf8)
         guard case .object(let arguments)? = HeldArguments.parse(sent) else { throw Failure(description: "it doesn't read") }
         try expectEqual(HeldArguments.lines(arguments), [
@@ -76,6 +92,9 @@ let approvalsHeldTests: [Test] = [
         try expect(HeldArguments.parse(Data("{\"a\": 01}".utf8)) == nil, "a leading zero")
         try expect(HeldArguments.parse(Data("{\"a\": 1} x".utf8)) == nil, "something after")
         try expect(HeldArguments.parse(Data("[1,]".utf8)) == nil, "a trailing comma")
+        // A key sent twice: the last one is what runs (Go's decoding in KIFF and planque), so it's the one shown.
+        guard case .object(let twice)? = HeldArguments.parse(Data(#"{"to":"a@test","to":"b@test"}"#.utf8)) else { throw Failure(description: "it doesn't read") }
+        try expectEqual(HeldArguments.lines(twice), ["to: b@test"])
         guard case .object(let o)? = HeldArguments.parse(Data(#"{"a":"x\ny \u00e9 \ud83d\ude00 \u202e"}"#.utf8)) else { throw Failure(description: "it doesn't read") }
         try expectEqual(HeldArguments.lines(o), ["a: x y é 😀 "])
     },
