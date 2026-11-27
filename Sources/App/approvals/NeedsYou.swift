@@ -478,6 +478,9 @@ struct NeedsYouView: View {
     /// Alerts on this Mac: in a `PUSH=1` build, `AlertsCard` offers them while they're off.
     var alerts: AlertsModel?
     @Environment(\.openURL) private var openURL
+    /// The held calls whose Details the person folded away: open by default, since a held browser
+    /// call's steps are what the person reads before approving.
+    @State private var folded: Set<String> = []
 
     var body: some View {
         ScrollView {
@@ -643,6 +646,35 @@ struct NeedsYouView: View {
         .accessibilityHint(words("needs_you.opens_where_you_answer", ["taf": taf.name]))
     }
 
+    /// The call's arguments, every one in full, one line each with nested values indented below their
+    /// name (`HeldArguments.lines`, kiff/tafs `contracts/held-arguments.json`): never shortened to "…".
+    private func details(_ call: HeldCall) -> some View {
+        let open = !folded.contains(call.id)
+        return VStack(alignment: .leading, spacing: 6) {
+            Button {
+                if open { folded.insert(call.id) } else { folded.remove(call.id) }
+            } label: {
+                Text(words(open ? "needs_you.details_open" : "needs_you.details_closed"))
+                    .font(.system(size: 12, weight: .semibold)).foregroundColor(Theme.soft)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("held-details")
+            if open {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(call.argumentLines.enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line).font(.system(size: 12, design: .monospaced)).foregroundColor(Theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .textSelection(.enabled)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
     private func card(_ call: HeldCall) -> some View {
         let taf = tafs.first { $0.kiffAgent == call.subject }
         return VStack(alignment: .leading, spacing: 12) {
@@ -688,6 +720,7 @@ struct NeedsYouView: View {
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
                 .accessibilityElement(children: .combine)
             }
+            if !call.argumentLines.isEmpty { details(call) }
             answers(call)
         }
         .padding(16)

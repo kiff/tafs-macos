@@ -32,6 +32,10 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     let entityID: String?
     /// Whether KIFF keeps the call's arguments: a gateway call, filed under its tool call's id.
     let hasArguments: Bool
+    /// The call's arguments, one line each as Details draws them (`HeldArguments.lines`): every one
+    /// in full, nested values below their name, read from KIFF's own bytes (`heldCalls`) so no number
+    /// is rounded. Empty when KIFF sends none, or none that reads as an object.
+    var argumentLines: [String] = []
     /// KIFF's id for the call the hold is of (`proposal_id`): what the Record's line is matched by.
     let proposalID: String?
     /// What KIFF holds it as (`kind`): a Card unit request ("card_unit") isn't a held call.
@@ -44,6 +48,34 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     /// "never an allowing answer without its release", the Chrome contract). Only the paired phone's own release
     /// opens a fill, and this Mac holds no approval key to make one: it offers no allowing answer for it, only the phone.
     let fillsInChrome: Bool
+
+    /// The held list with each call's arguments set apart (an object left empty in their place, so `hasArguments` reads
+    /// the same): the decoder reads numbers through `Double` and refuses the whole list for one it can't hold (`1e400`),
+    /// so a taf's argument could otherwise empty Needs you. The arguments are read by `withArguments` instead. An answer
+    /// that isn't JSON is passed on as it is, for the decoder to refuse.
+    static func argumentsApart(_ body: Data) -> Data {
+        guard case .object(var top)? = HeldArguments.parse(body), case .list(let sent)? = top["exceptions"] else { return body }
+        top["exceptions"] = .list(sent.map { one in
+            guard case .object(var fields) = one, let arguments = fields["arguments"], arguments != .null else { return one }
+            fields["arguments"] = .object([:])
+            return .object(fields)
+        })
+        return Data(HeldArguments.json(.object(top)).utf8)
+    }
+
+    /// Each call's Details lines, from the same answer's bytes read as sent (`HeldArguments.parse`): the
+    /// decoder reads numbers as `Double`, which would show digits the taf never sent.
+    static func withArguments(_ calls: [HeldCall], from body: Data) -> [HeldCall] {
+        guard case .object(let top)? = HeldArguments.parse(body), case .list(let sent)? = top["exceptions"],
+              sent.count == calls.count else { return calls }
+        var out = calls
+        for (i, one) in sent.enumerated() {
+            if case .object(let fields) = one, case .object(let arguments)? = fields["arguments"] {
+                out[i].argumentLines = HeldArguments.lines(arguments)
+            }
+        }
+        return out
+    }
 
     /// The calls KIFF holds, by proposal id (else the hold's own id), as the iPad reads them for the
     /// Record's "no longer waiting" (`AppModel.isWaiting`, AppModel.swift:706-712, 2664): a Card unit
@@ -175,8 +207,9 @@ extension AccountClient {
     /// The calls waiting for the person's answer.
     func heldCalls() async throws -> [HeldCall] {
         struct Answer: Decodable { let exceptions: [HeldCall] }
-        let answer: Answer = try read(try await send("GET", "/v1/me/card-exceptions?status=held"))
-        return answer.exceptions
+        let body = try await send("GET", "/v1/me/card-exceptions?status=held")
+        let answer: Answer = try read(HeldCall.argumentsApart(body))
+        return HeldCall.withArguments(answer.exceptions, from: body)
     }
 
     /// Refuses a held call, signed by the device key over the hold as the person saw it.
