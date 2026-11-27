@@ -57,7 +57,8 @@ sign-in pass on the test account comes before any release. The contract is kiff/
 5. **The three cards** (`OnboardingCards`, the iPad's whole): Your tafs, A Card is your permission,
    You stay in control, with Skip (Esc), Next and Get started (Return). They follow the celebration
    once on this Mac (`Onboarding.cardsSeenKey`). The last names a desktop's approval
-   (`onboarding.control_lead_desktop`): on the phone, since a Mac on macOS 12 has no Touch ID.
+   (`onboarding.control_lead_desktop`): on the phone, or on this Mac when it was signed in with a
+   security key (macOS 12 has no Touch ID).
 6. **The first Home** (the Overview with no taf and no job listed, for someone who may use Coach):
    board 2, tafs cloud's empty line or the app's "No tafs yet" with what Coach does, **Ask Coach** and
    **How tafs works** (`HowTafsWorksView`: the cards, each opening where it's clicked, and the four
