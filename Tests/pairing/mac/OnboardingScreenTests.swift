@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 // The new onboarding's screens, drawn in the languages a pull request shows (en, fr, the two right-to-left ones and
-// Japanese), light and dark: the welcome with its tick, the three cards, and How tafs works.
+// Japanese), light and dark: the welcome with its tick, the four cards, and How tafs works.
 
 private let strings = URL(fileURLWithPath: ".shared/app/strings")
 
@@ -29,7 +29,25 @@ private func shoot<V: View>(_ view: V, _ name: String, size: CGSize, dark: Bool)
 }
 
 let pairingOnboardingScreenTests: [Test] = [
-    Test("the screenshots: the welcome with its tick, the three cards and How tafs works, in en, fr, ar, he and ja, light and dark",
+    Test("the cards' steps: forward and back one card, never past either end; Next ends on the last, Skip from any") {
+        var steps = OnboardingSteps()
+        steps.back()
+        try expectEqual(steps.page, .tafs)
+        steps.forward(); steps.forward()
+        try expectEqual(steps.page, .card)
+        steps.back()
+        try expectEqual(steps.page, .coach)
+        steps.forward(); steps.forward(); steps.forward(); steps.forward()
+        try expectEqual(steps.page, .credits)
+        try expect(!steps.finished, "→ never ends the cards")
+        try expect(steps.isLast, "the last card")
+        steps.advance()
+        try expect(steps.finished, "Get started ends them")
+        var skipped = OnboardingSteps(start: .coach)
+        skipped.skip()
+        try expect(skipped.finished, "Skip ends them")
+    },
+    Test("the screenshots: the welcome with its tick, the four cards and How tafs works, in en, fr, ar, he and ja, light and dark",
          awaiting: { @MainActor in
         for language in ["en", "fr", "ar", "he", "ja"] {
             let words = try Words(language: language, folder: strings)

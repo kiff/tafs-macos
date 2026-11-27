@@ -334,7 +334,7 @@ struct AccountView: View {
     /// Legal (with How tafs works), About and Sign out, as the iPad's list ends.
     @ViewBuilder private var aboutGroups: some View {
         group(words("settings.legal")) {
-            // The new onboarding's How tafs works: the three cards again, and KIFF's and tafs's pages (`HowTafsWorksView`).
+            // The new onboarding's How tafs works: the four cards again, and KIFF's and tafs's pages (`HowTafsWorksView`).
             if onboarding {
                 action(words("onboarding.how_it_works"), color: Theme.amberText) { showingHowItWorks = true }
                 divider

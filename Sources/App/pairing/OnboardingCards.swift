@@ -1,35 +1,43 @@
 import SwiftUI
 
-/// The three cards on how tafs works, as the iPad's `OnboardingCards` (kiff/tafs `ios/Tafs/Views/OnboardingCards.swift`):
-/// after signing in, before the first Home, and again from How tafs works. Each draws the app's own components with
-/// the sample's words, so the person knows them a minute later and reads them in their language.
+/// The four cards on how tafs works (first run v2, every app alike): what a taf is, Coach setting one up, the Card
+/// with how this Mac approves, and what credits pay for. After signing in, before the first Home, and again from How
+/// tafs works. Each draws the app's own components with the sample's words, never a picture of a screen, so the
+/// person knows them a minute later and reads them in their language and theme.
 enum OnboardingPage: Int, CaseIterable, Identifiable {
-    case tafs, card, control
+    case tafs, coach, card, credits
 
     var id: Int { rawValue }
 
     var titleKey: String {
         switch self {
         case .tafs: return "onboarding.tafs_title"
+        case .coach: return "onboarding.coach_title"
         case .card: return "onboarding.card_title"
-        case .control: return "onboarding.control_title"
+        case .credits: return "onboarding.credits_title"
         }
     }
 
-    /// The last card names this Mac's own ways to approve (`control_lead_desktop`): on the phone, or on this Mac when it was
-    /// signed in with a security key. A Mac on macOS 12 has no Touch ID to approve with.
-    var leadKey: String {
+    /// Each card's line. The Card's ends with this Mac's own ways to approve (`control_lead_desktop`): on the phone, or on
+    /// this Mac when it was signed in with a security key. A Mac on macOS 12 has no Touch ID to approve with.
+    var leadKeys: [String] {
         switch self {
-        case .tafs: return "onboarding.tafs_lead"
-        case .card: return "onboarding.card_lead"
-        case .control: return "onboarding.control_lead_desktop"
+        case .tafs: return ["onboarding.tafs_lead"]
+        case .coach: return ["onboarding.home_lead"]
+        case .card: return ["onboarding.card_lead", "onboarding.control_lead_desktop"]
+        case .credits: return ["billing.credits_buy"]
         }
     }
+
+    /// The card's line as read: its lines, a space between them.
+    func lead(_ words: Words) -> String { leadKeys.map { words($0) }.joined(separator: " ") }
 
     var next: OnboardingPage? { OnboardingPage(rawValue: rawValue + 1) }
+    var previous: OnboardingPage? { OnboardingPage(rawValue: rawValue - 1) }
 }
 
-/// Where the person is in the cards: Next goes on, the last card's button ends them, and Skip ends them from any card.
+/// Where the person is in the cards: Next (or →) goes on, ← goes back, the last card's button ends them, and Skip ends
+/// them from any card.
 struct OnboardingSteps: Equatable {
     private(set) var page: OnboardingPage
     private(set) var finished = false
@@ -41,6 +49,16 @@ struct OnboardingSteps: Equatable {
     /// Next, or Get started on the last card.
     mutating func advance() {
         if let next = page.next { page = next } else { finished = true }
+    }
+
+    /// ← : the card before, staying on the first.
+    mutating func back() {
+        if let previous = page.previous { page = previous }
+    }
+
+    /// → : the next card, staying on the last (only its button ends the cards).
+    mutating func forward() {
+        if let next = page.next { page = next }
     }
 
     mutating func skip() { finished = true }
@@ -81,7 +99,7 @@ struct OnboardingCards: View {
                     .foregroundColor(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                Text(words(steps.page.leadKey))
+                Text(steps.page.lead(words))
                     .font(.system(size: 16))
                     .foregroundColor(Theme.soft)
                     .fixedSize(horizontal: false, vertical: true)
@@ -110,7 +128,26 @@ struct OnboardingCards: View {
         .frame(maxWidth: 520)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        // The arrow keys move between the cards, as a swipe does on a phone; mirrored in a right-to-left language,
+        // where the next card is to the left. Shortcuts, so they work wherever the focus is.
+        .background(arrows)
         .onChange(of: steps.finished) { if $0 { done() } }
+    }
+
+    @Environment(\.layoutDirection) private var direction
+
+    private var arrows: some View {
+        let rtl = direction == .rightToLeft
+        return ZStack {
+            Button("") { withAnimation(.easeInOut(duration: 0.2)) { if rtl { steps.back() } else { steps.forward() } } }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+            Button("") { withAnimation(.easeInOut(duration: 0.2)) { if rtl { steps.forward() } else { steps.back() } } }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+        }
+        .buttonStyle(.plain)
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
     }
 }
 
@@ -122,9 +159,44 @@ struct OnboardingPicture: View {
     var body: some View {
         switch page {
         case .tafs: tafs
-        case .card: card
-        case .control: control
+        case .coach: coach
+        case .card: VStack(spacing: 12) { card; held }
+        case .credits: credits
         }
+    }
+
+    /// Coach's first exchange, as its chat draws it: the job in one line, then Coach's first answer.
+    private var coach: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(words("sample.coach.ask"))
+                .font(.system(size: 15)).foregroundColor(.white)
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.amber))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .leading, spacing: 6) {
+                Eyebrow(text: words("coach.title"))
+                Text(words("sample.coach.connect_first")).font(.system(size: 15)).foregroundColor(Theme.ink)
+                Text(words("sample.coach.plan_line")).font(.system(size: 13)).foregroundColor(Theme.dim)
+            }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.raised))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: 420)
+    }
+
+    /// The credits, as Plan & usage draws them: Solo's month of credits and its meter, and Coach counted apart.
+    private var credits: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(words("billing.solo_on")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Meter(fraction: 0.52, color: Theme.ok)
+            Text(words("sample.credits.not_counted_coach")).font(.system(size: 13)).foregroundColor(Theme.soft)
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius).stroke(Theme.line))
+        .frame(maxWidth: 420)
     }
 
     /// The sample's tafs as the sidebar and the Overview list them: each with its avatar, name and job.
@@ -154,16 +226,13 @@ struct OnboardingPicture: View {
         }
     }
 
-    /// Needs you's card: the sample's Deploys asks, nothing is sent until you approve, and the three answers.
-    private var control: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// A held call under the Card, as Needs you draws it: the sample's Deploys asks, nothing is sent until you approve.
+    private var held: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Eyebrow(text: words("sample.deploys.name"))
-            Text(words("sample.deploys.deploy_api")).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
-            Text(words("sample.deploys.deploy_api_why")).font(.system(size: 14)).foregroundColor(Theme.soft)
+            Text(words("sample.deploys.deploy_api")).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
             Text(words("needs_you.nothing_sent")).font(.system(size: 13)).foregroundColor(Theme.dim)
             Button(words("needs_you.approve_once")) {}.buttonStyle(PrimaryButtonStyle())
-            Button(words("sample.deploys.next_step")) {}.buttonStyle(OutlineButtonStyle())
-            Button(words("needs_you.refuse")) {}.buttonStyle(OutlineButtonStyle(color: Theme.no))
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: Look.panelRadius).fill(Theme.panel))
@@ -197,7 +266,7 @@ struct OnboardingPicture: View {
     }
 }
 
-/// How tafs works, any time (the first Home; Account), as the iPad's `HowTafsWorksView`: the three cards again, each
+/// How tafs works, any time (the first Home; Account), as the iPad's `HowTafsWorksView`: the four cards again, each
 /// opening where it's clicked, the help sections this Mac can use (`HelpSections`), and the privacy and terms pages,
 /// KIFF's and tafs's.
 struct HowTafsWorksView: View {
