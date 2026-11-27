@@ -500,6 +500,14 @@ signature verifies with the device key and is not an approval's.
 - **KIFF's reason on an amber pill**;
 - "The taf says", then the taf's own words **in a box of their own**, apart from KIFF's and
   drawn plain;
+- **Details ▾**, open until the person folds it, with **every argument KIFF keeps for the call, in full**
+  (`HeldArguments.lines`, kiff/tafs `contracts/held-arguments.json`): one line each, nested values two
+  spaces deeper below their name (a list's items numbered 1, 2…), keys sorted by code point at every
+  level, the gateway's own (`kiff_operation_id`, `kiff_reason`, `kiff_about`) left out, a number written
+  out without an exponent or trailing zeros, a control character as a space, a direction mark dropped,
+  and nothing ever shortened to "…". A held browser call's `steps` (each fill's field and value, each
+  click's button) are what the person reads before approving. Arguments that aren't an object show no
+  Details;
 - "Nothing is sent until you approve.";
 - **Refuse**, as an outlined red button the card's width;
 - on a Mac with no approval key, "This device can't approve. Approve on another device

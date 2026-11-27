@@ -28,6 +28,57 @@ private func refusal(_ body: @autoclosure () async throws -> Void, is code: Stri
 }
 
 let approvalsHeldTests: [Test] = [
+    Test("a held call's arguments are written as every app writes them: every case of the shared contract") {
+        let data = try Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/held-arguments.json"))
+        guard case .object(let file)? = HeldArguments.parse(data), case .list(let cases)? = file["cases"] else { throw Failure(description: "the contract doesn't read") }
+        try expect(cases.count >= 4, "the contract has its cases")
+        for one in cases {
+            guard case .object(let c) = one, case .text(let name)? = c["name"], case .object(let arguments)? = c["arguments"],
+                  case .list(let want)? = c["lines"] else { throw Failure(description: "a case doesn't read") }
+            let lines = want.compactMap { line -> String? in if case .text(let t) = line { return t } else { return nil } }
+            let got = HeldArguments.lines(arguments)
+            if got != lines { throw Failure(description: "\(name): got \(got), want \(lines)") }
+        }
+    },
+    Test("a held browser call shows every step under Details, nested below its number, never \"…\"", awaiting: {
+        let json = #"""
+        {"exceptions":[{"id":"exc_b","subject":"a","action":"browse_act","created_at":"2026-11-27T17:00:00Z",
+          "arguments":{"kiff_about":"x","url":"https://example.test/form","steps":[
+            {"kind":"fill","selector":"input[name=custname]","value":"Test"},{"kind":"click","text":"Submit order"}]}},
+         {"id":"exc_n","subject":"a","action":"b","created_at":"2026-11-27T17:00:00Z","arguments":"not an object"},
+         {"id":"exc_z","subject":"a","action":"b","created_at":"2026-11-27T17:00:00Z"}]}
+        """#
+        let held = try await client([(200, json)]).0.heldCalls()
+        try expectEqual(held[0].argumentLines, [
+            "steps:", "  1:", "    kind: fill", "    selector: input[name=custname]", "    value: Test",
+            "  2:", "    kind: click", "    text: Submit order", "url: https://example.test/form",
+        ])
+        try expect(!held[0].argumentLines.joined().contains("…") && !held[0].argumentLines.joined().contains("..."), "nothing shortened")
+        // Arguments that aren't an object show no Details, and the hold is still read.
+        try expectEqual(held[1].argumentLines, [])
+        try expect(held[1].hasArguments, "it still has arguments")
+        try expectEqual(held[2].argumentLines, [])
+    }),
+    Test("a number is written with the digits sent: no exponent, no trailing zeros, never rounded through Double") {
+        try expectEqual(HeldArguments.plain("1.5e-05"), "0.000015")
+        try expectEqual(HeldArguments.plain("-2.5E-3"), "-0.0025")
+        try expectEqual(HeldArguments.plain("1e+20"), "100000000000000000000")
+        try expectEqual(HeldArguments.plain("12.75"), "12.75")
+        try expectEqual(HeldArguments.plain("-0.0"), "0")
+        let sent = Data(#"{"price": 1.50, "rate": 2.0, "tiny": 1.5e-05, "id_like": 12345678901234567.89, "long": 0.12345678901234567890, "big": 98765432109876543210987}"#.utf8)
+        guard case .object(let arguments)? = HeldArguments.parse(sent) else { throw Failure(description: "it doesn't read") }
+        try expectEqual(HeldArguments.lines(arguments), [
+            "big: 98765432109876543210987", "id_like: 12345678901234567.89", "long: 0.1234567890123456789",
+            "price: 1.5", "rate: 2", "tiny: 0.000015",
+        ])
+    },
+    Test("what isn't JSON reads as nothing, and a text keeps its escapes as characters") {
+        try expect(HeldArguments.parse(Data("{\"a\": 01}".utf8)) == nil, "a leading zero")
+        try expect(HeldArguments.parse(Data("{\"a\": 1} x".utf8)) == nil, "something after")
+        try expect(HeldArguments.parse(Data("[1,]".utf8)) == nil, "a trailing comma")
+        guard case .object(let o)? = HeldArguments.parse(Data(#"{"a":"x\ny \u00e9 \ud83d\ude00 \u202e"}"#.utf8)) else { throw Failure(description: "it doesn't read") }
+        try expectEqual(HeldArguments.lines(o), ["a: x y é 😀 "])
+    },
     Test("a held call says which tool even under a vendor's label, as the iPad's KIFFMapping.says") {
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Write Stripe API data"), "Write Stripe API data · refund payment")
         try expectEqual(CallNames.says("bxkwf7vi_refund_payment", title: "Refund a payment"), "Refund a payment")
