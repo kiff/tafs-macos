@@ -29,6 +29,9 @@ final class CoachModel: ObservableObject {
         didSet { notReopened = nil }
     }
     @Published var draft = ""
+    /// tafs cloud's words for a message refused for want of a plan (`PlanPrompt`): drawn as a prompt above the box, with
+    /// Solo's line, Choose a plan and Not now, until the person chooses, sends again or starts a new conversation.
+    @Published private(set) var planNeeded: String?
     @Published private(set) var pending: Pending?
     /// The card whose answer is on its way, by its key, and why an answer didn't go.
     @Published private(set) var answering: String?
@@ -314,6 +317,7 @@ final class CoachModel: ObservableObject {
         live = nil
         pending = nil
         stopped = nil
+        planNeeded = nil
         // The Mac keeps a message refused for want of the AI consent as `pending`, where the
         // iPad puts it back in the composer: with `pending` gone, its consent ask goes too.
         consent = nil
@@ -1001,6 +1005,7 @@ final class CoachModel: ObservableObject {
     private func deliver(_ text: String, to coach: Coach, firstTried: Date? = nil, files sent: [AttachmentRef] = []) async -> Bool {
         pending = Pending(text: text, at: firstTried ?? now(), files: sent)
         stopped = nil
+        planNeeded = nil
         var mine = conversation
         do {
             // An improvement's first message goes through tafs cloud, which adds the taf's
@@ -1063,6 +1068,15 @@ final class CoachModel: ObservableObject {
         } catch {
             guard mine == conversation else { return true }
             live = nil
+            // Refused for want of a plan: tafs cloud's words become the prompt, and the person's words go back in the
+            // box (with its files, back to the tray), never a Retry that would meet the same refusal (Android's #2193).
+            if let needed = PlanPrompt.words(error, say: Words.app) {
+                pending = nil
+                planNeeded = needed
+                if !sent.isEmpty { return false }
+                if draft.isEmpty { draft = text }
+                return true
+            }
             if !sent.isEmpty {
                 pending = nil
                 fileNotice = Self.fileWhy(error)
@@ -1072,6 +1086,9 @@ final class CoachModel: ObservableObject {
         }
         return true
     }
+
+    /// Not now, on the no-plan prompt: it goes, and the words stay in the box.
+    func dismissPlanPrompt() { planNeeded = nil }
 
     /// Draws the answer as its events come, then reads the thread, which has it whole. A
     /// stream that breaks, at any point, only ends the drawing: the thread has the rest.
@@ -1603,11 +1620,35 @@ struct CoachView: View {
         return page.working || model.live != nil ? words("chat.write_next") : words("chat.message_taf", ["taf": taf.name])
     }
 
+    /// A message refused for want of a plan, as Android's `PlanPrompt` (kiff/tafs#2193, #2198): tafs cloud's words, Solo's
+    /// line, Choose a plan (Plan & usage) and Not now, above the box where the words wait.
+    private func planPrompt(_ needed: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: needed).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(words(PlanPrompt.soloKey)).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button(words("usage.choose_plan")) { model.dismissPlanPrompt(); openUsage() }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .accessibilityIdentifier("coach.plan-prompt.choose")
+                Button(words("common.not_now")) { model.dismissPlanPrompt() }
+                    .buttonStyle(OutlineButtonStyle())
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
+        .padding(.horizontal, 20).padding(.top, 8)
+        .accessibilityIdentifier("coach.plan-prompt")
+    }
+
     /// The message box, to the iPad's: a rounded panel with the words, and the send circle at
     /// its foot. Return sends; nothing goes until the person sends it.
     @ViewBuilder private var composer: some View {
         if case .loaded = model.state {
             VStack(alignment: .leading, spacing: 0) {
+            if let needed = model.planNeeded { planPrompt(needed) }
             // The files for the next message, above the box, as the iPad's `FileTray`.
             FileTray(model: model)
             // While Coach improves a taf, files in the tray wait for the next message: the words go alone.

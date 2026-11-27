@@ -70,6 +70,21 @@ let coachArchiveTests: [Test] = [
         try expectEqual(ChatDelete.outcome(CloudRefusal(status: 503, body: Data()), words: words, say: say), .kept("It wasn't deleted."))
         try expectEqual(ChatDelete.outcome(URLError(.notConnectedToInternet), words: words, say: say), .kept("It wasn't deleted."))
     },
+    Test("a message refused for want of a plan is the no-plan prompt, in tafs cloud's words; every other refusal isn't") {
+        let say = Words(language: "en", lines: [:])
+        let noPlan = CloudRefusal(status: 402, body: Data(#"{"error":"no_plan","words":"Choose a plan to start your tafs."}"#.utf8))
+        try expectEqual(PlanPrompt.words(noPlan, say: say), "Choose a plan to start your tafs.")
+        // By its code alone, with no words: tafs cloud's error, never an empty prompt.
+        let bare = CloudRefusal(status: 402, body: Data(#"{"error":"no_plan"}"#.utf8))
+        try expectEqual(PlanPrompt.words(bare, say: say), "no_plan")
+        for other in [#"{"error":"credits_used_up","words":"Out of credits."}"#, #"{"error":"limit_reached"}"#, #"{"error":"busy"}"#] {
+            try expect(PlanPrompt.words(CloudRefusal(status: 402, body: Data(other.utf8)), say: say) == nil, other)
+        }
+        try expect(PlanPrompt.words(URLError(.notConnectedToInternet), say: say) == nil, "the network")
+        // Solo's line is Plan & usage's, already in every language.
+        let en = try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))
+        try expectEqual(en(PlanPrompt.soloKey), "For one person: 500 credits a month, Coach included.")
+    },
     Test("an archived list whose chat lacks its times doesn't read", awaiting: {
         let (client, _) = cloud([(200, #"{"chats":[{"session":"s1","title":"No times"}]}"#)])
         let read = try? await client.archivedChats(of: "taf-coach")
