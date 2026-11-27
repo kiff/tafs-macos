@@ -54,15 +54,20 @@ sign-in pass on the test account comes before any release. The contract is kiff/
 4. **The phone's half** waits on the same tick: no code is shown before it, and the claim carries
    the ticked version (`terms_version` on `/v1/pair/claim`), so KIFF records the consent for this
    Mac however the person signs in. `terms_outdated` there unticks the box too.
-5. **The three cards** (`OnboardingCards`, the iPad's whole): Your tafs, A Card is your permission,
-   You stay in control, with Skip (Esc), Next and Get started (Return). They follow the celebration
-   once on this Mac (`Onboarding.cardsSeenKey`). The last names a desktop's approval
-   (`onboarding.control_lead_desktop`): on the phone, or on this Mac when it was signed in with a
-   security key (macOS 12 has no Touch ID).
+5. **The four cards** (`OnboardingCards`, first run v2, every app alike): Your tafs work for you,
+   Coach sets it up with you, A Card is your permission, Credits pay for the work, with Skip (Esc),
+   Next and Get started (Return). They follow the celebration once on this Mac
+   (`Onboarding.cardsSeenKey`). Each picture is drawn by the app's own views with the sample's words.
+   The Card's line ends with a desktop's approval (`onboarding.control_lead_desktop`): on the phone,
+   or on this Mac when it was signed in with a security key (macOS 12 has no Touch ID). The credits
+   card's line is `billing.credits_buy`.
 6. **The first Home** (the Overview with no taf and no job listed, for someone who may use Coach):
    board 2, tafs cloud's empty line or the app's "No tafs yet" with what Coach does, **Ask Coach** and
    **How tafs works** (`HowTafsWorksView`: the cards, each opening where it's clicked, and the four
-   legal pages titled as their pages). Account's Legal opens it too. Between the cards and the
+   legal pages titled as their pages). Account's Legal opens it too. With no taf, and while tafs
+   cloud serves it, **A first taf to try** (`home.first_taf` in `/v1/recipes`' `home`: its first
+   proved job, only in the person's language) shows its title and line as served, and **Set it up
+   with Coach** puts its `say` in Coach's box. Nothing served, or no Coach for this person: no card. Between the cards and the
    legal pages are its help sections (`HelpSections`, the shared `help.*` lines), each only where
    this Mac can use it, as the iPad's (tafs#1758, #1848):
    - **Chrome** (`help.chrome_*`), once planque offers this person Chromes (Account › Chrome shows).

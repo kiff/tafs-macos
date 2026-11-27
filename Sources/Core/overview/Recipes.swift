@@ -110,15 +110,31 @@ struct Recipes: Decodable, Equatable {
                 line = (((try? c.decodeIfPresent(String.self, forKey: .line)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
+        /// A first taf to try (first run v2): tafs cloud's first proved job, served only while the account has no taf and
+        /// the job is written in the person's language, in its words; `say` is what Set it up with Coach puts in
+        /// Coach's box. Nil when it isn't served, or any of the three isn't words: then there's no card.
+        struct FirstTaf: Decodable, Equatable {
+            let title: String, line: String, say: String
+            enum Keys: String, CodingKey { case title, line, say }
+            init(title: String, line: String, say: String) { self.title = title; self.line = line; self.say = say }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: Keys.self)
+                func text(_ key: Keys) -> String { (((try? c.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+                title = text(.title); line = text(.line); say = text(.say)
+            }
+            var complete: Bool { !title.isEmpty && !line.isEmpty && !say.isEmpty }
+        }
         let shown: Bool, words: String, ownWords: OwnWords?
+        let firstTaf: FirstTaf?
 
-        enum Keys: String, CodingKey { case shown, words, ownWords = "own_words" }
+        enum Keys: String, CodingKey { case shown, words, ownWords = "own_words", firstTaf = "first_taf" }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: Keys.self)
             shown = ((try? c.decodeIfPresent(Bool.self, forKey: .shown)) ?? nil) ?? false
             words = ((try? c.decodeIfPresent(String.self, forKey: .words)) ?? nil) ?? ""
             // A row with no title isn't one.
             ownWords = ((try? c.decodeIfPresent(OwnWords.self, forKey: .ownWords)) ?? nil).flatMap { $0.title.isEmpty ? nil : $0 }
+            firstTaf = ((try? c.decodeIfPresent(FirstTaf.self, forKey: .firstTaf)) ?? nil).flatMap { $0.complete ? $0 : nil }
         }
     }
 
@@ -167,6 +183,9 @@ struct Recipes: Decodable, Equatable {
     var homeListsRecipes: Bool { home?.shown == true && labels != nil && !byCategory.isEmpty }
     /// "Say it in your own words", leading Home's list; nil when tafs cloud sent none.
     var homeOwnWords: Home.OwnWords? { home?.ownWords }
+
+    /// The first taf to try, as tafs cloud served it, or nil.
+    var homeFirstTaf: Home.FirstTaf? { home?.firstTaf }
     /// tafs cloud's line for Home with no taf; nil when it sent none.
     var homeWords: String? {
         guard let words = home?.words.trimmingCharacters(in: .whitespacesAndNewlines), !words.isEmpty else { return nil }

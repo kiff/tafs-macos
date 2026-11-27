@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 // The new onboarding's screens, drawn in the languages a pull request shows (en, fr, the two right-to-left ones and
-// Japanese), light and dark: the welcome with its tick, the three cards, and How tafs works.
+// Japanese), light and dark: the welcome with its tick, the four cards, and How tafs works.
 
 private let strings = URL(fileURLWithPath: ".shared/app/strings")
 
@@ -29,7 +29,7 @@ private func shoot<V: View>(_ view: V, _ name: String, size: CGSize, dark: Bool)
 }
 
 let pairingOnboardingScreenTests: [Test] = [
-    Test("the screenshots: the welcome with its tick, the three cards and How tafs works, in en, fr, ar, he and ja, light and dark",
+    Test("the screenshots: the welcome with its tick, the four cards and How tafs works, in en, fr, ar, he and ja, light and dark",
          awaiting: { @MainActor in
         for language in ["en", "fr", "ar", "he", "ja"] {
             let words = try Words(language: language, folder: strings)

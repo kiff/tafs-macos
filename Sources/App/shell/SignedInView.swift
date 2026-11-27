@@ -276,6 +276,7 @@ struct SignedInView: View {
                                                         needsCount: needsYou.needsYouCount(), needsWords: NeedsYouCount.words(needsYou.countParts(), words),
                                                         people: people, manages: { Access.manages(access[$0.id]) }, readShares: { [account] in try await account.shares(agent: $0) },
                                                         mayUseCoach: mayUseCoach, ownWords: startNewTaf, hand: handToCoach,
+                                                        handSay: { if mayUseCoach { panel.handRecipe($0, to: coach) } },
                                                         chromeOffered: chromes.chromes != nil, discard: { await discardSettingUp($0) },
                                                         // The sample's next round, then every list read again, as after any act here.
                                                         playNextSample: playNextSample.map { play in { if play() { Task { await readRound() } } } }))

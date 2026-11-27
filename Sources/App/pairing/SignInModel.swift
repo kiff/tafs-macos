@@ -55,7 +55,7 @@ final class SignInModel: ObservableObject {
     @Published private(set) var termsChanged = false
     /// Why the last in-app sign-in didn't work; nil when the sheet was closed, or nothing went wrong.
     @Published private(set) var problem: String?
-    /// The three cards on how tafs works, over the window after the celebration: once on this Mac, with the onboarding on.
+    /// The four cards on how tafs works, over the window after the celebration: once on this Mac, with the onboarding on.
     @Published private(set) var showsCards = false
     /// Where this Mac keeps that the cards were seen (`Onboarding.cardsSeenKey`).
     var cardsSeen: UserDefaults = .standard
@@ -223,7 +223,7 @@ final class SignInModel: ObservableObject {
         }
     }
 
-    /// The celebration's Let's go: then the three cards, the first time on this Mac with the onboarding on.
+    /// The celebration's Let's go: then the four cards, the first time on this Mac with the onboarding on.
     func celebrated() {
         justConnected = false
         showsCards = Onboarding.showsCards(on: onboarding, seen: cardsSeen.bool(forKey: Onboarding.cardsSeenKey))

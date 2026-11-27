@@ -67,7 +67,7 @@ struct TafsApp: App {
             }
             // A session just gained, on either path: celebrated once, over home.
             .overlay(Group { if signIn.justConnected { ConnectedView { signIn.celebrated() } } })
-            // Then, the first time on this Mac with the new onboarding on, the three cards on how tafs works.
+            // Then, the first time on this Mac with the new onboarding on, the four cards on how tafs works.
             .overlay(Group { if signIn.showsCards { OnboardingCards { signIn.cardsDone() } } })
             .frame(minWidth: ShellView.minimumSize.width, minHeight: ShellView.minimumSize.height)
             // The iPad's frame at first launch, remembered after (`WindowSize`).
