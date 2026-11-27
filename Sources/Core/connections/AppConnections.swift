@@ -227,7 +227,7 @@ enum AppConnections {
     /// Whether an app's row opens its connections, as the iPad's `opensConnections`
     /// (`AppModel.swift:7039-7041`): connected, or holding a connection on this account.
     static func opens(_ app: Apps.App, in grants: [Grant]) -> Bool {
-        app.isConnected || !connections(of: app, in: grants).isEmpty
+        app.opensConnections || !connections(of: app, in: grants).isEmpty
     }
 
     /// An app's connections grouped by the taf each was made for, as the iPad's

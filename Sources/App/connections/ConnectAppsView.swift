@@ -398,7 +398,7 @@ struct ConnectAppsView: View {
         .padding(.vertical, 8)
         // A connected app opens its connections from anywhere on its row, as the iPad's link.
         .contentShape(Rectangle())
-        .onTapGesture { if app.isConnected { model.opened = app } }
+        .onTapGesture { if app.opensConnections { model.opened = app } }
         .accessibilityElement(children: .contain)
     }
 
@@ -406,6 +406,10 @@ struct ConnectAppsView: View {
     @ViewBuilder private func statusWords(_ app: Apps.App, yours: Bool, setup: Bool) -> some View {
         if app.needsReconnect {
             Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if app.isSignedIn {
+            // tafs cloud's own line ("Sign in · Signed in · Not used by any taf"), else the shared one.
+            Text(verbatim: app.line ?? words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isYours {
             Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
@@ -422,7 +426,7 @@ struct ConnectAppsView: View {
     /// Whether the row's button goes under its status words: it has a button (Connect, Sign in again, Ask Coach) and
     /// words beside it. A check mark, or a button alone, stays beside.
     static func buttonUnder(_ app: Apps.App, yours: Bool, setup: Bool) -> Bool {
-        let button = !app.needsSetup && !app.isConnected
+        let button = !app.needsSetup && !app.isConnected && !app.isSignedIn
         let worded = app.needsReconnect || app.isYours || (setup && app.words != nil) || (yours && !app.usedBy.isEmpty)
         return button && worded
     }
@@ -432,7 +436,8 @@ struct ConnectAppsView: View {
     /// (`Apps.buttonKey`: "Ask Coach" where no taf needs it, else Sign in again or Connect),
     /// which opens Coach.
     @ViewBuilder private func trailing(_ app: Apps.App) -> some View {
-        if app.needsSetup {
+        if app.needsSetup || app.isSignedIn {
+            // A sign-in still to finish has no Connect: its connections open (the chevron), where it's removed.
             EmptyView()
         } else if app.isConnected {
             Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)

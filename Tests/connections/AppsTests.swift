@@ -41,6 +41,29 @@ let connectionsAppsTests: [Test] = [
         let vendorOnly = #"{"apps":[{"entry":"e","vendor":"gmail","state":"available"}]}"#
         try expectEqual(try AccountClient.decoder.decode(Apps.Page.self, from: Data(vendorOnly.utf8)).apps.count, 0)
     },
+    Test("a sign-in no taf uses yet is under Yours and opens its connections, where it can be ended; it has no Connect") {
+        let json = #"""
+        {"apps":[{"entry":"connector:p:pipedrive","vendor":"pipedrive","title":"Pipedrive","name":"Pipedrive","how":"oauth",
+          "state":"signed_in","grant":"g-pipedrive","connected":false,"method":"sign_in","whose":"Company","used_by":[],
+          "line":"Sign in · Signed in · Not used by any taf","needed_by":[]}]}
+        """#
+        let app = try AccountClient.decoder.decode(Apps.Page.self, from: Data(json.utf8)).apps[0]
+        try expect(app.isYours && app.isSignedIn && app.opensConnections, "yours, signed in, opens")
+        try expect(!app.isConnected && !app.needsReconnect, "neither connected nor to sign in again")
+        try expectEqual(app.line, "Sign in · Signed in · Not used by any taf")
+        try expect(AppConnections.opens(app, in: []), "opens even before its connection is read")
+    },
+    Test("tafs cloud's Connect apps contract: every sign-in the account holds is under Yours, the unused one opening its connections") {
+        let data = try Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/connect-apps.json"))
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let answer = object["answer"] else {
+            throw Failure(description: "connect-apps.json has no answer")
+        }
+        let page = try AccountClient.decoder.decode(Apps.Page.self, from: JSONSerialization.data(withJSONObject: answer))
+        try expectEqual(page.apps.filter(\.isYours).map(\.name), ["Gmail", "Stripe", "Pipedrive"])
+        let pipedrive = try page.apps.first { $0.name == "Pipedrive" } ?? { throw Failure(description: "no Pipedrive row") }()
+        try expect(pipedrive.isSignedIn && pipedrive.opensConnections && !pipedrive.isConnected, "signed in, opens, not connected")
+        try expectEqual(pipedrive.line, "Sign in · Signed in · Not used by any taf")
+    },
     Test("a search is escaped and cut, a cursor continues it, and an answer with no list is unreadable", awaiting: {
         let (client, transport) = cloud([(200, appsPage), (200, appsPage)])
         _ = try await client.apps("Qonto & co/..", cursor: "a+b")
