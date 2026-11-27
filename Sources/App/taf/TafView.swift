@@ -284,7 +284,7 @@ struct TafView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                CoachView(model: chat, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold, extras: chatExtras)
+                CoachView(model: chat, openUsage: openUsage, embedded: true, dictation: dictation, askCoach: askCoach, onScroll: fold, extras: chatExtras)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             cardColumn

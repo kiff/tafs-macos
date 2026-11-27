@@ -152,3 +152,19 @@ extension CloudClient {
         guard (try? JSONDecoder().decode(Answer.self, from: body)) != nil else { throw KIFFError.unreadable }
     }
 }
+
+/// A chat message refused for want of a plan (`no_plan`), as Android's no-plan prompt (kiff/tafs#2193, #2198): tafs
+/// cloud's words stay as a prompt above the box, with Solo's line, Choose a plan and Not now, until the person chooses
+/// or sends again. Every other refusal is said as before.
+enum PlanPrompt {
+    /// tafs cloud's code for a chat refused because the account has no plan.
+    static let code = "no_plan"
+    /// Solo's line, already Plan & usage's under Solo, in every language (`billing.tafs_kiff_one_person_every`).
+    static let soloKey = "billing.tafs_kiff_one_person_every"
+
+    /// tafs cloud's words for a refusal that needs a plan, else nil: its `words`, else its `error`, else the app's line.
+    static func words(_ error: Error, say: Words) -> String? {
+        guard let refusal = error as? CloudRefusal, refusal.code == code || refusal.error == code else { return nil }
+        return refusal.why(say)
+    }
+}
