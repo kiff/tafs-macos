@@ -78,8 +78,15 @@ enum Apps {
         /// `key` (an older one, in `how`), else Sign in.
         var howKey: String { (method ?? how) == "key" ? "connect.how.key" : "connect.how.sign_in" }
 
-        /// One of the account's own connections: connected, or to sign in again.
-        var isYours: Bool { state == "connected" || state == "needs_reconnect" }
+        /// One of the account's own connections: connected, to sign in again, or signed in with no taf using it yet
+        /// (planque's `signed_in`: a sign-in Coach made whose actions are still to choose). Every sign-in the account
+        /// holds is under Yours, so the owner can always end it.
+        var isYours: Bool { state == "connected" || state == "needs_reconnect" || isSignedIn }
+        /// Signed in, with its actions still to choose and no taf using it: it opens its connections, where
+        /// Remove unfinished connection ends it. tafs cloud's line says so ("Sign in · Signed in · Not used by any taf").
+        var isSignedIn: Bool { state == "signed_in" }
+        /// Its row opens its connections from anywhere on it: connected, or a sign-in still to finish.
+        var opensConnections: Bool { isConnected || isSignedIn }
         /// Its sign-in is no longer taken: it needs the person.
         var needsReconnect: Bool { state == "needs_reconnect" }
         /// Connected, with nothing to do: the row ends with a green check.
