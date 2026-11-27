@@ -93,9 +93,9 @@ let tafKnobMacTests: [Test] = [
     Test("times are the account's, as the iPad's AccountTime: HH:mm, its zone named when it isn't this Mac's, UTC for a zone unknown") {
         let at = Date(timeIntervalSince1970: 1_794_812_400) // 2026-11-16T07:00:00Z
         let paris = AccountTime("Europe/Paris")
-        try expectEqual(paris.shortTime(at), "08:00")
-        try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "Europe/Paris")!), "08:00")
-        try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "America/New_York")!).hasPrefix("08:00 "), true)
+        try expectEqual(paris.shortTime(at, twentyFour: true), "08:00")
+        try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "Europe/Paris")!, twentyFour: true), "08:00")
+        try expectEqual(paris.zonedShortTime(at, here: TimeZone(identifier: "America/New_York")!, twentyFour: true).hasPrefix("08:00 "), true)
         // UTC, by its offset: macOS names that zone "GMT" as often as "UTC".
         try expectEqual(AccountTime("Nowhere/Else").zone.secondsFromGMT(), 0)
         try expectEqual(AccountTime(nil).zone, TimeZone.current)

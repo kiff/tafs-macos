@@ -52,11 +52,19 @@ let shellViewMacTests: [Test] = [
         // The app's language keeps this Mac's region, as the iPad's Locale.current: English on a
         // British Mac reads 15 Nov and a 24-hour clock.
         try expectEqual(AppDates.formatter(english, date: .medium, zone: utc, region: "GB").string(from: at), "15 Nov 2026")
-        try expectEqual(AppDates.formatter(english, time: .short, zone: utc, region: "GB").string(from: at), "14:05")
+        try expectEqual(AppDates.formatter(english, time: .short, zone: utc, region: "GB", twentyFour: true).string(from: at), "14:05")
+        // On a Mac set to the 12-hour clock, the same time is a 12-hour one, whatever the language's default
+        // (kiff/tafs#2196); and a Mac on 24-hour time draws a US English time as 14:05, not 2:05 PM.
+        try expect(AppDates.formatter(english, time: .short, zone: utc, region: "GB", twentyFour: false).string(from: at).hasPrefix("2:05"), "12-hour")
+        try expectEqual(AppDates.formatter(english, time: .short, zone: utc, region: "US", twentyFour: true).string(from: at), "14:05")
+        // The date part stays as its style writes it; only the time follows the clock.
+        let both = AppDates.formatter(english, date: .medium, time: .short, zone: utc, region: "US", twentyFour: true).string(from: at)
+        try expect(both.hasPrefix("Nov 15, 2026") && both.hasSuffix("14:05"), both)
         try expectEqual(AppDates.locale(english, region: nil).identifier, "en")
         // A fixed clock stays 24-hour whatever the language.
         try expectEqual(AppDates.fixed("HH:mm", zone: utc).string(from: at), "14:05")
-        try expectEqual(london.shortTime(at), "14:05")
+        try expectEqual(london.shortTime(at, words: english, twentyFour: true), "14:05")
+        try expect(london.shortTime(at, words: english, region: "US", twentyFour: false).hasPrefix("2:05"), "a 12-hour Mac")
     },
     Test("a held call in NEEDS YOU opens its taf's page, as the iPad's HomeSelection.held; one whose taf isn't listed opens Needs you (sources)") {
         let source = try String(contentsOf: URL(fileURLWithPath: "Sources/App/shell/ShellView.swift"), encoding: .utf8)

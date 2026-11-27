@@ -17,14 +17,17 @@ struct AccountTime {
         return zone.abbreviation(for: date).map { " " + $0 } ?? ""
     }
 
-    /// The time of day, as 14:05, in the account's zone (the iPad's `shortTime`).
-    func shortTime(_ date: Date) -> String {
-        AppDates.fixed("HH:mm", zone: zone).string(from: date)
+    /// The time of day, as 14:05 or 2:05 PM, in the account's zone (the iPad's `shortTime`): on this Mac's 12- or 24-hour
+    /// clock, in the app's language, as every other time the app draws (`Clock`, kiff/tafs#2196).
+    func shortTime(_ date: Date, words: Words = Words.app, region: String? = Locale.current.regionCode,
+                   twentyFour: Bool = Clock.macTwentyFour) -> String {
+        AppDates.formatter(words, time: .short, zone: zone, region: region, twentyFour: twentyFour).string(from: date)
     }
 
     /// `shortTime`, with the zone's short name when it isn't this Mac's (`zonedShortTime`).
-    func zonedShortTime(_ date: Date, here: TimeZone = .current) -> String {
-        shortTime(date) + label(at: date, here: here)
+    func zonedShortTime(_ date: Date, here: TimeZone = .current, words: Words = Words.app,
+                        twentyFour: Bool = Clock.macTwentyFour) -> String {
+        shortTime(date, words: words, twentyFour: twentyFour) + label(at: date, here: here)
     }
 
     /// A calendar in the account's zone, for "today" and the day a time falls on (the iPad's
@@ -58,9 +61,32 @@ struct AccountTime {
     /// A date in a style, in the account's zone, with its short name when it isn't this
     /// Mac's (`zonedShown(date:time:)`).
     func zonedShown(_ date: Date, date dateStyle: Date.FormatStyle.DateStyle, time timeStyle: Date.FormatStyle.TimeStyle,
-                    words: Words, here: TimeZone = .current, region: String? = Locale.current.regionCode) -> String {
-        var style = Date.FormatStyle(date: dateStyle, time: timeStyle, locale: AppDates.locale(words, region: region))
-        style.timeZone = zone
-        return date.formatted(style) + label(at: date, here: here)
+                    words: Words, here: TimeZone = .current, region: String? = Locale.current.regionCode,
+                    twentyFour: Bool = Clock.macTwentyFour) -> String {
+        // Drawn by `AppDates.formatter`, so its time is on this Mac's clock as every other time (`Clock`).
+        let shown = AppDates.formatter(words, date: Self.style(dateStyle), time: Self.style(timeStyle), zone: zone, region: region,
+                                       twentyFour: twentyFour)
+        return shown.string(from: date) + label(at: date, here: here)
+    }
+
+    /// A date style as `DateFormatter` names it.
+    static func style(_ style: Date.FormatStyle.DateStyle) -> DateFormatter.Style {
+        switch style {
+        case .omitted: return .none
+        case .numeric: return .short
+        case .abbreviated: return .medium
+        case .long: return .long
+        default: return .full
+        }
+    }
+
+    /// A time style as `DateFormatter` names it.
+    static func style(_ style: Date.FormatStyle.TimeStyle) -> DateFormatter.Style {
+        switch style {
+        case .omitted: return .none
+        case .shortened: return .short
+        case .standard: return .medium
+        default: return .full
+        }
     }
 }
