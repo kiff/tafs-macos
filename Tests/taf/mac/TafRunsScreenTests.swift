@@ -59,7 +59,8 @@ let tafRunsMacTests: [Test] = [
         try expectEqual(RunsPanel.next(try taf(#""state":"paused","next_run_words":"Next run Mon 09:00""#), words: words), "Next run Mon 09:00")
         try expectEqual(RunsPanel.next(try taf(#""state":"idle","next_run_words":"Next run Mon 09:00""#), words: words), "Next run Mon 09:00")
         try expectEqual(RunsPanel.next(try taf(#""state":"idle","next_run":"2026-11-15T14:05:00Z""#), words: words).hasPrefix("Next run at "), true)
-        try expectEqual(RunsPanel.shortTime(ISO8601DateFormatter().date(from: "2026-11-15T14:05:00Z")!, zone: TimeZone(identifier: "UTC")!), "14:05")
+        try expectEqual(RunsPanel.shortTime(ISO8601DateFormatter().date(from: "2026-11-15T14:05:00Z")!, zone: TimeZone(identifier: "UTC")!,
+                                            twentyFour: true), "14:05")
         try expectEqual(RunsPanel.next(try taf(#""state":"idle""#), words: words), "On its schedule")
         try expectEqual(try taf(#""state":"idle","unscheduled":true"#).unscheduled, true)
     },
