@@ -13,17 +13,17 @@ enum AppDates {
     }
 
     /// A formatter in the app's language and this Mac's region, in a style and, when given, a zone. Its time of day is on
-    /// this Mac's 12- or 24-hour clock (`Clock`), whatever the language's default: the style's date part and the words
+    /// this Mac's 12- or 24-hour clock (`HourCycle`), whatever the language's default: the style's date part and the words
     /// joining them stay as the style writes them. `twentyFour` is this Mac's unless given (tests pin it).
     static func formatter(_ words: Words, date: DateFormatter.Style = .none, time: DateFormatter.Style = .none,
                           zone: TimeZone? = nil, region: String? = Locale.current.regionCode,
-                          twentyFour: Bool = Clock.macTwentyFour) -> DateFormatter {
+                          twentyFour: Bool = HourCycle.macTwentyFour) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = locale(words, region: region)
         formatter.dateStyle = date
         formatter.timeStyle = time
         if time != .none, let styled = formatter.dateFormat {
-            formatter.dateFormat = Clock.swapTime(in: styled, style: time, locale: formatter.locale, twentyFour: twentyFour)
+            formatter.dateFormat = HourCycle.swapTime(in: styled, style: time, locale: formatter.locale, twentyFour: twentyFour)
         }
         if let zone { formatter.timeZone = zone }
         return formatter

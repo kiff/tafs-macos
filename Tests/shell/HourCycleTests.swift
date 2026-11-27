@@ -9,15 +9,15 @@ private func drawn(_ id: String, date: DateFormatter.Style = .none, time: DateFo
     f.timeZone = TimeZone(identifier: "UTC")
     f.dateStyle = date
     f.timeStyle = time
-    f.dateFormat = Clock.swapTime(in: f.dateFormat ?? "", style: time, locale: f.locale, twentyFour: twentyFour)
+    f.dateFormat = HourCycle.swapTime(in: f.dateFormat ?? "", style: time, locale: f.locale, twentyFour: twentyFour)
     return f.string(from: at)
 }
 
-let shellClockTests: [Test] = [
+let shellHourCycleTests: [Test] = [
     Test("a locale's own hour: US English is 12-hour, British English and French are 24-hour") {
-        try expectEqual(Clock.twentyFour(Locale(identifier: "en_US")), false)
-        try expectEqual(Clock.twentyFour(Locale(identifier: "en_GB")), true)
-        try expectEqual(Clock.twentyFour(Locale(identifier: "fr_FR")), true)
+        try expectEqual(HourCycle.twentyFour(Locale(identifier: "en_US")), false)
+        try expectEqual(HourCycle.twentyFour(Locale(identifier: "en_GB")), true)
+        try expectEqual(HourCycle.twentyFour(Locale(identifier: "fr_FR")), true)
     },
     Test("a short time follows the clock asked for, not the language's default, in the language's own pattern") {
         try expectEqual(drawn("en_US", time: .short, twentyFour: true), "22:22")
@@ -31,9 +31,9 @@ let shellClockTests: [Test] = [
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_GB")
         f.timeStyle = .short
-        try expectEqual(Clock.swapTime(in: f.dateFormat, style: .short, locale: f.locale, twentyFour: true), f.dateFormat)
-        try expectEqual(Clock.swapTime(in: "d MMM y", style: .short, locale: Locale(identifier: "en_US"), twentyFour: true), "d MMM y")
-        try expectEqual(Clock.swapTime(in: "d MMM y", style: .none, locale: Locale(identifier: "en_US"), twentyFour: true), "d MMM y")
+        try expectEqual(HourCycle.swapTime(in: f.dateFormat, style: .short, locale: f.locale, twentyFour: true), f.dateFormat)
+        try expectEqual(HourCycle.swapTime(in: "d MMM y", style: .short, locale: Locale(identifier: "en_US"), twentyFour: true), "d MMM y")
+        try expectEqual(HourCycle.swapTime(in: "d MMM y", style: .none, locale: Locale(identifier: "en_US"), twentyFour: true), "d MMM y")
     },
     Test("with a date, only the time part changes: the date and the words joining them stay as the style wrote them") {
         let both = drawn("en_US", date: .medium, time: .short, twentyFour: true)

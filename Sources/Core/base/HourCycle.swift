@@ -9,7 +9,7 @@ import Foundation
 /// keyword (`@hours=h23`, `-u-hc-h23`) is ignored by the styles (checked on macOS 12), so the time part is drawn from
 /// a template ("Hmm", "hmm"), which honours it, in the language's own pattern ("22.22" in Finnish, "午後10:22" in
 /// Japanese).
-enum Clock {
+enum HourCycle {
     /// Whether a locale's own hour is 24-hour: its "j" skeleton has no day period.
     static func twentyFour(_ locale: Locale) -> Bool {
         !(DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: locale) ?? "H").contains("a")

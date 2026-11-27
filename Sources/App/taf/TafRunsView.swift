@@ -58,7 +58,7 @@ struct RunsPanel: View {
     }
 
     /// The time of day, as 14:05 or 2:05 PM, as the iPad's `shortTime`: on this Mac's clock (`AccountTime.shortTime`).
-    static func shortTime(_ date: Date, zone: TimeZone = .current, twentyFour: Bool = Clock.macTwentyFour) -> String {
+    static func shortTime(_ date: Date, zone: TimeZone = .current, twentyFour: Bool = HourCycle.macTwentyFour) -> String {
         AccountTime(zone.identifier).shortTime(date, twentyFour: twentyFour)
     }
 }
