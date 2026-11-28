@@ -1,2 +1,2 @@
-let recordTests: [Test] = recordListTests + receiptCheckTests + recordReadsTests + receiptStepWordsTests
+let recordTests: [Test] = recordListTests + recordPurchaseReceiptTests + receiptCheckTests + recordReadsTests + receiptStepWordsTests
     + recordNamingTests + recordWaitingTests + receiptOnHashTests + recordNextStepTests + receiptFactsTests
