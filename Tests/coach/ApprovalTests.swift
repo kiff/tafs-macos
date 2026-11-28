@@ -84,6 +84,21 @@ let coachApprovalTests: [Test] = [
         try expectEqual(try read(#"{"state":"wrote","words":"Approved"}"#), nil)
         try expectEqual(ApprovalLines.answer(try card(approval("a"))), nil)
     }),
+    Test("a card tafs cloud answered itself (asked again, rules first) reads as its note alone: never approved, never failed, never declinable", awaiting: {
+        func read(_ answer: String) throws -> Thread.Card { try card(approval("a", answer: answer)) }
+        let again = try read(#"{"state":"answered","words":"Coach is asking for Qonto again, for this taf.","answer":"asked again"}"#)
+        try expectEqual(ApprovalLines.answer(again), .noted("Coach is asking for Qonto again, for this taf."))
+        // Even with planque's grant failed or pending, the note wins: no failure line, no Approve, no grant text.
+        let failedGrant = try grant(#"{"id":"g_stripe","status":"failed","status_words":"You're already signed in: no second sign-in.","request":{"server":"mcp.stripe.com","agent":"a"}}"#)
+        try expectEqual(ApprovalLines.state(again, grant: failedGrant), .noted("Coach is asking for Qonto again, for this taf."))
+        try expect(!ApprovalLines.state(again, grant: failedGrant).isFailure, "never a failure")
+        try expect(!ApprovalLines.declinable(again, ApprovalLines.state(again, grant: failedGrant), replaced: false, grant: failedGrant), "nothing to decline")
+        try expectEqual(ApprovalLines.failedLine(again, ApprovalLines.state(again, grant: failedGrant), try Words(language: "en", folder: URL(fileURLWithPath: ".shared/app/strings"))), nil)
+        let rules = try read(#"{"state":"answered","words":"Coach asked for the rules first.","answer":"rules first"}"#)
+        try expectEqual(ApprovalLines.state(rules, grant: nil), .noted("Coach asked for the rules first."))
+        // No note: none drawn, still never a failure.
+        try expectEqual(ApprovalLines.state(try read(#"{"state":"answered","words":" ","answer":"asked again"}"#), grant: nil), .noted(nil))
+    }),
     Test("where an approval stands: its answer, else planque's state for its grant, in planque's words; then its eyebrow", awaiting: {
         let waiting = try card(approval("a"))
         try expectEqual(ApprovalLines.state(waiting, grant: nil), .needsYou)

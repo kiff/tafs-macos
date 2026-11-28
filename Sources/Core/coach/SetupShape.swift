@@ -110,6 +110,8 @@ struct SetupShape: Equatable {
                 switch state {
                 case .done: return Step(label: label, state: .done)
                 case .declined: return Step(label: label, state: .skipped)
+                // Answered by tafs cloud with a note (asked again, rules first): nothing done here, and nothing failed.
+                case .noted: return Step(label: label, state: .skipped)
                 case .failed: return Step(label: label, state: .failed)
                 case .needsYou: return Step(label: label, state: .toDo)
                 }

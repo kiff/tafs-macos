@@ -15,6 +15,9 @@ enum ApprovalLines {
         case declined
         /// Not approved: tafs cloud's line for the owner when it refused the request (`refused`).
         case failed(refused: String?)
+        /// Nothing approved and nothing failed: tafs cloud answered the card itself (`asked again`, a connection from an
+        /// earlier chat or another taf; `rules first`, Coach asking for the rules before any approval), with its note.
+        case noted(String?)
     }
 
     /// What tafs cloud's English words for a failed answer put before why.
@@ -30,6 +33,10 @@ enum ApprovalLines {
             switch stored {
             case "approved", "connected": text = "approved"
             case "declined": text = "declined"
+            case "asked again", "rules first":
+                // Its note alone, tafs cloud's words: never a failure, never the grant's text.
+                let note = words.trimmingCharacters(in: .whitespacesAndNewlines)
+                return .noted(note.isEmpty ? nil : note)
             default:
                 if stored == "already approved" || stored.hasPrefix("already approved:") { text = "already approved" }
                 else if stored.hasPrefix("failed: ") { text = stored }
@@ -64,6 +71,8 @@ enum ApprovalLines {
         case done
         case declined
         case failed(String?)
+        /// Answered by tafs cloud with a note (`Answer.noted`): one line in its words, with no Approve and no grant text.
+        case noted(String?)
         var isFailure: Bool { if case .failed = self { return true } else { return false } }
     }
 
@@ -77,6 +86,7 @@ enum ApprovalLines {
         case .approved?, .alreadyApproved?: if !grantFailed { return .done }
         case .declined?: return .declined
         case .failed?: return .failed(nil)
+        case .noted(let note)?: return .noted(note)
         case nil: break
         }
         if let grant, grant.failed {
@@ -110,6 +120,8 @@ enum ApprovalLines {
         case .declined: return (words("coach.answer.declined_short"), .dim)
         case .failed: return (words("coach.answer.failed_short"), .no)
         case .needsYou: return (words("coach.needs_you_approve"), .amber)
+        // Drawn as its note's line alone, never as a card with an eyebrow.
+        case .noted: return ("", .dim)
         }
     }
 

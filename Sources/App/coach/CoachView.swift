@@ -2257,7 +2257,11 @@ struct CoachView: View {
         let done = state == .done
         let lines = ApprovalLines.signedLines(state, draft: draft, words)
         return Group {
-            if replaced && !open {
+            if case .noted(let note) = state {
+                // tafs cloud answered it (a connection from an earlier chat or another taf, or the rules first): its note
+                // alone, never Approve, the grant's text, or a failure. Without a note, nothing.
+                if let note { outcomeLine("info.circle.fill", Theme.dim, note) }
+            } else if replaced && !open {
                 // A newer request for this connection is below: this one is history, and never shows
                 // that connection's live state or its error.
                 Button { opened.insert(card.key) } label: {
