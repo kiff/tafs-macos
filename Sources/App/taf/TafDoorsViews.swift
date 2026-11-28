@@ -452,7 +452,9 @@ struct UnansweredCard: View {
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
                 .accessibilityLabel(Text(verbatim: item.words.reply))
                 .accessibilityIdentifier("unanswered.text")
-            HStack(spacing: 10) {
+            // Send on its own row, so its words are never cut whatever the width; Connect an app and Ignore share the
+            // row under it, each as wide as the other.
+            VStack(spacing: 10) {
                 Button { Task { if await doors.sendOwn(item, text: text) { text = "" } } } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "key.fill").accessibilityHidden(true)
@@ -460,20 +462,18 @@ struct UnansweredCard: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .fixedSize()
                 .disabled(!TafDoors.Unanswered.sendable(text))
                 .accessibilityIdentifier("unanswered.send")
-                if let connect = item.words.connect, let openConnect {
-                    Button(connect, action: openConnect)
+                HStack(spacing: 10) {
+                    if let connect = item.words.connect, let openConnect {
+                        Button(connect, action: openConnect)
+                            .buttonStyle(OutlineButtonStyle())
+                            .accessibilityIdentifier("unanswered.connect")
+                    }
+                    Button(item.words.ignore) { Task { await doors.ignore(item) } }
                         .buttonStyle(OutlineButtonStyle())
-                        .fixedSize()
-                        .accessibilityIdentifier("unanswered.connect")
+                        .accessibilityIdentifier("unanswered.ignore")
                 }
-                Button(item.words.ignore) { Task { await doors.ignore(item) } }
-                    .buttonStyle(OutlineButtonStyle())
-                    .fixedSize()
-                    .accessibilityIdentifier("unanswered.ignore")
-                Spacer(minLength: 0)
             }
             .disabled(doors.busy)
         }
