@@ -97,6 +97,7 @@ let approvalsPurchaseTests: [Test] = [
         let wordsBroken: [(String, (inout [String: Any]) -> Void)] = [
             ("no total", words { $0["total"] = " " }),
             ("no prompt", words { $0["prompt"] = nil }),
+            ("no delivery", words { $0["delivery"] = nil }),
             ("a line that doesn't read", words { $0["lines"] = [["name": "x"]] }),
         ]
         for (why, change) in wordsBroken {

@@ -57,7 +57,8 @@ struct Purchase: Decodable, Equatable {
         let subtitle: String?
         let total: String
         let totalNote: String?
-        let delivery: String?
+        /// Where it's delivered: signed into the case, so approved with it, and always shown.
+        let delivery: String
         let showMore: String?
         let lines: [Line]
         let charges: [Charge]
@@ -82,16 +83,16 @@ struct Purchase: Decodable, Equatable {
                 let shown = BidiFree.text(value)
                 return shown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : shown
             }
-            // The shop, the total and the prompt are what's approved: without them there is nothing to show or name, so
-            // nothing to sign.
-            guard let title = text(.title), let total = text(.total), text(.prompt) != nil else {
+            // The shop, the total, where it's delivered and the prompt are what's approved: without any of them there is
+            // nothing complete to show or name, so nothing to sign.
+            guard let title = text(.title), let total = text(.total), let delivery = text(.delivery), text(.prompt) != nil else {
                 throw DecodingError.dataCorruptedError(forKey: .title, in: c, debugDescription: "a purchase with no shop or total")
             }
             self.title = title
             self.total = total
+            self.delivery = delivery
             subtitle = text(.subtitle)
             totalNote = text(.totalNote)
-            delivery = text(.delivery)
             showMore = text(.showMore)
             priceRule = text(.priceRule)
             grant = text(.grant)

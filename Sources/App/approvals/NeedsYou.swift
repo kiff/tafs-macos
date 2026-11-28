@@ -763,9 +763,7 @@ struct NeedsYouView: View {
                 .accessibilityIdentifier("purchase.total")
             if let note = p.words.totalNote { Text(verbatim: note).font(.system(size: 12)).foregroundColor(Theme.dim) }
         }
-        if let delivery = p.words.delivery {
-            Text(verbatim: delivery).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
-        }
+        Text(verbatim: p.words.delivery).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
         purchaseLines(call, p)
         VStack(alignment: .leading, spacing: 4) {
             ForEach([p.words.priceRule, p.words.grant, p.words.buysNow].compactMap { $0 }, id: \.self) { fact in
