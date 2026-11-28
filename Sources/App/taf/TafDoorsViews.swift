@@ -460,16 +460,20 @@ struct UnansweredCard: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .fixedSize()
                 .disabled(!TafDoors.Unanswered.sendable(text))
                 .accessibilityIdentifier("unanswered.send")
                 if let connect = item.words.connect, let openConnect {
                     Button(connect, action: openConnect)
                         .buttonStyle(OutlineButtonStyle())
+                        .fixedSize()
                         .accessibilityIdentifier("unanswered.connect")
                 }
                 Button(item.words.ignore) { Task { await doors.ignore(item) } }
                     .buttonStyle(OutlineButtonStyle())
+                    .fixedSize()
                     .accessibilityIdentifier("unanswered.ignore")
+                Spacer(minLength: 0)
             }
             .disabled(doors.busy)
         }

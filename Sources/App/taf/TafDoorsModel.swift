@@ -233,8 +233,9 @@ final class DoorsModel: ObservableObject {
     func send(_ reply: TafDoors.HeldReply) async {
         let hash = Self.textSHA256(reply.text)
         guard hash == reply.textSHA256 else {
-            error = reply.words.changed
+            // Read again first: a read that works clears the error, and these words must stay.
             await load()
+            error = reply.words.changed
             return
         }
         guard let sign = signWithKey else {
@@ -253,8 +254,8 @@ final class DoorsModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch let refusal as CloudRefusal where refusal.status == 409 {
-            error = refusal.words ?? reply.words.changed
             await load()
+            error = refusal.words ?? reply.words.changed
         } catch {
             self.error = NeedsYouModel.why(error)
         }
@@ -295,8 +296,8 @@ final class DoorsModel: ObservableObject {
         } catch is CancellationError {
             return false
         } catch let refusal as CloudRefusal where refusal.status == 409 {
-            error = refusal.words ?? item.words.changed
             await load()
+            error = refusal.words ?? item.words.changed
             return false
         } catch {
             self.error = NeedsYouModel.why(error)
