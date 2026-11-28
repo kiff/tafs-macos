@@ -408,8 +408,9 @@ struct ConnectAppsView: View {
             Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isSignedIn {
-            // tafs cloud's own line ("Sign in · Signed in · Not used by any taf"), else the shared one.
-            Text(verbatim: app.line ?? words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+            // tafs cloud's line without how it connects, which is its own column here ("Signed in · Not used by any taf"),
+            // so the row doesn't say "Sign in" twice and still says whether a taf uses it; else the shared words.
+            Text(verbatim: Self.statusLine(app.line) ?? words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isYours {
             Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
@@ -421,6 +422,14 @@ struct ConnectAppsView: View {
         if yours, !app.usedBy.isEmpty {
             Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
         }
+    }
+
+    /// tafs cloud's line for the Status column: without its first part, how it connects, which the How it connects
+    /// column already shows ("Sign in · Signed in · Not used by any taf" → "Signed in · Not used by any taf"). Nil when
+    /// there's no line, or nothing after that part.
+    static func statusLine(_ line: String?) -> String? {
+        guard let parts = line?.components(separatedBy: " · "), parts.count > 1 else { return nil }
+        return parts.dropFirst().joined(separator: " · ")
     }
 
     /// Whether the row's button goes under its status words: it has a button (Connect, Sign in again, Ask Coach) and

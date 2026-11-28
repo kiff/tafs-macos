@@ -59,6 +59,11 @@ let connectAppsMacTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("connect-apps-\(language).png"))
         }
     }),
+    Test("a signed-in row's status is tafs cloud's line without how it connects, which has its own column") {
+        try expect(ConnectAppsView.statusLine("Sign in · Signed in · Not used by any taf") == "Signed in · Not used by any taf", "the method part goes")
+        try expect(ConnectAppsView.statusLine("Sign in") == nil, "nothing after it: the shared words")
+        try expect(ConnectAppsView.statusLine(nil) == nil, "no line: the shared words")
+    },
     Test("the screenshot: every sign-in under Yours, the unused one included, from tafs cloud's own contract", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
@@ -71,7 +76,8 @@ let connectAppsMacTests: [Test] = [
         let page = String(decoding: try JSONSerialization.data(withJSONObject: answer), as: UTF8.self)
         let (model, _) = make([(200, page)])
         await model.load()
-        try expect(model.yours.contains { $0.isSignedIn }, "the unused sign-in is under Yours")
+        let pipedrive = model.yours.first { $0.name == "Pipedrive" }
+        try expect(pipedrive?.isSignedIn == true && pipedrive?.usedBy.isEmpty == true, "Pipedrive, signed in and used by no taf, is under Yours")
         let refunds = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_refunds","id":"t1","name":"Refunds","state":"idle"}"#.utf8))
         let view = ConnectAppsView(model: model, connectable: [refunds]).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
