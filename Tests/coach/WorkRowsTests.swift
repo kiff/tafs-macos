@@ -7,12 +7,13 @@ let coachWorkRowsTests: [Test] = [
         // A step that worked and then runs again is a new row.
         try expectEqual(WorkRows.rows([("Read", .done), ("Read", .done)], running: false).map(\.tries), [1, 1])
     },
-    Test("a failure is left out once something worked or while it runs, and kept when nothing worked") {
+    Test("while it runs, a failure shows as it ended; once it ends, it's left out if something worked, and kept when nothing did") {
         let mixed: [(words: String, status: WorkRows.Status)] = [("Connect", .error), ("Look up", .done)]
         try expectEqual(WorkRows.rows(mixed, running: false).map(\.words), ["Look up"])
         let failed: [(words: String, status: WorkRows.Status)] = [("Connect", .error)]
         try expectEqual(WorkRows.rows(failed, running: false).map(\.status), [.error])
-        try expectEqual(WorkRows.rows(failed, running: true), [])
+        try expectEqual(WorkRows.rows(failed, running: true).map(\.status), [.error])
+        try expectEqual(WorkRows.rows(mixed, running: true).map(\.status), [.error, .done])
         // Not made, and not tried again: it stays, and it isn't a failure.
         try expectEqual(WorkRows.rows([("Choose the tools", .notMade), ("Look up", .done)], running: false).map(\.status), [.notMade, .done])
     },
@@ -24,7 +25,8 @@ let coachWorkRowsTests: [Test] = [
         _ = live.take(.activity(words: "Connect…", call: "c1"))
         _ = live.take(.step(call: "c1", status: "error", why: "no"))
         _ = live.take(.activity(words: "Connect…", call: "c2"))
-        try expectEqual(live.rows, [])
+        // The failed try shows while it works on, in the failure colour; the step at work is no row.
+        try expectEqual(live.rows, [.init(words: "Connect", status: .error, tries: 1)])
         _ = live.take(.step(call: "c2", status: "done", why: nil))
         _ = live.take(.activity(words: "Read…", call: "c3"))
         try expectEqual(live.rows, [.init(words: "Connect", status: .done, tries: 2)])
