@@ -80,12 +80,12 @@ enum Apps {
             misplaced = ((try? c.decodeIfPresent([Misplaced].self, forKey: .misplaced)) ?? nil) ?? []
         }
 
-        /// The shared key for how it connects, by the iPad's rule: a key when tafs cloud says
-        /// `key` (an older one, in `how`), else Sign in.
         /// The grey line under the status: tafs cloud's `used_by_words` when sent (nothing when it's ""), else nil, and the
         /// row says who uses it from `usedBy` as before.
         var usageWords: String? { usedByWords.flatMap { $0.isEmpty ? nil : $0 } }
 
+        /// The shared key for how it connects, by the iPad's rule: a key when tafs cloud says
+        /// `key` (an older one, in `how`), else Sign in.
         var howKey: String { (method ?? how) == "key" ? "connect.how.key" : "connect.how.sign_in" }
 
         /// One of the account's own connections: connected, to sign in again, or signed in with no taf using it yet
