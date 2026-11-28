@@ -370,7 +370,7 @@ struct TafActivityTab: View {
             // Lazy, so the list's end shows only when it's scrolled to, and the next page is
             // asked for then.
             LazyVStack(alignment: .leading, spacing: 14) {
-                if let doors { TafKnocksPanel(taf: taf, doors: doors, offered: doorsOffered) }
+                if let doors { TafKnocksPanel(taf: taf, doors: doors, offered: doorsOffered, openConnect: manages ? openConnect : nil) }
                 // As the iPad's `TafActivityList.parts`: what waits on the Card for want of a unit,
                 // then its work, under which its health sits (`WorkPanel`).
                 if case .loaded(let page) = model.activity { ForEach(page.exceptions) { CardUnitPanel(exception: $0) } }

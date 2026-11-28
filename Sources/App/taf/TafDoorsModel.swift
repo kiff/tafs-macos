@@ -10,6 +10,8 @@ final class DoorsModel: ObservableObject {
     @Published private(set) var knocks: [TafDoors.Knock] = []
     /// The replies waiting for the owner to send them, each with the exact text that would go.
     @Published private(set) var replies: [TafDoors.HeldReply] = []
+    /// The writers the taf couldn't help, for the owner to answer in their own words or ignore.
+    @Published private(set) var unanswered: [TafDoors.Unanswered] = []
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published var error: String?
@@ -46,6 +48,7 @@ final class DoorsModel: ObservableObject {
                 apps = page.apps
                 knocks = page.knocks
                 replies = page.replies
+                unanswered = page.unanswered
                 loaded = true
                 error = nil
                 return
@@ -230,8 +233,9 @@ final class DoorsModel: ObservableObject {
     func send(_ reply: TafDoors.HeldReply) async {
         let hash = Self.textSHA256(reply.text)
         guard hash == reply.textSHA256 else {
-            error = reply.words.changed
+            // Read again first: a read that works clears the error, and these words must stay.
             await load()
+            error = reply.words.changed
             return
         }
         guard let sign = signWithKey else {
@@ -250,8 +254,8 @@ final class DoorsModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch let refusal as CloudRefusal where refusal.status == 409 {
-            error = refusal.words ?? reply.words.changed
             await load()
+            error = refusal.words ?? reply.words.changed
         } catch {
             self.error = NeedsYouModel.why(error)
         }
@@ -264,6 +268,50 @@ final class DoorsModel: ObservableObject {
         do {
             try await cloud.discardHeldReply(taf, run: reply.run)
             replies.removeAll { $0.run == reply.run }
+            error = nil
+        } catch {
+            self.error = NeedsYouModel.why(error)
+        }
+    }
+
+    /// Answer them yourself: the owner's words, exactly as typed, on the security key behind tafs cloud's own prompt. The
+    /// key signs the text's SHA-256 with it, so only that text goes. True once it's sent, so the box can empty.
+    @discardableResult
+    func sendOwn(_ item: TafDoors.Unanswered, text: String) async -> Bool {
+        guard TafDoors.Unanswered.sendable(text) else { return false }
+        guard let sign = signWithKey else {
+            error = Words.app("approval.device_can_not_approve_approve")
+            return false
+        }
+        let act = KeyAct.sendOwnReply(taf: taf, run: item.run, text: text, textSHA256: Self.textSHA256(text))
+        let cloud = cloud
+        busy = true
+        defer { busy = false }
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: item.words.prompt))
+            _ = try await cloud.signedDoorChange(act, assertion: assertion)
+            unanswered.removeAll { $0.run == item.run }
+            error = nil
+            return true
+        } catch is CancellationError {
+            return false
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            await load()
+            error = refusal.words ?? item.words.changed
+            return false
+        } catch {
+            self.error = NeedsYouModel.why(error)
+            return false
+        }
+    }
+
+    /// Ignore: nothing goes to the writer, so nothing is signed; it leaves the list.
+    func ignore(_ item: TafDoors.Unanswered) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await cloud.discardHeldReply(taf, run: item.run)
+            unanswered.removeAll { $0.run == item.run }
             error = nil
         } catch {
             self.error = NeedsYouModel.why(error)
