@@ -237,7 +237,7 @@ extension PasskeySession {
         }
         let signedAt = KIFFMessage.time(now)
         let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: answer,
-                                                accountingVersion: version, signedAt: signedAt, pin: pin, purchase: call.purchase)
+                                                accountingVersion: version, signedAt: signedAt, pin: pin, purchase: call.purchase?.binding)
         // The assertion's object as the key's answer gave it, and the same signed_at, in sorted keys.
         var body = Data(#"{"signature":{"passkey":"#.utf8)
         body.append(passkey)

@@ -168,7 +168,7 @@ extension PasskeyApprover {
     /// any device, so it's refused here before the key is asked. The assertion's JSON object goes in the
     /// answer's `signature.passkey`, beside the same `signed_at`.
     func answer(tenant: String, callID: String, answer: Answer, accountingVersion: Int, signedAt: String,
-                pin: SecurityKeyPIN?, purchase: Purchase? = nil) async throws -> Data {
+                pin: SecurityKeyPIN?, purchase: Purchase.Binding? = nil) async throws -> Data {
         guard answer.grants else { throw PasskeyRefusal.notAnApproval }
         let message = KIFFMessage.answer(tenant: tenant, callID: callID, answer: answer, nextStep: nil,
                                          accountingVersion: accountingVersion, signedAt: signedAt, purchase: purchase)

@@ -846,19 +846,23 @@ struct NeedsYouView: View {
                 .accessibilityIdentifier("needs_you.allow")
         }
         nextSteps(call)
-        // Refuse, as the iPad's outlined button: the card's width, in red.
-        Button { Task { await model.refuse(call) } } label: {
-            HStack(spacing: 8) {
-                Text(words("needs_you.refuse")).font(.system(size: 15, weight: .medium))
-                if model.answering == call.id { ProgressView().controlSize(.small) }
+        // Refuse, as the iPad's outlined button: the card's width, in red. Not for a purchase whose case can't be read:
+        // there's nothing to sign it for.
+        if !call.purchaseUnreadable || call.purchaseBinding != nil {
+            // Refuse, as the iPad's outlined button: the card's width, in red.
+            Button { Task { await model.refuse(call) } } label: {
+                HStack(spacing: 8) {
+                    Text(words("needs_you.refuse")).font(.system(size: 15, weight: .medium))
+                    if model.answering == call.id { ProgressView().controlSize(.small) }
+                }
+                .foregroundColor(Theme.no)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.no.opacity(0.4), lineWidth: 1))
+                .contentShape(Rectangle())
             }
-            .foregroundColor(Theme.no)
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.no.opacity(0.4), lineWidth: 1))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(model.answering != nil)
         }
-        .buttonStyle(.plain)
-        .disabled(model.answering != nil)
         if let line = Self.notTakenLine(model, call) {
             Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.no)
         }

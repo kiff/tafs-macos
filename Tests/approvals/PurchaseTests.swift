@@ -50,7 +50,7 @@ let approvalsPurchaseTests: [Test] = [
         let p = try AccountClient.decoder.decode(Purchase.self, from: JSONSerialization.data(withJSONObject: withWords))
         let message = KIFFMessage.answer(tenant: vector["tenant"] as? String ?? "", callID: vector["exception_id"] as? String ?? "",
                                          answer: .approveOnce, nextStep: nil, accountingVersion: vector["hold_version"] as? Int ?? 0,
-                                         signedAt: vector["signed_at"] as? String ?? "", purchase: p)
+                                         signedAt: vector["signed_at"] as? String ?? "", purchase: p.binding)
         try expectEqual(message, vector["message"] as? String ?? "")
         try expect(message.hasSuffix("\npurchase:\(caseID):\(version):\(digest)"), "the purchase line comes last")
     },
@@ -66,32 +66,58 @@ let approvalsPurchaseTests: [Test] = [
         try await client.refuse(call, at: ISO8601DateFormatter().date(from: "2026-11-28T09:15:09Z")!)
         try expect(signed.hasSuffix("\n" + (call.purchase?.signedLine ?? "?")), "the refusal binds the case too: \(signed)")
     },
-    Test("a purchase this app can't sign as sent is never answered here: a bad id, digest or version, or no shop or total") {
+    Test("a purchase whose case can't be signed as sent is never answered here; one whose words don't read is refused for its case, never approved") {
         let approval = try section("approval")
         func with(_ change: (inout [String: Any]) -> Void) throws -> HeldCall {
             var p = approval
             change(&p)
             return try AccountClient.decoder.decode(Held.self, from: try heldPurchase(p)).exceptions[0]
         }
-        let broken: [(String, (inout [String: Any]) -> Void)] = [
+        func words(_ change: @escaping (inout [String: Any]) -> Void) -> (inout [String: Any]) -> Void {
+            { p in var w = p["words"] as? [String: Any] ?? [:]; change(&w); p["words"] = w }
+        }
+        let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
+        let caseBroken: [(String, (inout [String: Any]) -> Void)] = [
             ("a colon in the id", { $0["case_id"] = "pc_1:2" }),
             ("a new line in the id", { $0["case_id"] = "pc_1\npurchase:x" }),
+            ("an id past 128", { $0["case_id"] = String(repeating: "a", count: 129) }),
             ("a digest that isn't 64 hex", { $0["digest"] = "ABC" }),
             ("version 0", { $0["version"] = 0 }),
-            ("no total", { p in var w = p["words"] as? [String: Any] ?? [:]; w["total"] = " "; p["words"] = w }),
-            ("a line that doesn't read", { p in var w = p["words"] as? [String: Any] ?? [:]; w["lines"] = [["name": "x"]]; p["words"] = w }),
         ]
-        for (why, change) in broken {
+        for (why, change) in caseBroken {
             let call = try with(change)
-            try expect(call.purchase == nil && call.purchaseUnreadable, why)
+            try expect(call.purchase == nil && call.purchaseUnreadable && call.purchaseBinding == nil, why)
             let transport = CannedTransport([(200, "{}")])
-            let session = Session(accessToken: "tok", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: "dev_1")
             let client = AccountClient(transport: transport, session: session, signMessage: { _ in "SIG" })
             do { try await client.refuse(call); throw Failure(description: "\(why): it was sent") } catch let error as KIFFError {
                 try expectEqual(error, .refused(status: 0, code: "purchase_unreadable"))
             }
             try expect(transport.sent.isEmpty, "\(why): nothing sent")
         }
+        let wordsBroken: [(String, (inout [String: Any]) -> Void)] = [
+            ("no total", words { $0["total"] = " " }),
+            ("no prompt", words { $0["prompt"] = nil }),
+            ("a line that doesn't read", words { $0["lines"] = [["name": "x"]] }),
+        ]
+        for (why, change) in wordsBroken {
+            let call = try with(change)
+            try expect(call.purchase == nil && call.purchaseUnreadable && call.purchaseBinding != nil, why)
+            var signed = ""
+            let transport = CannedTransport([(200, "{}")])
+            let client = AccountClient(transport: transport, session: session, signMessage: { signed = $0; return "SIG" })
+            try await client.refuse(call)
+            try expect(signed.hasSuffix("\n" + (call.purchaseBinding?.signedLine ?? "?")), "\(why): refused for its case")
+        }
+        let long = try with { $0["case_id"] = String(repeating: "a", count: 128) }
+        try expect(long.purchase != nil, "an id of 128 reads, as the other apps take it")
+    },
+    Test("direction characters are taken out of a purchase's words") {
+        var approval = try section("approval")
+        var w = approval["words"] as? [String: Any] ?? [:]
+        w["title"] = "Buy from \u{202E}nemuL eiretepaP"
+        approval["words"] = w
+        let p = try AccountClient.decoder.decode(Purchase.self, from: JSONSerialization.data(withJSONObject: approval))
+        try expect(!p.words.title.unicodeScalars.contains { $0.value == 0x202E }, "no override left: \(p.words.title)")
     },
     Test("a call with no purchase is as before: no purchase line in what's signed") {
         let message = KIFFMessage.answer(tenant: "t1", callID: "exc_1", answer: .reject, nextStep: nil, accountingVersion: 3, signedAt: "2026-11-28T09:15:09Z")

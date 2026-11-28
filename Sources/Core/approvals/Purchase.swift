@@ -5,10 +5,38 @@ import Foundation
 /// it waits. Approving it signs this case's version and digest (`signedLine`), so an answer counts only for the case the
 /// person saw.
 struct Purchase: Decodable, Equatable {
-    let caseID: String
-    let version: Int
-    let digest: String
+    /// The case an answer binds: read on its own, so a hold whose words don't read can still be refused for its case.
+    let binding: Binding
     let words: Words
+
+    var caseID: String { binding.caseID }
+    var version: Int { binding.version }
+    var digest: String { binding.digest }
+
+    /// What an answer to the purchase's hold signs: the case's id, version and digest, checked before anything is signed.
+    struct Binding: Decodable, Equatable {
+        let caseID: String
+        let version: Int
+        let digest: String
+
+        enum CodingKeys: String, CodingKey { case caseID = "case_id", version, digest }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            caseID = try c.decode(String.self, forKey: .caseID)
+            version = try c.decode(Int.self, forKey: .version)
+            digest = try c.decode(String.self, forKey: .digest)
+            // An id or digest that could carry a colon or a new line is refused, so the line signed is always exactly one
+            // `purchase:` line.
+            guard Purchase.isCaseID(caseID), version >= 1, Purchase.isDigest(digest) else {
+                throw DecodingError.dataCorruptedError(forKey: .digest, in: c, debugDescription: "a purchase case that can't be signed as sent")
+            }
+        }
+
+        /// The line an answer to the hold ends with: `purchase:<case_id>:<version>:<digest>`. KIFF refuses an answer
+        /// without it, or with a version or digest that isn't the case's current one.
+        var signedLine: String { "purchase:\(caseID):\(version):\(digest)" }
+    }
 
     /// One line the checkout lists ("A4 paper, 80 g, 5 reams", "× 2", "€59.80").
     struct Line: Decodable, Equatable {
@@ -48,12 +76,15 @@ struct Purchase: Decodable, Equatable {
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
+            // Direction characters are taken out of every word, so none can turn the shop or an amount around.
             func text(_ key: CodingKeys) -> String? {
                 guard let value = (try? c.decodeIfPresent(String.self, forKey: key)) ?? nil else { return nil }
-                return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
+                let shown = BidiFree.text(value)
+                return shown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : shown
             }
-            // The shop and the total are what's approved: without them there is nothing to show, so nothing to sign.
-            guard let title = text(.title), let total = text(.total) else {
+            // The shop, the total and the prompt are what's approved: without them there is nothing to show or name, so
+            // nothing to sign.
+            guard let title = text(.title), let total = text(.total), text(.prompt) != nil else {
                 throw DecodingError.dataCorruptedError(forKey: .title, in: c, debugDescription: "a purchase with no shop or total")
             }
             self.title = title
@@ -74,30 +105,28 @@ struct Purchase: Decodable, Equatable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case caseID = "case_id", version, digest, words }
+    enum CodingKeys: String, CodingKey { case words }
 
     init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        caseID = try c.decode(String.self, forKey: .caseID)
-        version = try c.decode(Int.self, forKey: .version)
-        digest = try c.decode(String.self, forKey: .digest)
-        words = try c.decode(Words.self, forKey: .words)
-        // What goes into the signed line is checked first: an id or digest that could carry a colon or a new line is
-        // refused, so the line signed is always exactly one `purchase:` line.
-        guard Self.isCaseID(caseID), version >= 1, Self.isDigest(digest) else {
-            throw DecodingError.dataCorruptedError(forKey: .digest, in: c, debugDescription: "a purchase that can't be signed as sent")
-        }
+        binding = try Binding(from: decoder)
+        words = try decoder.container(keyedBy: CodingKeys.self).decode(Words.self, forKey: .words)
     }
 
+    /// 1 to 128 of `[A-Za-z0-9_-]`, as planque's `issue_card` and the other apps take a case id.
     static func isCaseID(_ s: String) -> Bool {
-        !s.isEmpty && s.count <= 64 && s.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.isASCII || $0 == "_" || $0 == "-" }
+        !s.isEmpty && s.count <= 128 && s.unicodeScalars.allSatisfy {
+            ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0) || $0 == "_" || $0 == "-"
+        }
     }
 
     static func isDigest(_ s: String) -> Bool {
         s.count == 64 && s.unicodeScalars.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
     }
 
-    /// The line an answer to this purchase's hold ends with: `purchase:<case_id>:<version>:<digest>`. KIFF refuses an answer
-    /// without it, or with a version or digest that isn't the case's current one.
-    var signedLine: String { "purchase:\(caseID):\(version):\(digest)" }
+    var signedLine: String { binding.signedLine }
+}
+
+/// Text with every direction character taken out (`Words.withoutDirection`), the same as the Record's lines.
+enum BidiFree {
+    static func text(_ s: String) -> String { Words.withoutDirection(s) }
 }
