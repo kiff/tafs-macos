@@ -59,4 +59,22 @@ let connectAppsMacTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("connect-apps-\(language).png"))
         }
     }),
+    Test("the screenshot: every sign-in under Yours, the unused one included, from tafs cloud's own contract", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        // connect-apps.json's first page: Gmail to sign in again, Stripe connected, and Pipedrive signed in with no taf.
+        let data = try Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/connect-apps.json"))
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let answer = object["answer"] else {
+            throw Failure(description: "connect-apps.json has no answer")
+        }
+        let page = String(decoding: try JSONSerialization.data(withJSONObject: answer), as: UTF8.self)
+        let (model, _) = make([(200, page)])
+        await model.load()
+        try expect(model.yours.contains { $0.isSignedIn }, "the unused sign-in is under Yours")
+        let refunds = try AccountClient.decoder.decode(Home.Taf.self, from: Data(#"{"kiff_agent":"a_refunds","id":"t1","name":"Refunds","state":"idle"}"#.utf8))
+        let view = ConnectAppsView(model: model, connectable: [refunds]).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+        guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+        try png.write(to: folder.appendingPathComponent("connect-apps-signed-in-en.png"))
+    }),
 ]
