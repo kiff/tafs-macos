@@ -1398,6 +1398,10 @@ struct CoachView: View {
     /// its door's knocks by time, and KIFF's held calls where the taf made them. Nil in Coach's own chat.
     var extras: TafChatExtras? = nil
     @State private var scrollFold = ScrollFold()
+    /// Whether the thread follows what arrives, and its ↓ (the iPad's `atBottom`, `following`, `unseen`).
+    @State private var follow = ChatFollow()
+    /// The thread's visible height, for where its end sits.
+    @State private var threadHeight: CGFloat = 0
     @State private var planOpen = false
     /// Coach's width, for "Taking shape" beside its conversation at 780 or wider.
     @State private var width: CGFloat = 0
@@ -1546,7 +1550,17 @@ struct CoachView: View {
         return ImprovementCard(card: card, taf: taf, openVersions: open)
     }
 
+    /// What arriving in the thread means: a new item, the live answer growing, a step starting or stopping.
+    private var arrivals: [Int] {
+        guard case .loaded(_, let page) = model.state else { return [] }
+        return [page.items.count, page.working ? 1 : 0, model.pending == nil ? 0 : 1, model.live?.text.count ?? -1,
+                model.live?.steps.count ?? -1, extras?.extras.count ?? 0]
+    }
+
+    private static let threadEnd = "thread-end"
+
     private var thread: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 switch model.state {
@@ -1594,6 +1608,11 @@ struct CoachView: View {
                         }
                     }
                 }
+                // The thread's end: where the ↓ goes, and whether it shows.
+                Color.clear.frame(height: 1).id(Self.threadEnd)
+                    .background(GeometryReader { end in
+                        Color.clear.preference(key: ThreadFoot.self, value: end.frame(in: .named(ThreadTop.space)).maxY)
+                    })
             }
             .padding(.horizontal, Look.inset).padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1602,9 +1621,42 @@ struct CoachView: View {
             })
         }
         .coordinateSpace(name: ThreadTop.space)
+        .background(GeometryReader { shown in Color.clear.preference(key: ThreadHeight.self, value: shown.size.height) })
+        .onPreferenceChange(ThreadHeight.self) { threadHeight = $0 }
+        .onPreferenceChange(ThreadFoot.self) { follow.scrolled(foot: Double($0), height: Double(threadHeight)) }
         .onPreferenceChange(ThreadTop.self) { top in
             guard let onScroll, let down = scrollFold.moved(to: top) else { return }
             onScroll(down)
+        }
+        // What arrives is followed while the end shows; read back up, nothing moves and the ↓ gets its dot.
+        .onChange(of: arrivals) { _ in
+            if follow.arrived() { proxy.scrollTo(Self.threadEnd, anchor: .bottom) }
+        }
+        .overlay(alignment: .bottom) {
+            if follow.showsJump {
+                Button {
+                    follow.jumped()
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.threadEnd, anchor: .bottom) }
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(Theme.ink)
+                        .frame(width: 36, height: 36)
+                        .background(Theme.panel)
+                        .overlay(Circle().stroke(Theme.line))
+                        .clipShape(Circle())
+                        .shadow(color: Theme.ink.opacity(0.12), radius: 6, y: 2)
+                        // Something arrived below while they read back.
+                        .overlay(alignment: .topTrailing) {
+                            if follow.unseen { Circle().fill(Theme.amber).frame(width: 10, height: 10).offset(x: 1, y: -1) }
+                        }
+                }
+                .buttonStyle(.plain)
+                .help(words(follow.unseen ? "chat.jump_latest_something_new" : "chat.jump_to_latest"))
+                .accessibilityLabel(words(follow.unseen ? "chat.jump_latest_something_new" : "chat.jump_to_latest"))
+                .accessibilityIdentifier("chat.jump_to_latest")
+                .padding(.bottom, 10)
+            }
+        }
         }
         // A new version's See version: that taf's Versions, as the iPad's `VersionsScreen`.
         .sheet(item: $versionsShown) { shown in
@@ -2415,6 +2467,18 @@ struct WrapRow<Cell: View>: View {
 
 /// Coach's width, as drawn.
 private struct CoachWidth: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// Where the chat's thread ends, from the top of its scroll view.
+private struct ThreadFoot: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// The chat's scroll view's height.
+private struct ThreadHeight: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
