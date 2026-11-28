@@ -22,6 +22,21 @@ let tafUnansweredTests: [Test] = [
         let older = try AccountClient.decoder.decode(TafDoors.Page.self, from: Data(#"{"doors":[],"apps":[],"knocks":[],"replies":[]}"#.utf8))
         try expect(older.unanswered.isEmpty, "a tafs cloud before them: none")
     },
+    Test("a needs_setup writer reads with what the taf needs in tafs cloud's words, and no Connect an app; needs itself is never drawn") {
+        let body = """
+        {"doors":[],"apps":[],"knocks":[],"replies":[],"unanswered":[
+          {"run":"run_7","door":"d1","to":"Ben","at":"2026-11-28T10:40:00Z","cant_do":"needs_setup","needs":["sheet","folder"],
+           "words":{"line":"File receipts needs something from you before it can do what Ben asked: a spreadsheet and a folder. Their message waits here, and they haven't been answered.","reply":"Answer them yourself","ignore":"Ignore","prompt":"Send this reply to Ben","changed":"The reply changed since you read it."}},
+          {"run":"run_8","door":"d1","to":"Ana","at":"2026-11-28T10:41:00Z","cant_do":"needs_setup",
+           "words":{"line":"File receipts needs something from you before it can do what Ana asked. Their message waits here, and they haven't been answered.","reply":"Answer them yourself","ignore":"Ignore","prompt":"Send this reply to Ana","changed":"The reply changed since you read it."}}
+        ]}
+        """
+        let page = try AccountClient.decoder.decode(TafDoors.Page.self, from: Data(body.utf8))
+        try expectEqual(page.unanswered.map(\.run), ["run_7", "run_8"])
+        try expectEqual(page.unanswered.map(\.cantDo), ["needs_setup", "needs_setup"])
+        try expect(page.unanswered[0].words.line.contains("a spreadsheet and a folder"), "what it needs, in tafs cloud's words")
+        try expect(page.unanswered.allSatisfy { $0.words.connect == nil }, "no Connect an app: nothing to connect")
+    },
     Test("an own answer is sendable only with words in it; its length is tafs cloud's to judge") {
         try expect(!TafDoors.Unanswered.sendable(""), "empty")
         try expect(!TafDoors.Unanswered.sendable("  \n "), "only spaces")
