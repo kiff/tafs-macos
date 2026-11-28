@@ -147,6 +147,68 @@ enum TafDoors {
         var doors: [Door]
         var apps: [App]
         var knocks: [Knock]
+        /// The replies waiting for the owner to send them (tafs cloud holds a door's reply to someone outside): each read
+        /// on its own, so one that doesn't read never hides the rest. None from a tafs cloud before them.
+        var replies: [HeldReply] = []
+
+        enum CodingKeys: String, CodingKey { case doors, apps, knocks, replies }
+        init(doors: [Door], apps: [App], knocks: [Knock], replies: [HeldReply] = []) {
+            self.doors = doors
+            self.apps = apps
+            self.knocks = knocks
+            self.replies = replies
+        }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            doors = try c.decode([Door].self, forKey: .doors)
+            apps = try c.decode([App].self, forKey: .apps)
+            knocks = try c.decode([Knock].self, forKey: .knocks)
+            struct Lenient: Decodable {
+                let reply: HeldReply?
+                init(from decoder: Decoder) throws { reply = try? HeldReply(from: decoder) }
+            }
+            replies = ((try? c.decodeIfPresent([Lenient].self, forKey: .replies)) ?? nil)?.compactMap(\.reply) ?? []
+        }
+    }
+
+    /// A door's reply waiting for the owner: the exact text that would go to `to`, and tafs cloud's words for it. Sent only
+    /// as read: Send names the text's SHA-256, and tafs cloud sends nothing if the held text has changed since.
+    struct HeldReply: Decodable, Equatable, Identifiable {
+        let run: String
+        let door: String
+        let to: String
+        let subject: String?
+        let text: String
+        let textSHA256: String
+        let words: Words
+
+        var id: String { run }
+
+        /// Every line the app draws for it, tafs cloud's in the person's language: the app has none of its own for it.
+        struct Words: Decodable, Equatable {
+            let line: String
+            let send: String
+            let discard: String
+            let prompt: String
+            let changed: String
+        }
+
+        enum CodingKeys: String, CodingKey { case run, door, to, subject, text, textSHA256 = "text_sha256", words }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            run = try c.decode(String.self, forKey: .run)
+            door = try c.decode(String.self, forKey: .door)
+            to = try c.decode(String.self, forKey: .to)
+            subject = try c.decodeIfPresent(String.self, forKey: .subject)
+            text = try c.decode(String.self, forKey: .text)
+            textSHA256 = try c.decode(String.self, forKey: .textSHA256)
+            // A reply without its words isn't drawn: it would have to be worded here.
+            words = try c.decode(Words.self, forKey: .words)
+            guard !run.isEmpty, Purchase.isDigest(textSHA256) else {
+                throw DecodingError.dataCorruptedError(forKey: .textSHA256, in: c, debugDescription: "a held reply that can't be sent as read")
+            }
+        }
     }
 
     /// A taf's doors on Home, for its avatar's rim and Needs you's knocks, as the iPad's
@@ -156,15 +218,27 @@ enum TafDoors {
         let open: Bool
         let resting: Bool
         let knocks: Int
+        /// The replies waiting at this door for the owner to send them.
+        let replies: Int
+        /// The newest held reply's line, as its notification said it, for Needs you's row.
+        let replyLine: String?
 
-        enum CodingKeys: String, CodingKey { case app, open, resting, knocks }
+        enum CodingKeys: String, CodingKey { case app, open, resting, knocks, replies, replyLine = "reply_line" }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             app = (try? c.decode(String.self, forKey: .app)) ?? ""
             open = (try? c.decode(Bool.self, forKey: .open)) ?? false
             resting = (try? c.decode(Bool.self, forKey: .resting)) ?? false
             knocks = (try? c.decode(Int.self, forKey: .knocks)) ?? 0
+            replies = max(0, (try? c.decode(Int.self, forKey: .replies)) ?? 0)
+            replyLine = (try? c.decodeIfPresent(String.self, forKey: .replyLine)) ?? nil
         }
+    }
+
+    /// The replies waiting at a taf's doors for the owner to send, and the newest one's line, for Needs you's row.
+    static func heldReplies(_ lights: [Light]?) -> (count: Int, line: String?) {
+        let held = (lights ?? []).filter { $0.replies > 0 }
+        return (held.reduce(0) { $0 + $1.replies }, held.compactMap(\.replyLine).last)
     }
 
     /// The knocks waiting at a taf's doors, as Needs you counts them (`NeedsYouView.knocks`).
@@ -278,6 +352,11 @@ extension CloudClient {
         guard (200..<300).contains(status) else { throw CloudRefusal(status: status, body: answer) }
         guard let added = try? AccountClient.decoder.decode(AddedAPIDoor.self, from: answer), !added.key.key.isEmpty else { throw KIFFError.unreadable }
         return added
+    }
+
+    /// Don't send: nothing goes, so nothing is signed. The reply leaves Needs you.
+    func discardHeldReply(_ taf: String, run: String) async throws {
+        _ = try await doorChange("POST", doorsPath(taf) + "/replies/\(Self.escaped(run))", body: ["action": "discard"])
     }
 
     func removeDoor(_ taf: String, door id: String) async throws {

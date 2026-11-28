@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One taf's doors, for its Setup and its Activity, read from tafs cloud with the person's
@@ -7,6 +8,8 @@ final class DoorsModel: ObservableObject {
     @Published private(set) var doors: [TafDoors.Door] = []
     @Published private(set) var apps: [TafDoors.App] = []
     @Published private(set) var knocks: [TafDoors.Knock] = []
+    /// The replies waiting for the owner to send them, each with the exact text that would go.
+    @Published private(set) var replies: [TafDoors.HeldReply] = []
     @Published private(set) var loaded = false
     @Published private(set) var busy = false
     @Published var error: String?
@@ -42,6 +45,7 @@ final class DoorsModel: ObservableObject {
                 doors = page.doors
                 apps = page.apps
                 knocks = page.knocks
+                replies = page.replies
                 loaded = true
                 error = nil
                 return
@@ -213,6 +217,57 @@ final class DoorsModel: ObservableObject {
     func unpair(_ door: TafDoors.Door, _ key: TafDoors.Door.Key) async {
         let cloud = cloud, taf = taf
         _ = await work { try await cloud.unpair(taf, door: door.id, sender: key.id) }
+    }
+
+    /// The hex SHA-256 of a held reply's text as drawn here, UTF-8: what Send names.
+    nonisolated static func textSHA256(_ text: String) -> String {
+        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Send: on the security key, behind tafs cloud's own prompt, it names the SHA-256 of the text drawn here, so only
+    /// that text goes. When that isn't the hash tafs cloud gave, or tafs cloud says the reply changed, nothing is asked
+    /// or sent: the reply is read again, and tafs cloud's words say why.
+    func send(_ reply: TafDoors.HeldReply) async {
+        let hash = Self.textSHA256(reply.text)
+        guard hash == reply.textSHA256 else {
+            error = reply.words.changed
+            await load()
+            return
+        }
+        guard let sign = signWithKey else {
+            error = Words.app("approval.device_can_not_approve_approve")
+            return
+        }
+        let act = KeyAct.sendHeldReply(taf: taf, run: reply.run, textSHA256: hash)
+        let cloud = cloud
+        busy = true
+        defer { busy = false }
+        do {
+            let assertion = try await sign(act, act.title(Words.app, device: reply.words.prompt))
+            _ = try await cloud.signedDoorChange(act, assertion: assertion)
+            replies.removeAll { $0.run == reply.run }
+            error = nil
+        } catch is CancellationError {
+            return
+        } catch let refusal as CloudRefusal where refusal.status == 409 {
+            error = refusal.words ?? reply.words.changed
+            await load()
+        } catch {
+            self.error = NeedsYouModel.why(error)
+        }
+    }
+
+    /// Don't send: nothing goes, so nothing is signed; the reply leaves Needs you.
+    func discard(_ reply: TafDoors.HeldReply) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await cloud.discardHeldReply(taf, run: reply.run)
+            replies.removeAll { $0.run == reply.run }
+            error = nil
+        } catch {
+            self.error = NeedsYouModel.why(error)
+        }
     }
 
     /// The owner's answer to a knock. "do" starts the taf's run from their words.
