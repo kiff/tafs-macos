@@ -113,6 +113,25 @@ let connectAppsMacTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("connect-apps-ways-en\(dark ? "-dark" : "").png"))
         }
     }),
+    Test("two tafs held on one site are two cards: Skip this run on one posts that taf's skip once, removes nothing here, and reads Home again", awaiting: { @MainActor in
+        let home = #"""
+        {"tafs":[],"sign_ins":[
+          {"kind":"sign_in_stopped","grant":"g_web","site":"tax-office.example","taf":{"id":"t2","name":"VAT return"},"words":{"title":"x","line":"VAT return waits","sign_in":"Sign in again","skip":"Skip this run"}},
+          {"kind":"sign_in_stopped","grant":"g_web","site":"tax-office.example","taf":{"id":"t3","name":"Payroll"},"words":{"title":"x","line":"Payroll waits","sign_in":"Sign in again","skip":"Skip this run"}}
+        ]}
+        """#
+        let session = Session(accessToken: "t", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)
+        let transport = CannedTransport([(200, "{}")])
+        let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([]), session: session), route: .touchID,
+                                     cloud: CloudClient(transport: transport, session: session))
+        needsYou.show(try AccountClient.decoder.decode(Home.Page.self, from: Data(home.utf8)))
+        try expectEqual(needsYou.signIns.map(\.taf.id), ["t2", "t3"])
+        var reread = 0
+        await needsYou.putOff(needsYou.signIns[0], reread: { reread += 1 })
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/tafs/t2/held-sign-in/skip"])
+        try expectEqual(reread, 1)
+        try expect(needsYou.signIns.count == 2, "nothing removed here: Home's next read says what's left")
+    }),
     Test("the screenshot: Needs you's two sign-in items, soon with Later and stopped with Skip this run", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")

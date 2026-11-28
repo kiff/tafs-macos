@@ -12,7 +12,8 @@ struct SignInNeed: Decodable, Equatable, Identifiable {
     let taf: Taf
     let words: Words
 
-    var id: String { kind + "|" + grant + "|" + site }
+    /// Per taf: two tafs held on one site are two items, each with its own run and its own Skip.
+    var id: String { kind + "|" + grant + "|" + site + "|" + taf.id }
     var stopped: Bool { kind == "sign_in_stopped" }
 
     struct Taf: Decodable, Equatable {
@@ -26,7 +27,7 @@ struct SignInNeed: Decodable, Equatable, Identifiable {
         /// Sign in again's words.
         let signIn: String
         /// Later (soon) or Skip this run (stopped): the other button's words.
-        let other: String?
+        let other: String
         let why: String?
 
     }
@@ -48,13 +49,19 @@ struct SignInNeed: Decodable, Equatable, Identifiable {
         self.grant = grant
         self.site = site
         taf = try c.decode(Taf.self, forKey: .taf)
+        // Without its taf there's no run to skip and no one to name: left out, as the Android app does.
+        guard !taf.id.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw DecodingError.dataCorruptedError(forKey: .taf, in: c, debugDescription: "a sign-in item with no taf")
+        }
         let w = try c.nestedContainer(keyedBy: WordKeys.self, forKey: .words)
         func word(_ key: WordKeys) -> String? { text((try? w.decodeIfPresent(String.self, forKey: key)) ?? nil) }
         // Without its title, its line and Sign in again, there's nothing to draw: it would have to be worded here.
-        guard let title = word(.title), let line = word(.line), let signIn = word(.signIn) else {
+        // Its other button (Later, or Skip this run) is half of what the item is: without it, it's left out, as on Android.
+        guard let title = word(.title), let line = word(.line), let signIn = word(.signIn),
+              let other = word(kind == "sign_in_stopped" ? .skip : .later) else {
             throw DecodingError.dataCorruptedError(forKey: .words, in: c, debugDescription: "a sign-in item with no words")
         }
-        words = Words(title: title, line: line, signIn: signIn, other: word(kind == "sign_in_stopped" ? .skip : .later), why: word(.why))
+        words = Words(title: title, line: line, signIn: signIn, other: other, why: word(.why))
     }
 
     /// Home's list, each read on its own: one that doesn't read is left out, never the rest.

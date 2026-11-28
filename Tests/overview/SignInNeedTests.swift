@@ -8,18 +8,25 @@ private let home = #"""
    "words":{"title":"Sign-in · needs you soon","line":"supplier-portal.example asks you to sign in again by Tue 2 Dec","sign_in":"Sign in again","later":"Later","why":"At 07:00, tafs opened one page of the site with your saved sign-in."}},
   {"kind":"sign_in_stopped","grant":"g_web","site":"tax-office.example","checked_at":"2026-11-28T06:55:00Z","run_at":"2026-11-28T07:00:00Z","taf":{"id":"t2","name":"VAT return"},
    "words":{"title":"Sign-in · stopped working","line":"VAT return's 8:00 run waits for you. It won't run with a broken sign-in, and it's skipped only if you skip it.","sign_in":"Sign in again","skip":"Skip this run"}},
-  {"kind":"sign_in_maybe","grant":"g","site":"s","taf":{"id":"t","name":"n"},"words":{"title":"x","line":"y","sign_in":"z"}},
+  {"kind":"sign_in_maybe","grant":"g","site":"s","taf":{"id":"t","name":"n"},"words":{"title":"x","line":"y","sign_in":"z","later":"Later"}},
   {"kind":"sign_in_soon","grant":"g","site":"s","taf":{"id":"t","name":"n"},"words":{"title":"x","line":"y"}},
-  {"kind":"sign_in_soon","grant":"","site":"s","taf":{"id":"t","name":"n"},"words":{"title":"x","line":"y","sign_in":"z"}}
+  {"kind":"sign_in_soon","grant":"","site":"s","taf":{"id":"t","name":"n"},"words":{"title":"x","line":"y","sign_in":"z","later":"Later"}},
+  {"kind":"sign_in_stopped","grant":"g_web","site":"tax-office.example","taf":{"id":"t3","name":"Payroll"},
+   "words":{"title":"Sign-in · stopped working","line":"Payroll's 8:00 run waits for you.","sign_in":"Sign in again","skip":"Skip this run"}},
+  {"kind":"sign_in_stopped","grant":"g_web","site":"x.example","taf":{"id":"","name":"No taf"},"words":{"title":"x","line":"y","sign_in":"z","skip":"Skip"}},
+  {"kind":"sign_in_soon","grant":"g_web","site":"y.example","taf":{"id":"t9","name":"n"},"words":{"title":"x","line":"y","sign_in":"z"}}
 ]}
 """#
 
 let signInNeedTests: [Test] = [
     Test("Home lists each saved sign-in that needs the owner, soon with Later and stopped with Skip this run; one this app can't draw is left out") {
         let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(home.utf8))
-        try expectEqual(page.signIns.map(\.kind), ["sign_in_soon", "sign_in_stopped"])
-        try expectEqual(page.signIns.map(\.stopped), [false, true])
-        try expectEqual(page.signIns.map(\.words.other), ["Later", "Skip this run"])
+        try expectEqual(page.signIns.map(\.kind), ["sign_in_soon", "sign_in_stopped", "sign_in_stopped"])
+        try expectEqual(page.signIns.map(\.stopped), [false, true, true])
+        try expectEqual(page.signIns.map(\.words.other), ["Later", "Skip this run", "Skip this run"])
+        // Two tafs held on one site are two items, each its own: their ids differ.
+        try expectEqual(page.signIns.filter { $0.site == "tax-office.example" }.map(\.taf.id), ["t2", "t3"])
+        try expectEqual(Set(page.signIns.map(\.id)).count, page.signIns.count)
         try expectEqual(page.signIns[0].taf.name, "File invoices")
         try expect(page.signIns[0].words.why != nil && page.signIns[1].words.why == nil, "Why?, only when sent")
         let older = try AccountClient.decoder.decode(Home.Page.self, from: Data(#"{"tafs":[]}"#.utf8))

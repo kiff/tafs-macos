@@ -160,17 +160,19 @@ final class NeedsYouModel: ObservableObject {
         }
     }
 
-    /// Later (soon) or Skip this run (stopped), each a request tafs cloud keeps for everyone on the account. The item
-    /// leaves the list here at once; the next Home read is tafs cloud's word on it.
-    func putOff(_ need: SignInNeed) async {
+    /// Later (soon) or Skip this run (stopped), each a request tafs cloud keeps for everyone on the account. Nothing is
+    /// removed here: Home is read again (`reread`), and what it lists is what's left. A skipped item stays until the
+    /// sign-in works, holding no more runs, as tafs cloud says.
+    func putOff(_ need: SignInNeed, reread: () async -> Void) async {
         guard let cloud else { return }
         signInProblem[need.id] = nil
         do {
             if need.stopped { try await cloud.skipHeldSignIn(taf: need.taf.id) } else { try await cloud.laterSignIn(grant: need.grant, site: need.site) }
-            signIns.removeAll { $0.id == need.id }
         } catch {
             signInProblem[need.id] = NeedsYouModel.why(error)
+            return
         }
+        await reread()
     }
 
     /// Coach's waiting chats as Needs you draws them: less the one open in Coach (`onScreen`), and
@@ -544,7 +546,7 @@ struct NeedsYouView: View {
                 // (NeedsYouView.swift:16-19): Set all aside above them, with two or more.
                 coachWaiting
                 // A saved sign-in that needs the owner: soon, or stopped and holding a run (browser batch 2).
-                ForEach(model.signIns) { SignInNeedCard(model: model, need: $0) }
+                ForEach(model.signIns) { SignInNeedCard(model: model, need: $0, reread: answered) }
                 // A money call whose outcome KIFF can't prove: the owner says whether it happened.
                 ForEach(model.unproven) { happened($0) }
                 switch model.state {
@@ -1023,6 +1025,8 @@ struct AlertsCard: View {
 struct SignInNeedCard: View {
     @ObservedObject var model: NeedsYouModel
     let need: SignInNeed
+    /// Reads Home again after Later or Skip this run.
+    var reread: () async -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1040,11 +1044,9 @@ struct SignInNeedCard: View {
                         .buttonStyle(PrimaryButtonStyle()).fixedSize()
                         .accessibilityIdentifier("needs-you.sign-in")
                 }
-                if let other = need.words.other {
-                    Button { Task { await model.putOff(need) } } label: { Text(verbatim: other).padding(.horizontal, 16) }
-                        .buttonStyle(OutlineButtonStyle()).fixedSize()
-                        .accessibilityIdentifier(need.stopped ? "needs-you.sign-in.skip" : "needs-you.sign-in.later")
-                }
+                Button { Task { await model.putOff(need, reread: reread) } } label: { Text(verbatim: need.words.other).padding(.horizontal, 16) }
+                    .buttonStyle(OutlineButtonStyle()).fixedSize()
+                    .accessibilityIdentifier(need.stopped ? "needs-you.sign-in.skip" : "needs-you.sign-in.later")
             }
             if let problem = model.signInProblem[need.id] {
                 Text(verbatim: problem).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
