@@ -626,7 +626,8 @@ struct NeedsYouView: View {
     }
 
     /// The tafs with knocks at their doors, as Home counts them (`NeedsYouView.knocks`).
-    private var knocked: [Home.Taf] { tafs.filter { TafDoors.knocks($0.doors) > 0 } }
+    /// The tafs with knocks or replies waiting at their doors: each opens on its Activity, where they're answered.
+    private var knocked: [Home.Taf] { tafs.filter { TafDoors.knocks($0.doors) > 0 || TafDoors.heldReplies($0.doors).count > 0 } }
 
     /// A taf's knocks, as the iPad's row: its avatar, its name and how many knocked, opening it
     /// where they're answered.
@@ -636,8 +637,14 @@ struct NeedsYouView: View {
                 TafAvatar(name: taf.name, color: taf.color, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: taf.name).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
-                    Text(words.count("needs_you.knocks", TafDoors.knocks(taf.doors)))
-                        .font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    // A held reply in its newest line, as its notification said it (tafs cloud's words), then the knocks.
+                    if let line = TafDoors.heldReplies(taf.doors).line {
+                        Text(verbatim: line).font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if TafDoors.knocks(taf.doors) > 0 {
+                        Text(words.count("needs_you.knocks", TafDoors.knocks(taf.doors)))
+                            .font(.system(size: 14)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.dim)

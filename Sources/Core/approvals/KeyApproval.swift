@@ -58,6 +58,9 @@ enum KeyAct: Equatable {
     /// draft's `body`, canonical (RFC 8785), these exact bytes, on the security key as the door's other acts. The answer
     /// is the door and its first key, shown once.
     case addDraftedAPIDoor(taf: String, body: Data)
+    /// Sends a door's held reply to its writer (tafs cloud's `doorSigned`): `{action: "send", text_sha256}`, the SHA-256
+    /// of the exact text the owner read, so only that text goes.
+    case sendHeldReply(taf: String, run: String, textSHA256: String)
     /// Sharing a taf's KIFF agent with a group or one person (the iPad's `KIFFClient.share(agent:with:)`):
     /// `POST /v1/agents/{agent}/grants` with the share, and stopping (`unshare(agent:from:)`): `DELETE` with the group
     /// or the subject in the query and `{}`. KIFF takes each as an approval (`PhoneApprovalRules`), so each is the key's,
@@ -85,7 +88,7 @@ enum KeyAct: Equatable {
         case .confirmTrial, .confirmDraft: return "POST"
         case .discardSettingUp: return "POST"
         case .reopenAPIDoor: return "PATCH"
-        case .newAPIDoorKey, .addDraftedAPIDoor: return "POST"
+        case .newAPIDoorKey, .addDraftedAPIDoor, .sendHeldReply: return "POST"
         case .revokeAPIDoorKey, .removeAPIDoor: return "DELETE"
         case .share: return "POST"
         case .unshare: return "DELETE"
@@ -106,6 +109,7 @@ enum KeyAct: Equatable {
         case .reopenAPIDoor(let taf, let door), .removeAPIDoor(let taf, let door):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))"
         case .addDraftedAPIDoor(let taf, _): return "/v1/tafs/\(CloudClient.escaped(taf))/doors"
+        case .sendHeldReply(let taf, let run, _): return "/v1/tafs/\(CloudClient.escaped(taf))/doors/replies/\(CloudClient.escaped(run))"
         case .newAPIDoorKey(let taf, let door, _):
             return "/v1/tafs/\(CloudClient.escaped(taf))/doors/\(CloudClient.escaped(door))/keys"
         case .revokeAPIDoorKey(let taf, let door, let key):
@@ -141,6 +145,11 @@ enum KeyAct: Equatable {
         case .reopenAPIDoor: return Data(#"{"open":true}"#.utf8)
         case .revokeAPIDoorKey, .removeAPIDoor: return Data()
         case .addDraftedAPIDoor(_, let body): return body
+        // `{"action":"send","text_sha256":…}`, sorted keys: the exact bytes that are signed and sent.
+        case .sendHeldReply(_, _, let hash):
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return (try? encoder.encode(["action": "send", "text_sha256": hash])) ?? Data()
         // `{"name":…}`, as the iPad's `newKeyBody`: the exact bytes that are signed and sent.
         case .newAPIDoorKey(_, _, let name):
             let encoder = JSONEncoder()
@@ -192,6 +201,8 @@ enum KeyAct: Equatable {
             return words(happened ? "needs_you.prompt.happened" : "needs_you.prompt.did_not_happen", ["title": device])
         // The change in the person's words, the line Touch ID asked with ("Add {name} to {group}"), in `device`'s place.
         case .setMember: return device
+        // tafs cloud's own prompt for it ("Send this reply to Ben"), in `device`'s place.
+        case .sendHeldReply: return device
         }
     }
 }

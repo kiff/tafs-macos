@@ -388,6 +388,45 @@ struct PairSheet: View {
 
 /// Someone without a key wrote, as the iPad's `KnockCard`: who, what they want, and the
 /// owner's three answers.
+/// A door's reply waiting for the owner to send it: tafs cloud's line, the subject, the exact text that would go, and
+/// Send (on the security key, behind tafs cloud's prompt) and Don't send, every word tafs cloud's.
+struct HeldReplyCard: View {
+    let reply: TafDoors.HeldReply
+    @ObservedObject var doors: DoorsModel
+
+    var body: some View {
+        DoorPanel(stroke: Theme.amber.opacity(0.45)) {
+            Text(verbatim: reply.words.line).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subject = reply.subject {
+                Text(verbatim: subject).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.soft)
+            }
+            // The exact text that would go, selectable, in its own box.
+            Text(verbatim: reply.text).font(.system(size: 14)).foregroundColor(Theme.ink)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
+                .accessibilityIdentifier("held_reply.text")
+            HStack(spacing: 10) {
+                Button { Task { await doors.send(reply) } } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "key.fill").accessibilityHidden(true)
+                        Text(verbatim: reply.words.send)
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("held_reply.send")
+                Button(reply.words.discard) { Task { await doors.discard(reply) } }
+                    .buttonStyle(OutlineButtonStyle())
+                    .accessibilityIdentifier("held_reply.discard")
+            }
+            .disabled(doors.busy)
+        }
+    }
+}
+
 struct KnockCard: View {
     @Environment(\.words) private var words
     let knock: TafDoors.Knock
@@ -527,6 +566,8 @@ struct TafKnocksPanel: View {
         let open = doors.openKnocks.filter { !$0.isLine }
         let waiting = open.filter { !$0.paired }, paired = open.filter(\.paired)
         VStack(alignment: .leading, spacing: 14) {
+            // Replies waiting for the owner to send them, before the knocks, as on Android.
+            ForEach(doors.replies) { HeldReplyCard(reply: $0, doors: doors) }
             if !waiting.isEmpty {
                 DoorPanel(stroke: Theme.amber.opacity(0.45)) {
                     Eyebrow(text: words("door.knocks_waiting"), color: Theme.amber)
@@ -539,7 +580,7 @@ struct TafKnocksPanel: View {
                     ForEach(paired) { KnockCard(knock: $0, taf: taf, doors: doors, compact: true) }
                 }
             }
-            if !open.isEmpty, let error = doors.error {
+            if !open.isEmpty || !doors.replies.isEmpty, let error = doors.error {
                 Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
             }
         }
