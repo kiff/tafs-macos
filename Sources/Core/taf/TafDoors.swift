@@ -150,13 +150,17 @@ enum TafDoors {
         /// The replies waiting for the owner to send them (tafs cloud holds a door's reply to someone outside): each read
         /// on its own, so one that doesn't read never hides the rest. None from a tafs cloud before them.
         var replies: [HeldReply] = []
+        /// The writers the taf couldn't help (tafs cloud's `unanswered`): nothing was drafted, so the owner answers in
+        /// their own words or ignores it. Read each on its own, as the replies are; none from a tafs cloud before them.
+        var unanswered: [Unanswered] = []
 
-        enum CodingKeys: String, CodingKey { case doors, apps, knocks, replies }
-        init(doors: [Door], apps: [App], knocks: [Knock], replies: [HeldReply] = []) {
+        enum CodingKeys: String, CodingKey { case doors, apps, knocks, replies, unanswered }
+        init(doors: [Door], apps: [App], knocks: [Knock], replies: [HeldReply] = [], unanswered: [Unanswered] = []) {
             self.doors = doors
             self.apps = apps
             self.knocks = knocks
             self.replies = replies
+            self.unanswered = unanswered
         }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -168,6 +172,60 @@ enum TafDoors {
                 init(from decoder: Decoder) throws { reply = try? HeldReply(from: decoder) }
             }
             replies = ((try? c.decodeIfPresent([Lenient].self, forKey: .replies)) ?? nil)?.compactMap(\.reply) ?? []
+            struct LenientUnanswered: Decodable {
+                let item: Unanswered?
+                init(from decoder: Decoder) throws { item = try? Unanswered(from: decoder) }
+            }
+            unanswered = ((try? c.decodeIfPresent([LenientUnanswered].self, forKey: .unanswered)) ?? nil)?.compactMap(\.item) ?? []
+        }
+    }
+
+    /// A writer the taf couldn't help, waiting for the owner: why (`cant_do`), who, and tafs cloud's words. Nothing was
+    /// drafted and the writer has had nothing. The owner answers in their own words (Send signs the SHA-256 of the text
+    /// as typed) or ignores it, and connects an app when the one it needs isn't connected.
+    struct Unanswered: Decodable, Equatable, Identifiable {
+        let run: String
+        let door: String
+        let to: String
+        let subject: String?
+        /// `no_app` (the app it needs isn't connected), `other`, or `unfinished` (its run stopped before an answer).
+        let cantDo: String
+        let words: Words
+
+        var id: String { run }
+
+        /// The most an own answer can be, as tafs cloud counts it (JavaScript's `length`: UTF-16 units).
+        static let maxText = 4000
+
+        /// Whether `text` can be sent as the owner's answer: something besides spaces, within tafs cloud's limit.
+        static func sendable(_ text: String) -> Bool {
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.utf16.count <= maxText
+        }
+
+        /// Every line the app draws for it, tafs cloud's in the person's language. `connect` comes only for `no_app`.
+        struct Words: Decodable, Equatable {
+            let line: String
+            let connect: String?
+            let reply: String
+            let ignore: String
+            let prompt: String
+            let changed: String
+        }
+
+        enum CodingKeys: String, CodingKey { case run, door, to, subject, cantDo = "cant_do", words }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            run = try c.decode(String.self, forKey: .run)
+            door = try c.decode(String.self, forKey: .door)
+            to = try c.decode(String.self, forKey: .to)
+            subject = try c.decodeIfPresent(String.self, forKey: .subject)
+            cantDo = try c.decode(String.self, forKey: .cantDo)
+            // Without its words it isn't drawn: it would have to be worded here.
+            words = try c.decode(Words.self, forKey: .words)
+            guard !run.isEmpty else {
+                throw DecodingError.dataCorruptedError(forKey: .run, in: c, debugDescription: "an unanswered writer with no run")
+            }
         }
     }
 

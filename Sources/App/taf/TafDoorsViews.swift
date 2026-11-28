@@ -427,6 +427,55 @@ struct HeldReplyCard: View {
     }
 }
 
+/// A writer the taf couldn't help, on its Activity: tafs cloud's line for why, then the owner's own answer, typed here and
+/// sent on the security key as typed, or Ignore. Connect an app comes only when the app it needs isn't connected, and only
+/// for someone who manages the taf. The writer has had nothing, and gets nothing until the owner acts.
+struct UnansweredCard: View {
+    let item: TafDoors.Unanswered
+    @ObservedObject var doors: DoorsModel
+    /// Connect apps, for `no_app`; nil for someone who doesn't manage the taf.
+    var openConnect: (() -> Void)? = nil
+    @State private var text = ""
+
+    var body: some View {
+        DoorPanel(stroke: Theme.amber.opacity(0.45)) {
+            Text(verbatim: item.words.line).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subject = item.subject {
+                Text(verbatim: subject).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.soft)
+            }
+            // The owner's own words, sent exactly as typed.
+            TextEditor(text: $text)
+                .font(.system(size: 14))
+                .frame(minHeight: 72, maxHeight: 160)
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
+                .accessibilityLabel(Text(verbatim: item.words.reply))
+                .accessibilityIdentifier("unanswered.text")
+            HStack(spacing: 10) {
+                Button { Task { if await doors.sendOwn(item, text: text) { text = "" } } } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "key.fill").accessibilityHidden(true)
+                        Text(verbatim: item.words.reply)
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!TafDoors.Unanswered.sendable(text))
+                .accessibilityIdentifier("unanswered.send")
+                if let connect = item.words.connect, let openConnect {
+                    Button(connect, action: openConnect)
+                        .buttonStyle(OutlineButtonStyle())
+                        .accessibilityIdentifier("unanswered.connect")
+                }
+                Button(item.words.ignore) { Task { await doors.ignore(item) } }
+                    .buttonStyle(OutlineButtonStyle())
+                    .accessibilityIdentifier("unanswered.ignore")
+            }
+            .disabled(doors.busy)
+        }
+    }
+}
+
 struct KnockCard: View {
     @Environment(\.words) private var words
     let knock: TafDoors.Knock
@@ -561,6 +610,9 @@ struct TafKnocksPanel: View {
     @ObservedObject var doors: DoorsModel
     /// tafs cloud offers doors here.
     let offered: Bool
+    /// Connect apps, for a writer the taf couldn't help because an app isn't connected; nil for someone who doesn't
+    /// manage the taf.
+    var openConnect: (() -> Void)? = nil
 
     var body: some View {
         let open = doors.openKnocks.filter { !$0.isLine }
@@ -568,6 +620,8 @@ struct TafKnocksPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             // Replies waiting for the owner to send them, before the knocks, as on Android.
             ForEach(doors.replies) { HeldReplyCard(reply: $0, doors: doors) }
+            // Then the writers it couldn't help, each waiting for the owner's own answer.
+            ForEach(doors.unanswered) { UnansweredCard(item: $0, doors: doors, openConnect: openConnect) }
             if !waiting.isEmpty {
                 DoorPanel(stroke: Theme.amber.opacity(0.45)) {
                     Eyebrow(text: words("door.knocks_waiting"), color: Theme.amber)
@@ -580,7 +634,7 @@ struct TafKnocksPanel: View {
                     ForEach(paired) { KnockCard(knock: $0, taf: taf, doors: doors, compact: true) }
                 }
             }
-            if !open.isEmpty || !doors.replies.isEmpty, let error = doors.error {
+            if !open.isEmpty || !doors.replies.isEmpty || !doors.unanswered.isEmpty, let error = doors.error {
                 Text(verbatim: error).font(.system(size: 13)).foregroundColor(Theme.no)
             }
         }
