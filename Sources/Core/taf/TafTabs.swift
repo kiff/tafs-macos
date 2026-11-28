@@ -217,6 +217,9 @@ struct TafSetup: Decodable, Equatable {
     /// tafs cloud's line when the connections couldn't be read.
     let connectionsError: String?
     let exceptions: [CardUnitException]
+    /// How the taf uses websites (browser batch 2): its way, Coach's reason, and the other way's button; nil for a taf
+    /// with no browser connection, or a tafs cloud before it.
+    let browsing: BrowserWays.Browsing?
 
     /// One connected app: its name, tafs cloud's words for its status, its actions with their
     /// limits, and its week in words. `reconnect` when its sign-in must be done again.
@@ -249,10 +252,15 @@ struct TafSetup: Decodable, Equatable {
         let statsWords: String?
         /// The taf's Activity for this app's calls, as tafs cloud writes the query.
         let activityQuery: String?
+        /// A browser connection's way (`cloud`, `chrome`) and its words; nil for any other app.
+        let way: String?
+        let wayWords: BrowserWays.WayWords?
+        /// A `cloud` connection's sites, each with its sign-in's health.
+        let sites: [BrowserWays.SetupSite]
 
         enum Keys: String, CodingKey {
             case id, name, statusWords = "status_words", reconnect, actionWords = "action_words", actions, stats
-            case actionCount = "action_count", running
+            case actionCount = "action_count", running, way, wayWords = "way_words", sites
         }
         enum StatsKeys: String, CodingKey { case words, activityQuery = "activity_query" }
         init(from decoder: Decoder) throws {
@@ -268,6 +276,10 @@ struct TafSetup: Decodable, Equatable {
             let stats = try? c.nestedContainer(keyedBy: StatsKeys.self, forKey: .stats)
             statsWords = Lines.line(stats.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .words)) ?? nil })
             activityQuery = Lines.line(stats.flatMap { (try? $0.decodeIfPresent(String.self, forKey: .activityQuery)) ?? nil })
+            let sentWay = (try? c.decodeIfPresent(String.self, forKey: .way)) ?? nil
+            way = sentWay == "cloud" || sentWay == "chrome" ? sentWay : nil
+            wayWords = way == nil ? nil : (try? c.decodeIfPresent(BrowserWays.WayWords.self, forKey: .wayWords)) ?? nil
+            sites = way == "cloud" ? (((try? c.decodeIfPresent([Lenient<BrowserWays.SetupSite>].self, forKey: .sites)) ?? nil)?.compactMap(\.value) ?? []) : []
         }
     }
 
@@ -328,7 +340,7 @@ struct TafSetup: Decodable, Equatable {
 
     enum Keys: String, CodingKey {
         case workflow, memory, versions, connections, connectionsError = "connections_error", exceptions = "card_unit_exceptions"
-        case connectAgain = "connect_again"
+        case connectAgain = "connect_again", browsing
     }
     enum PartKeys: String, CodingKey { case title, summary, latest, live, earlier, steps }
 
@@ -353,6 +365,7 @@ struct TafSetup: Decodable, Equatable {
         connectAgain = (try? c.decodeIfPresent(ConnectAgain.self, forKey: .connectAgain)) ?? nil
         connectionsError = Lines.line((try? c.decodeIfPresent(String.self, forKey: .connectionsError)) ?? nil)
         exceptions = ((try? c.decodeIfPresent([Lenient<CardUnitException>].self, forKey: .exceptions)) ?? nil)?.compactMap(\.value) ?? []
+        browsing = (try? c.decodeIfPresent(BrowserWays.Browsing.self, forKey: .browsing)) ?? nil
         // A Setup with none of its parts isn't one.
         guard workflow != nil || memory != nil || versions != nil else {
             throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "no part of a Setup"))

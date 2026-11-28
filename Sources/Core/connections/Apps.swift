@@ -44,14 +44,12 @@ enum Apps {
         let wayWords: BrowserWays.WayWords?
         /// A `chrome` connection's paired Chrome, by the name planque keeps.
         let chromeName: String?
-        /// A `cloud` connection's saved sign-ins, each with its health; none for any other app.
-        let sites: [BrowserWays.Site]
 
         var id: String { entry }
 
         enum CodingKeys: String, CodingKey {
             case entry, name, title, subtitle, state, line, words, whose, method, how, logo, grant, usedBy = "used_by", usedByWords = "used_by_words", neededBy = "needed_by", misplaced
-            case way, wayWords = "way_words", chromeName = "chrome_name", sites
+            case way, wayWords = "way_words", chromeName = "chrome_name"
         }
         private struct User: Decodable { let name: String? }
         private struct LenientUser: Decodable {
@@ -92,9 +90,6 @@ enum Apps {
             way = sentWay == "cloud" || sentWay == "chrome" ? sentWay : nil
             wayWords = way == nil ? nil : (try? c.decodeIfPresent(BrowserWays.WayWords.self, forKey: .wayWords)) ?? nil
             chromeName = way == "chrome" ? text(.chromeName).flatMap(BrowserWays.shown) : nil
-            // A site that doesn't read is left out, never the row; a `chrome` connection keeps no sign-in, so it has none.
-            struct LenientSite: Decodable { let site: BrowserWays.Site?; init(from decoder: Decoder) throws { site = try? BrowserWays.Site(from: decoder) } }
-            sites = way == "cloud" ? ((((try? c.decodeIfPresent([LenientSite].self, forKey: .sites)) ?? nil) ?? []).compactMap(\.site)) : []
         }
 
         /// The grey line under the status: tafs cloud's `used_by_words` when sent (nothing when it's ""), else nil, and the
@@ -186,8 +181,12 @@ enum Apps {
         /// The two ways a taf uses websites, for the account, with or without a browser connection; none from a tafs cloud
         /// before them.
         let ways: [BrowserWays.Way]
+        /// The account's saved sign-ins on its `cloud` connections, each with its health (`saved_sign_ins`).
+        let savedSignIns: [BrowserWays.SavedSignIn]
 
-        enum CodingKeys: String, CodingKey { case apps, nextCursor = "next_cursor", partial, byKey = "by_key", removedTafs = "removed_tafs", ways }
+        enum CodingKeys: String, CodingKey {
+            case apps, nextCursor = "next_cursor", partial, byKey = "by_key", removedTafs = "removed_tafs", ways, savedSignIns = "saved_sign_ins"
+        }
         private struct Lenient: Decodable {
             let app: App?
             init(from decoder: Decoder) throws { app = try? App(from: decoder) }
@@ -201,6 +200,7 @@ enum Apps {
             byKey = ((try? c.decodeIfPresent(Bool.self, forKey: .byKey)) ?? nil) ?? false
             removedTafs = ((try? c.decodeIfPresent([RemovedTaf].self, forKey: .removedTafs)) ?? nil) ?? []
             ways = BrowserWays.ways(c)
+            savedSignIns = BrowserWays.savedSignIns(c)
         }
     }
 

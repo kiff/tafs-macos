@@ -90,12 +90,12 @@ let connectAppsMacTests: [Test] = [
         let page = #"""
         {"apps":[
           {"entry":"browser","name":"Websites","state":"connected","line":"Connected","grant":"g_web","whose":"Yours","way":"cloud",
-           "way_words":{"title":"Cloud browser","line":"Works while your computer is off."},
-           "sites":[
-             {"site":"supplier-portal.example","health":{"state":"needs_you_soon","words":{"line":"Needs you by Tue 2 Dec","why":"At 07:00, tafs opened one page of the site with your saved sign-in, without clicking anything. The site set your saved sign-in to end on 2 Dec."}}},
-             {"site":"books.example","health":{"state":"signed_in","words":{"line":"Signed in · checked today 07:00"}}},
-             {"site":"tax-office.example","health":{"state":"stopped","words":{"line":"Stopped working at 07:55","why":"At 07:55, tafs opened one page of the site with your saved sign-in, without clicking anything. The site asked to sign in again."}}}
-           ]}
+           "way_words":{"title":"Cloud browser","line":"Works while your computer is off."}}
+        ],
+        "saved_sign_ins":[
+          {"grant":"g_web","site":"supplier-portal.example","used_by":["File invoices"],"sign_in":{"title":"Sign in again"},"health":{"state":"needs_you_soon","words":{"line":"Needs you by Tue 2 Dec","why":"At 07:00, tafs opened one page of the site with your saved sign-in, without clicking anything. The site set your saved sign-in to end on 2 Dec."}}},
+          {"grant":"g_web","site":"books.example","used_by":["Month end"],"sign_in":{"title":"Sign in again"},"health":{"state":"signed_in","words":{"line":"Signed in · checked today 07:00"}}},
+          {"grant":"g_web","site":"tax-office.example","used_by":["VAT return"],"sign_in":{"title":"Sign in again"},"health":{"state":"stopped","words":{"line":"Stopped working at 07:55","why":"At 07:55, tafs opened one page of the site with your saved sign-in, without clicking anything. The site asked to sign in again."}}}
         ],
         "ways":[
           {"way":"cloud","words":{"title":"Cloud browser","line":"Works while your computer is off.","facts":["A fresh browser for each run, only on the sites you allow.","You sign in once, in a live view. Your password is never kept."],"status":"3 sign-ins saved"}},
@@ -105,11 +105,36 @@ let connectAppsMacTests: [Test] = [
         let (model, _) = make([(200, page)])
         await model.load()
         try expectEqual(model.ways.map(\.way), ["cloud", "chrome"])
-        try expectEqual(model.yours.first?.sites.count, 3)
+        try expectEqual(model.yours.first.map { model.savedSignIns(of: $0).count }, 3)
+        model.siteSignIn = { _ in throw PlanqueClient.PlanqueError.notSigning }
         for dark in [false, true] {
             let view = ConnectAppsView(model: model, connectable: []).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
             guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: folder.appendingPathComponent("connect-apps-ways-en\(dark ? "-dark" : "").png"))
+        }
+    }),
+    Test("the screenshot: Needs you's two sign-in items, soon with Later and stopped with Skip this run", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let home = #"""
+        {"tafs":[],"sign_ins":[
+          {"kind":"sign_in_soon","grant":"g_web","site":"supplier-portal.example","taf":{"id":"t1","name":"File invoices"},
+           "words":{"title":"Sign-in · needs you soon","line":"supplier-portal.example asks you to sign in again by Tue 2 Dec","sign_in":"Sign in again","later":"Later","why":"File invoices runs there every day at 8:00. Until then it works as now."}},
+          {"kind":"sign_in_stopped","grant":"g_web","site":"tax-office.example","taf":{"id":"t2","name":"VAT return"},
+           "words":{"title":"Sign-in · stopped working","line":"VAT return's 8:00 run waits for you. It won't run with a broken sign-in, and it's skipped only if you skip it.","sign_in":"Sign in again","skip":"Skip this run"}}
+        ]}
+        """#
+        let page = try AccountClient.decoder.decode(Home.Page.self, from: Data(home.utf8))
+        let needsYou = NeedsYouModel(account: AccountClient(transport: CannedTransport([]), session: Session(accessToken: "t", expiresIn: 60, tenant: "t1", subject: "u1", deviceID: nil)), route: .touchID)
+        needsYou.show(page)
+        needsYou.siteSignIn = { _ in throw PlanqueClient.PlanqueError.notSigning }
+        for dark in [false, true] {
+            let view = VStack(spacing: 14) { ForEach(needsYou.signIns) { SignInNeedCard(model: needsYou, need: $0) } }
+                .padding(20).frame(width: 560).background(Theme.background)
+                .environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 560, height: 420), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            try png.write(to: folder.appendingPathComponent("needs-you-sign-ins-en\(dark ? "-dark" : "").png"))
         }
     }),
 ]

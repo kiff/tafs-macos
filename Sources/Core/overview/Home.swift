@@ -217,9 +217,11 @@ enum Home {
         let cardUnits: Int
         /// The tafs being set up (`setting_up`), each with Discard for the person who started it.
         let settingUp: [SettingUp]
+        /// The saved sign-ins that need the owner (`sign_ins`): soon, or stopped and holding a run.
+        let signIns: [SignInNeed]
 
         enum CodingKeys: String, CodingKey {
-            case settingUp = "setting_up"
+            case settingUp = "setting_up", signIns = "sign_ins"
             case tafs, headline, needsYou = "needs_you", doorsOffered = "doors_offered", yourSteps = "your_steps", labels
             case labelsWords = "labels_words"
             case coachWaiting = "coach_waiting", coachWaitingClear = "coach_waiting_clear", cardUnits = "card_unit_exceptions"
@@ -245,6 +247,7 @@ enum Home {
             struct Unit: Decodable { let unit: CardUnitException?; init(from decoder: Decoder) throws { unit = try? CardUnitException(from: decoder) } }
             cardUnits = (((try? c.decodeIfPresent([Unit].self, forKey: .cardUnits)) ?? nil) ?? []).compactMap(\.unit).count
             settingUp = SettingUp.listed(c, .settingUp)
+            signIns = SignInNeed.listed(c, .signIns)
         }
     }
 }
