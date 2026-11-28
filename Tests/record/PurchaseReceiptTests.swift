@@ -16,8 +16,17 @@ let recordPurchaseReceiptTests: [Test] = [
         try expect(r.approver.isSelf && r.approver.method != nil, "approved by this person, and how")
         try expect(r.amounts.captured <= r.amounts.approvedMax, "captured within what was approved")
         try expect(!r.states.case.isEmpty && !r.states.money.isEmpty && !r.states.order.isEmpty, "three states, apart")
-        try expect(r.words.state != nil && r.words.allowed != nil && r.words.card != nil && r.words.shipping != nil && r.words.refunds != nil,
+        try expect(r.words.state != nil && r.words.allowed != nil && r.words.card != nil && r.words.order != nil && r.words.refunds != nil,
                    "the receipt's words beyond its line")
+    },
+    Test("the order's line is `order`, and a receipt issued before the rename still shows it from `shipping`") {
+        func words(_ w: [String: Any]) throws -> PurchaseReceipt.Words {
+            try AccountClient.decoder.decode(PurchaseReceipt.self, from: try contractReceipt { $0["words"] = w }).words
+        }
+        try expectEqual(try words(["line": "Bought", "order": "Ships to Lyon"]).order, "Ships to Lyon")
+        try expectEqual(try words(["line": "Bought", "shipping": "Ships to Lyon"]).order, "Ships to Lyon")
+        try expectEqual(try words(["line": "Bought", "order": "New", "shipping": "Old"]).order, "New")
+        try expect(try words(["line": "Bought"]).order == nil, "none sent, none shown")
     },
     Test("what KIFF signed is the receipt's canonical JSON without its sig, from the bytes as received") {
         let raw = try contractReceipt()

@@ -74,7 +74,8 @@ struct PurchaseReceipt: Decodable, Equatable {
         let state: String?
         let allowed: String?
         let card: String?
-        let shipping: String?
+        /// The order's line (where it ships, its tracking): `order`, or `shipping` on a receipt issued before the rename.
+        let order: String?
         let refunds: String?
 
         init(from decoder: Decoder) throws {
@@ -91,10 +92,10 @@ struct PurchaseReceipt: Decodable, Equatable {
             state = text(.state)
             allowed = text(.allowed)
             card = text(.card)
-            shipping = text(.shipping)
+            order = text(.order) ?? text(.shipping)
             refunds = text(.refunds)
         }
-        enum CodingKeys: String, CodingKey { case line, state, allowed, card, shipping, refunds }
+        enum CodingKeys: String, CodingKey { case line, state, allowed, card, order, shipping, refunds }
 
         private static func withoutDirection(_ s: String) -> String { BidiFree.text(s) }
     }
