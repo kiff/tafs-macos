@@ -48,6 +48,14 @@ struct HeldCall: Decodable, Identifiable, Equatable {
     /// "never an allowing answer without its release", the Chrome contract). Only the paired phone's own release
     /// opens a fill, and this Mac holds no approval key to make one: it offers no allowing answer for it, only the phone.
     let fillsInChrome: Bool
+    /// A purchase the Card holds (Thune), as KIFF serves it on the hold (`purchase`): drawn as its own card, and every
+    /// answer to it, a refusal too, signs its case's version and digest. Nil for any other call.
+    let purchase: Purchase?
+    /// The hold names a purchase this app can't read: it's never approved here. When its case still reads
+    /// (`purchaseBinding`), it can be refused for that case; when it doesn't, nothing is signed for it at all.
+    let purchaseUnreadable: Bool
+    /// The case the hold's purchase binds, read on its own: what any answer to it signs, Refuse included.
+    let purchaseBinding: Purchase.Binding?
 
     /// The held list with each call's arguments set apart (an object left empty in their place, so `hasArguments` reads
     /// the same): the decoder reads numbers through `Double` and refuses the whole list for one it can't hold (`1e400`),
@@ -99,7 +107,7 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         case expiresAt = "expires_at", accountingVersion = "accounting_version"
         case parameters, parameterUnits = "parameter_units"
         case entityID = "entity_id", arguments
-        case proposalID = "proposal_id", kind, breaches, browser
+        case proposalID = "proposal_id", kind, breaches, browser, purchase
     }
 
     init(from decoder: Decoder) throws {
@@ -143,6 +151,15 @@ struct HeldCall: Decodable, Identifiable, Equatable {
         } else {
             fillsInChrome = false
         }
+        if c.contains(.purchase), !((try? c.decodeNil(forKey: .purchase)) ?? false) {
+            purchase = try? c.decode(Purchase.self, forKey: .purchase)
+            purchaseBinding = purchase?.binding ?? (try? c.decode(Purchase.Binding.self, forKey: .purchase))
+            purchaseUnreadable = purchase == nil
+        } else {
+            purchase = nil
+            purchaseBinding = nil
+            purchaseUnreadable = false
+        }
         struct Unit: Decodable { let unit: String; let scale: Int }
         let parameters = ((try? c.decodeIfPresent([String: Int64].self, forKey: .parameters)) ?? nil) ?? [:]
         let units = ((try? c.decodeIfPresent([String: Unit].self, forKey: .parameterUnits)) ?? nil) ?? [:]
@@ -168,10 +185,12 @@ enum Answer: String {
 
 extension KIFFMessage {
     /// What is signed to answer a held call: `kiff.answer.v1`, one field per line. An absent
-    /// next step or note is an empty line.
+    /// next step or note is an empty line. A held purchase adds one more line, its case's
+    /// `purchase:<case_id>:<version>:<digest>` (tafs's `contracts/purchase.json`, `answer`).
     static func answer(tenant: String, callID: String, answer: Answer, nextStep: String?, noteHash: String = "",
-                       accountingVersion: Int, signedAt: String) -> String {
-        ["kiff.answer.v1", tenant, callID, answer.rawValue, nextStep ?? "", noteHash, String(accountingVersion), signedAt]
+                       accountingVersion: Int, signedAt: String, purchase: Purchase.Binding? = nil) -> String {
+        (["kiff.answer.v1", tenant, callID, answer.rawValue, nextStep ?? "", noteHash, String(accountingVersion), signedAt]
+            + (purchase.map { [$0.signedLine] } ?? []))
             .joined(separator: "\n")
     }
 }
@@ -221,11 +240,13 @@ extension AccountClient {
                 confirm: () async throws -> Void = {}) async throws {
         guard let signMessage else { throw KIFFError.refused(status: 0, code: "no_device_key") }
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
+        // A purchase is refused for its case, even when its words don't read; with no case that reads, nothing is signed.
+        guard !call.purchaseUnreadable || call.purchaseBinding != nil else { throw KIFFError.refused(status: 0, code: "purchase_unreadable") }
         if let nextStep, !call.nextSteps.contains(nextStep) { throw KIFFError.refused(status: 0, code: "not_a_next_step") }
         do { try await confirm() } catch { throw Unconfirmed(error: error) }
         let signedAt = KIFFMessage.time(date)
         let message = KIFFMessage.answer(tenant: session.tenant, callID: call.id, answer: .reject, nextStep: nextStep,
-                                         accountingVersion: version, signedAt: signedAt)
+                                         accountingVersion: version, signedAt: signedAt, purchase: call.purchaseBinding)
         struct Signature: Encodable { let signed_at: String; let value: String }
         struct Body: Encodable { let next_step: String?; let signature: Signature }
         let encoder = JSONEncoder()

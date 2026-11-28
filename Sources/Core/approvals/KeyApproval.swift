@@ -230,9 +230,14 @@ extension PasskeySession {
         // asked, whatever drew the answer ("never an allowing answer without its release", the Chrome contract).
         guard !call.fillsInChrome else { throw ApproveOnPhone() }
         guard let version = call.accountingVersion else { throw KIFFError.refused(status: 0, code: "no_accounting_version") }
+        // A purchase is approved once, never with extra room, and only for the case as read: one this app can't read is
+        // refused before the key is asked.
+        guard !call.purchaseUnreadable, call.purchase == nil || answer == .approveOnce else {
+            throw KIFFError.refused(status: 0, code: "purchase_answer")
+        }
         let signedAt = KIFFMessage.time(now)
         let passkey = try await approver.answer(tenant: session.tenant, callID: call.id, answer: answer,
-                                                accountingVersion: version, signedAt: signedAt, pin: pin)
+                                                accountingVersion: version, signedAt: signedAt, pin: pin, purchase: call.purchase?.binding)
         // The assertion's object as the key's answer gave it, and the same signed_at, in sorted keys.
         var body = Data(#"{"signature":{"passkey":"#.utf8)
         body.append(passkey)

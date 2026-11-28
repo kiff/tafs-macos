@@ -11,7 +11,10 @@ private let read = ["ai-consent.json", "home.json", "home-paused.json", "recipes
                          // A held call's arguments under Details, read by the approvals part's HeldCallTests.
                          "held-arguments.json",
                          // Connect apps' first page, read by the connections part's AppsTests (every sign-in under Yours).
-                         "connect-apps.json"]
+                         "connect-apps.json",
+                         // A held purchase (Thune): its approval and the answer's signed line, read by the approvals part's
+                         // PurchaseTests; its receipt comes with the Record's receipt screen.
+                         "purchase.json"]
 private let notYet = [
     "tafs.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",
     "tafs-paused.json": "its schedule and time-zone words, with the screens that show them; the tafs list is home.json",

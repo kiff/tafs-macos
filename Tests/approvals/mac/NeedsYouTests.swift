@@ -18,6 +18,32 @@ private func model(_ answers: [(Int, String)], route: ApprovalRoute = .phoneOrPa
 private let stepJSON = #"{"handoff":"h1","what":"Approve the transfer","words":{"done":"Done","skip":"Skip it"}}"#
 
 let approvalsScreenTests: [Test] = [
+    Test("the screenshots: a held purchase, as the approved design draws it, light and dark, closed and with its lines open", awaiting: { @MainActor in
+        let data = try Data(contentsOf: URL(fileURLWithPath: ".shared/contracts/purchase.json"))
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let approval = (object["approval"] as? [String: Any])?["value"] else { throw Failure(description: "purchase.json has no approval") }
+        let one: [String: Any] = ["id": "exc_7f3a", "subject": "agent_shop", "action": "buy", "created_at": "2026-11-28T09:14:00Z",
+                                  "expires_at": "2026-11-28T09:29:00Z", "accounting_version": 1, "purchase": approval]
+        let list = String(decoding: try JSONSerialization.data(withJSONObject: ["exceptions": [one]]), as: UTF8.self)
+        let (model, _) = model([(200, list)], route: .passkey)
+        model.answerWithKey = { _, _ in }
+        await model.load()
+        guard case .loaded(let calls) = model.state, let call = calls.first else { throw Failure(description: "no held purchase") }
+        try expect(call.purchase != nil, "read as a purchase")
+        try expect(model.offersApproveOnce(call) && !model.offersExtraRoom(call, managesCards: true), "Approve once, never Extra room")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for dark in [false, true] {
+            for open in [false, true] {
+                let view = NeedsYouView(model: model, now: ISO8601DateFormatter().date(from: "2026-11-28T09:14:08Z"), linesOpenAtStart: open ? ["exc_7f3a"] : [])
+                    .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
+                guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: open ? 900 : 760), dark: dark), let png = Snapshot.png(bitmap) else {
+                    throw Failure(description: "no PNG")
+                }
+                try png.write(to: folder.appendingPathComponent("needs-you-purchase\(open ? "-open" : "")-en\(dark ? "-dark" : "").png"))
+            }
+        }
+    }),
     Test("a call's time left counts down as a clock, m:ss or h:mm:ss, in the shared words, and says when it expired") {
         let words = Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"])
         let at = Date(timeIntervalSince1970: 1_794_679_800)
