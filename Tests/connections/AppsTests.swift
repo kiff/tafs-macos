@@ -63,6 +63,20 @@ let connectionsAppsTests: [Test] = [
         let pipedrive = try page.apps.first { $0.name == "Pipedrive" } ?? { throw Failure(description: "no Pipedrive row") }()
         try expect(pipedrive.isSignedIn && pipedrive.opensConnections && !pipedrive.isConnected, "signed in, opens, not connected")
         try expectEqual(pipedrive.line, "Sign in · Signed in · Not used by any taf")
+        // Who uses each of the account's own, alone: the grey line under its status.
+        try expectEqual(pipedrive.usageWords, "Not used by any taf")
+        try expectEqual(page.apps.first { $0.name == "Stripe" }?.usageWords, "Used by Rae")
+        try expect(page.apps.filter { !$0.isYours }.allSatisfy { $0.usedByWords == nil }, "an app to connect says nothing of use")
+    },
+    Test("used_by_words: the words, nothing when sent empty (only a taf the person can't see uses it), and the older rows when absent") {
+        func row(_ extra: String) throws -> Apps.App {
+            try AccountClient.decoder.decode(Apps.App.self, from: Data(#"{"entry":"stripe@3","name":"Stripe","state":"connected","line":"Sign in · Connected","used_by":[{"taf":"t1","name":"Rae"}]\#(extra)}"#.utf8))
+        }
+        try expectEqual(try row(#","used_by_words":"Used by Rae""#).usageWords, "Used by Rae")
+        let hidden = try row(#","used_by_words":"""#)
+        try expect(hidden.usedByWords == "" && hidden.usageWords == nil, "sent empty: nothing is said of use")
+        let older = try row("")
+        try expect(older.usedByWords == nil && older.usedBy == ["Rae"], "absent: the older rows, from used_by")
     },
     Test("a search is escaped and cut, a cursor continues it, and an answer with no list is unreadable", awaiting: {
         let (client, transport) = cloud([(200, appsPage), (200, appsPage)])
