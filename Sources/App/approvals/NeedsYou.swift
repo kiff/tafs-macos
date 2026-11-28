@@ -425,13 +425,15 @@ final class NeedsYouModel: ObservableObject {
     /// Whether this card offers Approve once: KIFF allows it for the call, and this Mac approves with its key.
     /// Never for a step that fills a field in Chrome: that needs the phone's release, which this Mac can't make.
     func offersApproveOnce(_ call: HeldCall) -> Bool {
-        call.canApproveOnce && call.accountingVersion != nil && answerWithKey != nil && !call.fillsInChrome
+        call.canApproveOnce && call.accountingVersion != nil && answerWithKey != nil && !call.fillsInChrome && !call.purchaseUnreadable
     }
 
     /// Whether this card offers Extra room, as the iPad's: over a total approving once can't pass, for someone who
     /// manages the Cards (KIFF's `cards.manage`), on a Mac that approves with its key.
     func offersExtraRoom(_ call: HeldCall, managesCards: Bool) -> Bool {
+        // Never on a purchase: its room is the case's, approved once (the purchase approval design, "Extra room is never offered").
         !call.canApproveOnce && managesCards && call.accountingVersion != nil && answerWithKey != nil && !call.fillsInChrome
+            && call.purchase == nil && !call.purchaseUnreadable
     }
 
     static func why(_ error: Error) -> String {
@@ -467,6 +469,10 @@ struct NeedsYouView: View {
     var allowIsLive = false
     /// Opens a taf where its door knocks are answered: its Activity.
     var openKnocks: (Home.Taf) -> Void = { _ in }
+    /// The held purchases whose lines are open (Show more): closed each time Needs you is drawn anew, never remembered.
+    @State private var purchaseOpen: Set<String> = []
+    /// Purchases drawn with their lines open from the start: a screenshot's, as a tap on Show more would leave them.
+    var linesOpenAtStart: Set<String> = []
     /// Reads the lists again once a step is answered: the taf's run goes on.
     var answered: () async -> Void = {}
     /// Whether this person may use Coach: a waiting chat's Open Coach is theirs alone.
@@ -695,6 +701,26 @@ struct NeedsYouView: View {
                     }
                 }
             }
+            if let purchase = call.purchase {
+                purchaseBody(call, purchase)
+            } else if call.purchaseUnreadable {
+                // A purchase this app can't read: its name only, and nothing to sign here.
+                Text(verbatim: call.summary).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                callBody(call)
+            }
+            answers(call)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A held call's own lines: what it moves, what it is, why KIFF held it, the taf's words and the arguments.
+    @ViewBuilder private func callBody(_ call: HeldCall) -> some View {
             // What it moves, in KIFF's numbers, then what it is.
             if let amount = call.amount {
                 Text(verbatim: amount.written(language: words.language)).font(.system(size: 44, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
@@ -721,32 +747,97 @@ struct NeedsYouView: View {
                 .accessibilityElement(children: .combine)
             }
             if !call.argumentLines.isEmpty { details(call) }
-            answers(call)
+    }
+
+    /// A held purchase, as the approved design draws it (Thune): the shop, the total with what it includes, where it's
+    /// delivered, the lines behind Show more (closed each time), the price rule and what the card allows beside the
+    /// answers, and why the Card asks, every word KIFF's. Approving signs exactly these lines, open or closed.
+    @ViewBuilder private func purchaseBody(_ call: HeldCall, _ p: Purchase) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: p.words.title).font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle = p.words.subtitle { Text(verbatim: subtitle).font(.system(size: 13)).foregroundColor(Theme.soft) }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).stroke(Theme.amber.opacity(0.4)))
-        .accessibilityElement(children: .contain)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: p.words.total).font(.system(size: 34, weight: .bold, design: .rounded)).foregroundColor(Theme.ink)
+                .accessibilityIdentifier("purchase.total")
+            if let note = p.words.totalNote { Text(verbatim: note).font(.system(size: 12)).foregroundColor(Theme.dim) }
+        }
+        if let delivery = p.words.delivery {
+            Text(verbatim: delivery).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+        }
+        purchaseLines(call, p)
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach([p.words.priceRule, p.words.grant, p.words.buysNow].compactMap { $0 }, id: \.self) { fact in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Circle().fill(Theme.dim.opacity(0.6)).frame(width: 5, height: 5).accessibilityHidden(true)
+                    Text(verbatim: fact).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        if let reason = p.words.reason ?? call.reasonText {
+            Text(verbatim: reason).font(.system(size: 12, weight: .medium)).foregroundColor(Theme.amberText)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(Theme.amber.opacity(0.14)))
+        }
+    }
+
+    /// Show more and the lines it opens, each as the checkout lists it, then the charges, so the open list adds up to the total.
+    @ViewBuilder private func purchaseLines(_ call: HeldCall, _ p: Purchase) -> some View {
+        let open = purchaseOpen.contains(call.id) != linesOpenAtStart.contains(call.id)
+        if !p.words.lines.isEmpty || !p.words.charges.isEmpty {
+            Button {
+                if open { purchaseOpen.remove(call.id) } else { purchaseOpen.insert(call.id) }
+            } label: {
+                HStack(spacing: 4) {
+                    // KIFF's word for it; the chevron says whether it's open (no shared "Show less" word yet).
+                    Text(verbatim: p.words.showMore ?? words("common.show_the_list"))
+                    Image(systemName: open ? "chevron.up" : "chevron.down").font(.system(size: 11, weight: .semibold)).accessibilityHidden(true)
+                }
+                .font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.amberText)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("purchase.show_more")
+        }
+        if open {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(p.words.lines.enumerated()), id: \.offset) { _, line in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(verbatim: line.name).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.ink)
+                        Spacer(minLength: 8)
+                        Text(verbatim: [line.quantity, line.amount].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    }
+                }
+                ForEach(Array(p.words.charges.enumerated()), id: \.offset) { _, charge in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(verbatim: charge.name).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.ink)
+                        Spacer(minLength: 8)
+                        Text(verbatim: charge.amount).font(.system(size: 13)).foregroundColor(Theme.soft)
+                    }
+                }
+            }
+            .padding(.top, 4)
+            .overlay(Rectangle().fill(Theme.line).frame(height: 1), alignment: .top)
+        }
     }
 
     /// The card's answers, as the iPad's `answers(refuseOnly:)`: what's sent, Approve once on the key, the over-total
     /// line, the next steps, then Refuse, and why the last answer wasn't taken.
     @ViewBuilder private func answers(_ call: HeldCall) -> some View {
-        Text(words("needs_you.nothing_sent")).font(.system(size: 14)).foregroundColor(Theme.soft)
+        Text(verbatim: call.purchase?.words.nothingUntil ?? words("needs_you.nothing_sent")).font(.system(size: 14)).foregroundColor(Theme.soft)
         if model.route == .phoneOrPasskey {
             Text(words("approval.device_can_not_approve_approve")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
-        } else if call.fillsInChrome {
+        } else if call.fillsInChrome || call.purchaseUnreadable {
             // A fill in Chrome opens only with the phone's release: Refuse stays here, and allowing is the phone's.
             Text(words("approval.security_key.on_phone")).font(.system(size: 13)).foregroundColor(Theme.soft)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("needs_you.fill_on_phone")
         }
         if model.offersApproveOnce(call) { approveOnceButton(call) }
-        if !call.canApproveOnce { overTotal }
+        if !call.canApproveOnce, call.purchase == nil { overTotal }
         if model.offersExtraRoom(call, managesCards: managesCards) { extraRoomButton(call) }
-        if let taf = tafs.first(where: { $0.kiffAgent == call.subject })?.tafID,
+        if call.purchase == nil, !call.purchaseUnreadable, let taf = tafs.first(where: { $0.kiffAgent == call.subject })?.tafID,
            model.offersAllow(call, taf: taf, managesCards: managesCards, allowIsLive: allowIsLive) {
             // The third answer, as the iPad's: a Card change, made on the tap, so calls like this go on their own.
             Button(words("needs_you.allow_from_now_on")) { model.openAllow(call, taf: taf) }
