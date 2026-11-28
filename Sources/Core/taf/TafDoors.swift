@@ -194,12 +194,10 @@ enum TafDoors {
 
         var id: String { run }
 
-        /// The most an own answer can be, as tafs cloud counts it (JavaScript's `length`: UTF-16 units).
-        static let maxText = 4000
-
-        /// Whether `text` can be sent as the owner's answer: something besides spaces, within tafs cloud's limit.
+        /// Whether `text` can be sent as the owner's answer: something besides spaces. How long it may be is tafs cloud's
+        /// to say, and its refusal is shown as it words it.
         static func sendable(_ text: String) -> Bool {
-            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.utf16.count <= maxText
+            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
         /// Every line the app draws for it, tafs cloud's in the person's language. `connect` comes only for `no_app`.

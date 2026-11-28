@@ -22,14 +22,11 @@ let tafUnansweredTests: [Test] = [
         let older = try AccountClient.decoder.decode(TafDoors.Page.self, from: Data(#"{"doors":[],"apps":[],"knocks":[],"replies":[]}"#.utf8))
         try expect(older.unanswered.isEmpty, "a tafs cloud before them: none")
     },
-    Test("an own answer is sendable only with words in it, and within tafs cloud's 4,000, counted as JavaScript counts") {
+    Test("an own answer is sendable only with words in it; its length is tafs cloud's to judge") {
         try expect(!TafDoors.Unanswered.sendable(""), "empty")
         try expect(!TafDoors.Unanswered.sendable("  \n "), "only spaces")
         try expect(TafDoors.Unanswered.sendable("Hi Ben, I'll look at it today."), "words")
-        try expect(TafDoors.Unanswered.sendable(String(repeating: "a", count: 4000)), "4,000 is the limit")
-        try expect(!TafDoors.Unanswered.sendable(String(repeating: "a", count: 4001)), "past it")
-        // An emoji is two of JavaScript's units: 2,001 of them are past 4,000 though Swift counts 2,001.
-        try expect(!TafDoors.Unanswered.sendable(String(repeating: "😀", count: 2001)), "counted in UTF-16, as tafs cloud does")
+        try expect(TafDoors.Unanswered.sendable(String(repeating: "a", count: 5000)), "a long one goes, and tafs cloud says if it's too long")
     },
     Test("Answer them yourself is one act on the security key: POST to the run, with exactly {action, text, text_sha256} in sorted keys, the text as typed") {
         let text = "Hi Ben,\nI'll send it by 5/12."

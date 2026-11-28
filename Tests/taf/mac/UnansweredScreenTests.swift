@@ -61,6 +61,15 @@ let tafUnansweredMacTests: [Test] = [
         await model.send(model.replies[0])
         try expectEqual(model.error, "The reply changed, so nothing was sent.")
     }),
+    Test("an answer tafs cloud refuses as too long says tafs cloud's words, and the writer stays", awaiting: { @MainActor in
+        let (model, _) = doors([(200, page), (400, #"{"error":"Your answer is too long: at most 4,000 characters."}"#)])
+        await model.load()
+        model.signWithKey = { _, _ in "ASSERTION" }
+        let sent = await model.sendOwn(model.unanswered[0], text: String(repeating: "a", count: 5000))
+        try expect(!sent, "not sent")
+        try expect(model.error?.contains("too long") == true, "tafs cloud's words: \(model.error ?? "nil")")
+        try expectEqual(model.unanswered.count, 2)
+    }),
     Test("Ignore signs nothing: a plain POST with action discard, and the writer leaves the list", awaiting: { @MainActor in
         let (model, transport) = doors([(200, page), (200, #"{"run":"run_2","state":"not_sent"}"#)])
         await model.load()
