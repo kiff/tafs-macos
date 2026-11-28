@@ -87,7 +87,7 @@ let tafUnansweredMacTests: [Test] = [
             let view = TafKnocksPanel(taf: taf, doors: model, offered: false, openConnect: {})
                 .padding(20).frame(width: 520, alignment: .topLeading).background(Theme.background)
                 .environment(\.words, Words.load(folder: URL(fileURLWithPath: ".shared/app/strings"), preferred: ["en"]))
-            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 520, height: 560), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 520, height: 680), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
             try png.write(to: URL(fileURLWithPath: "build/screenshots/door-unanswered-en\(dark ? "-dark" : "").png"))
         }
     }),
