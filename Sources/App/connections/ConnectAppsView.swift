@@ -408,9 +408,10 @@ struct ConnectAppsView: View {
             Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isSignedIn {
-            // tafs cloud's line without how it connects, which is its own column here ("Signed in · Not used by any taf"),
-            // so the row doesn't say "Sign in" twice and still says whether a taf uses it; else the shared words.
-            Text(verbatim: Self.statusLine(app.line) ?? words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+            // Where it stands and what's next, in the shared words, with who uses it under it (`used_by_words`). From a tafs
+            // cloud before that: its line without how it connects, which is its own column here, so "Sign in" shows once.
+            Text(verbatim: app.usedByWords != nil ? words("connect.signed_in_row") : Self.statusLine(app.line) ?? words("connect.signed_in_row"))
+                .font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isYours {
             Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
@@ -418,8 +419,11 @@ struct ConnectAppsView: View {
             // For an app an operator sets up first: tafs cloud's own line, in its status.
             Text(verbatim: line).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2)
         }
-        // Which tafs use one of the account's own connections, under its status.
-        if yours, !app.usedBy.isEmpty {
+        // Who uses one of the account's own, under its status: tafs cloud's words when it sends them (nothing when it sends
+        // ""), else the tafs it names.
+        if yours, let usage = app.usageWords {
+            Text(verbatim: usage).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
+        } else if yours, app.usedByWords == nil, !app.usedBy.isEmpty {
             Text(words("connect.apps.used_by", ["tafs": words.list(app.usedBy)])).font(.system(size: 12)).foregroundColor(Theme.dim).lineLimit(2)
         }
     }
@@ -436,7 +440,8 @@ struct ConnectAppsView: View {
     /// words beside it. A check mark, or a button alone, stays beside.
     static func buttonUnder(_ app: Apps.App, yours: Bool, setup: Bool) -> Bool {
         let button = !app.needsSetup && !app.isConnected && !app.isSignedIn
-        let worded = app.needsReconnect || app.isYours || (setup && app.words != nil) || (yours && !app.usedBy.isEmpty)
+        let worded = app.needsReconnect || app.isYours || (setup && app.words != nil)
+            || (yours && (app.usageWords != nil || (app.usedByWords == nil && !app.usedBy.isEmpty)))
         return button && worded
     }
 

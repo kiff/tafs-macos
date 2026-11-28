@@ -25,6 +25,10 @@ enum Apps {
         let whose: String?
         /// The tafs that use one of the account's own connections, by name, as sent.
         let usedBy: [String]
+        /// Who uses one of the account's own, in tafs cloud's words, alone ("Used by Rae", "Not used by any taf"): the
+        /// row's grey line under its status. "" when only a taf this person can't see uses it (nothing is said of use);
+        /// nil when tafs cloud doesn't know, or is older than it, and then the row says it from `usedBy` and `line`.
+        let usedByWords: String?
         /// The app's own icon on tafs cloud, when it has one: only a `/v1/logos/<32 hex>` path
         /// is kept, so no other address is ever fetched for a row.
         let logo: String?
@@ -38,7 +42,7 @@ enum Apps {
 
         var id: String { entry }
 
-        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, logo, grant, usedBy = "used_by", neededBy = "needed_by", misplaced }
+        enum CodingKeys: String, CodingKey { case entry, name, title, subtitle, state, line, words, whose, method, how, logo, grant, usedBy = "used_by", usedByWords = "used_by_words", neededBy = "needed_by", misplaced }
         private struct User: Decodable { let name: String? }
         private struct LenientUser: Decodable {
             let name: String?
@@ -68,6 +72,8 @@ enum Apps {
             // A user that doesn't read is left out, never the row.
             let users = ((try? c.decodeIfPresent([LenientUser].self, forKey: .usedBy)) ?? nil) ?? []
             usedBy = users.compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            // Kept as sent, "" included: empty says something here ("nothing to say"), unlike absent.
+            usedByWords = ((try? c.decodeIfPresent(String.self, forKey: .usedByWords)) ?? nil)?.trimmingCharacters(in: .whitespacesAndNewlines)
             grant = text(.grant)
             // A list it can't read is none sent, as the iPad's: never a guess from half a list.
             neededBy = ((try? c.decodeIfPresent([Named].self, forKey: .neededBy)) ?? nil)?.filter { !$0.taf.isEmpty }
@@ -76,6 +82,10 @@ enum Apps {
 
         /// The shared key for how it connects, by the iPad's rule: a key when tafs cloud says
         /// `key` (an older one, in `how`), else Sign in.
+        /// The grey line under the status: tafs cloud's `used_by_words` when sent (nothing when it's ""), else nil, and the
+        /// row says who uses it from `usedBy` as before.
+        var usageWords: String? { usedByWords.flatMap { $0.isEmpty ? nil : $0 } }
+
         var howKey: String { (method ?? how) == "key" ? "connect.how.key" : "connect.how.sign_in" }
 
         /// One of the account's own connections: connected, to sign in again, or signed in with no taf using it yet
