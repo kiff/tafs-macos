@@ -83,4 +83,33 @@ let connectAppsMacTests: [Test] = [
         guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760)), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
         try png.write(to: folder.appendingPathComponent("connect-apps-signed-in-en.png"))
     }),
+    Test("the screenshot: the two ways a taf uses websites, and a cloud connection's saved sign-ins with their health, light and dark", awaiting: { @MainActor in
+        let strings = URL(fileURLWithPath: ".shared/app/strings")
+        let folder = URL(fileURLWithPath: "build/screenshots")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let page = #"""
+        {"apps":[
+          {"entry":"browser","name":"Websites","state":"connected","line":"Connected","grant":"g_web","whose":"Yours","way":"cloud",
+           "way_words":{"title":"Cloud browser","line":"Works while your computer is off."},
+           "sites":[
+             {"site":"supplier-portal.example","health":{"state":"needs_you_soon","words":{"line":"Needs you by Tue 2 Dec","why":"At 07:00, tafs opened one page of the site with your saved sign-in, without clicking anything. The site set your saved sign-in to end on 2 Dec."}}},
+             {"site":"books.example","health":{"state":"signed_in","words":{"line":"Signed in · checked today 07:00"}}},
+             {"site":"tax-office.example","health":{"state":"stopped","words":{"line":"Stopped working at 07:55","why":"At 07:55, tafs opened one page of the site with your saved sign-in, without clicking anything. The site asked to sign in again."}}}
+           ]}
+        ],
+        "ways":[
+          {"way":"cloud","words":{"title":"Cloud browser","line":"Works while your computer is off.","facts":["A fresh browser for each run, only on the sites you allow.","You sign in once, in a live view. Your password is never kept."],"status":"3 sign-ins saved"}},
+          {"way":"chrome","words":{"title":"Chrome extension","line":"Works in your Chrome, where you're signed in.","facts":["Uses the sign-ins already in your Chrome. Your passwords stay there.","Banks and password managers stay blocked unless your phone allows each one."],"status":"Paired with Office Mac"}}
+        ]}
+        """#
+        let (model, _) = make([(200, page)])
+        await model.load()
+        try expectEqual(model.ways.map(\.way), ["cloud", "chrome"])
+        try expectEqual(model.yours.first?.sites.count, 3)
+        for dark in [false, true] {
+            let view = ConnectAppsView(model: model, connectable: []).environment(\.words, Words.load(folder: strings, preferred: ["en"]))
+            guard let bitmap = Snapshot.bitmap(of: view, size: CGSize(width: 980, height: 760), dark: dark), let png = Snapshot.png(bitmap) else { throw Failure(description: "no PNG") }
+            try png.write(to: folder.appendingPathComponent("connect-apps-ways-en\(dark ? "-dark" : "").png"))
+        }
+    }),
 ]

@@ -1,2 +1,2 @@
 /// The connections part's tests that need no Mac.
-let connectionsTests: [Test] = connectionsAppsTests + planqueEnrolTests + connectReceiptTests + appLogosTests + appConnectionsTests + connectionEndingTests + connectionLinesTests + grantWordsTests
+let connectionsTests: [Test] = connectionsAppsTests + connectionsBrowserWaysTests + planqueEnrolTests + connectReceiptTests + appLogosTests + appConnectionsTests + connectionEndingTests + connectionLinesTests + grantWordsTests
