@@ -59,6 +59,11 @@ let connectAppsMacTests: [Test] = [
             try png.write(to: folder.appendingPathComponent("connect-apps-\(language).png"))
         }
     }),
+    Test("a signed-in row's status is tafs cloud's line without how it connects, which has its own column") {
+        try expect(ConnectAppsView.statusLine("Sign in · Signed in · Not used by any taf") == "Signed in · Not used by any taf", "the method part goes")
+        try expect(ConnectAppsView.statusLine("Sign in") == nil, "nothing after it: the shared words")
+        try expect(ConnectAppsView.statusLine(nil) == nil, "no line: the shared words")
+    },
     Test("the screenshot: every sign-in under Yours, the unused one included, from tafs cloud's own contract", awaiting: { @MainActor in
         let strings = URL(fileURLWithPath: ".shared/app/strings")
         let folder = URL(fileURLWithPath: "build/screenshots")
