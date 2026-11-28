@@ -12,10 +12,42 @@ private func armed(_ transport: CannedTransport, signs: @escaping () -> Void) ->
 }
 
 let planqueRoutesTests: [Test] = [
+    Test("Sign in again asks planque for the live sign-in view: one POST of `{}` under the grant, signed once by the device key, with the body's hash in what's signed", awaiting: {
+        let transport = CannedTransport([(200, #"{"view":"https://planque.kiff.dev/v/abc","words":"Sign in to supplier-portal.example."}"#)])
+        let planque = PlanqueClient()
+        planque.tenant = "t/1"
+        planque.deviceID = "dev_9"
+        planque.transport = transport
+        var signed: [String] = []
+        let data = try await planque.safe(.siteSignIn(grant: "g 1"), signedBy: { signed.append($0); return "SIG" })
+        try expectEqual(transport.sent.map { $0.method + " " + $0.path }, ["POST /v1/accounts/t%2F1/grants/g%201/sign-in"])
+        try expectEqual(String(decoding: transport.sent[0].body, as: UTF8.self), "{}")
+        try expectEqual(transport.sent[0].headers["Content-Type"], "application/json")
+        try expectEqual(signed.count, 1)
+        try expect(signed[0].split(separator: "\n").contains(Substring(PlanqueClient.emptyObjectHash)), "the body's hash is signed: \(signed[0])")
+        let view = try JSONDecoder().decode(SiteSignInView.self, from: data)
+        try expect(view.opens, "on planque's own origin")
+        try expectEqual(view.words, "Sign in to supplier-portal.example.")
+    }),
+    Test("a sign-in view opens only on planque's own https origin, compared exactly, never by suffix") {
+        let planque = SiteSignInView.planque
+        func same(_ s: String) -> Bool { SiteSignInView.sameHTTPSOrigin(URL(string: s)!, planque) }
+        try expect(same("https://planque.kiff.dev/v/1"), "planque")
+        try expect(same("https://PLANQUE.kiff.dev:443/v/1"), "the same host, any case, the default port written")
+        try expect(!same("http://planque.kiff.dev/v/1"), "not https")
+        try expect(!same("https://planque.kiff.dev:8443/v/1"), "another port")
+        try expect(!same("https://evil.planque.kiff.dev/v/1"), "a subdomain")
+        try expect(!same("https://planque.kiff.dev.evil.example/v/1"), "a suffix")
+        try expect(!same("https://kiff.dev/v/1"), "the parent")
+        try expect(!same("javascript:alert(1)"), "a script")
+        let off = try JSONDecoder().decode(SiteSignInView.self, from: Data(#"{"view":"https://evil.example/v/1"}"#.utf8))
+        try expect(!off.opens, "never opened off planque")
+    },
     Test("send signs one route at planque, the enrolment: never a grant's approve, confirm or key") {
         try expectEqual(PlanqueClient.routes, ["enrolment"])
         // And its safe routes, each signed per call, never armed: Chrome's list and unpairing one, both taking nothing.
-        try expectEqual([PlanqueClient.Safe.chromes, .unpairChrome("c/1")].map { $0.method + " " + $0.path }, ["GET chromes", "DELETE chromes/c%2F1"])
+        try expectEqual([PlanqueClient.Safe.chromes, .unpairChrome("c/1"), .siteSignIn(grant: "g/1")].map { $0.method + " " + $0.path },
+                        ["GET chromes", "DELETE chromes/c%2F1", "POST grants/g%2F1/sign-in"])
         for route in PlanqueClient.routes {
             try expect(!route.hasPrefix("grants"), "\(route) is a grant's route")
             try expect(!route.contains("approve") && !route.contains("confirm") && !route.contains("key"), "\(route) approves, confirms or keys")

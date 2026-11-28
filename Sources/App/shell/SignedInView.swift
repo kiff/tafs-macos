@@ -198,6 +198,15 @@ struct SignedInView: View {
             accountHalt.approveWithKey = approveWithKey
             // A reported payment halts its taf: the list is read again.
             record.halted = { await readTafs() }
+            // Sign in again on a cloud connection's saved sign-in, in Connect apps and Needs you: planque's live view,
+            // asked for with the device key, fresh each time.
+            let siteSignIn: (String) async throws -> SiteSignInView = { [account, safePlanque] grant in
+                guard let sign = account.signMessage else { throw PlanqueClient.PlanqueError.notSigning }
+                let data = try await safePlanque.safe(.siteSignIn(grant: grant), signedBy: sign)
+                return try JSONDecoder().decode(SiteSignInView.self, from: data)
+            }
+            connect.siteSignIn = siteSignIn
+            needsYou.siteSignIn = siteSignIn
             // The pictures a paired Chrome kept before a step: planque's safe reads, signed by the device key.
             record.chromeShots = { [account, safePlanque] operation in
                 guard let sign = account.signMessage else { return [] }

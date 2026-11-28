@@ -342,7 +342,7 @@ struct TafView: View {
                 pages.show(activityQuery: query)
                 tab = .activity
             }, halted: halted, doors: manages ? doors : nil, taf: taf, manages: manages, me: me, myEmail: myEmail,
-               improveInCoach: improveInCoach, openConnect: manages ? openConnect : nil)
+               improveInCoach: improveInCoach, openConnect: manages ? openConnect : nil, askCoach: manages ? askCoach : nil)
         }
     }
 

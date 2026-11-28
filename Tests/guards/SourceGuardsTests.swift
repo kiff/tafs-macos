@@ -18,6 +18,16 @@ enum PlanqueBan {
     /// The other exception, in `HoldAllow` alone: the JSON keys of a KIFF draft's Card terms, which "Allow this from now on"
     /// reads before the security key signs (`HoldAllow.keysKnown`). A Card's key, never planque's grants list.
     static let kiffCardTermKeys = #"static let term = (grants: "grants", aggregates: "aggregates")"#
+    /// The one grant's sub-route a source may name, in `PlanqueClient` alone, this exact line: Sign in again, planque's live
+    /// sign-in view (`POST …/grants/{id}/sign-in`, `startBrowserSignIn`). It approves, confirms and connects nothing, and
+    /// adds no tool or scope: on a connected browser grant only, it opens a view where the owner signs in to a website
+    /// themselves. The owner's browser batch 2, with the security read's yes (one exception, nothing wider). Every other
+    /// sub-route stays banned, `/sign-in` anywhere else or in any other shape included.
+    static let siteSignIn = #"case .siteSignIn(let grant): return "grants/\(CloudClient.escaped(grant))/sign-in""#
+    /// Not planque's at all: tafs cloud's Later on a Needs you sign-in item (`POST /v1/needs-you/sign-in/{grant}/{site}/later`,
+    /// the person's own session, docs/api.md), in `SignInNeed` alone, this exact line. It names no grant's route at planque;
+    /// it only matches the sub-route pattern's `/sign-in`.
+    static let tafsCloudLater = #"_ = try await post("/v1/needs-you/sign-in/\(Self.escaped(grant))/\(Self.escaped(site))/later", [:])"#
 
     /// What no source names (#178's list): planque's approve and confirm, a fresh connection, a grant's own path beyond the
     /// DELETE's, and the grants list by its bare name.
@@ -34,6 +44,8 @@ enum PlanqueBan {
             .joined(separator: "\n")
         if path.hasSuffix("Sources/Core/approvals/KeyApproval.swift") { text = text.replacingOccurrences(of: kiffDraftConfirm, with: "") }
         if path.hasSuffix("Sources/Core/approvals/HoldAllow.swift") { text = text.replacingOccurrences(of: kiffCardTermKeys, with: "") }
+        if path.hasSuffix("Sources/Core/taf/PlanqueClient.swift") { text = text.replacingOccurrences(of: siteSignIn, with: "") }
+        if path.hasSuffix("Sources/Core/approvals/SignInNeed.swift") { text = text.replacingOccurrences(of: tafsCloudLater, with: "") }
         if let named = banned.first(where: { text.contains($0) }) { return named }
         return subRoute.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) > 0 ? "a grant's sub-route" : nil
     }
@@ -41,6 +53,19 @@ enum PlanqueBan {
 
 /// planque's routes: only the DELETE names a grant's route, the client is made and armed in one place, and the ban holds.
 let guardsPlanqueTests: [Test] = [
+    Test("Sign in again's line is the one exception: `/sign-in` anywhere else, in another shape, or beside it, still names a sub-route") {
+        let client = "Sources/Core/taf/PlanqueClient.swift"
+        try expect(PlanqueBan.names(path: client, text: PlanqueBan.siteSignIn) == nil, "the exact line, in the client, is allowed")
+        try expect(PlanqueBan.names(path: "Sources/App/connections/ConnectAppsView.swift", text: PlanqueBan.siteSignIn) != nil, "the same line elsewhere is banned")
+        try expect(PlanqueBan.names(path: client, text: #"case .siteSignIn(let g): return "grants/\(g)/sign-in""#) != nil, "another shape is banned")
+        try expect(PlanqueBan.names(path: client, text: PlanqueBan.siteSignIn + "\nlet done = \"/sign-in/done\"") != nil, "a second sign-in route beside it is banned")
+        try expect(PlanqueBan.names(path: client, text: PlanqueBan.siteSignIn + "\nlet a = \"/approve\"") != nil, "approve stays banned")
+        // tafs cloud's Later, its own exact line in `SignInNeed` alone; anywhere else, or reshaped, it names a sub-route.
+        let need = "Sources/Core/approvals/SignInNeed.swift"
+        try expect(PlanqueBan.names(path: need, text: PlanqueBan.tafsCloudLater) == nil, "tafs cloud's Later, exactly, there")
+        try expect(PlanqueBan.names(path: client, text: PlanqueBan.tafsCloudLater) != nil, "the same line in planque's client is banned")
+        try expect(PlanqueBan.names(path: need, text: #"_ = try await post("/v1/grants/\(g)/sign-in", [:])"#) != nil, "another shape is banned")
+    },
     Test("only the DELETE names a grant's route; no source names approve, confirm, a grant's key or a fresh connection") {
         let all = try sources()
         try expect(all.count > 50, "the app's sources: \(all.count)")
@@ -88,9 +113,12 @@ let guardsPlanqueTests: [Test] = [
         let naming = all.filter { $0.text.contains("grants/") }
         try expectEqual(naming.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["PlanqueClient.swift"])
         let client = naming[0].text
-        // Twice: the DELETE's path, and a Slack door's subscription stopped on planque's safe route (`Safe.deleteTrigger`,
-        // deleting a trigger, which takes authority away and is the device key's), this exact line and no other.
-        try expectEqual(client.components(separatedBy: "grants/").count - 1, 2)
+        // Three times: the DELETE's path; a Slack door's subscription stopped on planque's safe route (`Safe.deleteTrigger`,
+        // deleting a trigger, which takes authority away and is the device key's); and Sign in again's live view
+        // (`PlanqueBan.siteSignIn`, the one named exception), each this exact line and no other.
+        try expectEqual(client.components(separatedBy: "grants/").count - 1, 3)
+        try expect(client.contains(PlanqueBan.siteSignIn), "the third is Sign in again's, exactly")
+        try expectEqual(all.filter { $0.text.contains(PlanqueBan.siteSignIn) }.map { URL(fileURLWithPath: $0.path).lastPathComponent }, ["PlanqueClient.swift"])
         try expect(client.contains(#"case .deleteTrigger(let grant, let trigger): return "grants/\(CloudClient.escaped(grant))/triggers/\(CloudClient.escaped(trigger))""#),
                    "the second is the trigger's DELETE")
         try expect(client.contains(#""/v1/accounts/\(CloudClient.escaped(tenant))/grants/\(CloudClient.escaped(grantID))""#), "the DELETE's path, the grant's id last")

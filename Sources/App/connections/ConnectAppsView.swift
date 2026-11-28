@@ -22,6 +22,55 @@ final class ConnectAppsModel: ObservableObject {
     @Published private(set) var readsConnections = false
     /// The tafs removed since, as tafs cloud names them (`removed_tafs`).
     @Published private(set) var removedTafs: [Apps.RemovedTaf] = []
+    /// The two ways a taf uses websites, for this account, in tafs cloud's words (browser batch 2).
+    @Published private(set) var ways: [BrowserWays.Way] = []
+    /// The account's saved sign-ins, each under its connection's row.
+    @Published private(set) var savedSignIns: [BrowserWays.SavedSignIn] = []
+
+    /// Asks planque for a cloud connection's live sign-in view, signed by this Mac's device key (Sign in again); nil
+    /// where this Mac can't sign, and the button isn't offered.
+    var siteSignIn: ((String) async throws -> SiteSignInView)?
+    /// The sign-in view open now, and the words when it couldn't be opened.
+    @Published var signInView: OpenSignIn?
+    @Published private(set) var signInProblem: [String: String] = [:]
+
+    /// A sign-in view to show, by the grant it's for.
+    struct OpenSignIn: Identifiable, Equatable {
+        let grant: String
+        let view: SiteSignInView
+        var id: String { grant }
+    }
+
+    /// Sign in again: a fresh one-time view from planque, opened only on planque's own origin. It grants nothing; the owner
+    /// signs in to the site themselves.
+    func signIn(_ item: BrowserWays.SavedSignIn) async {
+        guard let siteSignIn else { return }
+        signInProblem[item.id] = nil
+        do {
+            let view = try await siteSignIn(item.grant)
+            guard view.opens else {
+                signInProblem[item.id] = Words.app("error.changed")
+                return
+            }
+            signInView = OpenSignIn(grant: item.grant, view: view)
+        } catch let refusal as PlanqueClient.PlanqueError {
+            if case .server(_, _, let words?) = refusal { signInProblem[item.id] = words } else { signInProblem[item.id] = NeedsYouModel.why(refusal) }
+        } catch {
+            signInProblem[item.id] = NeedsYouModel.why(error)
+        }
+    }
+
+    /// The sign-in view closed: the list is read again, so each site's health follows.
+    func signInClosed() async {
+        signInView = nil
+        await load()
+    }
+
+    /// A connection's saved sign-ins, as Connect apps lists them by `grant`.
+    func savedSignIns(of app: Apps.App) -> [BrowserWays.SavedSignIn] {
+        guard let grant = app.grant else { return [] }
+        return savedSignIns.filter { $0.grant == grant }
+    }
     /// The Record's newest calls, for each connection's last failed call (`AppConnections.lastFailure`), as the iPad
     /// reads its `record`, read when an app's connections open. One that can't be read is none: the line isn't drawn,
     /// nothing else changes.
@@ -173,6 +222,8 @@ final class ConnectAppsModel: ObservableObject {
             apps = page.apps
             byKey = false
             removedTafs = page.removedTafs
+            ways = page.ways
+            savedSignIns = page.savedSignIns
             show(page)
         } catch {
             guard mine == asked else { return }
@@ -283,6 +334,14 @@ struct ConnectAppsView: View {
                     if model.apps.isEmpty, !model.partial {
                         Text(words("connect.apps.none")).font(.system(size: 14)).foregroundColor(Theme.soft)
                     }
+                    // How the account's tafs use websites: the cloud browser and the owner's Chrome, each in tafs cloud's
+                    // words, before any browser connection exists too.
+                    if !model.ways.isEmpty {
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(model.ways) { WayCard(way: $0) }
+                        }
+                        .padding(.top, 8)
+                    }
                     if !model.yours.isEmpty {
                         heading(words("connect.apps.yours"))
                         panel {
@@ -290,6 +349,9 @@ struct ConnectAppsView: View {
                             ForEach(model.yours) { app in
                                 Rectangle().fill(Theme.line).frame(height: 1)
                                 row(app, yours: true)
+                                // A cloud browser connection's saved sign-ins, each with its health in tafs cloud's words.
+                                let signIns = model.savedSignIns(of: app)
+                                if !signIns.isEmpty { SavedSignIns(signIns: signIns, model: model) }
                             }
                         }
                     }
@@ -327,6 +389,11 @@ struct ConnectAppsView: View {
         }
         .background(Theme.background)
         .task { await model.load() }
+        // Sign in again: planque's live view, in a sheet, until Close; then the list is read again.
+        .sheet(item: $model.signInView) { open in
+            SiteSignInSheet(view: open.view) { Task { await model.signInClosed() } }
+                .environment(\.words, words)
+        }
         // Touch ID may have changed while away (a finger added, Touch ID locked): the route again.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in model.refreshRoute() }
     }
@@ -369,6 +436,12 @@ struct ConnectAppsView: View {
                     // An app an operator sets up first is named in the soft colour, as on the iPad.
                     Text(verbatim: app.name).font(.system(size: 16, weight: .semibold)).foregroundColor(setup ? Theme.soft : Theme.ink)
                     if let subtitle = app.subtitle { Text(verbatim: subtitle).font(.system(size: 13)).foregroundColor(Theme.soft).lineLimit(2) }
+                    // A browser connection says which way it works, in tafs cloud's words.
+                    if yours, let way = app.wayWords {
+                        Text(verbatim: "\(way.title) · \(way.line)").font(.system(size: 12)).foregroundColor(Theme.soft)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("connect.way")
+                    }
                 }
             }
             .frame(minWidth: 200, maxWidth: .infinity, alignment: .leading)
@@ -479,6 +552,113 @@ struct ConnectAppsView: View {
             .accessibilityLabel(words("connect.apps.your_connections", ["app": app.name]))
         } else {
             Color.clear.frame(width: Self.chevron, height: 1)
+        }
+    }
+}
+
+
+/// One of the two ways a taf uses websites (browser batch 2, frame 1a): its title, the line that says what the owner gets,
+/// its two facts, and its state on this account, every word tafs cloud's.
+struct WayCard: View {
+    let way: BrowserWays.Way
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: way.way == "cloud" ? "cloud" : "globe")
+                .font(.system(size: 16, weight: .semibold)).foregroundColor(Theme.ink)
+                .frame(width: 34, height: 34)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Theme.soft.opacity(0.1)))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(verbatim: way.words.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                Text(verbatim: way.words.line).font(.system(size: 13, weight: .semibold)).foregroundColor(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(way.words.facts, id: \.self) { fact in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Circle().fill(Theme.dim.opacity(0.6)).frame(width: 4, height: 4).accessibilityHidden(true)
+                        Text(verbatim: fact).font(.system(size: 12.5)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let status = way.words.status {
+                    Text(verbatim: status).font(.system(size: 12)).foregroundColor(Theme.soft)
+                        .padding(.horizontal, 9).padding(.vertical, 3)
+                        .background(Capsule().fill(Theme.soft.opacity(0.1)))
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.line))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("connect.way.\(way.way)")
+    }
+}
+
+/// A cloud browser connection's saved sign-ins (browser batch 2, frame 2c): each site with its health line in tafs cloud's
+/// words, amber when it needs the owner soon and red when it stopped, and Why? with how tafs knows.
+struct SavedSignIns: View {
+    let signIns: [BrowserWays.SavedSignIn]
+    @ObservedObject var model: ConnectAppsModel
+    @State private var why: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(signIns) { site in siteRow(site) }
+        }
+        .padding(.leading, 34).padding(.bottom, 10)
+    }
+
+    @ViewBuilder private func siteRow(_ site: BrowserWays.SavedSignIn) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(verbatim: site.site).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.ink)
+            Spacer(minLength: 8)
+            if let health = site.health { healthLine(health, site: site.site) }
+            // Sign in again, tafs cloud's words: on every saved sign-in it offers, so a sign-in can be refreshed before it
+            // breaks; in the accent when it needs the owner.
+            if let title = site.signIn, model.siteSignIn != nil {
+                Button(title) { Task { await model.signIn(site) } }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(site.health?.asksToSignIn == true ? Theme.amberText : Theme.soft)
+                    .accessibilityIdentifier("connect.site.sign_in")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        if let problem = model.signInProblem[site.id] {
+            Text(verbatim: problem).font(.system(size: 12)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder private func healthLine(_ health: BrowserWays.Health, site: String) -> some View {
+        Text(verbatim: health.words.line).font(.system(size: 12.5)).foregroundColor(color(health.tone))
+            .accessibilityIdentifier("connect.site.health")
+        if let reason = health.words.why { whyButton(reason, site: site) }
+    }
+
+    private func whyButton(_ reason: String, site: String) -> some View {
+        let shown = Binding<Bool>(get: { why == site }, set: { if !$0 { why = nil } })
+        return Button { why = why == site ? nil : site } label: {
+            Image(systemName: "info.circle").font(.system(size: 12)).foregroundColor(Theme.soft)
+        }
+        .buttonStyle(.plain)
+        .help(reason)
+        .accessibilityLabel(Text(verbatim: reason))
+        .popover(isPresented: shown) {
+            Text(verbatim: reason).font(.system(size: 13)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading)
+                .padding(12)
+        }
+    }
+
+    private func color(_ tone: BrowserWays.Health.Tone) -> Color {
+        switch tone {
+        case .plain: return Theme.soft
+        case .soon: return Theme.amberText
+        case .stopped: return Theme.no
         }
     }
 }

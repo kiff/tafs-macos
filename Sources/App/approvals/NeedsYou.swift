@@ -39,6 +39,13 @@ final class NeedsYouModel: ObservableObject {
     /// Coach's chats waiting on the person, as Home last listed them (`coach_waiting`), and its
     /// "Set all aside" (`coach_waiting_clear`).
     @Published private(set) var coachWaitingListed: [CoachWaiting] = []
+    /// The saved sign-ins that need the owner, as Home lists them (`sign_ins`), less those put off here just now.
+    @Published private(set) var signIns: [SignInNeed] = []
+    /// Asks planque for a cloud connection's live sign-in view, signed by this Mac's device key; nil where it can't.
+    var siteSignIn: ((String) async throws -> SiteSignInView)?
+    /// The sign-in view open now, and a sign-in item's line when its button didn't go through.
+    @Published var signInView: ConnectAppsModel.OpenSignIn?
+    @Published private(set) var signInProblem: [String: String] = [:]
     @Published private(set) var coachWaitingClear: CoachWaitingClear?
     /// The chats being set aside now: one call per chat at a time, so a second click sends
     /// nothing until tafs cloud answers.
@@ -131,9 +138,41 @@ final class NeedsYouModel: ObservableObject {
         showSteps(page.yourSteps)
         coachWaitingListed = page.coachWaiting
         coachWaitingClear = page.coachWaitingClear
+        signIns = page.signIns
         homeCount = page.needsYouCount
         homeWords = page.needsYouWords
         cardUnits = page.cardUnits
+    }
+
+    /// Sign in again on a sign-in item: planque's live view, opened only on planque's own origin.
+    func signIn(_ need: SignInNeed) async {
+        guard let siteSignIn else { return }
+        signInProblem[need.id] = nil
+        do {
+            let view = try await siteSignIn(need.grant)
+            guard view.opens else {
+                signInProblem[need.id] = Words.app("error.changed")
+                return
+            }
+            signInView = ConnectAppsModel.OpenSignIn(grant: need.grant, view: view)
+        } catch {
+            signInProblem[need.id] = NeedsYouModel.why(error)
+        }
+    }
+
+    /// Later (soon) or Skip this run (stopped), each a request tafs cloud keeps for everyone on the account. Nothing is
+    /// removed here: Home is read again (`reread`), and what it lists is what's left. A skipped item stays until the
+    /// sign-in works, holding no more runs, as tafs cloud says.
+    func putOff(_ need: SignInNeed, reread: () async -> Void) async {
+        guard let cloud else { return }
+        signInProblem[need.id] = nil
+        do {
+            if need.stopped { try await cloud.skipHeldSignIn(taf: need.taf.id) } else { try await cloud.laterSignIn(grant: need.grant, site: need.site) }
+        } catch {
+            signInProblem[need.id] = NeedsYouModel.why(error)
+            return
+        }
+        await reread()
     }
 
     /// Coach's waiting chats as Needs you draws them: less the one open in Coach (`onScreen`), and
@@ -506,6 +545,8 @@ struct NeedsYouView: View {
                 // Coach waits on the person in a chat, after the steps, as on the iPad
                 // (NeedsYouView.swift:16-19): Set all aside above them, with two or more.
                 coachWaiting
+                // A saved sign-in that needs the owner: soon, or stopped and holding a run (browser batch 2).
+                ForEach(model.signIns) { SignInNeedCard(model: model, need: $0, reread: answered) }
                 // A money call whose outcome KIFF can't prove: the owner says whether it happened.
                 ForEach(model.unproven) { happened($0) }
                 switch model.state {
@@ -514,7 +555,7 @@ struct NeedsYouView: View {
                 case .unread(let why):
                     Text(words("needs_you.request_not_read", ["why": why])).font(.system(size: 14)).foregroundColor(Theme.no)
                 case .loaded(let calls) where calls.isEmpty && knocked.isEmpty:
-                    if model.unproven.isEmpty, model.steps.isEmpty, model.coachWaiting().isEmpty { nothing }
+                    if model.unproven.isEmpty, model.steps.isEmpty, model.coachWaiting().isEmpty, model.signIns.isEmpty { nothing }
                 case .loaded(let calls):
                     ForEach(calls) { card($0) }
                 }
@@ -530,6 +571,11 @@ struct NeedsYouView: View {
         // "Allow this from now on", over Needs you, while it's open on a call.
         .sheet(isPresented: Binding(get: { model.allow != nil }, set: { if !$0 { model.allow = nil } })) {
             AllowSheetView(model: model).environment(\.words, words)
+        }
+        // Sign in again: planque's live view until Close; then Home is read again, so the item follows its check.
+        .sheet(item: $model.signInView) { open in
+            SiteSignInSheet(view: open.view) { Task { model.signInView = nil; await answered() } }
+                .environment(\.words, words)
         }
         .task {
             await model.load()
@@ -969,5 +1015,49 @@ struct AlertsCard: View {
             .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
             .accessibilityIdentifier("needs-you.alerts-card")
         }
+    }
+}
+
+
+/// A saved sign-in that needs the owner (browser batch 2, frames 2a and 2b), every word tafs cloud's: soon, edged in amber,
+/// with Later; or stopped, edged in red, its run waiting before it starts, with Skip this run. Sign in again opens planque's
+/// live view; Why? says how tafs knows.
+struct SignInNeedCard: View {
+    @ObservedObject var model: NeedsYouModel
+    let need: SignInNeed
+    /// Reads Home again after Later or Skip this run.
+    var reread: () async -> Void = {}
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: need.words.title.uppercased()).font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundColor(need.stopped ? Theme.no : Theme.amberText)
+            Text(verbatim: need.words.line).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(verbatim: need.taf.name).font(.system(size: 13)).foregroundColor(Theme.soft)
+            if let why = need.words.why {
+                Text(verbatim: why).font(.system(size: 12.5)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 10) {
+                if model.siteSignIn != nil {
+                    Button(need.words.signIn) { Task { await model.signIn(need) } }
+                        .buttonStyle(PrimaryButtonStyle()).fixedSize()
+                        .accessibilityIdentifier("needs-you.sign-in")
+                }
+                Button { Task { await model.putOff(need, reread: reread) } } label: { Text(verbatim: need.words.other).padding(.horizontal, 16) }
+                    .buttonStyle(OutlineButtonStyle()).fixedSize()
+                    .accessibilityIdentifier(need.stopped ? "needs-you.sign-in.skip" : "needs-you.sign-in.later")
+            }
+            if let problem = model.signInProblem[need.id] {
+                Text(verbatim: problem).font(.system(size: 13)).foregroundColor(Theme.no).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous)
+            .stroke(need.stopped ? Theme.no.opacity(0.35) : Theme.amber.opacity(0.55)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("needs-you.sign-in-need")
     }
 }

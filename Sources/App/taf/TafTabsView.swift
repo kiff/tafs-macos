@@ -510,6 +510,8 @@ struct TafSetupTab: View {
     var improveInCoach: (() -> Void)? = nil
     /// Connect apps, from the ring's +; nil draws no +.
     var openConnect: (() -> Void)? = nil
+    /// Coach on this taf with these words in its box, nothing sent: the other way's button; nil draws none.
+    var askCoach: ((String) -> Void)? = nil
     @State private var startsOpen = false
     @State private var resultsOpen = false
     /// Connect again clicked: its line says to approve on another device.
@@ -524,6 +526,11 @@ struct TafSetupTab: View {
                     PanelLink(action: { startsOpen = true }) { linkLabel(words("setup.starts_when"), "clock") }
                     ConnectedToolsRing(model: model, taf: taf, manages: manages, openActivity: openActivity,
                                        openConnect: openConnect, improveInCoach: improveInCoach)
+                    // How it uses websites (browser batch 2, frame 1b): its way, Coach's reason, and the other way's button.
+                    if case .loaded(let setup) = model.setup, let browsing = setup.browsing {
+                        BrowsingPanel(browsing: browsing, sites: setup.connections.first { $0.way == browsing.way }?.sites ?? [],
+                                      askCoach: askCoach)
+                    }
                     PanelLink(action: { resultsOpen = true }) { linkLabel(words("setup.results_go_to"), "paperplane") }
                 }
                 MemorySummaryPanel(model: model)
@@ -761,6 +768,75 @@ struct RemoveForGoodButton: View {
             if let said {
                 Text(verbatim: said).font(.system(size: 13)).foregroundColor(Theme.soft).fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+
+/// How a taf uses websites, on its Setup (browser batch 2, frame 1b): the sites, the way in tafs cloud's words, Coach's
+/// reason, each cloud site's sign-in health, and the other way's button, which opens Coach with tafs cloud's ask written
+/// in and sends nothing. Changing the way is a new version with the owner's approval, as any Card change.
+struct BrowsingPanel: View {
+    let browsing: BrowserWays.Browsing
+    let sites: [BrowserWays.SetupSite]
+    var askCoach: ((String) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            head
+            if let why = browsing.why { whyBox(why) }
+            ForEach(sites) { siteLine($0) }
+            switchButton
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Look.panelRadius, style: .continuous).fill(Theme.panel))
+        .accessibilityIdentifier("setup.browsing")
+    }
+
+    @ViewBuilder private var head: some View {
+        if !browsing.sites.isEmpty {
+            Text(verbatim: browsing.sites.joined(separator: ", ")).font(.system(size: 13)).foregroundColor(Theme.soft)
+        }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(verbatim: browsing.wayWords.title).font(.system(size: 15, weight: .semibold)).foregroundColor(Theme.ink)
+            Text(verbatim: browsing.wayWords.line).font(.system(size: 13)).foregroundColor(Theme.soft)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func whyBox(_ why: String) -> some View {
+        Text(verbatim: why).font(.system(size: 12.5)).foregroundColor(Theme.soft)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.soft.opacity(0.08)))
+    }
+
+    @ViewBuilder private func siteLine(_ site: BrowserWays.SetupSite) -> some View {
+        if let health = site.health {
+            HStack(alignment: .firstTextBaseline) {
+                Text(verbatim: site.site).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.ink)
+                Spacer(minLength: 8)
+                Text(verbatim: health.words.line).font(.system(size: 12.5)).foregroundColor(color(health.tone))
+            }
+            .help(health.words.why ?? "")
+        }
+    }
+
+    @ViewBuilder private var switchButton: some View {
+        if let change = browsing.switchTo, let askCoach {
+            Button(change.button) { askCoach(change.ask) }
+                .buttonStyle(OutlineButtonStyle())
+                .fixedSize()
+                .accessibilityIdentifier("setup.browsing.switch")
+        }
+    }
+
+    private func color(_ tone: BrowserWays.Health.Tone) -> Color {
+        switch tone {
+        case .plain: return Theme.soft
+        case .soon: return Theme.amberText
+        case .stopped: return Theme.no
         }
     }
 }

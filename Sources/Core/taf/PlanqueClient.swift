@@ -33,6 +33,8 @@ final class PlanqueClient {
     static let baseURL = "https://planque.kiff.dev"
     /// The SHA-256 of an empty body, in hex: a read's body.
     static let emptyBodyHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    /// The SHA-256 of `{}`, in hex: the sign-in view's body.
+    static let emptyObjectHash = "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
 
     let baseURL: String
     /// The account, by KIFF's tenant; nil signs nothing.
@@ -191,14 +193,28 @@ final class PlanqueClient {
         /// delivery off, then removes it upstream. It takes authority away, so the device key signs it (planque's safe
         /// routes, docs/api.md).
         case deleteTrigger(grant: String, trigger: String)
+        /// planque's live sign-in view for a cloud browser connection, as Android's `siteSignIn`: a one-time URL, asked for
+        /// fresh each time with the device's signature. It grants nothing: the owner signs in to the site themselves, in
+        /// the view (Sign in again, browser batch 2).
+        case siteSignIn(grant: String)
 
         var method: String {
             switch self {
             case .chromes, .chromeShots, .chromeShot: return "GET"
             case .unpairChrome: return "DELETE"
             case .deleteTrigger: return "DELETE"
+            case .siteSignIn: return "POST"
             }
         }
+
+        /// The body sent and signed: `{}` for the sign-in view, as Android sends it; none for the rest.
+        var body: Data? {
+            if case .siteSignIn = self { return Data("{}".utf8) }
+            return nil
+        }
+
+        /// The SHA-256 of `body`, in hex, as signed.
+        var bodyHash: String { body == nil ? PlanqueClient.emptyBodyHash : PlanqueClient.emptyObjectHash }
 
         /// Under the account's routes. The operation is escaped into the query, which is part of what's signed.
         var path: String {
@@ -208,6 +224,7 @@ final class PlanqueClient {
             case .chromeShots(let operation): return "chromes/screenshots?op=\(ChromeShots.queryEscaped(operation))"
             case .chromeShot(let step): return "chromes/screenshots/\(CloudClient.escaped(step))"
             case .deleteTrigger(let grant, let trigger): return "grants/\(CloudClient.escaped(grant))/triggers/\(CloudClient.escaped(trigger))"
+            case .siteSignIn(let grant): return "grants/\(CloudClient.escaped(grant))/sign-in"
             }
         }
     }
@@ -219,11 +236,13 @@ final class PlanqueClient {
         guard let device = deviceID else { throw PlanqueError.noDevice }
         let uri = "/v1/accounts/\(CloudClient.escaped(tenant))/\(route.path)"
         let at = SigningTime.next()
-        let message = Self.message(base: baseURL, tenant: tenant, method: route.method, uri: uri, bodyHash: Self.emptyBodyHash, signedAt: at)
-        let request = HTTPRequest(method: route.method, path: uri, headers: [
+        let message = Self.message(base: baseURL, tenant: tenant, method: route.method, uri: uri, bodyHash: route.bodyHash, signedAt: at)
+        var headers = [
             "Accept": "application/json", "User-Agent": "tafs-macos", "X-Time-Zone": TimeZone.current.identifier,
             "Planque-Device-Signature": "t=\(at),v1=\(try sign(message)),d=\(device)",
-        ])
+        ]
+        if route.body != nil { headers["Content-Type"] = "application/json" }
+        let request = HTTPRequest(method: route.method, path: uri, headers: headers, body: route.body ?? Data())
         let (status, answer) = try await transport.send(request)
         guard (200..<300).contains(status) else {
             let said = Self.refusal(answer)
@@ -333,4 +352,36 @@ extension AccountClient {
         let answer: Answer = try read(try await send("GET", "/v1/me/devices"))
         return answer.devices.first { $0.thisDevice == true && $0.id.hasPrefix("dev_") }?.id
     }
+}
+
+
+/// planque's live sign-in view for a cloud browser connection (Sign in again): its one-time URL, when it lapses, and
+/// planque's words for it. The Mac opens it only on planque's own https origin, and follows nothing off it.
+struct SiteSignInView: Decodable, Equatable {
+    let view: URL
+    let words: String?
+
+    enum CodingKeys: String, CodingKey { case view, words }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard let url = URL(string: try c.decode(String.self, forKey: .view)) else {
+            throw DecodingError.dataCorruptedError(forKey: .view, in: c, debugDescription: "a view that isn't a URL")
+        }
+        view = url
+        words = ((try? c.decodeIfPresent(String.self, forKey: .words)) ?? nil).flatMap(BrowserWays.shown)
+    }
+
+    /// Whether `url` is on `origin`'s https origin: the scheme `https` on both, the same host, and the same port (443
+    /// when none is written). Compared exactly, never by suffix.
+    static func sameHTTPSOrigin(_ url: URL, _ origin: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", origin.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(), let originHost = origin.host?.lowercased(), !host.isEmpty else { return false }
+        return host == originHost && (url.port ?? 443) == (origin.port ?? 443)
+    }
+
+    /// planque's own origin, the only one a view opens on.
+    static var planque: URL { URL(string: PlanqueClient.baseURL)! }
+
+    /// Whether this view may be opened: its URL is on planque's own https origin.
+    var opens: Bool { Self.sameHTTPSOrigin(view, Self.planque) }
 }
