@@ -408,8 +408,9 @@ struct ConnectAppsView: View {
             Text(words("connect.sign_in_again")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isSignedIn {
-            // tafs cloud's own line ("Sign in · Signed in · Not used by any taf"), else the shared one.
-            Text(verbatim: app.line ?? words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
+            // The shared words, where it stands and what's next. Not tafs cloud's `line` ("Sign in · Signed in · Not used
+            // by any taf"): it starts with how it connects, which is its own column here, so the row said "Sign in" twice.
+            Text(words("connect.signed_in_row")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.amberText)
                 .fixedSize(horizontal: false, vertical: true)
         } else if app.isYours {
             Text(words("connect.status.connected")).font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.ok)
